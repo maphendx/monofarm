@@ -37,7 +37,12 @@ export interface Printer {
   job: string | null;
   eta_minutes: number | null;
   updated_at: string | null;
-  source: "simplyprint" | "manual" | "unknown";
+  source: "simplyprint" | "moonraker" | "manual" | "unknown";
+  progress_pct: number | null;
+  extruder_temp: number | null;
+  extruder_target: number | null;
+  bed_temp: number | null;
+  bed_target: number | null;
 }
 
 export interface PrintTask {

@@ -80,10 +80,39 @@ export function PrinterCard({
         </div>
       )}
 
+      {printer.progress_pct !== null && printer.state === "printing" && (
+        <div className="space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${printer.progress_pct}%` }}
+            />
+          </div>
+          <div className="text-[11px] text-neutral-500">{printer.progress_pct}%</div>
+        </div>
+      )}
+
       {(printer.job || eta) && (
         <div className="border-t border-neutral-100 pt-2 text-xs text-neutral-500 dark:border-neutral-800">
           {printer.job && <div className="truncate">📦 {printer.job}</div>}
           {eta && <div>⏱ {eta}</div>}
+        </div>
+      )}
+
+      {(printer.extruder_temp != null || printer.bed_temp != null) && (
+        <div className="flex gap-2 border-t border-neutral-100 pt-2 text-[11px] text-neutral-500 dark:border-neutral-800">
+          {printer.extruder_temp != null && (
+            <span title="Сопло">
+              🌡{Math.round(printer.extruder_temp)}°
+              {printer.extruder_target ? `/${Math.round(printer.extruder_target)}°` : ""}
+            </span>
+          )}
+          {printer.bed_temp != null && (
+            <span title="Стіл">
+              ▣{Math.round(printer.bed_temp)}°
+              {printer.bed_target ? `/${Math.round(printer.bed_target)}°` : ""}
+            </span>
+          )}
         </div>
       )}
     </button>

@@ -4,6 +4,7 @@ Strategy: DB stores persistent printer rows (name, kind, sp_printer_id, manual s
 SimplyPrint live state is fetched on demand (with a 30s in-memory cache) and merged
 with DB rows. Unknown sp_printer_ids are auto-imported as new rows on first sync.
 """
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +20,7 @@ from app.schemas.printer import (
     PrinterOut,
     PrinterUpdate,
 )
-from app.services import simplyprint
+from app.services import moonraker, simplyprint
 
 
 router = APIRouter(prefix="/printers", tags=["printers"])
@@ -75,7 +76,25 @@ def _to_dto(printer: Printer, sp_state: dict | None) -> PrinterOut:
         )
     if printer.kind == PrinterKind.simplyprint:
         return PrinterOut(**base, state="unknown", flags=[], source="unknown")
-    # Manual (U1, other)
+
+    # Manual (U1, other) — if Moonraker URL is set, prefer live data
+    if printer.moonraker_url:
+        live = moonraker.get_live_status(printer.moonraker_url)
+        return PrinterOut(
+            **base,
+            state=live.get("state") or "unknown",
+            flags=[],
+            job=live.get("filename") or printer.manual_job,
+            eta_minutes=live.get("eta_minutes"),
+            updated_at=printer.manual_updated_at,
+            source="moonraker",
+            progress_pct=live.get("progress_pct"),
+            extruder_temp=live.get("extruder_temp"),
+            extruder_target=live.get("extruder_target"),
+            bed_temp=live.get("bed_temp"),
+            bed_target=live.get("bed_target"),
+        )
+
     return PrinterOut(
         **base,
         state=printer.manual_status or "idle",
@@ -182,3 +201,50 @@ def force_sync(
     sp_printers = simplyprint.extract_printers(overview)
     _ensure_simplyprint_rows(db, sp_printers)
     return list_printers(db=db, _user=_user)  # type: ignore[arg-type]
+
+
+# ── Moonraker print control ─────────────────────────────────────────────────
+
+
+async def _moonraker_action(
+    printer_id: int, action_name: str, action_fn, db: Session
+) -> dict:
+    row = db.get(Printer, printer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    if not row.moonraker_url:
+        raise HTTPException(status_code=400, detail="У принтера не вказано Moonraker URL")
+    try:
+        await asyncio.to_thread(action_fn, row.moonraker_url)
+    except moonraker.MoonrakerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    # invalidate live cache so the next /api/printers shows fresh state
+    moonraker._status_cache.pop(row.moonraker_url, None)  # noqa: SLF001
+    return {"ok": True, "action": action_name}
+
+
+@router.post("/{printer_id}/pause")
+async def pause_print(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    return await _moonraker_action(printer_id, "pause", moonraker.pause_print, db)
+
+
+@router.post("/{printer_id}/resume")
+async def resume_print(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    return await _moonraker_action(printer_id, "resume", moonraker.resume_print, db)
+
+
+@router.post("/{printer_id}/cancel")
+async def cancel_print(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    return await _moonraker_action(printer_id, "cancel", moonraker.cancel_print, db)

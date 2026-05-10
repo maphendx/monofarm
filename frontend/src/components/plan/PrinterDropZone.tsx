@@ -1,7 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
 import { kindLabel, stateEmoji, stateLabel } from "@/lib/printerLabels";
@@ -20,15 +20,26 @@ function PlanEntryRow({
 }) {
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  const inFlight = useRef(false);
 
   let cantSendReason: string | null = null;
-  if (entry.done) cantSendReason = "Задача вже виконана";
-  else if (!entry.task.file_name) cantSendReason = "Немає файлу — додай .gcode/.3mf у задачу";
-  else if (!printer.moonraker_url) cantSendReason = "У принтера не вказано Moonraker URL";
+  let cantSendShort: string | null = null;
+  if (entry.done) {
+    cantSendReason = "Задача вже виконана";
+    cantSendShort = "вже виконано";
+  } else if (!entry.task.file_name) {
+    cantSendReason = "Немає файлу — додай .gcode/.3mf у задачу";
+    cantSendShort = "немає файлу";
+  } else if (!printer.moonraker_url) {
+    cantSendReason = "У принтера не вказано Moonraker URL";
+    cantSendShort = "немає URL принтера";
+  }
 
   const canSend = cantSendReason === null;
 
   async function send() {
+    if (inFlight.current) return; // sync guard against double-click
+    inFlight.current = true;
     setSending(true);
     setSendErr(null);
     try {
@@ -37,6 +48,7 @@ function PlanEntryRow({
       setSendErr(err instanceof ApiError ? err.message : "Помилка");
     } finally {
       setSending(false);
+      inFlight.current = false;
     }
   }
 
@@ -92,7 +104,7 @@ function PlanEntryRow({
           ? "Завантажую…"
           : canSend
             ? "▶ Друк"
-            : `▶ Друк · ${cantSendReason}`}
+            : `▶ ${cantSendShort}`}
       </button>
 
       {sendErr && (

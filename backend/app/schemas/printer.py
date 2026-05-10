@@ -37,10 +37,17 @@ class PrinterOut(BaseModel):
     # Live / merged state for the dashboard
     state: str | None = None  # primary state ('printing', 'paused', 'idle', ...)
     flags: list[str] = []  # ['requires_attention', ...] from SimplyPrint
-    job: str | None = None  # current job title (for U1 — manual_job)
+    job: str | None = None  # current job title
     eta_minutes: int | None = None
     updated_at: datetime | None = None
-    source: str  # 'simplyprint' | 'manual' | 'unknown'
+    source: str  # 'simplyprint' | 'moonraker' | 'manual' | 'unknown'
+
+    # Moonraker live extras
+    progress_pct: int | None = None
+    extruder_temp: float | None = None
+    extruder_target: float | None = None
+    bed_temp: float | None = None
+    bed_target: float | None = None
 
     class Config:
         from_attributes = True

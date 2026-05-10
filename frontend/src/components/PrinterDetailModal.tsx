@@ -20,6 +20,75 @@ const MANUAL_STATUSES = [
   { value: "error", label: "Помилка 🛑" },
 ];
 
+function MoonrakerControls({
+  printer,
+  onUpdated,
+}: {
+  printer: Printer;
+  onUpdated: (p: Printer) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function act(action: "pause" | "resume" | "cancel") {
+    setBusy(action);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/${action}`, { method: "POST" });
+      // Refresh printer state — server's cache for this URL is invalidated
+      const refreshed = await api<Printer[]>("/api/printers");
+      const updated = refreshed.find((p) => p.id === printer.id);
+      if (updated) onUpdated(updated);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const isPaused = printer.state === "paused";
+  const isPrinting = printer.state === "printing";
+
+  return (
+    <div className="space-y-1">
+      <div className="grid grid-cols-3 gap-2">
+        {isPrinting && (
+          <button
+            type="button"
+            onClick={() => act("pause")}
+            disabled={busy !== null}
+            className="rounded-md bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+          >
+            {busy === "pause" ? "…" : "⏸ Пауза"}
+          </button>
+        )}
+        {isPaused && (
+          <button
+            type="button"
+            onClick={() => act("resume")}
+            disabled={busy !== null}
+            className="rounded-md bg-emerald-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {busy === "resume" ? "…" : "▶ Продовжити"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm("Скасувати поточний друк? Це не скасується автоматично.")) act("cancel");
+          }}
+          disabled={busy !== null}
+          className="col-span-2 rounded-md border border-red-300 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+        >
+          {busy === "cancel" ? "…" : "✕ Скасувати друк"}
+        </button>
+      </div>
+      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+    </div>
+  );
+}
+
+
 function MoonrakerUrlEditor({
   printer,
   onUpdated,
@@ -175,25 +244,68 @@ export function PrinterDetailModal({
         </div>
 
         {printer.moonraker_url && (
-          <div className="flex items-center gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => window.open(printer.moonraker_url!, "_blank", "noopener,noreferrer")}
-              className="rounded-md border border-blue-300 px-2 py-1 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
-            >
-              🔗 Відкрити в Mainsail
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(printer.moonraker_url!);
-              }}
-              className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
-              title="Скопіювати URL"
-            >
-              ⧉ копіювати
-            </button>
-          </div>
+          <>
+            <div className="flex items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => window.open(printer.moonraker_url!, "_blank", "noopener,noreferrer")}
+                className="rounded-md border border-blue-300 px-2 py-1 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
+              >
+                🔗 Відкрити в Mainsail
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(printer.moonraker_url!);
+                }}
+                className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+                title="Скопіювати URL"
+              >
+                ⧉ копіювати
+              </button>
+            </div>
+
+            {(printer.state === "printing" || printer.state === "paused") && canEdit && (
+              <MoonrakerControls printer={printer} onUpdated={onUpdated} />
+            )}
+
+            {(printer.progress_pct != null ||
+              printer.extruder_temp != null ||
+              printer.bed_temp != null) && (
+              <div className="rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+                {printer.progress_pct != null && printer.state === "printing" && (
+                  <>
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-neutral-500">Прогрес</span>
+                      <span className="font-medium">{printer.progress_pct}%</span>
+                    </div>
+                    <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500"
+                        style={{ width: `${printer.progress_pct}%` }}
+                      />
+                    </div>
+                  </>
+                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-600 dark:text-neutral-400">
+                  {printer.extruder_temp != null && (
+                    <span>
+                      🌡 Сопло: {Math.round(printer.extruder_temp)}°
+                      {printer.extruder_target
+                        ? ` → ${Math.round(printer.extruder_target)}°`
+                        : ""}
+                    </span>
+                  )}
+                  {printer.bed_temp != null && (
+                    <span>
+                      ▣ Стіл: {Math.round(printer.bed_temp)}°
+                      {printer.bed_target ? ` → ${Math.round(printer.bed_target)}°` : ""}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {isManual && user.role === "admin" && (
