@@ -3,6 +3,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
+import { FilamentSwatches } from "@/components/FilamentSwatches";
 import type { PrintTask } from "@/lib/types";
 
 function formatEta(min: number | null) {
@@ -51,7 +52,7 @@ export function TaskQueueItem({
       </div>
       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-neutral-500">
         {task.quantity > 1 && <span>×{task.quantity}</span>}
-        {task.filament_type && (
+        {!task.filament_meta?.types?.length && task.filament_type && (
           <span>
             {task.filament_type}
             {task.filament_color ? ` · ${task.filament_color}` : ""}
@@ -71,6 +72,11 @@ export function TaskQueueItem({
           </span>
         )}
       </div>
+      {task.filament_meta && (
+        <div className="mt-1.5">
+          <FilamentSwatches meta={task.filament_meta} />
+        </div>
+      )}
       <button
         type="button"
         onPointerDown={(e) => e.stopPropagation()}

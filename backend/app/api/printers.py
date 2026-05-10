@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.db import get_db
+from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.schemas.printer import (
@@ -190,6 +191,21 @@ def set_manual_state(
     db.commit()
     db.refresh(row)
     return _to_dto(row, None)
+
+
+@router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> None:
+    row = db.get(Printer, printer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    # Cascade: drop plan entries pointing to this printer
+    db.query(PlanEntry).filter(PlanEntry.printer_id == printer_id).delete()
+    db.delete(row)
+    db.commit()
 
 
 @router.post("/sync", response_model=list[PrinterOut])

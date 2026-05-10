@@ -159,6 +159,9 @@ export default function DashboardPage() {
         onUpdated={(p) => {
           upsertPrinter(p);
         }}
+        onDeleted={(id) => {
+          setPrinters((prev) => prev.filter((p) => p.id !== id));
+        }}
       />
     </div>
   );

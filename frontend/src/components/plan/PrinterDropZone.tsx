@@ -3,6 +3,7 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useRef, useState } from "react";
 
+import { FilamentSwatches } from "@/components/FilamentSwatches";
 import { ApiError, api } from "@/lib/api";
 import { kindLabel, stateEmoji, stateLabel } from "@/lib/printerLabels";
 import type { PlanEntry, Printer } from "@/lib/types";
@@ -76,6 +77,11 @@ function PlanEntryRow({
               <span className="ml-1 text-xs text-blue-500" title={entry.task.file_name}>📎</span>
             )}
           </div>
+          {entry.task.filament_meta && (
+            <div className="mt-1">
+              <FilamentSwatches meta={entry.task.filament_meta} />
+            </div>
+          )}
         </div>
         <button
           type="button"

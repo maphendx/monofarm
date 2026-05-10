@@ -9,6 +9,7 @@ from app.core.db import get_db
 from app.models.task import PrintTask, PrintTaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import PrintTaskCreate, PrintTaskOut, PrintTaskUpdate
+from app.services.gcode_meta import parse_gcode
 
 
 # Files live under data/uploads/<task_id>/<original_filename>
@@ -141,6 +142,18 @@ async def upload_task_file(
     task.file_ref = fname
     task.file_name = fname
     task.file_size = written
+
+    # Best-effort metadata extraction; never fails the upload.
+    try:
+        meta = parse_gcode(target_path)
+        if meta:
+            task.filament_meta = meta
+            # If estimated_minutes wasn't set manually, populate from file
+            if not task.estimated_minutes and meta.get("estimated_minutes"):
+                task.estimated_minutes = meta["estimated_minutes"]
+    except Exception:  # noqa: BLE001
+        pass
+
     db.commit()
     db.refresh(task)
     return task
@@ -174,6 +187,7 @@ def delete_task_file(
     task.file_ref = None
     task.file_name = None
     task.file_size = None
+    task.filament_meta = None
     db.commit()
     db.refresh(task)
     return task

@@ -152,10 +152,12 @@ export function PrinterDetailModal({
   printer,
   onClose,
   onUpdated,
+  onDeleted,
 }: {
   printer: Printer | null;
   onClose: () => void;
   onUpdated: (p: Printer) => void;
+  onDeleted?: (id: number) => void;
 }) {
   const user = useUser();
   const isManual = printer?.kind !== "simplyprint";
@@ -408,6 +410,28 @@ export function PrinterDetailModal({
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        )}
+
+        {isManual && user.role === "admin" && onDeleted && (
+          <div className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm(`Видалити ${printer.name}? Усі записи плану з ним теж видаляться.`))
+                  return;
+                try {
+                  await api(`/api/printers/${printer.id}`, { method: "DELETE" });
+                  onDeleted(printer.id);
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof ApiError ? err.message : "Помилка видалення");
+                }
+              }}
+              className="w-full rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              🗑 Видалити принтер
+            </button>
+          </div>
         )}
       </div>
     </Modal>

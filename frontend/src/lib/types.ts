@@ -45,6 +45,16 @@ export interface Printer {
   bed_target: number | null;
 }
 
+export interface FilamentMeta {
+  types?: string[];
+  colors?: string[];
+  used_g?: number[];
+  used_m?: number[];
+  estimated_minutes?: number;
+  total_layers?: number;
+  layer_height?: number;
+}
+
 export interface PrintTask {
   id: number;
   title: string;
@@ -58,6 +68,7 @@ export interface PrintTask {
   created_at: string;
   file_name: string | null;
   file_size: number | null;
+  filament_meta: FilamentMeta | null;
 }
 
 export interface Filament {

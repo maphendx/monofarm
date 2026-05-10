@@ -39,6 +39,7 @@ class PrintTaskOut(BaseModel):
     created_at: datetime
     file_name: str | None = None
     file_size: int | None = None
+    filament_meta: dict | None = None
 
     class Config:
         from_attributes = True
