@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: printfarm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: printfarm
+      POSTGRES_PASSWORD: printfarm
+      POSTGRES_DB: printfarm
+    ports:
+      - "5432:5432"
+    volumes:
+      - printfarm-pgdata:/var/lib/postgresql/data
+
+volumes:
+  printfarm-pgdata:

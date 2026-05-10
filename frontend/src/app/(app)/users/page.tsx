@@ -1,0 +1,265 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+import { Modal } from "@/components/Modal";
+import { ApiError, api } from "@/lib/api";
+import { useUser } from "@/lib/auth-context";
+import type { AdminUser, UserRole } from "@/lib/types";
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  admin: "Адмін",
+  operator: "Оператор",
+  manager: "Керівник",
+};
+
+const ROLE_COLOR: Record<UserRole, string> = {
+  admin: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  operator: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  manager: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+};
+
+interface FormState {
+  email: string;
+  name: string;
+  password: string;
+  role: UserRole;
+}
+
+const EMPTY_FORM: FormState = {
+  email: "",
+  name: "",
+  password: "",
+  role: "operator",
+};
+
+function UserFormModal({
+  open,
+  initial,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  initial: AdminUser | null;
+  onClose: () => void;
+  onSaved: (u: AdminUser) => void;
+}) {
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm(
+        initial
+          ? { email: initial.email, name: initial.name, password: "", role: initial.role }
+          : EMPTY_FORM,
+      );
+      setError(null);
+    }
+  }, [open, initial]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      let saved: AdminUser;
+      if (initial) {
+        const body: Record<string, unknown> = { name: form.name, role: form.role };
+        if (form.password) body.password = form.password;
+        saved = await api<AdminUser>(`/api/users/${initial.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
+      } else {
+        saved = await api<AdminUser>("/api/users", {
+          method: "POST",
+          body: JSON.stringify(form),
+        });
+      }
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => { if (!busy) onClose(); }}
+      title={initial ? "Редагувати користувача" : "Додати користувача"}
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            Скасувати
+          </button>
+          <button type="submit" form="user-form" disabled={busy}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити"}
+          </button>
+        </>
+      }
+    >
+      <form id="user-form" onSubmit={submit} className="space-y-3 text-sm">
+        <label className="block">
+          <span className="mb-1 block">Email</span>
+          <input type="email" required disabled={!!initial} value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            placeholder="user@example.com"
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block">Імʼя</span>
+          <input type="text" value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            placeholder="Іван"
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block">
+            Пароль {initial && <span className="text-neutral-400">(залиш порожнім — не міняти)</span>}
+          </span>
+          <input type="password" required={!initial} minLength={6} value={form.password}
+            onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+            placeholder="мін. 6 символів"
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block">Роль</span>
+          <select value={form.role}
+            onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950">
+            {(Object.keys(ROLE_LABEL) as UserRole[]).map(r => (
+              <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+            ))}
+          </select>
+        </label>
+        {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+      </form>
+    </Modal>
+  );
+}
+
+export default function UsersPage() {
+  const me = useUser();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setUsers(await api<AdminUser[]>("/api/users"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function upsert(u: AdminUser) {
+    setUsers(prev => {
+      const idx = prev.findIndex(x => x.id === u.id);
+      if (idx === -1) return [...prev, u];
+      const copy = [...prev]; copy[idx] = u; return copy;
+    });
+  }
+
+  async function toggleActive(u: AdminUser) {
+    if (u.id === me.id) return;
+    const updated = await api<AdminUser>(`/api/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_active: !u.is_active }),
+    });
+    upsert(updated);
+  }
+
+  async function remove(u: AdminUser) {
+    if (u.id === me.id) return;
+    if (!confirm(`Видалити користувача ${u.email}?`)) return;
+    await api(`/api/users/${u.id}`, { method: "DELETE" });
+    setUsers(prev => prev.filter(x => x.id !== u.id));
+  }
+
+  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Користувачі</h1>
+        <button onClick={() => { setEditing(null); setModalOpen(true); }}
+          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          + Користувач
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950">
+            <tr>
+              <th className="px-4 py-3 font-medium">Email</th>
+              <th className="px-4 py-3 font-medium">Імʼя</th>
+              <th className="px-4 py-3 font-medium">Роль</th>
+              <th className="px-4 py-3 font-medium">Статус</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+            {users.map(u => (
+              <tr key={u.id} className={u.is_active ? "" : "opacity-50"}>
+                <td className="px-4 py-3 font-medium">
+                  {u.email}
+                  {u.id === me.id && <span className="ml-1.5 text-xs text-neutral-400">(ти)</span>}
+                </td>
+                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{u.name || "—"}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded px-1.5 py-0.5 text-xs ${ROLE_COLOR[u.role]}`}>
+                    {ROLE_LABEL[u.role]}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {u.is_active ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">● Активний</span>
+                  ) : (
+                    <span className="text-neutral-400">○ Деактивований</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => { setEditing(u); setModalOpen(true); }}
+                      className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"
+                      title="Редагувати">✎</button>
+                    {u.id !== me.id && (
+                      <>
+                        <button onClick={() => toggleActive(u)}
+                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          title={u.is_active ? "Деактивувати" : "Активувати"}>
+                          {u.is_active ? "⏸" : "▶"}
+                        </button>
+                        <button onClick={() => remove(u)}
+                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800"
+                          title="Видалити">✕</button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <UserFormModal
+        open={modalOpen}
+        initial={editing}
+        onClose={() => setModalOpen(false)}
+        onSaved={upsert}
+      />
+    </div>
+  );
+}

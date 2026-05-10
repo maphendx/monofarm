@@ -1,0 +1,55 @@
+import enum
+from datetime import date, datetime
+
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.db import Base
+
+
+class PrintTaskStatus(str, enum.Enum):
+    queued = "queued"
+    in_progress = "in_progress"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class PrintTask(Base):
+    """A part / batch that needs to be printed."""
+
+    __tablename__ = "print_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    filament_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    filament_color: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    file_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[PrintTaskStatus] = mapped_column(Enum(PrintTaskStatus), default=PrintTaskStatus.queued)
+
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FarmTaskStatus(str, enum.Enum):
+    todo = "todo"
+    in_progress = "in_progress"
+    done = "done"
+
+
+class FarmTask(Base):
+    """General farm tasks (maintenance, supply, etc) — task manager."""
+
+    __tablename__ = "farm_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[FarmTaskStatus] = mapped_column(Enum(FarmTaskStatus), default=FarmTaskStatus.todo)
+    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
