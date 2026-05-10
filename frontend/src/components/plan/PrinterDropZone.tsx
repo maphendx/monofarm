@@ -43,53 +43,61 @@ function PlanEntryRow({
   return (
     <div
       className={
-        "flex items-start gap-2 rounded-md px-2 py-1.5 text-sm " +
+        "rounded-md px-2 py-2 text-sm " +
         (entry.done ? "opacity-50" : "bg-neutral-50 dark:bg-neutral-800/50")
       }
     >
-      <input
-        type="checkbox"
-        checked={entry.done}
-        onChange={onToggleDone}
-        className="mt-0.5 shrink-0 cursor-pointer accent-emerald-600"
-      />
-      <div className="min-w-0 flex-1">
-        <div className={entry.done ? "line-through" : ""}>
-          {entry.task.title}
-          {entry.task.quantity > 1 && (
-            <span className="ml-1 text-xs text-neutral-400">×{entry.task.quantity}</span>
-          )}
-          {entry.task.file_name && (
-            <span className="ml-1 text-[10px] text-blue-500" title={entry.task.file_name}>📎</span>
-          )}
+      <div className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={entry.done}
+          onChange={onToggleDone}
+          className="mt-0.5 shrink-0 cursor-pointer accent-emerald-600"
+        />
+        <div className="min-w-0 flex-1">
+          <div className={entry.done ? "line-through" : ""}>
+            {entry.task.title}
+            {entry.task.quantity > 1 && (
+              <span className="ml-1 text-xs text-neutral-400">×{entry.task.quantity}</span>
+            )}
+            {entry.task.file_name && (
+              <span className="ml-1 text-xs text-blue-500" title={entry.task.file_name}>📎</span>
+            )}
+          </div>
         </div>
-        {sendErr && (
-          <div className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">{sendErr}</div>
-        )}
-      </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={canSend ? send : undefined}
-          disabled={!canSend || sending}
-          className={
-            canSend
-              ? "rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-emerald-500 disabled:opacity-50"
-              : "cursor-not-allowed rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500"
-          }
-          title={canSend ? "Завантажити файл і запустити друк через Moonraker" : (cantSendReason ?? "")}
-        >
-          {sending ? "…" : "▶ Друк"}
-        </button>
         <button
           type="button"
           onClick={onRemove}
-          className="text-neutral-300 hover:text-red-500 dark:text-neutral-600"
+          className="shrink-0 text-neutral-300 hover:text-red-500 dark:text-neutral-600"
           aria-label="Прибрати"
         >
           ✕
         </button>
       </div>
+
+      {/* Big, full-width action button — primary call-to-action */}
+      <button
+        type="button"
+        onClick={canSend ? send : undefined}
+        disabled={!canSend || sending}
+        className={
+          "mt-2 block w-full rounded-md py-1.5 text-xs font-medium transition " +
+          (canSend
+            ? "bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+            : "cursor-not-allowed bg-neutral-200 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500")
+        }
+        title={canSend ? "Завантажити файл і запустити друк" : (cantSendReason ?? "")}
+      >
+        {sending
+          ? "Завантажую…"
+          : canSend
+            ? "▶ Друк"
+            : `▶ Друк · ${cantSendReason}`}
+      </button>
+
+      {sendErr && (
+        <div className="mt-1 text-xs text-red-600 dark:text-red-400">{sendErr}</div>
+      )}
     </div>
   );
 }
