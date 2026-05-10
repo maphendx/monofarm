@@ -1,15 +1,28 @@
-from datetime import date
+import asyncio
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.core.db import get_db
 from app.models.plan import PlanEntry
-from app.models.printer import Printer
+from app.models.printer import Printer, PrinterKind
 from app.models.task import PrintTask
 from app.models.user import User, UserRole
 from app.schemas.plan import PlanEntryCreate, PlanEntryOut, PlanEntryUpdate
+from app.services import moonraker
+
+
+# Files live under data/uploads/<task_id>/<original_filename>
+UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
+
+
+class SendResult(BaseModel):
+    ok: bool
+    message: str
 
 
 router = APIRouter(prefix="/plan", tags=["plan"])
@@ -111,3 +124,47 @@ def delete_entry(
         raise HTTPException(status_code=404, detail="Plan entry not found")
     db.delete(entry)
     db.commit()
+
+
+@router.post("/{entry_id}/send", response_model=SendResult)
+async def send_entry_to_printer(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> SendResult:
+    """Upload the task's file to the printer's Moonraker and start the print."""
+    entry = db.get(PlanEntry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Plan entry not found")
+
+    printer = db.get(Printer, entry.printer_id)
+    task = db.get(PrintTask, entry.task_id)
+    if not printer or not task:
+        raise HTTPException(status_code=404, detail="Printer or task not found")
+    if not printer.moonraker_url:
+        raise HTTPException(status_code=400, detail="У принтера не вказано Moonraker URL")
+    if not task.file_ref:
+        raise HTTPException(status_code=400, detail="До задачі не прикріплено файл")
+
+    file_path = UPLOADS_DIR / str(task.id) / task.file_ref
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Файл відсутній на диску")
+
+    url = printer.moonraker_url
+
+    # Network-bound, sync — offload to a thread so the event loop stays free.
+    try:
+        await asyncio.to_thread(moonraker.upload_gcode, url, file_path, task.file_ref)
+        await asyncio.to_thread(moonraker.start_print, url, task.file_ref)
+    except moonraker.MoonrakerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Reflect on the printer card: mark manual U1 as printing
+    if printer.kind != PrinterKind.simplyprint:
+        printer.manual_status = "printing"
+        printer.manual_job = task.title
+        printer.manual_eta_minutes = task.estimated_minutes
+        printer.manual_updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return SendResult(ok=True, message=f"Запущено друк на {printer.name}")

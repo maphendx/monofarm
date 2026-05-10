@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import { useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
 import { kindLabel, stateEmoji, stateLabel } from "@/lib/printerLabels";
@@ -8,20 +9,38 @@ import type { PlanEntry, Printer } from "@/lib/types";
 
 function PlanEntryRow({
   entry,
+  printer,
   onToggleDone,
   onRemove,
 }: {
   entry: PlanEntry;
+  printer: Printer;
   onToggleDone: () => void;
   onRemove: () => void;
 }) {
+  const [sending, setSending] = useState(false);
+  const [sendErr, setSendErr] = useState<string | null>(null);
+
+  const canSend =
+    !!entry.task.file_name && !!printer.moonraker_url && !entry.done;
+
+  async function send() {
+    setSending(true);
+    setSendErr(null);
+    try {
+      await api(`/api/plan/${entry.id}/send`, { method: "POST" });
+    } catch (err) {
+      setSendErr(err instanceof ApiError ? err.message : "Помилка");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <div
       className={
         "flex items-start gap-2 rounded-md px-2 py-1.5 text-sm " +
-        (entry.done
-          ? "opacity-50"
-          : "bg-neutral-50 dark:bg-neutral-800/50")
+        (entry.done ? "opacity-50" : "bg-neutral-50 dark:bg-neutral-800/50")
       }
     >
       <input
@@ -30,20 +49,41 @@ function PlanEntryRow({
         onChange={onToggleDone}
         className="mt-0.5 shrink-0 cursor-pointer accent-emerald-600"
       />
-      <span className={entry.done ? "line-through" : ""}>
-        {entry.task.title}
-        {entry.task.quantity > 1 && (
-          <span className="ml-1 text-xs text-neutral-400">×{entry.task.quantity}</span>
+      <div className="min-w-0 flex-1">
+        <div className={entry.done ? "line-through" : ""}>
+          {entry.task.title}
+          {entry.task.quantity > 1 && (
+            <span className="ml-1 text-xs text-neutral-400">×{entry.task.quantity}</span>
+          )}
+          {entry.task.file_name && (
+            <span className="ml-1 text-[10px] text-blue-500" title={entry.task.file_name}>📎</span>
+          )}
+        </div>
+        {sendErr && (
+          <div className="mt-0.5 text-[10px] text-red-600 dark:text-red-400">{sendErr}</div>
         )}
-      </span>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="ml-auto shrink-0 text-neutral-300 hover:text-red-500 dark:text-neutral-600"
-        aria-label="Прибрати"
-      >
-        ✕
-      </button>
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {canSend && (
+          <button
+            type="button"
+            onClick={send}
+            disabled={sending}
+            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-emerald-500 disabled:opacity-50"
+            title="Завантажити файл і запустити друк через Moonraker"
+          >
+            {sending ? "…" : "▶ Друк"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-neutral-300 hover:text-red-500 dark:text-neutral-600"
+          aria-label="Прибрати"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
@@ -121,6 +161,7 @@ export function PrinterDropZone({
           <PlanEntryRow
             key={entry.id}
             entry={entry}
+            printer={printer}
             onToggleDone={() => toggleDone(entry)}
             onRemove={() => removeEntry(entry)}
           />

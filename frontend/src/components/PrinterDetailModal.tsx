@@ -175,14 +175,25 @@ export function PrinterDetailModal({
         </div>
 
         {printer.moonraker_url && (
-          <a
-            href={printer.moonraker_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
-          >
-            🔗 Відкрити в Mainsail
-          </a>
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => window.open(printer.moonraker_url!, "_blank", "noopener,noreferrer")}
+              className="rounded-md border border-blue-300 px-2 py-1 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
+            >
+              🔗 Відкрити в Mainsail
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(printer.moonraker_url!);
+              }}
+              className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+              title="Скопіювати URL"
+            >
+              ⧉ копіювати
+            </button>
+          </div>
         )}
 
         {isManual && user.role === "admin" && (
