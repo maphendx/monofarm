@@ -15,6 +15,14 @@ export interface User {
 export interface AdminUser extends User {
   is_active: boolean;
   created_at: string;
+  telegram_chat_id: number | null;
+}
+
+export interface TelegramLink {
+  code: string;
+  bot_username: string | null;
+  deep_link: string | null;
+  expires_at: string;
 }
 
 export interface Printer {
@@ -42,6 +50,18 @@ export interface PrintTask {
   notes: string | null;
   status: PrintTaskStatus;
   created_at: string;
+}
+
+export interface Filament {
+  id: number;
+  material: string;
+  color: string;
+  brand: string | null;
+  grams_remaining: number;
+  min_grams: number;
+  note: string | null;
+  updated_at: string;
+  is_low: boolean;
 }
 
 export interface FarmTask {

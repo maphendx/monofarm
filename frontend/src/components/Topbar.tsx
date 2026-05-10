@@ -10,6 +10,7 @@ const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
   { href: "/dashboard", label: "Дашборд" },
   { href: "/plan", label: "План дня" },
   { href: "/tasks", label: "Завдання" },
+  { href: "/filament", label: "Пластик" },
   { href: "/users", label: "Користувачі", adminOnly: true },
 ];
 

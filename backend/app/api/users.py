@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
@@ -6,6 +7,14 @@ from app.core.db import get_db
 from app.core.security import hash_password
 from app.models.user import User, UserRole
 from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
+from app.services import telegram_bot
+
+
+class TelegramLinkOut(BaseModel):
+    code: str
+    bot_username: str | None
+    deep_link: str | None
+    expires_at: str
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -66,6 +75,43 @@ def update_user(
     if payload.password:
         user.password_hash = hash_password(payload.password)
 
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/telegram/link", response_model=TelegramLinkOut)
+def generate_telegram_link(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> TelegramLinkOut:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+    code = telegram_bot.generate_link_code(db, user)
+    bot_username = telegram_bot.get_bot_username()
+    deep_link = f"https://t.me/{bot_username}?start={code}" if bot_username else None
+    return TelegramLinkOut(
+        code=code,
+        bot_username=bot_username,
+        deep_link=deep_link,
+        expires_at=user.telegram_link_expires_at.isoformat() if user.telegram_link_expires_at else "",
+    )
+
+
+@router.delete("/{user_id}/telegram", response_model=UserAdminOut)
+def unlink_telegram(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> User:
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+    user.telegram_chat_id = None
+    user.telegram_link_code = None
+    user.telegram_link_expires_at = None
     db.commit()
     db.refresh(user)
     return user

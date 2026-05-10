@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Modal } from "@/components/Modal";
+import { TelegramLinkModal } from "@/components/TelegramLinkModal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
@@ -151,6 +152,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [tgLinkUser, setTgLinkUser] = useState<AdminUser | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -186,6 +188,12 @@ export default function UsersPage() {
     setUsers(prev => prev.filter(x => x.id !== u.id));
   }
 
+  async function unlinkTelegram(u: AdminUser) {
+    if (!confirm(`Відвʼязати Telegram від ${u.email}?`)) return;
+    const updated = await api<AdminUser>(`/api/users/${u.id}/telegram`, { method: "DELETE" });
+    upsert(updated);
+  }
+
   if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
 
   return (
@@ -206,6 +214,7 @@ export default function UsersPage() {
               <th className="px-4 py-3 font-medium">Імʼя</th>
               <th className="px-4 py-3 font-medium">Роль</th>
               <th className="px-4 py-3 font-medium">Статус</th>
+              <th className="px-4 py-3 font-medium">Telegram</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -227,6 +236,24 @@ export default function UsersPage() {
                     <span className="text-emerald-600 dark:text-emerald-400">● Активний</span>
                   ) : (
                     <span className="text-neutral-400">○ Деактивований</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {u.telegram_chat_id ? (
+                    <button
+                      onClick={() => unlinkTelegram(u)}
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                      title="Відвʼязати"
+                    >
+                      ✓ Привʼязано
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setTgLinkUser(u)}
+                      className="text-neutral-500 hover:text-neutral-900 hover:underline dark:hover:text-neutral-100"
+                    >
+                      🔗 Привʼязати
+                    </button>
                   )}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -259,6 +286,11 @@ export default function UsersPage() {
         initial={editing}
         onClose={() => setModalOpen(false)}
         onSaved={upsert}
+      />
+
+      <TelegramLinkModal
+        user={tgLinkUser}
+        onClose={() => setTgLinkUser(null)}
       />
     </div>
   );

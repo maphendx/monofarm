@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     TG_BOT_TOKEN: str = ""
     TG_REPORT_CHAT_ID: str = ""
+    FARM_PUBLIC_URL: str = "http://localhost:3000"
 
     TIMEZONE: str = "Europe/Kiev"
     CORS_ORIGINS: str = "http://localhost:3000"

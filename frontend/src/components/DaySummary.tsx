@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { FarmTask, PlanEntry } from "@/lib/types";
+import type { FarmTask, Filament, PlanEntry } from "@/lib/types";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -15,13 +15,15 @@ export function DaySummary() {
   const [planTotal, setPlanTotal] = useState(0);
   const [tasksTodo, setTasksTodo] = useState(0);
   const [tasksOverdue, setTasksOverdue] = useState(0);
+  const [lowFilament, setLowFilament] = useState(0);
 
   useEffect(() => {
     const today = todayStr();
     Promise.all([
       api<PlanEntry[]>(`/api/plan?plan_date=${today}`),
       api<FarmTask[]>("/api/tasks/farm"),
-    ]).then(([entries, tasks]) => {
+      api<Filament[]>("/api/filaments"),
+    ]).then(([entries, tasks, filaments]) => {
       setPlanTotal(entries.length);
       setPlanDone(entries.filter((e) => e.done).length);
       const active = tasks.filter((t) => t.status !== "done");
@@ -31,10 +33,11 @@ export function DaySummary() {
           (t) => t.deadline && new Date(t.deadline) < new Date(today),
         ).length,
       );
+      setLowFilament(filaments.filter((f) => f.is_low).length);
     });
   }, []);
 
-  if (planTotal === 0 && tasksTodo === 0) return null;
+  if (planTotal === 0 && tasksTodo === 0 && lowFilament === 0) return null;
 
   return (
     <div className="flex flex-wrap gap-3">
@@ -69,6 +72,24 @@ export function DaySummary() {
                   ⚠️ {tasksOverdue} прострочено
                 </span>
               )}
+            </div>
+          </div>
+        </Link>
+      )}
+
+      {lowFilament > 0 && (
+        <Link
+          href="/filament"
+          className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm hover:border-amber-500 dark:border-amber-900 dark:bg-amber-950/20"
+        >
+          <span className="text-xl">⚠️</span>
+          <div>
+            <div className="text-xs text-amber-700 dark:text-amber-400">
+              Пластик закінчується
+            </div>
+            <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+              {lowFilament}{" "}
+              <span className="font-normal">{lowFilament === 1 ? "котушка" : "котушок"}</span>
             </div>
           </div>
         </Link>

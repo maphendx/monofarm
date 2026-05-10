@@ -26,6 +26,7 @@ class UserAdminOut(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    telegram_chat_id: int | None = None
 
     class Config:
         from_attributes = True
