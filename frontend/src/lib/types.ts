@@ -30,6 +30,7 @@ export interface Printer {
   name: string;
   kind: PrinterKind;
   sp_printer_id: string | null;
+  moonraker_url: string | null;
   is_active: boolean;
   state: string | null;
   flags: string[];
@@ -50,6 +51,8 @@ export interface PrintTask {
   notes: string | null;
   status: PrintTaskStatus;
   created_at: string;
+  file_name: string | null;
+  file_size: number | null;
 }
 
 export interface Filament {

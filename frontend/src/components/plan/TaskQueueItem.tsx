@@ -65,6 +65,11 @@ export function TaskQueueItem({
             🗓 {task.deadline}
           </span>
         )}
+        {task.file_name && (
+          <span className="rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+            📎 {task.file_name}
+          </span>
+        )}
       </div>
       <button
         type="button"

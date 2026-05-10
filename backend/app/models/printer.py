@@ -29,5 +29,8 @@ class Printer(Base):
     manual_eta_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     manual_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Moonraker / Mainsail URL (for Snapmaker U1 and other Klipper-based printers)
+    moonraker_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

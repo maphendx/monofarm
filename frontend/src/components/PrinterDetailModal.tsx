@@ -20,6 +20,65 @@ const MANUAL_STATUSES = [
   { value: "error", label: "Помилка 🛑" },
 ];
 
+function MoonrakerUrlEditor({
+  printer,
+  onUpdated,
+}: {
+  printer: Printer;
+  onUpdated: (p: Printer) => void;
+}) {
+  const [url, setUrl] = useState(printer.moonraker_url ?? "");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setUrl(printer.moonraker_url ?? "");
+  }, [printer.moonraker_url]);
+
+  async function save() {
+    setBusy(true);
+    setSaved(false);
+    try {
+      const updated = await api<Printer>(`/api/printers/${printer.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ moonraker_url: url.trim() }),
+      });
+      onUpdated(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <label className="block">
+        <span className="mb-1 block text-xs text-neutral-500">
+          Moonraker / Mainsail URL
+        </span>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="http://192.168.31.210"
+          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950"
+        />
+      </label>
+      <div className="flex justify-end gap-2 text-xs">
+        {saved && <span className="text-emerald-600 dark:text-emerald-400">✓ Збережено</span>}
+        <button
+          onClick={save}
+          disabled={busy || (url.trim() === (printer.moonraker_url ?? ""))}
+          className="rounded bg-neutral-900 px-2 py-1 text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        >
+          {busy ? "…" : "Зберегти URL"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PrinterDetailModal({
   printer,
   onClose,
@@ -114,6 +173,21 @@ export function PrinterDetailModal({
             </span>
           ))}
         </div>
+
+        {printer.moonraker_url && (
+          <a
+            href={printer.moonraker_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline dark:text-blue-400"
+          >
+            🔗 Відкрити в Mainsail
+          </a>
+        )}
+
+        {isManual && user.role === "admin" && (
+          <MoonrakerUrlEditor printer={printer} onUpdated={onUpdated} />
+        )}
 
         {!isManual && (
           <p className="rounded-md bg-neutral-100 px-3 py-2 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">

@@ -27,6 +27,8 @@ class PrintTask(Base):
     estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
     file_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[PrintTaskStatus] = mapped_column(Enum(PrintTaskStatus), default=PrintTaskStatus.queued)
 

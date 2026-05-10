@@ -58,38 +58,26 @@ def _ensure_simplyprint_rows(db: Session, sp_printers: list[dict]) -> dict[str, 
 
 
 def _to_dto(printer: Printer, sp_state: dict | None) -> PrinterOut:
-    if printer.kind == PrinterKind.simplyprint and sp_state:
-        return PrinterOut(
-            id=printer.id,
-            name=printer.name,
-            kind=printer.kind,
-            sp_printer_id=printer.sp_printer_id,
-            is_active=printer.is_active,
-            state=sp_state["state"],
-            flags=sp_state.get("flags", []),
-            job=None,
-            eta_minutes=None,
-            updated_at=None,
-            source="simplyprint",
-        )
-    if printer.kind == PrinterKind.simplyprint:
-        return PrinterOut(
-            id=printer.id,
-            name=printer.name,
-            kind=printer.kind,
-            sp_printer_id=printer.sp_printer_id,
-            is_active=printer.is_active,
-            state="unknown",
-            flags=[],
-            source="unknown",
-        )
-    # Manual (U1, other)
-    return PrinterOut(
+    base = dict(
         id=printer.id,
         name=printer.name,
         kind=printer.kind,
         sp_printer_id=printer.sp_printer_id,
+        moonraker_url=printer.moonraker_url,
         is_active=printer.is_active,
+    )
+    if printer.kind == PrinterKind.simplyprint and sp_state:
+        return PrinterOut(
+            **base,
+            state=sp_state["state"],
+            flags=sp_state.get("flags", []),
+            source="simplyprint",
+        )
+    if printer.kind == PrinterKind.simplyprint:
+        return PrinterOut(**base, state="unknown", flags=[], source="unknown")
+    # Manual (U1, other)
+    return PrinterOut(
+        **base,
         state=printer.manual_status or "idle",
         flags=[],
         job=printer.manual_job,
@@ -128,6 +116,7 @@ def create_printer(
         name=payload.name,
         kind=payload.kind,
         sp_printer_id=payload.sp_printer_id,
+        moonraker_url=payload.moonraker_url,
     )
     db.add(row)
     db.commit()
@@ -149,6 +138,9 @@ def update_printer(
         row.name = payload.name
     if payload.is_active is not None:
         row.is_active = payload.is_active
+    if payload.moonraker_url is not None:
+        # Empty string clears the URL
+        row.moonraker_url = payload.moonraker_url.strip() or None
     db.commit()
     db.refresh(row)
     return _to_dto(row, None)

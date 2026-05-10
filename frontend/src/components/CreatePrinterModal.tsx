@@ -22,12 +22,14 @@ export function CreatePrinterModal({
 }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PrinterKind>("snapmaker_u1");
+  const [moonrakerUrl, setMoonrakerUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
     setName("");
     setKind("snapmaker_u1");
+    setMoonrakerUrl("");
     setError(null);
   }
 
@@ -38,7 +40,11 @@ export function CreatePrinterModal({
     try {
       const p = await api<Printer>("/api/printers", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), kind }),
+        body: JSON.stringify({
+          name: name.trim(),
+          kind,
+          moonraker_url: moonrakerUrl.trim() || null,
+        }),
       });
       onCreated(p);
       reset();
@@ -110,6 +116,19 @@ export function CreatePrinterModal({
               </option>
             ))}
           </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm">
+            Moonraker / Mainsail URL{" "}
+            <span className="text-neutral-400">(опційно, для U1)</span>
+          </span>
+          <input
+            type="url"
+            value={moonrakerUrl}
+            onChange={(e) => setMoonrakerUrl(e.target.value)}
+            placeholder="http://192.168.31.210"
+            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+          />
         </label>
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>

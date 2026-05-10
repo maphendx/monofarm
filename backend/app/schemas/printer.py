@@ -9,11 +9,13 @@ class PrinterCreate(BaseModel):
     name: str
     kind: PrinterKind = PrinterKind.snapmaker_u1
     sp_printer_id: str | None = None
+    moonraker_url: str | None = None
 
 
 class PrinterUpdate(BaseModel):
     name: str | None = None
     is_active: bool | None = None
+    moonraker_url: str | None = None
 
 
 class PrinterManualUpdate(BaseModel):
@@ -29,6 +31,7 @@ class PrinterOut(BaseModel):
     name: str
     kind: PrinterKind
     sp_printer_id: str | None
+    moonraker_url: str | None = None
     is_active: bool
 
     # Live / merged state for the dashboard

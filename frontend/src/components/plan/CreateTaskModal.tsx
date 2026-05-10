@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Modal } from "@/components/Modal";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, getToken } from "@/lib/api";
 import type { PrintTask } from "@/lib/types";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export function CreateTaskModal({
   open,
@@ -21,12 +23,16 @@ export function CreateTaskModal({
   const [filamentColor, setFilamentColor] = useState("");
   const [etaMin, setEtaMin] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setTitle(""); setQty("1"); setFilamentType("");
-    setFilamentColor(""); setEtaMin(""); setDeadline(""); setError(null);
+    setFilamentColor(""); setEtaMin(""); setDeadline("");
+    setFile(null); setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function submit(e: React.FormEvent) {
@@ -44,7 +50,25 @@ export function CreateTaskModal({
           deadline: deadline || null,
         }),
       });
-      onCreated(task);
+
+      // Upload file (if any) — multipart, separate request
+      let final = task;
+      if (file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const resp = await fetch(`${API_URL}/api/tasks/print/${task.id}/file`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: fd,
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new ApiError(resp.status, data.detail ?? "Не вдалося завантажити файл");
+        }
+        final = (await resp.json()) as PrintTask;
+      }
+
+      onCreated(final);
       reset();
       onClose();
     } catch (err) {
@@ -111,6 +135,23 @@ export function CreateTaskModal({
           <span className="mb-1 block">Дедлайн (опційно)</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
             className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block">
+            Файл друку <span className="text-neutral-400">(.gcode, .3mf, опційно)</span>
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".gcode,.gco,.g,.3mf,.bgcode"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-xs text-neutral-600 file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-white file:hover:bg-neutral-700 dark:text-neutral-400 dark:file:bg-neutral-100 dark:file:text-neutral-900"
+          />
+          {file && (
+            <p className="mt-1 text-xs text-neutral-500">
+              {file.name} · {(file.size / 1024).toFixed(0)} КБ
+            </p>
+          )}
         </label>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
       </form>

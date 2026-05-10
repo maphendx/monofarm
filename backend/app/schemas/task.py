@@ -37,6 +37,8 @@ class PrintTaskOut(BaseModel):
     notes: str | None
     status: PrintTaskStatus
     created_at: datetime
+    file_name: str | None = None
+    file_size: int | None = None
 
     class Config:
         from_attributes = True
