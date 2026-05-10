@@ -19,6 +19,8 @@ log = logging.getLogger(__name__)
 TIMEOUT = 30
 STATUS_TIMEOUT = 5  # short timeout for live status polling
 STATUS_CACHE_TTL = 10.0  # seconds
+META_CACHE_TTL = 300.0  # file metadata is static for a given filename
+META_TAIL_BYTES = 96 * 1024  # how much to download from remote file for parsing
 
 
 class MoonrakerError(Exception):
@@ -26,6 +28,7 @@ class MoonrakerError(Exception):
 
 
 _status_cache: dict[str, tuple[float, dict]] = {}
+_meta_cache: dict[tuple[str, str], tuple[float, dict]] = {}
 
 
 def _api_base(url: str) -> str:
@@ -173,6 +176,135 @@ def _fetch_live_status(moonraker_url: str) -> dict:
         "bed_temp": bed.get("temperature"),
         "bed_target": bed.get("target"),
     }
+
+
+# ── File metadata fetch (for color swatches when local task isn't available) ─
+
+
+def _split_csv_or_semi(value) -> list[str]:
+    """Slicers/Moonraker emit some fields as 'a;b' strings, others as lists."""
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str):
+        return [v.strip() for v in value.replace(";", ",").split(",") if v.strip()]
+    return []
+
+
+def _from_moonraker_metadata(data: dict) -> dict:
+    """Best-effort conversion of Moonraker's metadata dict → our filament_meta."""
+    out: dict = {}
+
+    # Types
+    types = data.get("filament_type") or data.get("filament_name")
+    if types:
+        out["types"] = _split_csv_or_semi(types)
+
+    # Colors — Moonraker key varies; OrcaSlicer/Snaporca often expose it
+    for key in ("filament_color", "filament_colour", "filament_colors", "filament_colours"):
+        if key in data:
+            colors = _split_csv_or_semi(data[key])
+            if colors:
+                out["colors"] = colors
+                break
+
+    # Weight (grams) — Moonraker exposes per-filament list as `filament_weight`
+    weights = (
+        data.get("filament_weight")
+        or data.get("filament_weights")
+        or data.get("filament_weight_total")
+    )
+    if isinstance(weights, list):
+        out["used_g"] = [round(float(w), 2) for w in weights if w is not None]
+    elif isinstance(weights, (int, float)):
+        out["used_g"] = [round(float(weights), 2)]
+
+    if data.get("estimated_time"):
+        try:
+            out["estimated_minutes"] = round(float(data["estimated_time"]) / 60)
+        except (TypeError, ValueError):
+            pass
+    if data.get("layer_count"):
+        try:
+            out["total_layers"] = int(data["layer_count"])
+        except (TypeError, ValueError):
+            pass
+    if data.get("layer_height"):
+        try:
+            out["layer_height"] = float(data["layer_height"])
+        except (TypeError, ValueError):
+            pass
+
+    return out
+
+
+def _fetch_moonraker_metadata(moonraker_url: str, filename: str) -> dict:
+    base = _api_base(moonraker_url)
+    safe = quote(filename, safe="")
+    try:
+        resp = requests.get(
+            f"{base}/server/files/metadata?filename={safe}",
+            timeout=STATUS_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _from_moonraker_metadata(resp.json().get("result", {}))
+    except (requests.RequestException, ValueError) as e:
+        log.debug("Moonraker metadata fetch failed for %s: %s", filename, e)
+        return {}
+
+
+def _fetch_file_tail_and_parse(moonraker_url: str, filename: str) -> dict:
+    """Range-download the last META_TAIL_BYTES of the file and run our gcode parser."""
+    import tempfile
+    from app.services.gcode_meta import parse_gcode
+
+    base = _api_base(moonraker_url)
+    safe = quote(filename, safe="")
+    file_url = f"{base}/server/files/gcodes/{safe}"
+    try:
+        resp = requests.get(
+            file_url,
+            headers={"Range": f"bytes=-{META_TAIL_BYTES}"},
+            timeout=STATUS_TIMEOUT,
+        )
+        if resp.status_code not in (200, 206):
+            return {}
+        with tempfile.NamedTemporaryFile(suffix=Path(filename).suffix, delete=False) as f:
+            f.write(resp.content)
+            tmp_path = Path(f.name)
+        try:
+            return parse_gcode(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    except requests.RequestException as e:
+        log.debug("Moonraker file tail download failed for %s: %s", filename, e)
+        return {}
+
+
+def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
+    """Get filament metadata for a file stored on the printer.
+
+    Tries Moonraker's own metadata first; falls back to downloading the file
+    tail and running our gcode parser. Result is cached per (url, filename)
+    for META_CACHE_TTL seconds.
+    """
+    if not moonraker_url or not filename:
+        return {}
+    key = (moonraker_url, filename)
+    now = time.monotonic()
+    cached = _meta_cache.get(key)
+    if cached and now - cached[0] < META_CACHE_TTL:
+        return cached[1]
+
+    meta = _fetch_moonraker_metadata(moonraker_url, filename)
+    # If colors are missing, fall back to parsing the file ourselves
+    if not meta.get("colors"):
+        parsed = _fetch_file_tail_and_parse(moonraker_url, filename)
+        if parsed:
+            # parsed wins for any field it has, but keep moonraker fields too
+            meta = {**meta, **parsed}
+
+    _meta_cache[key] = (now, meta)
+    return meta
 
 
 def get_live_status(moonraker_url: str) -> dict:

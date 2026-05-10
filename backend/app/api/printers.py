@@ -60,11 +60,13 @@ def _ensure_simplyprint_rows(db: Session, sp_printers: list[dict]) -> dict[str, 
     return existing
 
 
-def _resolve_filament_for_file(db: Session, filename: str | None) -> dict | None:
+def _resolve_filament_for_file(
+    db: Session, filename: str | None, moonraker_url: str | None = None
+) -> dict | None:
     """Find filament_meta for the file currently being printed.
 
-    Matches by file_name (the same name we used when uploading to Moonraker).
-    If multiple tasks share a filename, prefers the most recently created one.
+    1. Local DB: PrintTask whose file_name matches (most recent if duplicates).
+    2. Fallback: fetch from Moonraker — its metadata, then file tail.
     """
     if not filename:
         return None
@@ -74,7 +76,13 @@ def _resolve_filament_for_file(db: Session, filename: str | None) -> dict | None
         .order_by(PrintTask.created_at.desc())
         .first()
     )
-    return task.filament_meta if task else None
+    if task and task.filament_meta:
+        return task.filament_meta
+    # Fall back to Moonraker — for files uploaded outside our system
+    if moonraker_url:
+        remote = moonraker.get_remote_file_meta(moonraker_url, filename)
+        return remote or None
+    return None
 
 
 def _to_dto(printer: Printer, sp_state: dict | None, db: Session | None = None) -> PrinterOut:
@@ -100,7 +108,11 @@ def _to_dto(printer: Printer, sp_state: dict | None, db: Session | None = None) 
     if printer.moonraker_url:
         live = moonraker.get_live_status(printer.moonraker_url)
         filename = live.get("filename") or printer.manual_job
-        current_meta = _resolve_filament_for_file(db, filename) if db else None
+        current_meta = (
+            _resolve_filament_for_file(db, filename, printer.moonraker_url)
+            if db
+            else None
+        )
         return PrinterOut(
             **base,
             state=live.get("state") or "unknown",
