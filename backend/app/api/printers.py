@@ -14,6 +14,7 @@ from app.api.deps import get_current_user, require_roles
 from app.core.db import get_db
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
+from app.models.task import PrintTask
 from app.models.user import User, UserRole
 from app.schemas.printer import (
     PrinterCreate,
@@ -59,7 +60,24 @@ def _ensure_simplyprint_rows(db: Session, sp_printers: list[dict]) -> dict[str, 
     return existing
 
 
-def _to_dto(printer: Printer, sp_state: dict | None) -> PrinterOut:
+def _resolve_filament_for_file(db: Session, filename: str | None) -> dict | None:
+    """Find filament_meta for the file currently being printed.
+
+    Matches by file_name (the same name we used when uploading to Moonraker).
+    If multiple tasks share a filename, prefers the most recently created one.
+    """
+    if not filename:
+        return None
+    task = (
+        db.query(PrintTask)
+        .filter(PrintTask.file_name == filename, PrintTask.filament_meta.isnot(None))
+        .order_by(PrintTask.created_at.desc())
+        .first()
+    )
+    return task.filament_meta if task else None
+
+
+def _to_dto(printer: Printer, sp_state: dict | None, db: Session | None = None) -> PrinterOut:
     base = dict(
         id=printer.id,
         name=printer.name,
@@ -81,11 +99,13 @@ def _to_dto(printer: Printer, sp_state: dict | None) -> PrinterOut:
     # Manual (U1, other) — if Moonraker URL is set, prefer live data
     if printer.moonraker_url:
         live = moonraker.get_live_status(printer.moonraker_url)
+        filename = live.get("filename") or printer.manual_job
+        current_meta = _resolve_filament_for_file(db, filename) if db else None
         return PrinterOut(
             **base,
             state=live.get("state") or "unknown",
             flags=[],
-            job=live.get("filename") or printer.manual_job,
+            job=filename,
             eta_minutes=live.get("eta_minutes"),
             updated_at=printer.manual_updated_at,
             source="moonraker",
@@ -94,6 +114,7 @@ def _to_dto(printer: Printer, sp_state: dict | None) -> PrinterOut:
             extruder_target=live.get("extruder_target"),
             bed_temp=live.get("bed_temp"),
             bed_target=live.get("bed_target"),
+            current_filament_meta=current_meta,
         )
 
     return PrinterOut(
@@ -122,7 +143,7 @@ def list_printers(
     out: list[PrinterOut] = []
     for row in rows:
         sp_state = sp_state_by_id.get(row.sp_printer_id) if row.sp_printer_id else None
-        out.append(_to_dto(row, sp_state))
+        out.append(_to_dto(row, sp_state, db))
     return out
 
 
@@ -141,7 +162,7 @@ def create_printer(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return _to_dto(row, None)
+    return _to_dto(row, None, db)
 
 
 @router.patch("/{printer_id}", response_model=PrinterOut)
@@ -163,7 +184,7 @@ def update_printer(
         row.moonraker_url = payload.moonraker_url.strip() or None
     db.commit()
     db.refresh(row)
-    return _to_dto(row, None)
+    return _to_dto(row, None, db)
 
 
 @router.post("/{printer_id}/manual", response_model=PrinterOut)
@@ -190,7 +211,7 @@ def set_manual_state(
     row.manual_updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
-    return _to_dto(row, None)
+    return _to_dto(row, None, db)
 
 
 @router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)

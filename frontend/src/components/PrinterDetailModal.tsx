@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { FilamentSwatches } from "@/components/FilamentSwatches";
 import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
@@ -273,15 +274,16 @@ export function PrinterDetailModal({
 
             {(printer.progress_pct != null ||
               printer.extruder_temp != null ||
-              printer.bed_temp != null) && (
-              <div className="rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+              printer.bed_temp != null ||
+              printer.current_filament_meta) && (
+              <div className="space-y-2 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 {printer.progress_pct != null && printer.state === "printing" && (
                   <>
-                    <div className="mb-1 flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       <span className="text-neutral-500">Прогрес</span>
                       <span className="font-medium">{printer.progress_pct}%</span>
                     </div>
-                    <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
                       <div
                         className="h-full rounded-full bg-emerald-500"
                         style={{ width: `${printer.progress_pct}%` }}
@@ -305,6 +307,16 @@ export function PrinterDetailModal({
                     </span>
                   )}
                 </div>
+                {printer.current_filament_meta && (
+                  <div>
+                    <div className="mb-1 text-neutral-500">Завантажений пластик</div>
+                    <FilamentSwatches
+                      meta={printer.current_filament_meta}
+                      size={14}
+                      showLabel
+                    />
+                  </div>
+                )}
               </div>
             )}
           </>

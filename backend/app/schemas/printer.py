@@ -49,5 +49,8 @@ class PrinterOut(BaseModel):
     bed_temp: float | None = None
     bed_target: float | None = None
 
+    # Filament info for the file currently being printed
+    current_filament_meta: dict | None = None
+
     class Config:
         from_attributes = True

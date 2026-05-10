@@ -43,6 +43,7 @@ export interface Printer {
   extruder_target: number | null;
   bed_temp: number | null;
   bed_target: number | null;
+  current_filament_meta: FilamentMeta | null;
 }
 
 export interface FilamentMeta {

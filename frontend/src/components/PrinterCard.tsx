@@ -1,5 +1,6 @@
 "use client";
 
+import { FilamentSwatches } from "@/components/FilamentSwatches";
 import {
   flagLabel,
   kindLabel,
@@ -66,6 +67,10 @@ export function PrinterCard({
         <span className="text-lg leading-none">{stateEmoji(printer.state)}</span>
         <span>{stateLabel(printer.state)}</span>
       </div>
+
+      {printer.current_filament_meta && (
+        <FilamentSwatches meta={printer.current_filament_meta} size={10} />
+      )}
 
       {printer.flags?.length > 0 && (
         <div className="flex flex-wrap gap-1">
