@@ -1,10 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.deps import require_roles
 from app.api.farm_tasks import router as farm_tasks_router
 from app.api.filaments import router as filaments_router
 from app.api.plan import router as plan_router
@@ -13,11 +14,17 @@ from app.api.tasks import router as tasks_router
 from app.api.users import router as users_router
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.models.user import UserRole
 from app.services import scheduler, telegram_bot
 from app.services.bootstrap import seed_admin
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# Quiet down chatty third-party loggers (httpx logs every Telegram getUpdates poll, with the
+# bot token in the URL — both noisy and a security smell).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 log = logging.getLogger("printfarm")
 
 
@@ -55,6 +62,16 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health() -> dict:
+    return {"ok": True}
+
+
+@app.post("/api/internal/send-plan-now")
+async def send_plan_now(
+    _admin=Depends(require_roles(UserRole.admin)),
+) -> dict:
+    """Force-send today's plan to all linked Telegram users (test-only)."""
+    from app.services.daily_report import send_daily_plan_to_all
+    await send_daily_plan_to_all()
     return {"ok": True}
 
 
