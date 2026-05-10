@@ -21,8 +21,12 @@ function PlanEntryRow({
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
 
-  const canSend =
-    !!entry.task.file_name && !!printer.moonraker_url && !entry.done;
+  let cantSendReason: string | null = null;
+  if (entry.done) cantSendReason = "Задача вже виконана";
+  else if (!entry.task.file_name) cantSendReason = "Немає файлу — додай .gcode/.3mf у задачу";
+  else if (!printer.moonraker_url) cantSendReason = "У принтера не вказано Moonraker URL";
+
+  const canSend = cantSendReason === null;
 
   async function send() {
     setSending(true);
@@ -64,17 +68,19 @@ function PlanEntryRow({
         )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        {canSend && (
-          <button
-            type="button"
-            onClick={send}
-            disabled={sending}
-            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-emerald-500 disabled:opacity-50"
-            title="Завантажити файл і запустити друк через Moonraker"
-          >
-            {sending ? "…" : "▶ Друк"}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={canSend ? send : undefined}
+          disabled={!canSend || sending}
+          className={
+            canSend
+              ? "rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] text-white hover:bg-emerald-500 disabled:opacity-50"
+              : "cursor-not-allowed rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500"
+          }
+          title={canSend ? "Завантажити файл і запустити друк через Moonraker" : (cantSendReason ?? "")}
+        >
+          {sending ? "…" : "▶ Друк"}
+        </button>
         <button
           type="button"
           onClick={onRemove}

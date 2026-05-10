@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearToken } from "@/lib/api";
 import type { User } from "@/lib/types";
 
@@ -59,6 +60,7 @@ export function Topbar({ user }: { user: User | null }) {
               </span>
             </span>
           )}
+          <ThemeToggle />
           <button
             onClick={logout}
             className="rounded-md border border-neutral-200 px-3 py-1.5 text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"

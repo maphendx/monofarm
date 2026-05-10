@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 
@@ -80,7 +80,8 @@ def upload_gcode(moonraker_url: str, file_path: Path, filename: str | None = Non
 def start_print(moonraker_url: str, filename: str) -> dict:
     """Start printing an already-uploaded file (no path, just bare filename)."""
     base = _api_base(moonraker_url)
-    return _request("POST", base, f"/printer/print/start?filename={filename}").get("result", {})
+    safe = quote(filename, safe="")
+    return _request("POST", base, f"/printer/print/start?filename={safe}").get("result", {})
 
 
 def pause_print(moonraker_url: str) -> dict:
