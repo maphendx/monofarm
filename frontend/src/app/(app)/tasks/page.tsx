@@ -135,7 +135,7 @@ function KanbanColumn({
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col">
+    <div className="flex min-w-56 flex-1 flex-col">
       {/* column header */}
       <div className={`mb-3 flex items-center justify-between border-b-2 pb-2 ${col.color}`}>
         <span className="text-sm font-semibold">{col.label}</span>
@@ -388,7 +388,7 @@ export default function TasksPage() {
         <h1 className="text-lg font-semibold">Завдання</h1>
       </div>
 
-      <div className="mt-4 flex gap-4 overflow-x-auto pb-4">
+      <div className="mt-4 flex gap-4 overflow-x-auto pb-4 items-start">
         {COLUMNS.map((col) => (
           <KanbanColumn
             key={col.id}

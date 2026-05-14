@@ -8,6 +8,7 @@ import type { Printer, PrinterKind } from "@/lib/types";
 
 const KINDS: { value: PrinterKind; label: string }[] = [
   { value: "snapmaker_u1", label: "Snapmaker U1" },
+  { value: "bambu", label: "Bambu Lab" },
   { value: "other", label: "Інший (ручний)" },
 ];
 
@@ -23,6 +24,8 @@ export function CreatePrinterModal({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PrinterKind>("snapmaker_u1");
   const [moonrakerUrl, setMoonrakerUrl] = useState("");
+  const [bambuDevId, setBambuDevId] = useState("");
+  const [bambuAccessCode, setBambuAccessCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +33,8 @@ export function CreatePrinterModal({
     setName("");
     setKind("snapmaker_u1");
     setMoonrakerUrl("");
+    setBambuDevId("");
+    setBambuAccessCode("");
     setError(null);
   }
 
@@ -44,6 +49,8 @@ export function CreatePrinterModal({
           name: name.trim(),
           kind,
           moonraker_url: moonrakerUrl.trim() || null,
+          bambu_dev_id: bambuDevId.trim() || null,
+          bambu_access_code: bambuAccessCode.trim() || null,
         }),
       });
       onCreated(p);
@@ -117,19 +124,55 @@ export function CreatePrinterModal({
             ))}
           </select>
         </label>
-        <label className="block">
-          <span className="mb-1 block text-sm">
-            Moonraker / Mainsail URL{" "}
-            <span className="text-neutral-400">(опційно, для U1)</span>
-          </span>
-          <input
-            type="url"
-            value={moonrakerUrl}
-            onChange={(e) => setMoonrakerUrl(e.target.value)}
-            placeholder="http://192.168.31.210"
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
-          />
-        </label>
+        {kind !== "bambu" && (
+          <label className="block">
+            <span className="mb-1 block text-sm">
+              Moonraker / Mainsail URL{" "}
+              <span className="text-neutral-400">(опційно, для U1)</span>
+            </span>
+            <input
+              type="url"
+              value={moonrakerUrl}
+              onChange={(e) => setMoonrakerUrl(e.target.value)}
+              placeholder="http://192.168.31.210"
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+            />
+          </label>
+        )}
+        {kind === "bambu" && (
+          <>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Bambu-принтери автоматично імпортуються з Bambu Cloud акаунту.
+              Заповнюйте вручну, лише якщо потрібно додати принтер окремо.
+            </p>
+            <label className="block">
+              <span className="mb-1 block text-sm">
+                Serial / Dev ID{" "}
+                <span className="text-neutral-400">(опційно)</span>
+              </span>
+              <input
+                type="text"
+                value={bambuDevId}
+                onChange={(e) => setBambuDevId(e.target.value)}
+                placeholder="01P09C321100123"
+                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm">
+                Access Code{" "}
+                <span className="text-neutral-400">(опційно)</span>
+              </span>
+              <input
+                type="text"
+                value={bambuAccessCode}
+                onChange={(e) => setBambuAccessCode(e.target.value)}
+                placeholder="12345678"
+                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+              />
+            </label>
+          </>
+        )}
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         )}

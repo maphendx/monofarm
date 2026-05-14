@@ -40,6 +40,7 @@ const FLAG_LABEL: Record<string, string> = {
 const KIND_LABEL: Record<string, string> = {
   simplyprint: "SimplyPrint",
   snapmaker_u1: "Snapmaker U1",
+  bambu: "Bambu Lab",
   other: "Інший",
 };
 
@@ -61,7 +62,7 @@ export function kindLabel(kind: string): string {
   return KIND_LABEL[kind] ?? kind;
 }
 
-export type PrinterTone = "ok" | "warn" | "bad" | "idle" | "muted";
+export type PrinterTone = "printing" | "ok" | "warn" | "bad" | "idle" | "muted";
 
 export function printerTone(p: Printer): PrinterTone {
   if (!p.is_active) return "muted";
@@ -75,6 +76,7 @@ export function printerTone(p: Printer): PrinterTone {
   if (flags.includes("ai_detected_low")) return "warn";
   switch (p.state) {
     case "printing":
+      return "printing";
     case "operational":
     case "online":
     case "print_pending":

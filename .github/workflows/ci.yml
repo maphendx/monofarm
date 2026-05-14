@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (lint + tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: printfarm
+          POSTGRES_PASSWORD: printfarm
+          POSTGRES_DB: printfarm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
+        run: pytest -ra
+
+      - name: Verify Alembic migrations apply cleanly
+        env:
+          DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
+        # Recreate the schema (pytest left state in it), then run migrations
+        # end-to-end. Catches divergence between models and migrations that
+        # the SQLAlchemy create_all() path in pytest doesn't exercise.
+        run: |
+          python <<'PY'
+          from sqlalchemy import create_engine, text
+          import os
+          e = create_engine(os.environ["DATABASE_URL"])
+          with e.connect() as c:
+              c.execute(text("DROP SCHEMA public CASCADE"))
+              c.execute(text("CREATE SCHEMA public"))
+              c.commit()
+          PY
+          alembic upgrade head
+
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint (advisory)
+        # Next.js 16 / React 19 introduced new strict rules (react-hooks/
+        # set-state-in-effect) that flag legacy patterns in the codebase.
+        # See TECH_DEBT.md for the cleanup list. Lint is advisory until that
+        # is fixed; the build step below is the hard gate.
+        continue-on-error: true
+        run: bun run lint
+
+      - name: Build
+        env:
+          # next build statically renders pages; without this it tries to reach
+          # the API and fails in CI.
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: bun run build

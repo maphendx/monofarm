@@ -9,7 +9,8 @@ import type { User } from "@/lib/types";
 
 const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
   { href: "/dashboard", label: "Дашборд" },
-  { href: "/plan", label: "План дня" },
+  { href: "/plan", label: "План друку" },
+  { href: "/files", label: "Файли" },
   { href: "/tasks", label: "Завдання" },
   { href: "/filament", label: "Пластик" },
   { href: "/users", label: "Користувачі", adminOnly: true },

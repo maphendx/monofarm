@@ -31,8 +31,8 @@ function PlanEntryRow({
   } else if (!entry.task.file_name) {
     cantSendReason = "Немає файлу — додай .gcode/.3mf у задачу";
     cantSendShort = "немає файлу";
-  } else if (!printer.moonraker_url) {
-    cantSendReason = "У принтера не вказано Moonraker URL";
+  } else if (!printer.moonraker_url && !(printer.kind === "bambu" && printer.bambu_dev_id)) {
+    cantSendReason = "У принтера не вказано Moonraker URL / Bambu Dev ID";
     cantSendShort = "немає URL принтера";
   }
 

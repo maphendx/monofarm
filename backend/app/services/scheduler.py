@@ -1,9 +1,10 @@
-"""APScheduler — runs the 09:00 daily plan job inside FastAPI's event loop."""
+"""APScheduler — periodic jobs inside FastAPI's event loop."""
 import logging
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.services.daily_report import send_daily_plan_to_all
@@ -26,6 +27,16 @@ def start() -> None:
         id="daily_plan_09",
         replace_existing=True,
     )
+
+    # Bambu Cloud token refresh every 6 hours
+    from app.services.bambu import do_token_refresh
+    _scheduler.add_job(
+        do_token_refresh,
+        IntervalTrigger(hours=6),
+        id="bambu_token_refresh",
+        replace_existing=True,
+    )
+
     _scheduler.start()
     log.info("Scheduler started (timezone=%s)", settings.TIMEZONE)
 

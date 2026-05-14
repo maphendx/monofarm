@@ -1,0 +1,23 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: tests that require a running Postgres test database",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["alembic/versions", "data", ".venv"]
+
+[tool.ruff.lint]
+# Conservative initial ruleset: catch real bugs (pyflakes), basic syntax/whitespace.
+# Skip stylistic rule families (I/B/UP) for now to avoid mass-rewrites of existing
+# code — tighten over time as the team agrees on conventions.
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line length: many slicer comment strings legitimately exceed
+    "E402",  # local imports inside functions (intentional: lazy load to avoid cycles)
+]

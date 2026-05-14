@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     SIMPLYPRINT_API_KEY: str = ""
     SIMPLYPRINT_ORG_ID: str = ""
 
+    BAMBU_EMAIL: str = ""
+    BAMBU_PASSWORD: str = ""
+    BAMBU_REFRESH_TOKEN: str = ""
+    BAMBU_REGION: str = ""  # "us", "eu", or "cn"; empty = auto from login
+
     TG_BOT_TOKEN: str = ""
     TG_REPORT_CHAT_ID: str = ""
     FARM_PUBLIC_URL: str = "http://localhost:3000"

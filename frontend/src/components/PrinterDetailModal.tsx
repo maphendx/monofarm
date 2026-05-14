@@ -12,7 +12,7 @@ import {
   stateEmoji,
   stateLabel,
 } from "@/lib/printerLabels";
-import type { Printer } from "@/lib/types";
+import type { Printer, PrinterGroup } from "@/lib/types";
 
 const MANUAL_STATUSES = [
   { value: "idle", label: "Вільний 💤" },
@@ -90,6 +90,151 @@ function MoonrakerControls({
 }
 
 
+// ── SimplyPrint controls ─────────────────────────────────────────────────────
+
+function SimplyPrintControls({
+  printer,
+  onUpdated,
+}: {
+  printer: Printer;
+  onUpdated: (p: Printer) => void;
+}) {
+  const user = useUser();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [gcodeInput, setGcodeInput] = useState("");
+  const [gcodeOpen, setGcodeOpen] = useState(false);
+
+  const isPrinting = printer.state === "printing";
+  const isPaused = printer.state === "paused";
+  const needsBedClear =
+    printer.state === "operational" || printer.state === "awaiting_bed_clear";
+
+  async function act(action: string, body?: object) {
+    setBusy(action);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/sp/${action}`, {
+        method: "POST",
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const refreshed = await api<Printer[]>("/api/printers");
+      const updated = refreshed.find((p) => p.id === printer.id);
+      if (updated) onUpdated(updated);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendGcode() {
+    const lines = gcodeInput
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (!lines.length) return;
+    await act("gcode", { gcode: lines });
+    setGcodeInput("");
+    setGcodeOpen(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* state-specific action buttons */}
+      <div className="flex flex-wrap gap-2">
+        {isPrinting && (
+          <button
+            type="button"
+            onClick={() => act("pause")}
+            disabled={busy !== null}
+            className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+          >
+            {busy === "pause" ? "…" : "⏸ Пауза"}
+          </button>
+        )}
+        {isPaused && (
+          <button
+            type="button"
+            onClick={() => act("resume")}
+            disabled={busy !== null}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {busy === "resume" ? "…" : "▶ Продовжити"}
+          </button>
+        )}
+        {(isPrinting || isPaused) && (
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm("Скасувати поточний друк?")) act("cancel");
+            }}
+            disabled={busy !== null}
+            className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            {busy === "cancel" ? "…" : "✕ Скасувати"}
+          </button>
+        )}
+        {needsBedClear && (
+          <button
+            type="button"
+            onClick={() => act("clear-bed", { success: true })}
+            disabled={busy !== null}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {busy === "clear-bed" ? "…" : "✓ Стіл очищено"}
+          </button>
+        )}
+      </div>
+
+      {/* raw G-code sender — admin only */}
+      {user.role === "admin" && (
+        <div className="border-t border-neutral-200 pt-2 dark:border-neutral-800">
+          {gcodeOpen ? (
+            <div className="space-y-2">
+              <textarea
+                rows={3}
+                value={gcodeInput}
+                onChange={(e) => setGcodeInput(e.target.value)}
+                placeholder={"G28 XY\nM109 S200"}
+                className="w-full resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={sendGcode}
+                  disabled={busy !== null || !gcodeInput.trim()}
+                  className="rounded-md bg-neutral-900 px-3 py-1 text-xs text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  {busy === "gcode" ? "…" : "Надіслати G-code"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setGcodeOpen(false); setGcodeInput(""); }}
+                  className="rounded-md px-3 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  Скасувати
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setGcodeOpen(true)}
+              className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+            >
+              {"</>"} Надіслати G-code…
+            </button>
+          )}
+        </div>
+      )}
+
+      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+    </div>
+  );
+}
+
+
 function MoonrakerUrlEditor({
   printer,
   onUpdated,
@@ -148,6 +293,56 @@ function MoonrakerUrlEditor({
     </div>
   );
 }
+
+// ── group picker ─────────────────────────────────────────────────────────────
+
+function GroupPicker({
+  printer,
+  onUpdated,
+}: {
+  printer: Printer;
+  onUpdated: (p: Printer) => void;
+}) {
+  const [groups, setGroups] = useState<PrinterGroup[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<PrinterGroup[]>("/api/printer-groups").then(setGroups).catch(() => {});
+  }, []);
+
+  async function assignGroup(groupId: number | null) {
+    setBusy(true);
+    try {
+      const updated = await api<Printer>(`/api/printers/${printer.id}/group`, {
+        method: "POST",
+        body: JSON.stringify({ group_id: groupId }),
+      });
+      onUpdated(updated);
+    } catch {
+      // ignore; the select will revert visually on next render
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs text-neutral-500">Група</span>
+      <select
+        value={printer.group_id ?? ""}
+        disabled={busy}
+        onChange={(e) => assignGroup(e.target.value ? Number(e.target.value) : null)}
+        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none dark:border-neutral-700 dark:bg-neutral-950 disabled:opacity-50"
+      >
+        <option value="">— Без групи —</option>
+        {groups.map((g) => (
+          <option key={g.id} value={g.id}>{g.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 
 export function PrinterDetailModal({
   printer,
@@ -236,6 +431,11 @@ export function PrinterDetailModal({
           <span>
             {stateEmoji(printer.state)} {stateLabel(printer.state)}
           </span>
+          {printer.group_name && (
+            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+              📁 {printer.group_name}
+            </span>
+          )}
           {printer.flags.map((f) => (
             <span
               key={f}
@@ -245,6 +445,10 @@ export function PrinterDetailModal({
             </span>
           ))}
         </div>
+
+        {(user.role === "admin" || user.role === "operator") && (
+          <GroupPicker printer={printer} onUpdated={onUpdated} />
+        )}
 
         {printer.moonraker_url && (
           <>
@@ -322,20 +526,25 @@ export function PrinterDetailModal({
           </>
         )}
 
-        {isManual && user.role === "admin" && (
+        {isManual && printer.kind !== "bambu" && user.role === "admin" && (
           <MoonrakerUrlEditor printer={printer} onUpdated={onUpdated} />
         )}
 
         {!isManual && (
-          <p className="rounded-md bg-neutral-100 px-3 py-2 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-            Дані тягнуться з SimplyPrint автоматично.
-            {printer.job && (
-              <>
-                <br />
-                Поточний друк: <b>{printer.job}</b>
-              </>
+          <div className="space-y-3">
+            <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+              Дані тягнуться з SimplyPrint автоматично.
+              {printer.job && (
+                <>
+                  <br />
+                  Поточний друк: <b>{printer.job}</b>
+                </>
+              )}
+            </p>
+            {(user.role === "admin" || user.role === "operator") && (
+              <SimplyPrintControls printer={printer} onUpdated={onUpdated} />
             )}
-          </p>
+          </div>
         )}
 
         {canEdit && (

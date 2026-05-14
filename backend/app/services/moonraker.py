@@ -17,7 +17,7 @@ import requests
 
 log = logging.getLogger(__name__)
 TIMEOUT = 30
-STATUS_TIMEOUT = 5  # short timeout for live status polling
+STATUS_TIMEOUT = 3  # short timeout for live status polling
 STATUS_CACHE_TTL = 10.0  # seconds
 META_CACHE_TTL = 300.0  # file metadata is static for a given filename
 META_TAIL_BYTES = 96 * 1024  # how much to download from remote file for parsing
@@ -73,8 +73,15 @@ def query_objects(moonraker_url: str, objects: list[str] | None = None) -> dict:
     return _request("GET", base, f"/printer/objects/query?{query}").get("result", {})
 
 
-def upload_gcode(moonraker_url: str, file_path: Path, filename: str | None = None) -> dict:
+def upload_gcode(
+    moonraker_url: str,
+    file_path: Path,
+    filename: str | None = None,
+    start_print: bool = False,
+) -> dict:
     """Upload a .gcode/.3mf to Moonraker's `gcodes` root.
+
+    When start_print=True, Moonraker queues the print immediately after upload.
 
     Returns Moonraker's response: {item: {...}, print_started: bool, ...}.
     """
@@ -82,7 +89,7 @@ def upload_gcode(moonraker_url: str, file_path: Path, filename: str | None = Non
     name = filename or file_path.name
     with file_path.open("rb") as f:
         files = {"file": (name, f, "application/octet-stream")}
-        data = {"root": "gcodes", "print": "false"}
+        data = {"root": "gcodes", "print": "true" if start_print else "false"}
         return _request("POST", base, "/server/files/upload", files=files, data=data)
 
 
@@ -106,6 +113,36 @@ def resume_print(moonraker_url: str) -> dict:
 def cancel_print(moonraker_url: str) -> dict:
     base = _api_base(moonraker_url)
     return _request("POST", base, "/printer/print/cancel").get("result", {})
+
+
+def send_gcode(moonraker_url: str, script: str) -> dict:
+    """Send a G-code script line (or multiple lines joined by '\\n') to Klipper."""
+    base = _api_base(moonraker_url)
+    return _request("POST", base, "/printer/gcode/script", json={"script": script}).get("result", {})
+
+
+def get_webcams(moonraker_url: str) -> list[dict]:
+    """Return Moonraker's configured webcam list (name, snapshot_url, stream_url).
+
+    Returns an empty list if the endpoint is unavailable or no webcams are configured.
+    Each entry: {name, snapshot_url, stream_url, enabled, ...}
+    """
+    base = _api_base(moonraker_url)
+    try:
+        result = _request("GET", base, "/server/webcams/list")
+        return result.get("result", {}).get("webcams", [])
+    except MoonrakerError:
+        return []
+
+
+def skip_object(moonraker_url: str) -> dict:
+    """Cancel the currently-printing object using Klipper's EXCLUDE_OBJECT module.
+
+    Requires [exclude_object] in printer.cfg and SET_EXCLUDE_OBJECT_CURRENT enabled.
+    Sends EXCLUDE_OBJECT_CURRENT which marks the active object for exclusion so
+    Klipper skips it and moves on to the next object in the print.
+    """
+    return send_gcode(moonraker_url, "EXCLUDE_OBJECT_CURRENT")
 
 
 # ── Aggregated live status (cached) ─────────────────────────────────────────
@@ -305,6 +342,163 @@ def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
 
     _meta_cache[key] = (now, meta)
     return meta
+
+
+def remap_slots(src: Path | bytes, slot_map: dict[int, int]) -> bytes:
+    """Return gcode bytes with tool-change commands remapped.
+
+    Replaces:
+      - standalone tool-change lines (`^T<n>`)
+      - tool-select params in temperature commands (`M104/M109/M116 T<n>`)
+      - Snapmaker macro EXTRUDER params (`SM_PRINT_* EXTRUDER=<n>`) — preheat,
+        auto-feed and flow-calibrate must run against the physical slot that
+        will actually be used after remap, not the slicer's source slot.
+
+    Uses a two-pass placeholder strategy to avoid collisions when slots swap
+    (A→B and B→A).
+
+    slot_map: {old_slot_index: new_slot_index}  (0-based)
+    """
+    import re
+
+    raw = src if isinstance(src, bytes) else src.read_bytes()
+    content = raw.decode("utf-8", errors="ignore")
+
+    changes = {k: v for k, v in slot_map.items() if k != v}
+    if not changes:
+        return raw
+
+    # Pass 1 — T<n> tool-change / temperature params → placeholders
+    def to_tool_placeholder(m: re.Match) -> str:
+        n = int(m.group(1))
+        if n in changes:
+            return f"__TOOL_{n}__"
+        return m.group(0)
+
+    tool_pattern = re.compile(
+        r"(?:(?<=\s)|^)T(\d+)(?=\s|;|$)",
+        re.MULTILINE,
+    )
+    intermediate = tool_pattern.sub(to_tool_placeholder, content)
+
+    # Pass 1b — SM_PRINT_* EXTRUDER=<n> params → placeholders
+    def to_ext_placeholder(m: re.Match) -> str:
+        prefix, n_str = m.group(1), m.group(2)
+        n = int(n_str)
+        if n in changes:
+            return f"{prefix}__SLOT_{n}__"
+        return m.group(0)
+
+    ext_pattern = re.compile(
+        r"^(SM_PRINT_\w+\s+(?:[^=\s]+=\S+\s+)*EXTRUDER=)(\d+)",
+        re.MULTILINE,
+    )
+    intermediate = ext_pattern.sub(to_ext_placeholder, intermediate)
+
+    # Pass 2 — placeholders → final slot numbers
+    for old, new in changes.items():
+        intermediate = intermediate.replace(f"__TOOL_{old}__", f"T{new}")
+        intermediate = intermediate.replace(f"__SLOT_{old}__", str(new))
+
+    return intermediate.encode("utf-8")
+
+
+def apply_print_options(
+    src: Path,
+    auto_bed_leveling: bool | None,
+    timelapse: bool | None,
+    ai_detection: bool | None,
+    used_slots: set[int] | None,
+    calibrate_slots: set[int] | None,
+) -> bytes | None:
+    """Disable specific Snaporca-emitted operations by commenting them out.
+
+    Disabling toggles only the *actual* command — the `SET_*` status macros
+    written by the slicer (e.g. `SET_PRINT_AUTO_BED_LEVELING ENABLE=1`) are
+    left alone, because they only set firmware state and do not gate whether
+    `BED_MESH_CALIBRATE`/`TIMELAPSE_*`/`SM_PRINT_FLOW_CALIBRATE` run.
+
+    - `auto_bed_leveling=False` → comment out `BED_MESH_CALIBRATE …` lines
+    - `timelapse=False` → comment out `TIMELAPSE_START` and `TIMELAPSE_TAKE_FRAME`
+    - `ai_detection=False` → comment out Snapmaker's AI/camera macros
+      (`DEFECT_DETECTION_START`, `DEFECT_DETECTION_DETECT[_BED]`, `DETECT_BED_PLATE`)
+    - `used_slots={n,…}` → comment out all `SM_PRINT_(EXTRUDER_PREHEAT|AUTO_FEED|
+      FLOW_CALIBRATE) EXTRUDER=k` whose `k` is NOT in the set (skips preheat,
+      loading, and calibration for filament slots the print never uses)
+    - `calibrate_slots={n,…}` → additionally restrict `SM_PRINT_FLOW_CALIBRATE`
+      to only those slots (intersected with `used_slots`)
+
+    `None` / `True` mean "leave the slicer's output untouched". Returns the
+    rewritten bytes, or `None` when nothing needed changing.
+    """
+    import re
+
+    needs_rewrite = (
+        auto_bed_leveling is False
+        or timelapse is False
+        or ai_detection is False
+        or used_slots is not None
+        or calibrate_slots is not None
+    )
+    if not needs_rewrite:
+        return None
+
+    content = src.read_bytes().decode("utf-8", errors="ignore")
+    out = content
+
+    if auto_bed_leveling is False:
+        out = re.sub(
+            r"^(BED_MESH_CALIBRATE\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+
+    if timelapse is False:
+        out = re.sub(
+            r"^(TIMELAPSE_(?:START|TAKE_FRAME)\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+
+    if ai_detection is False:
+        out = re.sub(
+            r"^((?:DEFECT_DETECTION_(?:START|DETECT(?:_BED)?)|DETECT_BED_PLATE)\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+
+    # Drop preheat + auto-feed for unused slots
+    if used_slots is not None:
+        out = re.sub(
+            r"^SM_PRINT_(?:EXTRUDER_PREHEAT|AUTO_FEED)\s+EXTRUDER=(\d+).*$",
+            lambda m: m.group(0) if int(m.group(1)) in used_slots else "; SKIPPED " + m.group(0),
+            out,
+            flags=re.MULTILINE,
+        )
+
+    # Flow calibrate: intersect user's choice with the actually-used slots
+    effective: set[int] | None = None
+    if calibrate_slots is not None and used_slots is not None:
+        effective = calibrate_slots & used_slots
+    elif calibrate_slots is not None:
+        effective = calibrate_slots
+    elif used_slots is not None:
+        effective = used_slots
+
+    if effective is not None:
+        out = re.sub(
+            r"^SM_PRINT_FLOW_CALIBRATE\s+EXTRUDER=(\d+).*$",
+            lambda m: m.group(0) if int(m.group(1)) in effective else "; SKIPPED " + m.group(0),
+            out,
+            flags=re.MULTILINE,
+        )
+
+    if out == content:
+        return None
+    return out.encode("utf-8")
 
 
 def get_live_status(moonraker_url: str) -> dict:

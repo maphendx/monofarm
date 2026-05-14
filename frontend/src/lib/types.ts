@@ -1,6 +1,6 @@
 export type UserRole = "admin" | "operator" | "manager";
 
-export type PrinterKind = "simplyprint" | "snapmaker_u1" | "other";
+export type PrinterKind = "simplyprint" | "snapmaker_u1" | "bambu" | "other";
 
 export type PrintTaskStatus = "queued" | "in_progress" | "done" | "cancelled";
 export type FarmTaskStatus = "todo" | "in_progress" | "done";
@@ -25,19 +25,48 @@ export interface TelegramLink {
   expires_at: string;
 }
 
+export interface PrinterGroup {
+  id: number;
+  name: string;
+  sort_order: number;
+  printer_count: number;
+}
+
+export interface FilamentSlot {
+  slot: number;
+  color: string;
+  color_name: string | null;
+  type: string;
+  brand: string | null;
+  filament_id: number | null;
+}
+
+export interface FilamentColor {
+  id: number;
+  name: string;
+  hex_color: string;
+  sort_order: number;
+}
+
 export interface Printer {
   id: number;
   name: string;
   kind: PrinterKind;
   sp_printer_id: string | null;
   moonraker_url: string | null;
+  bambu_dev_id: string | null;
+  bambu_model: string | null;
   is_active: boolean;
+  sort_order: number;
+  group_id: number | null;
+  group_name: string | null;
+  loaded_filaments: FilamentSlot[];
   state: string | null;
   flags: string[];
   job: string | null;
   eta_minutes: number | null;
   updated_at: string | null;
-  source: "simplyprint" | "moonraker" | "manual" | "unknown";
+  source: "simplyprint" | "moonraker" | "bambu" | "manual" | "unknown";
   progress_pct: number | null;
   extruder_temp: number | null;
   extruder_target: number | null;
@@ -92,6 +121,26 @@ export interface FarmTask {
   deadline: string | null;
   assignee_id: number | null;
   created_at: string;
+}
+
+export interface GcodeFileMeta {
+  types?: string[];
+  colors?: string[];
+  used_g?: number[];
+  estimated_minutes?: number;
+  total_layers?: number;
+  layer_height?: number;
+}
+
+export interface GcodeFile {
+  id: number;
+  original_name: string;
+  stored_name: string;
+  size_bytes: number;
+  notes: string | null;
+  filament_meta: GcodeFileMeta | null;
+  uploaded_at: string;
+  uploaded_by_name: string | null;
 }
 
 export interface PlanEntry {
