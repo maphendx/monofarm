@@ -24,6 +24,7 @@ from telegram.ext import (
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.models.organization import Organization
 from app.models.user import User
 
 
@@ -79,7 +80,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
         else:
             await update.message.reply_text(
-                "Цей чат не привʼязаний до акаунта printfarm.\n"
+                "Цей чат не привʼязаний до акаунта monofarm.\n"
                 "Попроси адміна надіслати тобі персональне посилання."
             )
 
@@ -91,10 +92,11 @@ async def cmd_plan(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
     from app.services.daily_report import build_daily_plan_text  # avoid cycle
 
     with SessionLocal() as db:
-        if not _user_by_chat(db, chat_id):
+        user = _user_by_chat(db, chat_id)
+        if not user:
             await update.message.reply_text("Не зареєстрований. Попроси адміна посилання.")
             return
-        text = build_daily_plan_text(db)
+        text = build_daily_plan_text(db, user.organization_id)
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
@@ -105,10 +107,15 @@ async def cmd_status(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
     from app.services.daily_report import build_status_text
 
     with SessionLocal() as db:
-        if not _user_by_chat(db, chat_id):
+        user = _user_by_chat(db, chat_id)
+        if not user:
             await update.message.reply_text("Не зареєстрований.")
             return
-        text = build_status_text(db)
+        org = db.get(Organization, user.organization_id)
+        if not org:
+            await update.message.reply_text("Організацію не знайдено.")
+            return
+        text = build_status_text(db, org)
     await update.message.reply_text(text, parse_mode="Markdown")
 
 

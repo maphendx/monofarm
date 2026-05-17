@@ -4,15 +4,15 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, api } from "@/lib/api";
+import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
   flagLabel,
   kindLabel,
   printerTone,
-  stateEmoji,
   stateLabel,
 } from "@/lib/printerLabels";
+import { StateIcon } from "@/components/StateIcon";
 import type { Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -25,75 +25,71 @@ function formatEta(min: number | null): string | null {
   return m ? `${h} год ${m} хв` : `${h} год`;
 }
 
-const TONE_BG: Record<string, string> = {
-  printing: "bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300",
-  ok: "bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
-  warn: "bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300",
-  bad: "bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300",
-  idle: "bg-neutral-100 border-neutral-300 text-neutral-600 dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-400",
-  muted: "bg-neutral-100 border-neutral-300 text-neutral-400 dark:bg-neutral-800 dark:border-neutral-700",
-};
 
-function Card({ title, children, className = "" }: { title?: string; children: React.ReactNode; className?: string }) {
+function Card({ title, children, className = "", accent }: { title?: string; children: React.ReactNode; className?: string; accent?: string }) {
   return (
-    <div className={`rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
-      {title && <h2 className="mb-3 text-sm font-semibold text-neutral-500 uppercase tracking-wide dark:text-neutral-400">{title}</h2>}
-      {children}
+    <div className={`relative overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 ${className}`}>
+      {accent && <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />}
+      <div className={accent ? "pl-5 pr-5 py-5" : "p-5"}>
+        {title && <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{title}</p>}
+        {children}
+      </div>
     </div>
   );
 }
 
-// ── webcam ────────────────────────────────────────────────────────────────────
+// ── camera ────────────────────────────────────────────────────────────────────
 
-function WebcamCard({ printerId }: { printerId: number }) {
+function CameraCard({ printer }: { printer: Printer }) {
+  const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_ip;
   const [tick, setTick] = useState(0);
-  const [hasWebcam, setHasWebcam] = useState(true);
+  const [visible, setVisible] = useState(true);
+  const token = getToken();
 
+  // Moonraker: poll snapshot every 2s. Bambu: native MJPEG stream, no polling needed.
   useEffect(() => {
+    if (isBambu) return;
     const id = setInterval(() => setTick((n) => n + 1), 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [isBambu]);
 
-  if (!hasWebcam) return null;
+  if (!visible) return null;
+
+  const src = isBambu
+    ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
+    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${tick}&token=${token}`;
 
   return (
-    <Card title="Вебкамера">
-      <div className="overflow-hidden rounded-lg bg-neutral-950">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/api/printers/${printerId}/webcam/snapshot?t=${tick}`}
-          alt="Webcam"
-          className="w-full object-cover"
-          onError={() => setHasWebcam(false)}
-        />
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-950 dark:border-neutral-800">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt="Camera"
+        className="w-full object-cover"
+        onError={() => setVisible(false)}
+      />
+      <div className="flex items-center gap-1.5 px-3 py-2">
+        <span className="size-1.5 rounded-full bg-red-500" />
+        <span className="text-[10px] font-medium text-neutral-400">LIVE</span>
       </div>
-    </Card>
+    </div>
   );
 }
 
 // ── temperatures ──────────────────────────────────────────────────────────────
 
-function TempBar({ current, target }: { current: number; target: number | null }) {
-  const max = target ? Math.max(target, current, 10) : Math.max(current, 10);
-  const pct = Math.min(100, (current / max) * 100);
-  return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-      <div className="h-full rounded-full bg-orange-500 transition-[width] duration-700" style={{ width: `${pct}%` }} />
-    </div>
-  );
-}
 
 function TemperaturesCard({ printer }: { printer: Printer }) {
   const rows = [
     {
       label: "Сопло",
-      icon: "🌡",
+      icon: "nozzle",
       current: printer.extruder_temp,
       target: printer.extruder_target,
     },
     {
       label: "Стіл",
-      icon: "▣",
+      icon: "bed",
       current: printer.bed_temp,
       target: printer.bed_target,
     },
@@ -102,30 +98,341 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
   if (rows.length === 0) return null;
 
   return (
-    <Card title="Температури">
-      <div className="space-y-3">
-        {rows.map((r) => (
-          <div key={r.label}>
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
-                {r.icon} {r.label}
-              </span>
-              <span className="font-mono font-medium">
-                {Math.round(r.current!)}°
-                {r.target != null && r.target > 0 && (
-                  <span className="ml-1 text-xs text-neutral-400">→ {Math.round(r.target)}°</span>
-                )}
-              </span>
-            </div>
-            <TempBar current={r.current!} target={r.target ?? null} />
-          </div>
-        ))}
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Температури</p>
       </div>
-    </Card>
+      <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
+        {rows.map((r) => {
+          const max = r.target ? Math.max(r.target, r.current!, 30) : Math.max(r.current!, 30);
+          const pct = Math.min(100, (r.current! / max) * 100);
+          const isHot = r.current! > (r.target ?? 0) * 0.8 && r.current! > 40;
+          return (
+            <div key={r.label} className="px-5 py-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {r.icon === "nozzle" ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400">
+                      <path d="M12 22V12M8 22h8M9 12h6M12 2v4M9 6h6"/><path d="M7 6a5 5 0 0 0 10 0"/>
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400">
+                      <rect x="2" y="14" width="20" height="6" rx="1"/><path d="M6 14v-4a6 6 0 0 1 12 0v4"/>
+                    </svg>
+                  )}
+                  <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">{r.label}</span>
+                </div>
+                <div className="font-mono text-sm font-bold">
+                  <span className={isHot ? "text-orange-600 dark:text-orange-400" : "text-neutral-700 dark:text-neutral-300"}>
+                    {Math.round(r.current!)}°
+                  </span>
+                  {r.target != null && r.target > 0 && (
+                    <span className="ml-1.5 text-xs font-normal text-neutral-400">→ {Math.round(r.target)}°</span>
+                  )}
+                </div>
+              </div>
+              {/* Segmented gauge */}
+              <div className="flex gap-px">
+                {Array.from({ length: 20 }).map((_, i) => {
+                  const filled = (i / 20) * 100 < pct;
+                  return (
+                    <div
+                      key={i}
+                      className={`h-1.5 flex-1 rounded-sm transition-colors duration-300 ${
+                        filled
+                          ? pct > 90 ? "bg-red-500" : pct > 70 ? "bg-orange-400" : "bg-orange-300"
+                          : "bg-neutral-100 dark:bg-neutral-800"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
 // ── print status + controls ───────────────────────────────────────────────────
+
+// ── control panel (Moonraker only) ───────────────────────────────────────────
+
+const MOVE_DISTANCES = [0.1, 1, 10, 50, 100];
+
+const BAMBU_SPEEDS = [
+  { label: "Тихий", profile: 1, pct: 25 },
+  { label: "Стандарт", profile: 2, pct: 50 },
+  { label: "Спорт", profile: 3, pct: 75 },
+  { label: "Ludicrous", profile: 4, pct: 100 },
+];
+
+function ControlPanel({ printer }: { printer: Printer }) {
+  const user = useUser();
+  const [dist, setDist] = useState(10);
+  const [speed, setSpeed] = useState(100);
+  const [flow, setFlow] = useState(100);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_id;
+  const isMoonraker = !!printer.moonraker_url;
+
+  if (!isBambu && !isMoonraker) return null;
+  if (user.role !== "admin" && user.role !== "operator") return null;
+
+  async function gcode(script: string, key: string) {
+    if (busy) return;
+    setBusy(key);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/gcode`, {
+        method: "POST",
+        body: JSON.stringify({ script }),
+      });
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setSpeedProfile(profile: number) {
+    if (busy) return;
+    setBusy(`sp${profile}`);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/speed-profile`, {
+        method: "POST",
+        body: JSON.stringify({ profile }),
+      });
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Mechanical arrow button — tactile feel
+  const axisBtn = (dir: string, script: string, key: string, svgPath: string) => (
+    <button
+      type="button"
+      onClick={() => gcode(script, key)}
+      disabled={busy !== null}
+      title={`${dir} ${dist}мм`}
+      className="flex size-10 items-center justify-center rounded-md border border-neutral-300 bg-neutral-50 text-neutral-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)] transition active:shadow-none active:translate-y-px hover:border-neutral-400 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+    >
+      {busy === key ? (
+        <span className="text-[10px]">…</span>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d={svgPath} />
+        </svg>
+      )}
+    </button>
+  );
+
+  const homeBtn = (label: string, script: string, key: string) => (
+    <button
+      type="button"
+      onClick={() => gcode(script, key)}
+      disabled={busy !== null}
+      className="flex size-10 items-center justify-center rounded-md border border-neutral-300 bg-white text-neutral-500 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-700 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800"
+      title={`Home ${label}`}
+    >
+      {busy === key ? (
+        <span className="text-[10px]">…</span>
+      ) : (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
+        </svg>
+      )}
+    </button>
+  );
+
+  const utilBtn = (label: string, script: string, key: string, icon: string, colorCls = "text-neutral-600 dark:text-neutral-300") => (
+    <button
+      type="button"
+      onClick={() => gcode(script, key)}
+      disabled={busy !== null}
+      className={`flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700 ${colorCls}`}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d={icon} />
+      </svg>
+      {busy === key ? "…" : label}
+    </button>
+  );
+
+  const SPEED_COLORS = [
+    "border-neutral-300 bg-neutral-50 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300",
+    "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300",
+    "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300",
+    "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300",
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 dark:border-neutral-800">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Керування</p>
+        <span className="text-[10px] text-neutral-300 dark:text-neutral-600">{isBambu ? "Bambu MQTT" : "Moonraker"}</span>
+      </div>
+
+      <div className="p-5 space-y-5">
+        {/* ── Movement ── */}
+        <div>
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Переміщення</p>
+
+          {/* Step size */}
+          <div className="mb-4 flex items-center gap-px overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-700 w-fit">
+            {MOVE_DISTANCES.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDist(d)}
+                className={`px-3 py-1.5 text-[11px] font-medium tabular-nums transition ${
+                  dist === d
+                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    : "bg-white text-neutral-500 hover:bg-neutral-50 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                }`}
+              >
+                {d < 1 ? d : d}
+                <span className="ml-0.5 text-[9px] opacity-60">мм</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Pad */}
+          <div className="flex items-start gap-4">
+            {/* XY */}
+            <div>
+              <p className="mb-2 text-[9px] uppercase tracking-widest text-neutral-300 dark:text-neutral-600">X / Y</p>
+              <div className="grid grid-cols-3 gap-1">
+                <div />
+                {axisBtn("Y+", `G91\nG0 Y${dist} F3000\nG90`, "y+", "M12 19V5M5 12l7-7 7 7")}
+                <div />
+                {axisBtn("X-", `G91\nG0 X-${dist} F3000\nG90`, "x-", "M19 12H5M12 19l-7-7 7-7")}
+                {homeBtn("XY", "G28 X Y", "home-xy")}
+                {axisBtn("X+", `G91\nG0 X${dist} F3000\nG90`, "x+", "M5 12h14M12 5l7 7-7 7")}
+                <div />
+                {axisBtn("Y-", `G91\nG0 Y-${dist} F3000\nG90`, "y-", "M12 5v14M19 12l-7 7-7-7")}
+                <div />
+              </div>
+            </div>
+
+            {/* Z */}
+            <div>
+              <p className="mb-2 text-[9px] uppercase tracking-widest text-neutral-300 dark:text-neutral-600">Z</p>
+              <div className="flex flex-col gap-1">
+                {axisBtn("Z+", `G91\nG0 Z${dist} F300\nG90`, "z+", "M12 19V5M5 12l7-7 7 7")}
+                {homeBtn("Z", "G28 Z", "home-z")}
+                {axisBtn("Z-", `G91\nG0 Z-${dist} F300\nG90`, "z-", "M12 5v14M19 12l-7 7-7-7")}
+              </div>
+            </div>
+
+            {/* Home all */}
+            <div className="mt-7">
+              <button
+                type="button"
+                onClick={() => gcode("G28", "home-all")}
+                disabled={busy !== null}
+                className="flex flex-col items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-[10px] font-medium text-neutral-500 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
+                </svg>
+                {busy === "home-all" ? "…" : "Всі"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+
+        {/* ── Speed ── */}
+        <div>
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Швидкість друку</p>
+          {isBambu ? (
+            <div className="grid grid-cols-4 gap-2">
+              {BAMBU_SPEEDS.map((s, i) => (
+                <button
+                  key={s.profile}
+                  type="button"
+                  onClick={() => setSpeedProfile(s.profile)}
+                  disabled={busy !== null}
+                  className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-center text-[11px] font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition disabled:opacity-40 ${SPEED_COLORS[i]}`}
+                >
+                  <span className="text-[9px] font-bold tracking-widest opacity-60">
+                    {"▮".repeat(i + 1)}
+                  </span>
+                  {busy === `sp${s.profile}` ? "…" : s.label}
+                  <span className="text-[9px] opacity-50 tabular-nums">{s.pct}%</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={10} max={300} value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+                className="w-20 rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-center font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
+              />
+              <span className="text-xs text-neutral-400">%</span>
+              <button
+                type="button"
+                onClick={() => gcode(`M220 S${speed}`, "speed")}
+                disabled={busy !== null}
+                className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              >
+                {busy === "speed" ? "…" : "Задати"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Flow (Moonraker) ── */}
+        {isMoonraker && (
+          <div>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Витрата пластику</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={50} max={200} value={flow}
+                onChange={(e) => setFlow(Number(e.target.value))}
+                className="w-20 rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-center font-mono text-sm dark:border-neutral-700 dark:bg-neutral-950"
+              />
+              <span className="text-xs text-neutral-400">%</span>
+              <button
+                type="button"
+                onClick={() => gcode(`M221 S${flow}`, "flow")}
+                disabled={busy !== null}
+                className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+              >
+                {busy === "flow" ? "…" : "Задати"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+
+        {/* ── Utilities ── */}
+        <div>
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Допоміжні</p>
+          <div className="flex flex-wrap gap-2">
+            {utilBtn("Мотори вимк", "M84", "motors-off", "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18")}
+            {utilBtn("Вент увімк", "M106 S255", "fan-on", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
+            {utilBtn("Вент вимк", "M107", "fan-off", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
+            {utilBtn("Охолодити", "M104 S0\nM140 S0", "cool-down", "M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "text-blue-600 dark:text-blue-400")}
+          </div>
+        </div>
+
+        {err && <p className="text-xs text-red-500 dark:text-red-400">{err}</p>}
+      </div>
+    </div>
+  );
+}
 
 function PrintStatusCard({
   printer,
@@ -138,22 +445,21 @@ function PrintStatusCard({
   const canEdit = user.role === "admin" || user.role === "operator";
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const tone = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
-  const needsBedClear = printer.state === "awaiting_bed_clear";
-  const isSimplyPrint = printer.kind === "simplyprint";
-  const isBambu = printer.kind === "bambu";
+  const isOperational = printer.state === "operational" || printer.state === "awaiting_bed_clear";
+  const isError = printer.state === "error";
   const hasMoonraker = !!printer.moonraker_url;
-  const hasLiveSource = hasMoonraker || isSimplyPrint || isBambu;
   const eta = formatEta(printer.eta_minutes);
 
   async function act(action: string) {
     if (busy) return;
-    if (action === "cancel" && !confirm("Скасувати поточний друк?")) return;
     setBusy(action);
     setErr(null);
+    setConfirmCancel(false);
     try {
       await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
       onUpdated();
@@ -164,111 +470,135 @@ function PrintStatusCard({
     }
   }
 
+  const stateBarColor = {
+    printing: "bg-blue-500", ok: "bg-emerald-500", warn: "bg-amber-400",
+    bad: "bg-red-500", idle: "bg-neutral-300 dark:bg-neutral-600", muted: "bg-neutral-200",
+  }[tone] ?? "bg-neutral-300";
+
   return (
-    <Card>
-      {/* state badge */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{stateEmoji(printer.state)}</span>
-          <div>
-            <div className="font-semibold">{stateLabel(printer.state)}</div>
-            <div className="text-xs text-neutral-500">{kindLabel(printer.kind)}</div>
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      {/* State bar — 3px color accent across top */}
+      <div className={`h-0.5 w-full ${stateBarColor}`} />
+
+      <div className="p-5">
+        {/* State row */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <StateIcon state={printer.state} size={16} />
+            <span className="text-sm font-semibold">{stateLabel(printer.state)}</span>
+            {printer.flags?.map((f) => (
+              <span key={f} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                {flagLabel(f)}
+              </span>
+            ))}
           </div>
+          <span className="font-mono text-[10px] text-neutral-300 dark:text-neutral-600 uppercase">{kindLabel(printer.kind)}</span>
         </div>
-        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${TONE_BG[tone]}`}>
-          {stateLabel(printer.state)}
-        </span>
+
+        {/* Error strip */}
+        {printer.error_msg && (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900/50 dark:bg-red-900/10">
+            <svg className="mt-0.5 shrink-0 text-red-500" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p className="text-xs text-red-700 dark:text-red-400">{printer.error_msg}</p>
+          </div>
+        )}
+
+        {/* Job + progress */}
+        {(printer.job || isPrinting || isPaused) && (
+          <div className="mb-5 rounded-md border border-neutral-100 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-800/50">
+            {printer.job && (
+              <p className="mb-1 truncate text-[13px] font-medium text-neutral-700 dark:text-neutral-200">{printer.job}</p>
+            )}
+            {eta && (
+              <p className="mb-2.5 font-mono text-[11px] text-neutral-400">⏱ {eta} залишилось</p>
+            )}
+            {printer.progress_pct != null && (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-neutral-400">прогрес</span>
+                  <span className="font-mono text-sm font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                    {printer.progress_pct}%
+                  </span>
+                </div>
+                <div className="relative h-3 overflow-hidden rounded-sm bg-neutral-200 dark:bg-neutral-700">
+                  <div
+                    className="h-full bg-blue-500 transition-[width] duration-1000 ease-linear"
+                    style={{ width: `${printer.progress_pct}%` }}
+                  />
+                  {/* Tick marks */}
+                  {[25, 50, 75].map((t) => (
+                    <div key={t} className="absolute inset-y-0 w-px bg-white/30 dark:bg-black/20" style={{ left: `${t}%` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {canEdit && (
+          <div className="flex flex-wrap gap-2">
+            {isPrinting && (
+              <button onClick={() => act("pause")} disabled={busy !== null}
+                className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-amber-100 disabled:opacity-40 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-300">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                {busy === "pause" ? "…" : "Пауза"}
+              </button>
+            )}
+            {isPaused && (
+              <button onClick={() => act("resume")} disabled={busy !== null}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-emerald-300">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                {busy === "resume" ? "…" : "Продовжити"}
+              </button>
+            )}
+            {(isPrinting || isPaused) && (
+              confirmCancel ? (
+                <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900/50 dark:bg-red-900/10">
+                  <span className="text-xs text-red-700 dark:text-red-300">Зупинити друк?</span>
+                  <button onClick={() => act("cancel")} disabled={busy !== null}
+                    className="text-xs font-bold text-red-700 hover:underline disabled:opacity-40 dark:text-red-400">
+                    {busy === "cancel" ? "…" : "Так"}
+                  </button>
+                  <span className="text-neutral-300">·</span>
+                  <button onClick={() => setConfirmCancel(false)} className="text-xs text-neutral-500 hover:underline">Ні</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
+                  className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-red-100 disabled:opacity-40 dark:border-red-900/50 dark:bg-red-900/10 dark:text-red-300">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                  Зупинити
+                </button>
+              )
+            )}
+            {isOperational && (
+              <button onClick={() => act("clear-bed")} disabled={busy !== null}
+                className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-emerald-300">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {busy === "clear-bed" ? "…" : "Стіл очищено"}
+              </button>
+            )}
+            {isError && (
+              <button onClick={() => act("clear-error")} disabled={busy !== null}
+                className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-medium text-neutral-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                {busy === "clear-error" ? "…" : "Скинути помилку"}
+              </button>
+            )}
+            {isPrinting && hasMoonraker && (
+              <button onClick={() => act("skip-object")} disabled={busy !== null}
+                title="Потребує [exclude_object] в printer.cfg"
+                className="rounded-md border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-medium text-neutral-600 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                {busy === "skip-object" ? "…" : "Пропустити об'єкт"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {err && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{err}</p>}
       </div>
-
-      {/* flags */}
-      {printer.flags?.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-1">
-          {printer.flags.map((f) => (
-            <span key={f} className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
-              {flagLabel(f)}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* job + progress */}
-      {(printer.job || isPrinting || isPaused) && (
-        <div className="mb-4 space-y-2 rounded-lg bg-neutral-50 p-3 dark:bg-neutral-800">
-          {printer.job && (
-            <div className="truncate text-sm font-medium">📦 {printer.job}</div>
-          )}
-          {eta && <div className="text-xs text-neutral-500">⏱ Залишилось: {eta}</div>}
-          {printer.progress_pct != null && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-neutral-500">
-                <span>Прогрес</span>
-                <span className="font-medium text-blue-600 dark:text-blue-400">{printer.progress_pct}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-[width] duration-1000 ease-linear"
-                  style={{ width: `${printer.progress_pct}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* action buttons */}
-      {canEdit && (
-        <div className="flex flex-wrap gap-2">
-          {isPrinting && (
-            <button
-              onClick={() => act("pause")}
-              disabled={busy !== null}
-              className="rounded-lg bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-500/30 disabled:opacity-40 dark:text-amber-300"
-            >
-              {busy === "pause" ? "…" : "⏸ Пауза"}
-            </button>
-          )}
-          {isPaused && (
-            <button
-              onClick={() => act("resume")}
-              disabled={busy !== null}
-              className="rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/30 disabled:opacity-40 dark:text-emerald-300"
-            >
-              {busy === "resume" ? "…" : "▶ Продовжити"}
-            </button>
-          )}
-          {(isPrinting || isPaused) && (
-            <button
-              onClick={() => act("cancel")}
-              disabled={busy !== null}
-              className="rounded-lg bg-red-500/15 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-500/30 disabled:opacity-40 dark:text-red-300"
-            >
-              {busy === "cancel" ? "…" : "✕ Зупинити"}
-            </button>
-          )}
-          {needsBedClear && isSimplyPrint && (
-            <button
-              onClick={() => act("clear-bed")}
-              disabled={busy !== null}
-              className="rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-500/30 disabled:opacity-40 dark:text-emerald-300"
-            >
-              {busy === "clear-bed" ? "…" : "✓ Стіл очищено"}
-            </button>
-          )}
-          {isPrinting && hasMoonraker && (
-            <button
-              onClick={() => act("skip-object")}
-              disabled={busy !== null}
-              title="Потребує [exclude_object] в printer.cfg"
-              className="rounded-lg bg-neutral-500/10 px-4 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-500/20 disabled:opacity-40 dark:text-neutral-300"
-            >
-              {busy === "skip-object" ? "…" : "⏭ Пропустити об'єкт"}
-            </button>
-          )}
-        </div>
-      )}
-
-      {err && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{err}</p>}
-    </Card>
+    </div>
   );
 }
 
@@ -348,10 +678,10 @@ function FilamentCard({ printer }: { printer: Printer }) {
       </div>
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-neutral-500">
         {meta.estimated_minutes != null && (
-          <span>⏱ {formatEta(meta.estimated_minutes)}</span>
+          <span>{formatEta(meta.estimated_minutes)}</span>
         )}
         {meta.total_layers != null && (
-          <span>▣ {meta.total_layers} шарів</span>
+          <span>{meta.total_layers} шарів</span>
         )}
         {meta.layer_height != null && (
           <span>↕ {meta.layer_height} мм</span>
@@ -579,6 +909,105 @@ function ColorPaletteModal({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function AmsDisplay({
+  slots,
+  activeTray,
+  inventory,
+}: {
+  slots: FilamentSlot[];
+  activeTray: number | null;
+  inventory: Filament[];
+}) {
+  // Group by unit_id, external (slot 254) separate
+  const units = new Map<number, FilamentSlot[]>();
+  const external: FilamentSlot[] = [];
+
+  for (const s of slots) {
+    if (s.slot === 254) { external.push(s); continue; }
+    const uid = s.unit_id ?? 0;
+    if (!units.has(uid)) units.set(uid, []);
+    units.get(uid)!.push(s);
+  }
+  const sortedUnits = [...units.entries()].sort(([a], [b]) => a - b);
+
+  return (
+    <div className="space-y-4">
+      {sortedUnits.map(([uid, unitSlots]) => (
+        <div key={uid}>
+          {sortedUnits.length > 1 && (
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-400">
+              AMS {uid + 1}
+            </p>
+          )}
+          <div className="grid grid-cols-4 gap-2">
+            {unitSlots.sort((a, b) => a.slot - b.slot).map((s) => {
+              const isActive = activeTray === s.slot;
+              const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
+              const hex = s.color.startsWith("#") ? s.color.slice(0, 7) : s.color;
+              const label = String.fromCharCode(65 + (s.slot % 4)); // A B C D
+              return (
+                <div
+                  key={s.slot}
+                  title={s.empty ? "Порожній" : `${s.type}${s.brand ? ` · ${s.brand}` : ""}${s.color_name ? ` (${s.color_name})` : ""}`}
+                  className={[
+                    "relative flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 transition-all",
+                    isActive
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-sm shadow-blue-500/20"
+                      : "border-neutral-100 dark:border-neutral-800",
+                  ].join(" ")}
+                >
+                  {isActive && (
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                      друкує
+                    </span>
+                  )}
+                  {s.empty ? (
+                    <div className="size-7 rounded-full border-2 border-dashed border-neutral-200 dark:border-neutral-700" />
+                  ) : (
+                    <div
+                      className="size-7 rounded-full ring-2 ring-black/10 dark:ring-white/10"
+                      style={{ backgroundColor: hex }}
+                    />
+                  )}
+                  <div className="w-full text-center">
+                    <div className="truncate text-[11px] font-semibold leading-tight text-neutral-700 dark:text-neutral-300">
+                      {s.empty ? "—" : (s.type || "?")}
+                    </div>
+                    {invItem && (
+                      <div className="text-[9px] text-neutral-400">{invItem.grams_remaining} г</div>
+                    )}
+                    <div className="text-[9px] text-neutral-400">{label}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {external.map((s) => {
+        const isActive = activeTray === s.slot;
+        const hex = s.color.startsWith("#") ? s.color.slice(0, 7) : s.color;
+        return (
+          <div key={s.slot} className="flex items-center gap-3 rounded-xl border border-neutral-100 px-4 py-3 dark:border-neutral-800">
+            <div
+              className={`size-6 shrink-0 rounded-full ring-2 ${isActive ? "ring-blue-500" : "ring-black/10 dark:ring-white/10"}`}
+              style={{ backgroundColor: hex }}
+            />
+            <div className="min-w-0">
+              <div className="text-xs font-semibold">{s.type || "—"}</div>
+              {s.brand && <div className="text-[10px] text-neutral-400">{s.brand}</div>}
+            </div>
+            <span className="ml-auto text-[10px] text-neutral-400">Зовнішня</span>
+            {isActive && <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[9px] font-bold text-white">друкує</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LoadedFilamentsCard({
   printer,
   onUpdated,
@@ -653,7 +1082,6 @@ function LoadedFilamentsCard({
       )}
 
       <Card title="Пластик в принтері">
-        {/* ── spool display ── */}
         {slots.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-4 text-center">
             <EmptySpoolIcon size={56} />
@@ -814,6 +1242,47 @@ function LoadedFilamentsCard({
 }
 
 
+// ── bambu LAN discovery ───────────────────────────────────────────────────────
+
+function DiscoverButton({ devId, onFound }: { devId: string | null; onFound: (ip: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function discover() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const devices = await api<{ dev_id: string; ip: string }[]>("/api/printers/bambu-discover");
+      const match = devices.find((d) => d.dev_id === devId);
+      if (match) {
+        onFound(match.ip);
+        setMsg("✓");
+      } else {
+        setMsg("не знайдено");
+      }
+    } catch {
+      setMsg("помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button
+        type="button"
+        onClick={discover}
+        disabled={busy}
+        title="Знайти IP автоматично (UDP broadcast)"
+        className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+      >
+        {busy ? "…" : "Знайти"}
+      </button>
+      {msg && <span className={`text-xs ${msg === "✓" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>{msg}</span>}
+    </div>
+  );
+}
+
 // ── settings card ─────────────────────────────────────────────────────────────
 
 function SettingsCard({
@@ -831,10 +1300,12 @@ function SettingsCard({
   // every background refresh so the user's in-progress edits aren't overwritten.
   const [name, setName] = useState(printer.name);
   const [url, setUrl] = useState(printer.moonraker_url ?? "");
+  const [bambuIp, setBambuIp] = useState(printer.bambu_dev_ip ?? "");
   const [groupId, setGroupId] = useState<string>(printer.group_id?.toString() ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     api<PrinterGroup[]>("/api/printer-groups").then(setGroups).catch(() => {});
@@ -848,12 +1319,17 @@ function SettingsCard({
     setErr(null);
     setSaved(false);
     try {
-      if (name !== printer.name || url !== (printer.moonraker_url ?? "")) {
+      if (
+        name !== printer.name ||
+        url !== (printer.moonraker_url ?? "") ||
+        bambuIp !== (printer.bambu_dev_ip ?? "")
+      ) {
         await api(`/api/printers/${printer.id}`, {
           method: "PATCH",
           body: JSON.stringify({
             name: name.trim() || undefined,
-            moonraker_url: url.trim() || undefined,
+            moonraker_url: url.trim() || null,
+            bambu_dev_ip: bambuIp.trim() || null,
           }),
         });
       }
@@ -875,12 +1351,12 @@ function SettingsCard({
   }
 
   async function deletePrinter() {
-    if (!confirm(`Видалити ${printer.name}? Всі записи плану з ним теж видаляться.`)) return;
     try {
       await api(`/api/printers/${printer.id}`, { method: "DELETE" });
       onDeleted();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Помилка видалення");
+      setConfirmDelete(false);
     }
   }
 
@@ -913,7 +1389,23 @@ function SettingsCard({
             </select>
           </label>
 
-          {printer.kind !== "simplyprint" && (
+          {printer.kind === "bambu" && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">LAN IP (для камери)</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={bambuIp}
+                  onChange={(e) => setBambuIp(e.target.value)}
+                  placeholder="192.168.1.100"
+                  className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-300"
+                />
+                <DiscoverButton devId={printer.bambu_dev_id} onFound={setBambuIp} />
+              </div>
+            </label>
+          )}
+
+          {printer.kind !== "bambu" && (
             <label className="block">
               <span className="mb-1 block text-xs text-neutral-500">Moonraker URL</span>
               <input
@@ -940,14 +1432,22 @@ function SettingsCard({
 
           <div className="flex-1" />
 
-          {printer.kind !== "simplyprint" && (
-            <button
-              type="button"
-              onClick={deletePrinter}
-              className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
-            >
-              🗑 Видалити принтер
-            </button>
+          {true && (
+            confirmDelete ? (
+              <div className="flex items-center gap-2 rounded-lg border border-red-300 px-3 py-1.5 dark:border-red-900">
+                <span className="text-sm text-red-700 dark:text-red-400">Видалити {printer.name}?</span>
+                <button type="button" onClick={deletePrinter} className="rounded px-2 py-0.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/40">Так</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-2 py-0.5 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">Ні</button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                Видалити принтер
+              </button>
+            )
           )}
         </div>
       </form>
@@ -965,6 +1465,8 @@ export default function PrinterPage() {
   const [printer, setPrinter] = useState<Printer | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [controlOpen, setControlOpen] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -999,7 +1501,7 @@ export default function PrinterPage() {
   if (error || !printer) {
     return (
       <div className="space-y-3">
-        <Link href="/dashboard" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100">
+        <Link href="/printers" className="text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100">
           ← Назад
         </Link>
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -1009,112 +1511,147 @@ export default function PrinterPage() {
     );
   }
 
-  const tone = printerTone(printer);
   const hasMoonraker = !!printer.moonraker_url;
   const isBambu = printer.kind === "bambu";
 
   return (
-    <div className="space-y-5">
-      {/* breadcrumb + header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/dashboard"
-            className="mb-1 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
-          >
-            ← Дашборд
+    <div className="space-y-4">
+      {/* ── header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-4 dark:border-neutral-800">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/dashboard"
+            className="flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           </Link>
-          <h1 className="text-2xl font-bold">{printer.name}</h1>
-          <div className="mt-0.5 flex items-center gap-2 text-sm text-neutral-500">
-            <span>{kindLabel(printer.kind)}</span>
-            {printer.bambu_model && <span>· {printer.bambu_model}</span>}
-            {printer.group_name && (
-              <>
-                <span>·</span>
-                <span>📁 {printer.group_name}</span>
-              </>
-            )}
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold">{printer.name}</h1>
+            <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+              <span>{kindLabel(printer.kind)}</span>
+              {printer.bambu_model && <><span>·</span><span>{printer.bambu_model}</span></>}
+              {printer.group_name && <><span>·</span><span>{printer.group_name}</span></>}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`rounded-full border px-3 py-1 text-sm font-medium ${TONE_BG[tone]}`}>
-            {stateEmoji(printer.state)} {stateLabel(printer.state)}
-          </span>
-          <button
-            onClick={() => void load()}
-            className="rounded-lg border border-neutral-200 px-3 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"
-          >
-            ↻ Оновити
+        <div className="flex items-center gap-2 shrink-0">
+          <StateIcon state={printer.state} size={10} />
+          <span className="text-sm text-neutral-600 dark:text-neutral-400">{stateLabel(printer.state)}</span>
+          <button onClick={() => void load()}
+            className="ml-2 rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            title="Оновити">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+          <button onClick={() => setSettingsOpen(true)}
+            className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            title="Налаштування принтера">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
           </button>
         </div>
       </div>
 
-      {/* main grid */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* left — 2 cols */}
-        <div className="space-y-4 lg:col-span-2">
+      {/* ── main grid ── */}
+      <div className="grid gap-4 lg:grid-cols-5">
+
+        {/* left — status + filaments (3 cols) */}
+        <div className="space-y-4 lg:col-span-3">
           <PrintStatusCard printer={printer} onUpdated={load} />
           <LoadedFilamentsCard printer={printer} onUpdated={load} />
-          <FilamentCard printer={printer} />
+          {printer.current_filament_meta && <FilamentCard printer={printer} />}
+
+          {/* ── Collapsible control panel ── */}
+          <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
+            <button
+              type="button"
+              onClick={() => setControlOpen((v) => !v)}
+              className="flex w-full items-center justify-between px-5 py-3.5 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+            >
+              <div className="flex items-center gap-2.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400">
+                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                </svg>
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Керування</span>
+              </div>
+              <svg
+                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                className={`text-neutral-400 transition-transform duration-200 ${controlOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {controlOpen && (
+              <div className="border-t border-neutral-100 dark:border-neutral-800">
+                <ControlPanel printer={printer} />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* right — 1 col */}
-        <div className="space-y-4">
-          {hasMoonraker && <WebcamCard printerId={printer.id} />}
+        {/* right — camera + temps + info (2 cols) */}
+        <div className="space-y-4 lg:col-span-2">
+          {(hasMoonraker || (isBambu && !!printer.bambu_dev_ip)) && <CameraCard printer={printer} />}
           <TemperaturesCard printer={printer} />
 
-          {/* SP info */}
-          {printer.kind === "simplyprint" && printer.sp_printer_id && (
-            <Card title="SimplyPrint">
-              <div className="space-y-2 text-sm text-neutral-600 dark:text-neutral-400">
-                <div>ID: <span className="font-mono">{printer.sp_printer_id}</span></div>
-                <a
-                  href="https://app.simplyprint.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
-                >
-                  🔗 Відкрити в SimplyPrint
-                </a>
-              </div>
-            </Card>
-          )}
-
-          {/* Bambu info */}
-          {isBambu && printer.bambu_dev_id && (
-            <Card title="Bambu Lab">
-              <div className="space-y-2 text-sm text-neutral-600 dark:text-neutral-400">
-                <div>Dev ID: <span className="font-mono">{printer.bambu_dev_id}</span></div>
-                {printer.bambu_model && <div>Модель: {printer.bambu_model}</div>}
-              </div>
-            </Card>
-          )}
-
-          {/* Moonraker link */}
-          {hasMoonraker && (
-            <Card title="Moonraker">
-              <div className="space-y-2 text-sm">
-                <div className="truncate font-mono text-xs text-neutral-500">{printer.moonraker_url}</div>
-                <a
-                  href={printer.moonraker_url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-lg border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
-                >
-                  🔗 Відкрити в Mainsail
-                </a>
+          {/* Connection info — compact */}
+          {(isBambu || hasMoonraker) && (
+            <Card title="Підключення">
+              <div className="space-y-2 text-xs text-neutral-500 dark:text-neutral-400">
+                {isBambu && printer.bambu_dev_id && (
+                  <div className="flex items-center justify-between">
+                    <span>Dev ID</span>
+                    <span className="font-mono text-[10px]">{printer.bambu_dev_id}</span>
+                  </div>
+                )}
+                {hasMoonraker && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-[10px]">{printer.moonraker_url}</span>
+                    <a href={printer.moonraker_url!} target="_blank" rel="noopener noreferrer"
+                      className="shrink-0 rounded border border-neutral-200 px-2 py-0.5 text-[10px] hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                      Mainsail
+                    </a>
+                  </div>
+                )}
               </div>
             </Card>
           )}
         </div>
       </div>
 
-      {/* settings — admin only, full width */}
-      <SettingsCard
-        printer={printer}
-        onUpdated={load}
-        onDeleted={() => router.push("/dashboard")}
-      />
+      {/* ── Settings modal ── */}
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-12 backdrop-blur-sm"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
+              <div>
+                <h2 className="font-semibold">{printer.name}</h2>
+                <p className="text-xs text-neutral-400">Налаштування принтера</p>
+              </div>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <SettingsCard
+                printer={printer}
+                onUpdated={() => { load(); setSettingsOpen(false); }}
+                onDeleted={() => router.push("/printers")}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

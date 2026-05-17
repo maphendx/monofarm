@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { CreatePrinterModal } from "@/components/CreatePrinterModal";
 import { DashboardPet } from "@/components/DashboardPet";
@@ -13,7 +14,6 @@ import { useUser } from "@/lib/auth-context";
 import {
   kindLabel,
   printerTone,
-  stateEmoji,
   stateLabel,
 } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
@@ -92,11 +92,10 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
 
 // ── filter ───────────────────────────────────────────────────────────────────
 
-type Filter = "all" | "simplyprint" | "snapmaker_u1" | "problems";
+type Filter = "all" | "snapmaker_u1" | "problems";
 
 const FILTER_OPTS: { id: Filter; label: string }[] = [
   { id: "all", label: "Всі принтери" },
-  { id: "simplyprint", label: "SimplyPrint" },
   { id: "snapmaker_u1", label: "Snapmaker U1" },
   { id: "problems", label: "Лише проблеми" },
 ];
@@ -112,7 +111,7 @@ const GROUP_OPTS: { id: GroupBy; label: string }[] = [
   { id: "state", label: "За станом" },
 ];
 
-const KIND_ORDER: PrinterKind[] = ["simplyprint", "snapmaker_u1", "other"];
+const KIND_ORDER: PrinterKind[] = ["bambu", "snapmaker_u1", "other"];
 
 const STATE_ORDER = [
   "printing", "paused", "error", "awaiting_bed_clear",
@@ -164,7 +163,7 @@ function groupPrinters(
   const ordered = STATE_ORDER.filter((s) => map.has(s));
   for (const s of map.keys()) if (!ordered.includes(s)) ordered.push(s);
   return ordered.map((s) => ({
-    key: s, label: `${stateEmoji(s)} ${stateLabel(s)}`, items: map.get(s)!,
+    key: s, label: stateLabel(s), items: map.get(s)!,
   }));
 }
 
@@ -196,6 +195,7 @@ function CompactSelect<T extends string>({
 
 export default function DashboardPage() {
   const user = useUser();
+  const router = useRouter();
 
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -243,9 +243,8 @@ export default function DashboardPage() {
   );
 
   const counts = useMemo(() => {
-    const c = { all: printers.length, simplyprint: 0, snapmaker_u1: 0, problems: 0 };
+    const c = { all: printers.length, snapmaker_u1: 0, problems: 0 };
     for (const p of printers) {
-      if (p.kind === "simplyprint") c.simplyprint++;
       if (p.kind === "snapmaker_u1") c.snapmaker_u1++;
       const t = printerTone(p);
       if (t === "bad" || t === "warn") c.problems++;
@@ -298,7 +297,7 @@ export default function DashboardPage() {
               className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800"
               title="Керувати групами принтерів"
             >
-              📁 Групи
+              Групи
             </button>
           )}
           {user.role === "admin" && (
@@ -328,7 +327,7 @@ export default function DashboardPage() {
       ) : !isGrouped ? (
         <div className={GRID}>
           {filtered.map((p) => (
-            <PrinterCard key={p.id} printer={p} onClick={setSelected} onUpdated={upsertPrinter} />
+            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} />
           ))}
         </div>
       ) : (
@@ -347,7 +346,7 @@ export default function DashboardPage() {
                 </div>
                 <div className={GRID}>
                   {g.items.map((p) => (
-                    <PrinterCard key={p.id} printer={p} onClick={setSelected} onUpdated={upsertPrinter} />
+                    <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} />
                   ))}
                 </div>
               </section>

@@ -2,10 +2,13 @@ import type { Printer } from "@/lib/types";
 
 const STATE_LABEL: Record<string, string> = {
   printing: "друкує",
+  pausing: "призупиняється…",
+  resuming: "відновлюється…",
+  cancelling: "скасовується…",
   operational: "готовий",
   print_pending: "очікує друку",
   online: "онлайн",
-  awaiting_bed_clear: "потрібно очистити стіл",
+  awaiting_bed_clear: "очистити стіл",
   paused: "на паузі",
   in_maintenance: "обслуговування",
   not_connected: "не під'єднаний",
@@ -15,30 +18,14 @@ const STATE_LABEL: Record<string, string> = {
   error: "помилка",
 };
 
-const STATE_EMOJI: Record<string, string> = {
-  printing: "🖨️",
-  operational: "✅",
-  print_pending: "⏳",
-  online: "🟢",
-  awaiting_bed_clear: "🧹",
-  paused: "⏸️",
-  in_maintenance: "🔧",
-  not_connected: "🔌",
-  offline: "🔌",
-  unknown: "❓",
-  idle: "💤",
-  error: "🛑",
-};
-
 const FLAG_LABEL: Record<string, string> = {
-  requires_attention: "⚠️ Потребує уваги",
-  ai_running: "🤖 AI спостерігає",
-  ai_detected_low: "🤖 Можлива помилка",
-  ai_detected_high: "🤖 Висока ймовірність помилки",
+  requires_attention: "Потребує уваги",
+  ai_running: "AI спостерігає",
+  ai_detected_low: "Можлива помилка",
+  ai_detected_high: "Висока ймовірність помилки",
 };
 
 const KIND_LABEL: Record<string, string> = {
-  simplyprint: "SimplyPrint",
   snapmaker_u1: "Snapmaker U1",
   bambu: "Bambu Lab",
   other: "Інший",
@@ -47,11 +34,6 @@ const KIND_LABEL: Record<string, string> = {
 export function stateLabel(s: string | null | undefined): string {
   if (!s) return "—";
   return STATE_LABEL[s] ?? s;
-}
-
-export function stateEmoji(s: string | null | undefined): string {
-  if (!s) return "•";
-  return STATE_EMOJI[s] ?? "•";
 }
 
 export function flagLabel(flag: string): string {
@@ -67,15 +49,13 @@ export type PrinterTone = "printing" | "ok" | "warn" | "bad" | "idle" | "muted";
 export function printerTone(p: Printer): PrinterTone {
   if (!p.is_active) return "muted";
   const flags = p.flags ?? [];
-  if (
-    flags.includes("requires_attention") ||
-    flags.includes("ai_detected_high")
-  ) {
-    return "bad";
-  }
+  if (flags.includes("requires_attention") || flags.includes("ai_detected_high")) return "bad";
   if (flags.includes("ai_detected_low")) return "warn";
   switch (p.state) {
     case "printing":
+    case "pausing":
+    case "resuming":
+    case "cancelling":
       return "printing";
     case "operational":
     case "online":
@@ -96,3 +76,4 @@ export function printerTone(p: Printer): PrinterTone {
       return "idle";
   }
 }
+

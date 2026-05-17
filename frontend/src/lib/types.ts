@@ -1,6 +1,6 @@
 export type UserRole = "admin" | "operator" | "manager";
 
-export type PrinterKind = "simplyprint" | "snapmaker_u1" | "bambu" | "other";
+export type PrinterKind = "snapmaker_u1" | "bambu" | "other";
 
 export type PrintTaskStatus = "queued" | "in_progress" | "done" | "cancelled";
 export type FarmTaskStatus = "todo" | "in_progress" | "done";
@@ -39,6 +39,8 @@ export interface FilamentSlot {
   type: string;
   brand: string | null;
   filament_id: number | null;
+  empty: boolean;
+  unit_id: number | null;
 }
 
 export interface FilamentColor {
@@ -52,9 +54,9 @@ export interface Printer {
   id: number;
   name: string;
   kind: PrinterKind;
-  sp_printer_id: string | null;
   moonraker_url: string | null;
   bambu_dev_id: string | null;
+  bambu_dev_ip: string | null;
   bambu_model: string | null;
   is_active: boolean;
   sort_order: number;
@@ -66,13 +68,15 @@ export interface Printer {
   job: string | null;
   eta_minutes: number | null;
   updated_at: string | null;
-  source: "simplyprint" | "moonraker" | "bambu" | "manual" | "unknown";
+  source: "moonraker" | "bambu" | "manual" | "unknown";
   progress_pct: number | null;
   extruder_temp: number | null;
   extruder_target: number | null;
   bed_temp: number | null;
   bed_target: number | null;
   current_filament_meta: FilamentMeta | null;
+  error_msg: string | null;
+  active_tray: number | null;
 }
 
 export interface FilamentMeta {

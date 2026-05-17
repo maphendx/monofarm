@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
+from app.models.organization import Organization
 from app.models.task import PrintTask, PrintTaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import PrintTaskCreate, PrintTaskOut, PrintTaskUpdate
@@ -25,9 +26,9 @@ router = APIRouter(prefix="/tasks/print", tags=["tasks"])
 def list_tasks(
     status: PrintTaskStatus | None = None,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> list[PrintTask]:
-    q = db.query(PrintTask)
+    q = db.query(PrintTask).filter(PrintTask.organization_id == org.id)
     if status:
         q = q.filter(PrintTask.status == status)
     else:
@@ -40,8 +41,9 @@ def create_task(
     payload: PrintTaskCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+    org: Organization = Depends(get_current_org),
 ) -> PrintTask:
-    task = PrintTask(**payload.model_dump(), created_by_id=user.id)
+    task = PrintTask(**payload.model_dump(), created_by_id=user.id, organization_id=org.id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -53,9 +55,10 @@ def update_task(
     task_id: int,
     payload: PrintTaskUpdate,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> PrintTask:
-    task = db.get(PrintTask, task_id)
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     for field, val in payload.model_dump(exclude_none=True).items():
@@ -69,9 +72,10 @@ def update_task(
 def delete_task(
     task_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> None:
-    task = db.get(PrintTask, task_id)
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     _delete_task_file(task)
@@ -87,7 +91,6 @@ def _task_dir(task_id: int) -> Path:
 
 def _safe_filename(name: str) -> str:
     name = Path(name).name  # strip any path
-    # replace separators / nulls just to be safe
     return name.replace("/", "_").replace("\\", "_").replace("\x00", "")
 
 
@@ -97,7 +100,6 @@ def _delete_task_file(task: PrintTask) -> None:
     p = _task_dir(task.id) / task.file_ref
     if p.exists():
         p.unlink(missing_ok=True)
-    # remove dir if empty
     d = _task_dir(task.id)
     if d.exists() and not any(d.iterdir()):
         d.rmdir()
@@ -108,9 +110,10 @@ async def upload_task_file(
     task_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> PrintTask:
-    task = db.get(PrintTask, task_id)
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -122,7 +125,6 @@ async def upload_task_file(
             detail=f"Дозволені формати: {', '.join(sorted(ALLOWED_EXTS))}",
         )
 
-    # Replace any existing file
     _delete_task_file(task)
 
     target_dir = _task_dir(task_id)
@@ -143,12 +145,10 @@ async def upload_task_file(
     task.file_name = fname
     task.file_size = written
 
-    # Best-effort metadata extraction; never fails the upload.
     try:
         meta = parse_gcode(target_path)
         if meta:
             task.filament_meta = meta
-            # If estimated_minutes wasn't set manually, populate from file
             if not task.estimated_minutes and meta.get("estimated_minutes"):
                 task.estimated_minutes = meta["estimated_minutes"]
     except Exception:  # noqa: BLE001
@@ -163,9 +163,9 @@ async def upload_task_file(
 def download_task_file(
     task_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> FileResponse:
-    task = db.get(PrintTask, task_id)
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task or not task.file_ref:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
     path = _task_dir(task_id) / task.file_ref
@@ -178,9 +178,10 @@ def download_task_file(
 def delete_task_file(
     task_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> PrintTask:
-    task = db.get(PrintTask, task_id)
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     _delete_task_file(task)

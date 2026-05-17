@@ -18,7 +18,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Невірний email або пароль")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Користувача деактивовано")
-    token = create_access_token(subject=str(user.id), role=user.role.value)
+    token = create_access_token(subject=str(user.id), role=user.role.value, org_id=user.organization_id)
     return TokenResponse(access_token=token)
 
 

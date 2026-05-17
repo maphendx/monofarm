@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.core.security import hash_password
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
 from app.services import telegram_bot
@@ -23,20 +24,23 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("", response_model=list[UserAdminOut])
 def list_users(
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> list[User]:
-    return db.query(User).order_by(User.created_at).all()
+    return db.query(User).filter(User.organization_id == org.id).order_by(User.created_at).all()
 
 
 @router.post("", response_model=UserAdminOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.admin)),
+    org: Organization = Depends(get_current_org),
+    admin: User = Depends(require_roles(UserRole.admin)),
 ) -> User:
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Користувач з таким email вже існує")
     user = User(
+        organization_id=org.id,
         email=payload.email,
         password_hash=hash_password(payload.password),
         name=payload.name,
@@ -53,13 +57,13 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     admin: User = Depends(require_roles(UserRole.admin)),
 ) -> User:
-    user = db.get(User, user_id)
+    user = db.query(User).filter(User.id == user_id, User.organization_id == org.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
 
-    # Don't allow demoting yourself or deactivating yourself
     if user.id == admin.id:
         if payload.role is not None and payload.role != UserRole.admin:
             raise HTTPException(status_code=400, detail="Не можна змінити власну роль")
@@ -84,9 +88,10 @@ def update_user(
 def generate_telegram_link(
     user_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> TelegramLinkOut:
-    user = db.get(User, user_id)
+    user = db.query(User).filter(User.id == user_id, User.organization_id == org.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
     code = telegram_bot.generate_link_code(db, user)
@@ -104,9 +109,10 @@ def generate_telegram_link(
 def unlink_telegram(
     user_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> User:
-    user = db.get(User, user_id)
+    user = db.query(User).filter(User.id == user_id, User.organization_id == org.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
     user.telegram_chat_id = None
@@ -121,9 +127,10 @@ def unlink_telegram(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     admin: User = Depends(require_roles(UserRole.admin)),
 ) -> None:
-    user = db.get(User, user_id)
+    user = db.query(User).filter(User.id == user_id, User.organization_id == org.id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
     if user.id == admin.id:

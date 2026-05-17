@@ -1,5 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const TOKEN_KEY = "printfarm_token";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const TOKEN_KEY = "monofarm_token";
 
 export class ApiError extends Error {
   status: number;

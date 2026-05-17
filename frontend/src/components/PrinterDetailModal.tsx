@@ -9,16 +9,15 @@ import { useUser } from "@/lib/auth-context";
 import {
   flagLabel,
   kindLabel,
-  stateEmoji,
   stateLabel,
 } from "@/lib/printerLabels";
 import type { Printer, PrinterGroup } from "@/lib/types";
 
 const MANUAL_STATUSES = [
-  { value: "idle", label: "Вільний 💤" },
-  { value: "printing", label: "Друкує 🖨️" },
-  { value: "in_maintenance", label: "Обслуговування 🔧" },
-  { value: "error", label: "Помилка 🛑" },
+  { value: "idle", label: "Вільний" },
+  { value: "printing", label: "Друкує" },
+  { value: "in_maintenance", label: "Обслуговування" },
+  { value: "error", label: "Помилка" },
 ];
 
 function MoonrakerControls({
@@ -60,7 +59,7 @@ function MoonrakerControls({
             disabled={busy !== null}
             className="rounded-md bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
           >
-            {busy === "pause" ? "…" : "⏸ Пауза"}
+            {busy === "pause" ? "…" : "Пауза"}
           </button>
         )}
         {isPaused && (
@@ -90,149 +89,6 @@ function MoonrakerControls({
 }
 
 
-// ── SimplyPrint controls ─────────────────────────────────────────────────────
-
-function SimplyPrintControls({
-  printer,
-  onUpdated,
-}: {
-  printer: Printer;
-  onUpdated: (p: Printer) => void;
-}) {
-  const user = useUser();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [gcodeInput, setGcodeInput] = useState("");
-  const [gcodeOpen, setGcodeOpen] = useState(false);
-
-  const isPrinting = printer.state === "printing";
-  const isPaused = printer.state === "paused";
-  const needsBedClear =
-    printer.state === "operational" || printer.state === "awaiting_bed_clear";
-
-  async function act(action: string, body?: object) {
-    setBusy(action);
-    setErr(null);
-    try {
-      await api(`/api/printers/${printer.id}/sp/${action}`, {
-        method: "POST",
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const refreshed = await api<Printer[]>("/api/printers");
-      const updated = refreshed.find((p) => p.id === printer.id);
-      if (updated) onUpdated(updated);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Помилка");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function sendGcode() {
-    const lines = gcodeInput
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (!lines.length) return;
-    await act("gcode", { gcode: lines });
-    setGcodeInput("");
-    setGcodeOpen(false);
-  }
-
-  return (
-    <div className="space-y-2">
-      {/* state-specific action buttons */}
-      <div className="flex flex-wrap gap-2">
-        {isPrinting && (
-          <button
-            type="button"
-            onClick={() => act("pause")}
-            disabled={busy !== null}
-            className="rounded-md bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
-          >
-            {busy === "pause" ? "…" : "⏸ Пауза"}
-          </button>
-        )}
-        {isPaused && (
-          <button
-            type="button"
-            onClick={() => act("resume")}
-            disabled={busy !== null}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {busy === "resume" ? "…" : "▶ Продовжити"}
-          </button>
-        )}
-        {(isPrinting || isPaused) && (
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm("Скасувати поточний друк?")) act("cancel");
-            }}
-            disabled={busy !== null}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
-          >
-            {busy === "cancel" ? "…" : "✕ Скасувати"}
-          </button>
-        )}
-        {needsBedClear && (
-          <button
-            type="button"
-            onClick={() => act("clear-bed", { success: true })}
-            disabled={busy !== null}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {busy === "clear-bed" ? "…" : "✓ Стіл очищено"}
-          </button>
-        )}
-      </div>
-
-      {/* raw G-code sender — admin only */}
-      {user.role === "admin" && (
-        <div className="border-t border-neutral-200 pt-2 dark:border-neutral-800">
-          {gcodeOpen ? (
-            <div className="space-y-2">
-              <textarea
-                rows={3}
-                value={gcodeInput}
-                onChange={(e) => setGcodeInput(e.target.value)}
-                placeholder={"G28 XY\nM109 S200"}
-                className="w-full resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={sendGcode}
-                  disabled={busy !== null || !gcodeInput.trim()}
-                  className="rounded-md bg-neutral-900 px-3 py-1 text-xs text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-                >
-                  {busy === "gcode" ? "…" : "Надіслати G-code"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setGcodeOpen(false); setGcodeInput(""); }}
-                  className="rounded-md px-3 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                >
-                  Скасувати
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setGcodeOpen(true)}
-              className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
-            >
-              {"</>"} Надіслати G-code…
-            </button>
-          )}
-        </div>
-      )}
-
-      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
-    </div>
-  );
-}
 
 
 function MoonrakerUrlEditor({
@@ -356,9 +212,7 @@ export function PrinterDetailModal({
   onDeleted?: (id: number) => void;
 }) {
   const user = useUser();
-  const isManual = printer?.kind !== "simplyprint";
-  const canEdit =
-    isManual && (user.role === "admin" || user.role === "operator");
+  const canEdit = user.role === "admin" || user.role === "operator";
 
   const [status, setStatus] = useState("idle");
   const [job, setJob] = useState("");
@@ -428,12 +282,10 @@ export function PrinterDetailModal({
       <div className="space-y-4 text-sm">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-500">
           <span>{kindLabel(printer.kind)}</span>
-          <span>
-            {stateEmoji(printer.state)} {stateLabel(printer.state)}
-          </span>
+          <span>{stateLabel(printer.state)}</span>
           {printer.group_name && (
             <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-              📁 {printer.group_name}
+              {printer.group_name}
             </span>
           )}
           {printer.flags.map((f) => (
@@ -498,7 +350,7 @@ export function PrinterDetailModal({
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-600 dark:text-neutral-400">
                   {printer.extruder_temp != null && (
                     <span>
-                      🌡 Сопло: {Math.round(printer.extruder_temp)}°
+                      Сопло: {Math.round(printer.extruder_temp)}°
                       {printer.extruder_target
                         ? ` → ${Math.round(printer.extruder_target)}°`
                         : ""}
@@ -506,7 +358,7 @@ export function PrinterDetailModal({
                   )}
                   {printer.bed_temp != null && (
                     <span>
-                      ▣ Стіл: {Math.round(printer.bed_temp)}°
+                      Стіл: {Math.round(printer.bed_temp)}°
                       {printer.bed_target ? ` → ${Math.round(printer.bed_target)}°` : ""}
                     </span>
                   )}
@@ -526,25 +378,8 @@ export function PrinterDetailModal({
           </>
         )}
 
-        {isManual && printer.kind !== "bambu" && user.role === "admin" && (
+        {printer.kind !== "bambu" && user.role === "admin" && (
           <MoonrakerUrlEditor printer={printer} onUpdated={onUpdated} />
-        )}
-
-        {!isManual && (
-          <div className="space-y-3">
-            <p className="rounded-md bg-neutral-100 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
-              Дані тягнуться з SimplyPrint автоматично.
-              {printer.job && (
-                <>
-                  <br />
-                  Поточний друк: <b>{printer.job}</b>
-                </>
-              )}
-            </p>
-            {(user.role === "admin" || user.role === "operator") && (
-              <SimplyPrintControls printer={printer} onUpdated={onUpdated} />
-            )}
-          </div>
         )}
 
         {canEdit && (
@@ -650,7 +485,7 @@ export function PrinterDetailModal({
               }}
               className="w-full rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
             >
-              🗑 Видалити принтер
+              Видалити принтер
             </button>
           </div>
         )}

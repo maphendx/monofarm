@@ -12,6 +12,9 @@ class PlanEntry(Base):
     __tablename__ = "plan_entries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     plan_date: Mapped[date] = mapped_column(Date, index=True)
     printer_id: Mapped[int] = mapped_column(ForeignKey("printers.id"))
     task_id: Mapped[int] = mapped_column(ForeignKey("print_tasks.id"))

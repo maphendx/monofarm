@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv-graphify/
 venv/
 .pytest_cache/
 
@@ -27,7 +28,16 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Claude Code — personal project notes (optional)
+CLAUDE.local.md
+
+# Claude Code (machine-specific allowlist; keep shared hooks in settings.json)
+.claude/settings.local.json
+
 # Data
 data/
 *.sqlite
 *.db
+
+# Graphify (generated knowledge graph; rebuild with graphify extract/update)
+graphify-out/

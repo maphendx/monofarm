@@ -252,7 +252,7 @@ export default function UsersPage() {
                       onClick={() => setTgLinkUser(u)}
                       className="text-neutral-500 hover:text-neutral-900 hover:underline dark:hover:text-neutral-100"
                     >
-                      🔗 Привʼязати
+                      Привʼязати
                     </button>
                   )}
                 </td>

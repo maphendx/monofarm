@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "printfarm",
+  title: "monofarm",
   description: "Управління 3D-фермою",
+  icons: { icon: "/logo-icon.svg" },
 };
 
 export default function RootLayout({
@@ -32,7 +33,7 @@ export default function RootLayout({
         {/* Apply saved theme before render to avoid flash of wrong theme */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('printfarm_theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+            __html: `try{var t=localStorage.getItem('monofarm_theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
           }}
         />
       </head>

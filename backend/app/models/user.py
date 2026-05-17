@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, String, func
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -17,6 +17,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(120), default="")

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import decode_token
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 
 
@@ -26,6 +27,16 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
     return user
+
+
+def get_current_org(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Organization:
+    org = db.get(Organization, user.organization_id)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Organization not found")
+    return org
 
 
 def require_roles(*roles: UserRole):

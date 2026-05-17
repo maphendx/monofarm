@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
+from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.printer import Printer
 from app.models.task import PrintTask
 from app.models.user import User
-from app.services import simplyprint, telegram_bot
+from app.services import bambu, telegram_bot
 
 
 log = logging.getLogger(__name__)
@@ -26,11 +27,11 @@ def _esc(text: str) -> str:
     return text.replace("*", "").replace("_", "").replace("`", "").replace("[", "(").replace("]", ")")
 
 
-def build_daily_plan_text(db: Session, plan_date: date | None = None) -> str:
+def build_daily_plan_text(db: Session, org_id: int, plan_date: date | None = None) -> str:
     plan_date = plan_date or date.today()
     entries = (
         db.query(PlanEntry)
-        .filter(PlanEntry.plan_date == plan_date)
+        .filter(PlanEntry.plan_date == plan_date, PlanEntry.organization_id == org_id)
         .order_by(PlanEntry.printer_id, PlanEntry.sequence, PlanEntry.created_at)
         .all()
     )
@@ -79,34 +80,33 @@ _STATE_LABEL = {
 }
 
 
-def build_status_text(db: Session) -> str:
-    overview = simplyprint.get_farm_overview()
-    sp_states = {str(p["id"]): p for p in simplyprint.extract_printers(overview)}
-
+def build_status_text(db: Session, org: Organization) -> str:
     rows = (
         db.query(Printer)
-        .filter(Printer.is_active.is_(True))
+        .filter(Printer.is_active.is_(True), Printer.organization_id == org.id)
         .order_by(Printer.kind, Printer.name)
         .all()
     )
     if not rows:
         return "Принтерів немає."
 
-    # Bucket
     counts: dict[str, list[str]] = defaultdict(list)
-    problems: list[tuple[Printer, str, list[str]]] = []
+    problems: list[tuple[Printer, str]] = []
 
     for row in rows:
-        if row.sp_printer_id and row.sp_printer_id in sp_states:
-            sp = sp_states[row.sp_printer_id]
-            state = sp["state"]
-            flags = sp.get("flags", [])
+        from app.models.printer import PrinterKind
+        if row.kind == PrinterKind.bambu and row.bambu_dev_id:
+            live = bambu.get_cached_state(row.bambu_dev_id)
+            state = live.get("state") or "unknown"
+        elif row.moonraker_url:
+            from app.services import moonraker
+            live = moonraker.get_live_status(row.moonraker_url)
+            state = live.get("state") or "unknown"
         else:
             state = row.manual_status or "idle"
-            flags = []
         counts[state].append(row.name)
-        if "requires_attention" in flags or state in ("paused", "error", "in_maintenance"):
-            problems.append((row, state, flags))
+        if state in ("paused", "error", "in_maintenance"):
+            problems.append((row, state))
 
     lines = [f"*Стан ферми* — {len(rows)} принтерів", ""]
     for state in [
@@ -124,11 +124,10 @@ def build_status_text(db: Session) -> str:
     if problems:
         lines.append("")
         lines.append("*Потребують уваги:*")
-        for printer, state, flags in problems:
+        for printer, state in problems:
             emoji = _STATE_EMOJI.get(state, "⚠️")
             label = _STATE_LABEL.get(state, state)
-            tail = " ⚠️ потребує уваги" if "requires_attention" in flags else ""
-            lines.append(f"{emoji} {_esc(printer.name)} — {label}{tail}")
+            lines.append(f"{emoji} {_esc(printer.name)} — {label}")
 
     lines.append("")
     lines.append(f"_{settings.FARM_PUBLIC_URL}/dashboard_")
@@ -138,20 +137,32 @@ def build_status_text(db: Session) -> str:
 # ── 09:00 broadcast ──────────────────────────────────────────────────────────
 
 async def send_daily_plan_to_all() -> None:
-    """Called by scheduler at 09:00. Sends plan to every linked active user."""
+    """Called by scheduler at 09:00. Sends per-org plan to every linked active user."""
     with SessionLocal() as db:
-        text = build_daily_plan_text(db)
-        chat_ids = [
-            row[0]
-            for row in db.query(User.telegram_chat_id)
-            .filter(User.is_active.is_(True), User.telegram_chat_id.isnot(None))
-            .all()
-        ]
-    if not chat_ids:
+        orgs = db.query(Organization).all()
+        by_org: list[tuple[str, list[int]]] = []
+        for org in orgs:
+            chat_ids = [
+                int(row[0])
+                for row in db.query(User.telegram_chat_id)
+                .filter(
+                    User.organization_id == org.id,
+                    User.is_active.is_(True),
+                    User.telegram_chat_id.isnot(None),
+                )
+                .all()
+            ]
+            if chat_ids:
+                text = build_daily_plan_text(db, org.id)
+                by_org.append((text, chat_ids))
+
+    if not by_org:
         log.info("Daily plan: no linked users to send to")
         return
-    sent = 0
-    for chat_id in chat_ids:
-        ok = await telegram_bot.send_message(int(chat_id), text)
-        sent += int(ok)
-    log.info("Daily plan: sent to %d/%d users", sent, len(chat_ids))
+    sent = total = 0
+    for text, chat_ids in by_org:
+        for chat_id in chat_ids:
+            ok = await telegram_bot.send_message(chat_id, text)
+            sent += int(ok)
+            total += 1
+    log.info("Daily plan: sent to %d/%d users", sent, total)

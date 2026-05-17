@@ -6,11 +6,11 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+
 from app.core.db import Base
 
 
 class PrinterKind(str, enum.Enum):
-    simplyprint = "simplyprint"
     snapmaker_u1 = "snapmaker_u1"
     bambu = "bambu"
     other = "other"
@@ -20,11 +20,11 @@ class Printer(Base):
     __tablename__ = "printers"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(120))
-    kind: Mapped[PrinterKind] = mapped_column(Enum(PrinterKind), default=PrinterKind.simplyprint)
-
-    # SimplyPrint linkage (nullable for manual printers like U1)
-    sp_printer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    kind: Mapped[PrinterKind] = mapped_column(Enum(PrinterKind), default=PrinterKind.other)
 
     # Manual state (used for U1 / non-API printers)
     manual_status: Mapped[str | None] = mapped_column(String(40), nullable=True)

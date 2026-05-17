@@ -241,7 +241,7 @@ export function PrinterGroupsModal({
                     className="rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
                     title="Видалити групу"
                   >
-                    🗑
+                    ×
                   </button>
                 )}
               </li>

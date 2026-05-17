@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
-import type { Filament } from "@/lib/types";
+import type { Filament, FilamentColor } from "@/lib/types";
 
 // ─── Filament form (create/edit) ──────────────────────────────────────────────
 
@@ -246,6 +246,119 @@ function AdjustModal({
   );
 }
 
+// ─── Filament Colors ──────────────────────────────────────────────────────────
+
+function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
+  const [colors, setColors] = useState<FilamentColor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editColor, setEditColor] = useState<FilamentColor | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [hex, setHex] = useState("#ffffff");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try { setColors(await api<FilamentColor[]>("/api/filament-colors")); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function openAdd() { setName(""); setHex("#3b82f6"); setEditColor(null); setError(null); setAddOpen(true); }
+  function openEdit(c: FilamentColor) { setName(c.name); setHex(c.hex_color); setEditColor(c); setError(null); setAddOpen(true); }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError(null);
+    try {
+      if (editColor) {
+        const updated = await api<FilamentColor>(`/api/filament-colors/${editColor.id}`, {
+          method: "PATCH", body: JSON.stringify({ name: name.trim(), hex_color: hex }),
+        });
+        setColors(prev => prev.map(c => c.id === updated.id ? updated : c));
+      } else {
+        const created = await api<FilamentColor>("/api/filament-colors", {
+          method: "POST", body: JSON.stringify({ name: name.trim(), hex_color: hex }),
+        });
+        setColors(prev => [...prev, created]);
+      }
+      setAddOpen(false);
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Помилка"); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(c: FilamentColor) {
+    if (!confirm(`Видалити колір "${c.name}"?`)) return;
+    await api(`/api/filament-colors/${c.id}`, { method: "DELETE" });
+    setColors(prev => prev.filter(x => x.id !== c.id));
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-medium">Каталог кольорів</h2>
+        {canEdit && (
+          <button onClick={openAdd}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+            + Додати колір
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-neutral-400">Завантаження…</p>
+      ) : colors.length === 0 ? (
+        <p className="text-sm text-neutral-400">Каталог порожній</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {colors.map(c => (
+            <div key={c.id}
+              className="group flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+              <span className="h-4 w-4 shrink-0 rounded-full border border-neutral-200 dark:border-neutral-700"
+                style={{ background: c.hex_color }} />
+              <span className="text-sm">{c.name}</span>
+              <span className="text-xs text-neutral-400">{c.hex_color}</span>
+              {canEdit && (
+                <div className="ml-1 hidden gap-0.5 group-hover:flex">
+                  <button onClick={() => openEdit(c)} className="rounded p-0.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">✎</button>
+                  <button onClick={() => remove(c)} className="rounded p-0.5 text-neutral-400 hover:text-red-600">✕</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal open={addOpen} onClose={() => { if (!busy) setAddOpen(false); }}
+        title={editColor ? "Редагувати колір" : "Новий колір"}
+        footer={<>
+          <button type="button" onClick={() => setAddOpen(false)} disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">Скасувати</button>
+          <button type="submit" form="color-form" disabled={busy || !name.trim()}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        </>}
+      >
+        <form id="color-form" onSubmit={save} className="space-y-3 text-sm">
+          <label className="block"><span className="mb-1 block">Назва</span>
+            <input type="text" required autoFocus value={name} onChange={e => setName(e.target.value)}
+              placeholder="Чорний, Білий, Galaxy Black…"
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" /></label>
+          <label className="block"><span className="mb-1 block">Колір</span>
+            <div className="flex items-center gap-3">
+              <input type="color" value={hex} onChange={e => setHex(e.target.value)}
+                className="h-10 w-16 cursor-pointer rounded-md border border-neutral-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" />
+              <input type="text" value={hex} onChange={e => setHex(e.target.value)}
+                pattern="^#[0-9a-fA-F]{6}$"
+                className="w-32 rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+            </div>
+          </label>
+          {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FilamentPage() {
@@ -376,6 +489,10 @@ export default function FilamentPage() {
         onClose={() => setAdjustFilament(null)}
         onSaved={upsert}
       />
+
+      <div className="mt-10 border-t border-neutral-200 pt-8 dark:border-neutral-800">
+        <FilamentColorsSection canEdit={canEdit} />
+      </div>
     </div>
   );
 }

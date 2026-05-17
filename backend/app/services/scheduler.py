@@ -37,6 +37,15 @@ def start() -> None:
         replace_existing=True,
     )
 
+    # Print state transition tracker — opens/closes PrintHistory entries
+    from app.services.print_tracker import check_transitions
+    _scheduler.add_job(
+        check_transitions,
+        IntervalTrigger(seconds=30),
+        id="print_tracker",
+        replace_existing=True,
+    )
+
     _scheduler.start()
     log.info("Scheduler started (timezone=%s)", settings.TIMEZONE)
 

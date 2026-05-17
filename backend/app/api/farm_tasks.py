@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
+from app.models.organization import Organization
 from app.models.task import FarmTask, FarmTaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import FarmTaskCreate, FarmTaskOut, FarmTaskUpdate
@@ -15,9 +16,9 @@ router = APIRouter(prefix="/tasks/farm", tags=["farm-tasks"])
 def list_farm_tasks(
     status: FarmTaskStatus | None = None,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> list[FarmTask]:
-    q = db.query(FarmTask)
+    q = db.query(FarmTask).filter(FarmTask.organization_id == org.id)
     if status:
         q = q.filter(FarmTask.status == status)
     else:
@@ -30,8 +31,9 @@ def create_farm_task(
     payload: FarmTaskCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+    org: Organization = Depends(get_current_org),
 ) -> FarmTask:
-    task = FarmTask(**payload.model_dump(), created_by_id=user.id)
+    task = FarmTask(**payload.model_dump(), created_by_id=user.id, organization_id=org.id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -43,9 +45,10 @@ def update_farm_task(
     task_id: int,
     payload: FarmTaskUpdate,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> FarmTask:
-    task = db.get(FarmTask, task_id)
+    task = db.query(FarmTask).filter(FarmTask.id == task_id, FarmTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     for field, val in payload.model_dump(exclude_none=True).items():
@@ -59,9 +62,10 @@ def update_farm_task(
 def delete_farm_task(
     task_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> None:
-    task = db.get(FarmTask, task_id)
+    task = db.query(FarmTask).filter(FarmTask.id == task_id, FarmTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     db.delete(task)

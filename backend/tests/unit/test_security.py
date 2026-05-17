@@ -34,7 +34,7 @@ def test_verify_password_handles_invalid_hash_format():
 
 
 def test_create_and_decode_access_token_roundtrip():
-    token = create_access_token(subject="42", role="admin")
+    token = create_access_token(subject="42", role="admin", org_id=1)
     payload = decode_token(token)
     assert payload is not None
     assert payload["sub"] == "42"

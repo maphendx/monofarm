@@ -16,9 +16,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
+from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.services import bambu as bambu_svc
@@ -104,9 +105,9 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
 @router.get("", response_model=list[GcodeFileOut])
 def list_files(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> list[GcodeFileOut]:
-    files = db.query(GcodeFile).order_by(GcodeFile.uploaded_at.desc()).all()
+    files = db.query(GcodeFile).filter(GcodeFile.organization_id == org.id).order_by(GcodeFile.uploaded_at.desc()).all()
 
     # Self-heal rows whose filament_meta was written by an older parser that
     # couldn't read comma-separated `filament used [g]` / `[m]` fields.
@@ -144,6 +145,7 @@ def list_files(
 async def upload_file(
     file: UploadFile,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> GcodeFileOut:
     if not file.filename:
@@ -175,6 +177,7 @@ async def upload_file(
         pass
 
     row = GcodeFile(
+        organization_id=org.id,
         stored_name=stored_name,
         original_name=file.filename,
         size_bytes=len(contents),
@@ -191,9 +194,10 @@ async def upload_file(
 def delete_file(
     file_id: int,
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> None:
-    row = db.get(GcodeFile, file_id)
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
     path = GCODES_DIR / row.stored_name
@@ -206,9 +210,9 @@ def delete_file(
 def download_file(
     file_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> FileResponse:
-    row = db.get(GcodeFile, file_id)
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
     path = GCODES_DIR / row.stored_name
@@ -223,13 +227,14 @@ async def send_to_printer(
     printer_id: int,
     payload: SendPayload = Body(default=SendPayload()),
     db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> SendResult:
-    row = db.get(GcodeFile, file_id)
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
 
-    printer = db.get(Printer, printer_id)
+    printer = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == org.id).first()
     if not printer:
         raise HTTPException(status_code=404, detail="Принтер не знайдено")
 

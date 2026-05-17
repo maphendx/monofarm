@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -10,6 +10,9 @@ class Filament(Base):
     __tablename__ = "filaments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     material: Mapped[str] = mapped_column(String(40))
     color: Mapped[str] = mapped_column(String(40))
     brand: Mapped[str | None] = mapped_column(String(80), nullable=True)

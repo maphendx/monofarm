@@ -67,7 +67,7 @@ def octo_version() -> dict:
     return {
         "api": "0.1",
         "server": "1.3.0",
-        "text": "OctoPrint 1.3.0 (printfarm shim)",
+        "text": "OctoPrint 1.3.0 (monofarm shim)",
     }
 
 
@@ -132,6 +132,7 @@ async def octo_upload(
         pass
 
     row = GcodeFile(
+        organization_id=user.organization_id,
         stored_name=stored_name,
         original_name=file.filename,
         size_bytes=len(contents),

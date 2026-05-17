@@ -11,9 +11,6 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "change-me"
 
-    SIMPLYPRINT_API_KEY: str = ""
-    SIMPLYPRINT_ORG_ID: str = ""
-
     BAMBU_EMAIL: str = ""
     BAMBU_PASSWORD: str = ""
     BAMBU_REFRESH_TOKEN: str = ""
@@ -25,6 +22,13 @@ class Settings(BaseSettings):
 
     TIMEZONE: str = "Europe/Kiev"
     CORS_ORIGINS: str = "http://localhost:3000"
+
+    LMSQ_API_KEY: str = ""          # Lemon Squeezy API key
+    LMSQ_WEBHOOK_SECRET: str = ""   # from LS dashboard → webhooks
+    LMSQ_STORE_ID: str = ""         # numeric store ID from LS URL
+    LMSQ_VARIANT_STARTER: str = ""  # variant ID for each plan
+    LMSQ_VARIANT_PRO: str = ""
+    LMSQ_VARIANT_FARM: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.filament import Filament
-from app.models.user import User, UserRole
+from app.models.organization import Organization
+from app.models.user import UserRole
 from app.schemas.filament import (
     FilamentAdjust,
     FilamentCreate,
@@ -33,9 +34,9 @@ def _to_out(f: Filament) -> FilamentOut:
 @router.get("", response_model=list[FilamentOut])
 def list_filaments(
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> list[FilamentOut]:
-    rows = db.query(Filament).order_by(Filament.material, Filament.color).all()
+    rows = db.query(Filament).filter(Filament.organization_id == org.id).order_by(Filament.material, Filament.color).all()
     return [_to_out(f) for f in rows]
 
 
@@ -43,9 +44,10 @@ def list_filaments(
 def create_filament(
     payload: FilamentCreate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> FilamentOut:
-    f = Filament(**payload.model_dump())
+    f = Filament(**payload.model_dump(), organization_id=org.id)
     db.add(f)
     db.commit()
     db.refresh(f)
@@ -57,9 +59,10 @@ def update_filament(
     filament_id: int,
     payload: FilamentUpdate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> FilamentOut:
-    f = db.get(Filament, filament_id)
+    f = db.query(Filament).filter(Filament.id == filament_id, Filament.organization_id == org.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Filament not found")
     for field, val in payload.model_dump(exclude_none=True).items():
@@ -74,9 +77,10 @@ def adjust_stock(
     filament_id: int,
     payload: FilamentAdjust,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> FilamentOut:
-    f = db.get(Filament, filament_id)
+    f = db.query(Filament).filter(Filament.id == filament_id, Filament.organization_id == org.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Filament not found")
     new_value = f.grams_remaining + payload.delta_grams
@@ -92,9 +96,10 @@ def adjust_stock(
 def delete_filament(
     filament_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin)),
 ) -> None:
-    f = db.get(Filament, filament_id)
+    f = db.query(Filament).filter(Filament.id == filament_id, Filament.organization_id == org.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Filament not found")
     db.delete(f)

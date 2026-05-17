@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Printer } from "@/lib/types";
 
-const STORAGE_HIDE = "printfarm_dashboard_pet_hidden";
+const STORAGE_HIDE = "monofarm_dashboard_pet_hidden";
 
 /** Швидкість наближення до цілі (експонента за секунду); менше — повільніше. */
 const SMOOTH_LAMBDA = 0.9;
@@ -141,7 +141,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
       const p = pos.current;
       const t = target.current;
       let dx = t.x - p.x;
-      let dy = t.y - p.y;
+      const dy = t.y - p.y;
       const dist = Math.hypot(dx, dy);
 
       if (dist < ARRIVE_EPS) {

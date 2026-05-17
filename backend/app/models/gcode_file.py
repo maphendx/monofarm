@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +13,9 @@ class GcodeFile(Base):
     __tablename__ = "gcode_files"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     # UUID-based storage name on disk (prevents collisions/path traversal)
     stored_name: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     # Original filename as uploaded by the user

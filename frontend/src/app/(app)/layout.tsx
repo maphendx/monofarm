@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Topbar } from "@/components/Topbar";
+import { Sidebar } from "@/components/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
 import type { User } from "@/lib/types";
@@ -34,7 +34,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!ready || !user) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">
         Завантаження…
       </div>
     );
@@ -42,10 +42,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider user={user}>
-      <Topbar user={user} />
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6">
-        {children}
-      </main>
+      <div className="flex min-h-screen">
+        <Sidebar user={user} />
+        {/* pl-14 = collapsed sidebar width; sidebar expands on hover over itself only */}
+        <main className="flex-1 pl-14">
+          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
+            {children}
+          </div>
+        </main>
+      </div>
     </AuthProvider>
   );
 }

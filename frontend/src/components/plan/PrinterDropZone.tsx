@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 
 import { FilamentSwatches } from "@/components/FilamentSwatches";
 import { ApiError, api } from "@/lib/api";
-import { kindLabel, stateEmoji, stateLabel } from "@/lib/printerLabels";
+import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { PlanEntry, Printer } from "@/lib/types";
 
 function PlanEntryRow({
@@ -177,7 +177,7 @@ export function PrinterDropZone({
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{printer.name}</div>
           <div className="text-xs text-neutral-500">
-            {stateEmoji(printer.state)} {stateLabel(printer.state)} ·{" "}
+            {stateLabel(printer.state)} ·{" "}
             {kindLabel(printer.kind)}
           </div>
         </div>

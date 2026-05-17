@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**Claude Code harness:** team config lives in [`.claude/`](.claude/CLAUDE.md) (`rules/`, `commands/`, `agents/`, shared `settings.json`). Slash workflows: `/backend-test`, `/frontend-check`, `/graphify-refresh`. Optional private notes in `CLAUDE.local.md` (gitignored).
+
 ## Project overview
 
 Full-stack 3D print farm management platform ("printfarm"). Manages ~50 printers: SimplyPrint-connected printers (live state from SimplyPrint API), 12 Snapmaker U1 printers tracked via Moonraker/Klipper REST, and Bambu Lab printers (P1S, A1, A1 mini) via Cloud MQTT + LAN FTPS. Two operators with shifts, a remote manager, daily print planning, farm task management, and filament inventory.
@@ -141,3 +143,15 @@ CORS_ORIGINS=http://localhost:3000,https://your-domain
 **Tailwind v4 dark mode:** Class-based via `@custom-variant dark`. The dev server **must be restarted** after any change to `globals.css` — hot reload doesn't pick up `@custom-variant` changes.
 
 **Chrome blocks `http://192.168.x.x`** from localhost (Private Network Access policy). Use Safari for testing Mainsail links, or test on the farm PC directly.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+On this machine Graphify is installed in `.venv-graphify`. Run `. .venv-graphify/bin/activate` before `graphify` / `graphify query` / etc.
+
+Rules:
+- ALWAYS read graphify-out/GRAPH_REPORT.md before reading any source files, running grep/glob searches, or answering codebase questions. The graph is your primary map of the codebase.
+- IF graphify-out/wiki/index.md EXISTS, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

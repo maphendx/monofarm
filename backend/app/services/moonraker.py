@@ -153,7 +153,11 @@ _STATE_MAP = {
     "standby": "idle",
     "ready": "idle",
     "printing": "printing",
+    "pausing": "pausing",
     "paused": "paused",
+    "resuming": "resuming",
+    "cancelling": "cancelling",
+    "canceling": "cancelling",
     "complete": "operational",
     "completed": "operational",
     "cancelled": "idle",
@@ -162,24 +166,19 @@ _STATE_MAP = {
 }
 
 
-def _fetch_live_status(moonraker_url: str) -> dict:
-    """Single Moonraker call returning normalized state for the dashboard."""
-    base = _api_base(moonraker_url)
-    objs = "print_stats&display_status&virtual_sdcard&extruder&heater_bed"
-    try:
-        resp = requests.get(
-            f"{base}/printer/objects/query?{objs}", timeout=STATUS_TIMEOUT
-        )
-        resp.raise_for_status()
-        data = resp.json().get("result", {}).get("status", {})
-    except (requests.RequestException, ValueError) as e:
-        raise MoonrakerError(str(e)) from e
+LIVE_STATUS_OBJECTS = "print_stats&display_status&virtual_sdcard&extruder&heater_bed"
 
-    print_stats = data.get("print_stats") or {}
-    display = data.get("display_status") or {}
-    sdcard = data.get("virtual_sdcard") or {}
-    extruder = data.get("extruder") or {}
-    bed = data.get("heater_bed") or {}
+
+def _parse_moonraker_status(status: dict) -> dict:
+    """Convert a Moonraker .result.status dict → our normalized live-state dict.
+
+    Extracted so the tunnel path can reuse it without duplicating the mapping logic.
+    """
+    print_stats = status.get("print_stats") or {}
+    display = status.get("display_status") or {}
+    sdcard = status.get("virtual_sdcard") or {}
+    extruder = status.get("extruder") or {}
+    bed = status.get("heater_bed") or {}
 
     raw_state = (print_stats.get("state") or "").lower()
     state = _STATE_MAP.get(raw_state, raw_state or "unknown")
@@ -192,13 +191,16 @@ def _fetch_live_status(moonraker_url: str) -> dict:
     progress_pct = round(progress * 100) if isinstance(progress, (int, float)) else None
 
     print_duration = print_stats.get("print_duration") or 0
-    total_duration = print_stats.get("total_duration") or 0
     eta_minutes: int | None = None
     if state == "printing" and progress and progress > 0.01 and print_duration > 0:
-        # naive estimate: assumes consistent speed
         total_estimated = print_duration / progress
         remaining = max(0, total_estimated - print_duration)
         eta_minutes = round(remaining / 60)
+
+    error_msg: str | None = None
+    raw_msg = (print_stats.get("message") or "").strip()
+    if raw_msg and state in ("error", "unknown"):
+        error_msg = raw_msg[:200]
 
     return {
         "state": state,
@@ -207,12 +209,27 @@ def _fetch_live_status(moonraker_url: str) -> dict:
         "progress_pct": progress_pct,
         "eta_minutes": eta_minutes,
         "print_duration_s": int(print_duration) if print_duration else None,
-        "total_duration_s": int(total_duration) if total_duration else None,
+        "total_duration_s": int(print_stats.get("total_duration") or 0) or None,
         "extruder_temp": extruder.get("temperature"),
         "extruder_target": extruder.get("target"),
         "bed_temp": bed.get("temperature"),
         "bed_target": bed.get("target"),
+        "error_msg": error_msg,
     }
+
+
+def _fetch_live_status(moonraker_url: str) -> dict:
+    """Single Moonraker call returning normalized state for the dashboard."""
+    base = _api_base(moonraker_url)
+    try:
+        resp = requests.get(
+            f"{base}/printer/objects/query?{LIVE_STATUS_OBJECTS}", timeout=STATUS_TIMEOUT
+        )
+        resp.raise_for_status()
+        status = resp.json().get("result", {}).get("status", {})
+    except (requests.RequestException, ValueError) as e:
+        raise MoonrakerError(str(e)) from e
+    return _parse_moonraker_status(status)
 
 
 # ── File metadata fetch (for color swatches when local task isn't available) ─

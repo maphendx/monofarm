@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ApiError, api, getToken, setToken } from "@/lib/api";
@@ -46,9 +47,27 @@ export default function LoginPage() {
         onSubmit={onSubmit}
         className="w-full max-w-sm space-y-5 rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
       >
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold">printfarm</h1>
-          <p className="text-sm text-neutral-500">Вхід в систему</p>
+        <div className="flex items-center gap-3">
+          <svg width="36" height="28" viewBox="0 0 112 88" aria-hidden="true">
+            <rect x="24" y="0"  width="24" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="64" y="0"  width="24" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="16" y="8"  width="80" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="0"  y="24" width="112" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="16" y="40" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="16" y="48" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="32" y="48" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
+            <rect x="64" y="48" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
+            <rect x="16" y="56" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="32" y="56" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
+            <rect x="64" y="56" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
+            <rect x="16" y="64" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="32" y="72" width="16" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
+            <rect x="64" y="72" width="16" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
+          </svg>
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">monofarm</h1>
+            <p className="text-xs text-neutral-500">Вхід в систему</p>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -88,6 +107,13 @@ export default function LoginPage() {
         >
           {busy ? "Вхід…" : "Увійти"}
         </button>
+
+        <p className="text-center text-sm text-neutral-500">
+          Ще немає акаунту?{" "}
+          <Link href="/register" className="underline hover:text-neutral-900 dark:hover:text-neutral-100">
+            Зареєструватись
+          </Link>
+        </p>
       </form>
     </div>
   );

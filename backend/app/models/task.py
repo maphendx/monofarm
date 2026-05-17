@@ -2,6 +2,7 @@ import enum
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +22,9 @@ class PrintTask(Base):
     __tablename__ = "print_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     filament_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -50,6 +54,9 @@ class FarmTask(Base):
     __tablename__ = "farm_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[FarmTaskStatus] = mapped_column(Enum(FarmTaskStatus), default=FarmTaskStatus.todo)

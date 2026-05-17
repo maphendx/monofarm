@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
+from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
 from app.models.task import PrintTask
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.schemas.plan import PlanEntryCreate, PlanEntryOut, PlanEntryUpdate
 from app.services import moonraker
 
@@ -49,12 +50,12 @@ def _to_out(entry: PlanEntry, db: Session) -> PlanEntryOut:
 def get_plan(
     plan_date: date | None = None,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    org: Organization = Depends(get_current_org),
 ) -> list[PlanEntryOut]:
     target = plan_date or date.today()
     entries = (
         db.query(PlanEntry)
-        .filter(PlanEntry.plan_date == target)
+        .filter(PlanEntry.plan_date == target, PlanEntry.organization_id == org.id)
         .order_by(PlanEntry.printer_id, PlanEntry.sequence, PlanEntry.created_at)
         .all()
     )
@@ -65,23 +66,27 @@ def get_plan(
 def create_entry(
     payload: PlanEntryCreate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> PlanEntryOut:
-    if not db.get(Printer, payload.printer_id):
+    printer = db.query(Printer).filter(Printer.id == payload.printer_id, Printer.organization_id == org.id).first()
+    if not printer:
         raise HTTPException(status_code=404, detail="Printer not found")
-    if not db.get(PrintTask, payload.task_id):
+    task = db.query(PrintTask).filter(PrintTask.id == payload.task_id, PrintTask.organization_id == org.id).first()
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Sequence = next available for that printer+date
     existing = (
         db.query(PlanEntry)
         .filter(
             PlanEntry.plan_date == payload.plan_date,
             PlanEntry.printer_id == payload.printer_id,
+            PlanEntry.organization_id == org.id,
         )
         .count()
     )
     entry = PlanEntry(
+        organization_id=org.id,
         plan_date=payload.plan_date,
         printer_id=payload.printer_id,
         task_id=payload.task_id,
@@ -99,9 +104,10 @@ def update_entry(
     entry_id: int,
     payload: PlanEntryUpdate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> PlanEntryOut:
-    entry = db.get(PlanEntry, entry_id)
+    entry = db.query(PlanEntry).filter(PlanEntry.id == entry_id, PlanEntry.organization_id == org.id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Plan entry not found")
     if payload.done is not None:
@@ -117,9 +123,10 @@ def update_entry(
 def delete_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> None:
-    entry = db.get(PlanEntry, entry_id)
+    entry = db.query(PlanEntry).filter(PlanEntry.id == entry_id, PlanEntry.organization_id == org.id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Plan entry not found")
     db.delete(entry)
@@ -130,10 +137,11 @@ def delete_entry(
 async def send_entry_to_printer(
     entry_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    org: Organization = Depends(get_current_org),
+    _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> SendResult:
     """Upload the task's file to the printer's Moonraker and start the print."""
-    entry = db.get(PlanEntry, entry_id)
+    entry = db.query(PlanEntry).filter(PlanEntry.id == entry_id, PlanEntry.organization_id == org.id).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Plan entry not found")
 
@@ -152,19 +160,16 @@ async def send_entry_to_printer(
 
     url = printer.moonraker_url
 
-    # Network-bound, sync — offload to a thread so the event loop stays free.
     try:
         await asyncio.to_thread(moonraker.upload_gcode, url, file_path, task.file_ref)
         await asyncio.to_thread(moonraker.start_print, url, task.file_ref)
     except moonraker.MoonrakerError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Reflect on the printer card: mark manual U1 as printing
-    if printer.kind != PrinterKind.simplyprint:
-        printer.manual_status = "printing"
-        printer.manual_job = task.title
-        printer.manual_eta_minutes = task.estimated_minutes
-        printer.manual_updated_at = datetime.now(timezone.utc)
+    printer.manual_status = "printing"
+    printer.manual_job = task.title
+    printer.manual_eta_minutes = task.estimated_minutes
+    printer.manual_updated_at = datetime.now(timezone.utc)
 
     db.commit()
     return SendResult(ok=True, message=f"Запущено друк на {printer.name}")
