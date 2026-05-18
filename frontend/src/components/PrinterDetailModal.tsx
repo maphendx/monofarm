@@ -213,6 +213,7 @@ export function PrinterDetailModal({
 }) {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
+  const isManual = printer?.kind === "other";
 
   const [status, setStatus] = useState("idle");
   const [job, setJob] = useState("");

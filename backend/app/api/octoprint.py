@@ -24,13 +24,11 @@ from app.core.db import get_db
 from app.core.security import decode_token
 from app.models.gcode_file import GcodeFile
 from app.models.user import User
+from app.services import storage as storage_svc
 from app.services.gcode_meta import parse_gcode
+from app.services.storage import LOCAL_DIR as GCODES_DIR
 
 from fastapi import Depends
-
-
-GCODES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes"
-GCODES_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTS = {".gcode", ".gco", ".g", ".3mf", ".bgcode"}
 MAX_FILE_BYTES = 500 * 1024 * 1024
@@ -44,9 +42,19 @@ def _resolve_user(
     x_api_key: str | None,
     db: Session,
 ) -> User:
-    """Accept OctoPrint-style X-Api-Key (which is our JWT token)."""
+    """Accept OctoPrint-style X-Api-Key: scoped ApiKey (preferred) or JWT (legacy)."""
     if not x_api_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing API key")
+
+    # Try scoped ApiKey first (mf_… prefix or any non-JWT value)
+    if not x_api_key.startswith("eyJ"):
+        from app.api.api_keys import resolve_api_key
+        user = resolve_api_key(x_api_key, db)
+        if user and user.is_active:
+            return user
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired API key")
+
+    # Legacy path: raw JWT token
     payload = decode_token(x_api_key)
     if not payload:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
@@ -121,15 +129,19 @@ async def octo_upload(
         raise HTTPException(status_code=413, detail="File too large")
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
-    dest = GCODES_DIR / stored_name
-    dest.write_bytes(contents)
-
+    parse_path = GCODES_DIR / stored_name
+    parse_path.write_bytes(contents)
     filament_meta: dict | None = None
     try:
-        parsed = parse_gcode(dest)
+        parsed = parse_gcode(parse_path)
         filament_meta = parsed if parsed else None
     except Exception:
         pass
+    if storage_svc.is_s3():
+        try:
+            storage_svc.put(stored_name, contents, user.organization_id)
+        finally:
+            parse_path.unlink(missing_ok=True)
 
     row = GcodeFile(
         organization_id=user.organization_id,

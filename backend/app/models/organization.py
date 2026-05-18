@@ -25,7 +25,7 @@ PLAN_LIMITS: dict[OrgPlan, dict[str, int]] = {
     OrgPlan.free:    {"printers": 3,  "users": 1},
     OrgPlan.starter: {"printers": 10, "users": 3},
     OrgPlan.pro:     {"printers": 30, "users": 10},
-    OrgPlan.farm:    {"printers": 50, "users": 999},
+    OrgPlan.farm:    {"printers": 100, "users": 999},
 }
 
 PLAN_PRICE_USD: dict[OrgPlan, int] = {

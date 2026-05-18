@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { TelegramLinkModal } from "@/components/TelegramLinkModal";
 import { ApiError, api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
 
@@ -147,6 +148,7 @@ function UserFormModal({
 }
 
 export default function UsersPage() {
+  const t = useT();
   const me = useUser();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,15 +196,15 @@ export default function UsersPage() {
     upsert(updated);
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-neutral-500">{t("common.loading")}</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Користувачі</h1>
+        <h1 className="text-lg font-semibold">{t("users.title")}</h1>
         <button onClick={() => { setEditing(null); setModalOpen(true); }}
           className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
-          + Користувач
+          + {t("users.addUser")}
         </button>
       </div>
 

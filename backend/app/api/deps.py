@@ -1,10 +1,12 @@
+from datetime import datetime
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models.organization import Organization
+from app.models.organization import OrgPlan, Organization
 from app.models.user import User, UserRole
 
 
@@ -36,6 +38,11 @@ def get_current_org(
     org = db.get(Organization, user.organization_id)
     if not org:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Organization not found")
+    if org.plan != OrgPlan.free and org.plan_expires_at:
+        expires = org.plan_expires_at.replace(tzinfo=None) if org.plan_expires_at.tzinfo else org.plan_expires_at
+        if expires < datetime.utcnow():
+            org.plan = OrgPlan.free
+            db.commit()
     return org
 
 

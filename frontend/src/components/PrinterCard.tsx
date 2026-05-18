@@ -55,11 +55,13 @@ export function PrinterCard({
   onClick,
   onSettings,
   onUpdated,
+  onPrint,
 }: {
   printer: Printer;
   onClick?: (p: Printer) => void;
   onSettings?: (p: Printer) => void;
   onUpdated?: (p: Printer) => void;
+  onPrint?: (p: Printer) => void;
 }) {
   const user = useUser();
   const tone = printerTone(printer);
@@ -67,10 +69,11 @@ export function PrinterCard({
 
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
+  const isIdle = printer.state === "idle";
   const isOperational = printer.state === "operational" || printer.state === "awaiting_bed_clear";
   const hasMoonraker = !!printer.moonraker_url;
   const canEdit = user.role === "admin" || user.role === "operator";
-  const isActionable = (isPrinting || isPaused || isOperational) && canEdit;
+  const isActionable = (isPrinting || isPaused || isOperational || isIdle) && canEdit;
   const showProgress = isPrinting && printer.progress_pct != null;
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -221,6 +224,15 @@ export function PrinterCard({
       {isActionable && (
         <div className="mt-0.5 border-t border-neutral-100 pt-1.5 dark:border-neutral-800">
           <div className="flex flex-wrap gap-1">
+            {isIdle && onPrint && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onPrint(printer); }}
+                className="flex-1 rounded-md bg-blue-500/10 py-1 text-[10px] font-medium text-blue-700 transition hover:bg-blue-500/25 dark:text-blue-400"
+              >
+                ▶ Друк
+              </button>
+            )}
             {isOperational && (
               <button
                 type="button"

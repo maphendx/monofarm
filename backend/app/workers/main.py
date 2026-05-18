@@ -1,0 +1,157 @@
+"""Monofarm background worker.
+
+Runs Telegram bot, APScheduler, Bambu MQTT, and Redis command relay
+in a single asyncio process — separate from the FastAPI web workers.
+
+Usage:
+    python -m app.workers.main
+
+Docker:
+    command: python -m app.workers.main
+    environment:
+      INLINE_WORKERS: "false"
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import signal
+import threading
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+log = logging.getLogger("monofarm.worker")
+
+
+def _redis_cmd_relay() -> None:
+    """Background thread: forward Bambu commands from Redis pub/sub → MQTT.
+
+    Web workers publish to 'bambu:cmd' when they have no local MQTT client.
+    This thread picks them up and publishes to the real MQTT broker.
+    """
+    from app.services.cache import _r
+    from app.services.bambu import _mqtt_clients, _dev_to_org
+
+    r = _r()
+    if r is None:
+        log.warning("Redis not configured — Bambu command relay disabled")
+        return
+
+    pubsub = r.pubsub()
+    pubsub.subscribe("bambu:cmd")
+    log.info("Redis cmd relay: subscribed to bambu:cmd")
+
+    for message in pubsub.listen():
+        if message["type"] != "message":
+            continue
+        try:
+            cmd = json.loads(message["data"])
+            topic: str = cmd["topic"]
+            payload: str = cmd["payload"]
+            dev_id = topic.split("/")[1] if "/" in topic else ""
+            org_id = _dev_to_org.get(dev_id)
+            client = _mqtt_clients.get(org_id) if org_id is not None else None
+            if client is not None:
+                client.publish(topic, payload)
+                log.debug("Redis cmd relay: forwarded cmd to %s", topic)
+            else:
+                log.warning("Redis cmd relay: no MQTT client for dev_id=%s (org_id=%s)", dev_id, org_id)
+        except Exception as e:
+            log.warning("Redis cmd relay error: %s", e)
+
+
+async def _refresh_bambu_subscriptions() -> None:
+    """Re-subscribe MQTT for any Bambu printers added since startup."""
+    from app.core.db import SessionLocal
+    from app.models.organization import Organization
+    from app.services import bambu
+    from app.services.bambu import _dev_to_org
+
+    try:
+        with SessionLocal() as db:
+            orgs = db.query(Organization).all()
+        for org in orgs:
+            devices = await asyncio.to_thread(bambu.list_devices, org.id)
+            for d in devices:
+                dev_id = d.get("dev_id", "")
+                if dev_id and dev_id not in _dev_to_org:
+                    log.info("Worker: new Bambu device discovered, subscribing: %s", dev_id)
+                    bambu.subscribe_device(dev_id, org.id)
+    except Exception:
+        log.exception("Bambu subscription refresh failed")
+
+
+async def main() -> None:
+    from app.services import bambu, scheduler, telegram_bot
+    from app.core.db import SessionLocal
+    from app.models.organization import Organization
+
+    # Redis command relay (runs in daemon thread — dies with the process)
+    threading.Thread(target=_redis_cmd_relay, daemon=True, name="redis-cmd-relay").start()
+
+    # Telegram bot
+    try:
+        await telegram_bot.init()
+        log.info("Telegram bot started")
+    except Exception:
+        log.exception("Telegram bot failed to start")
+
+    # APScheduler (daily report + Bambu token refresh + print tracker)
+    try:
+        scheduler.start()
+        log.info("Scheduler started")
+    except Exception:
+        log.exception("Scheduler failed to start")
+
+    # Bambu MQTT for all orgs
+    try:
+        with SessionLocal() as db:
+            orgs = db.query(Organization).all()
+        for org in orgs:
+            await bambu.init(org)
+        log.info("Bambu MQTT started for %d org(s)", len(orgs))
+    except Exception:
+        log.exception("Bambu MQTT failed to start")
+
+    # Periodic new-device subscription refresh (every 5 min)
+    from apscheduler.triggers.interval import IntervalTrigger
+    from app.services.scheduler import _scheduler
+    if _scheduler is not None:
+        _scheduler.add_job(
+            _refresh_bambu_subscriptions,
+            IntervalTrigger(minutes=5),
+            id="bambu_subscription_refresh",
+            replace_existing=True,
+        )
+
+    log.info("monofarm worker ready")
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+
+    await stop.wait()
+
+    log.info("Worker shutting down…")
+    scheduler.shutdown()
+    try:
+        await bambu.shutdown()
+    except Exception:
+        log.exception("Bambu MQTT shutdown error")
+    try:
+        await telegram_bot.shutdown()
+    except Exception:
+        log.exception("Telegram shutdown error")
+    log.info("Worker stopped")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

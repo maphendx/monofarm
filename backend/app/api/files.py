@@ -24,11 +24,10 @@ from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.services import bambu as bambu_svc
 from app.services import moonraker as mr
+from app.services import storage as storage_svc
+from app.services import tunnel as _tunnel
 from app.services.gcode_meta import parse_gcode
-
-
-GCODES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes"
-GCODES_DIR.mkdir(parents=True, exist_ok=True)
+from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
 
 ALLOWED_EXTS = {".gcode", ".gco", ".g", ".3mf", ".bgcode"}
 MAX_FILE_BYTES = 500 * 1024 * 1024  # 500 MB
@@ -165,16 +164,23 @@ async def upload_file(
         raise HTTPException(status_code=413, detail="Файл занадто великий (макс 500 МБ)")
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
-    dest = GCODES_DIR / stored_name
-    dest.write_bytes(contents)
 
-    # Parse filament metadata from the gcode file (best-effort, non-blocking)
+    # Parse metadata from a local copy before committing to final storage
     filament_meta: dict | None = None
+    parse_path = GCODES_DIR / stored_name
+    parse_path.write_bytes(contents)
     try:
-        parsed = parse_gcode(dest)
+        parsed = parse_gcode(parse_path)
         filament_meta = parsed if parsed else None
     except Exception:
         pass
+
+    # If S3 mode: upload to S3 and remove the local copy we just wrote for parsing
+    if storage_svc.is_s3():
+        try:
+            storage_svc.put(stored_name, contents, org.id)
+        finally:
+            parse_path.unlink(missing_ok=True)
 
     row = GcodeFile(
         organization_id=org.id,
@@ -200,8 +206,7 @@ def delete_file(
     row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
-    path = GCODES_DIR / row.stored_name
-    path.unlink(missing_ok=True)
+    storage_svc.delete(row.stored_name, org.id)
     db.delete(row)
     db.commit()
 
@@ -211,10 +216,16 @@ def download_file(
     file_id: int,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
-) -> FileResponse:
+):
+    from fastapi.responses import RedirectResponse
     row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
+    if storage_svc.is_s3():
+        url = storage_svc.presigned_url(row.stored_name, org.id)
+        if not url:
+            raise HTTPException(status_code=404, detail="Файл відсутній в S3")
+        return RedirectResponse(url)
     path = GCODES_DIR / row.stored_name
     if not path.exists():
         raise HTTPException(status_code=404, detail="Файл відсутній на диску")
@@ -238,136 +249,156 @@ async def send_to_printer(
     if not printer:
         raise HTTPException(status_code=404, detail="Принтер не знайдено")
 
-    src = GCODES_DIR / row.stored_name
-    if not src.exists():
-        raise HTTPException(status_code=404, detail="Файл відсутній на диску")
+    try:
+        _src_ctx = storage_svc.local_path_for(row.stored_name, org.id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл відсутній")
 
-    # ── Bambu path: FTPS upload + MQTT start command ──
-    if printer.kind == PrinterKind.bambu:
-        if not printer.bambu_dev_id:
-            raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
-        if not printer.bambu_access_code or not printer.bambu_dev_ip:
+    with _src_ctx as src:
+        # ── Bambu path: FTPS upload + MQTT start command ──
+        if printer.kind == PrinterKind.bambu:
+            if not printer.bambu_dev_id:
+                raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
+            if not printer.bambu_access_code or not printer.bambu_dev_ip:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Принтер '{printer.name}': відсутній access_code або LAN IP для FTPS",
+                )
+            is_3mf = ".3mf" in Path(row.original_name).suffixes
+            if not is_3mf:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Bambu Lab приймає лише .3mf файли",
+                )
+
+            # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
+            # -1 marks unused slots so Bambu doesn't try to load them.
+            meta = row.filament_meta or {}
+            slot_count = max(
+                len(meta.get("colors") or []),
+                len(meta.get("types") or []),
+                1,
+            )
+            used_g = meta.get("used_g") or []
+            ams_mapping: list[int] = []
+            for i in range(slot_count):
+                g = used_g[i] if i < len(used_g) else None
+                if g is not None and g <= 0:
+                    ams_mapping.append(-1)
+                else:
+                    ams_mapping.append(payload.slot_map.get(i, i))
+            use_ams = any(v >= 0 for v in ams_mapping)
+
+            try:
+                if _tunnel.has_tunnel(org.id):
+                    presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=1800)
+                    ftp_name = await _tunnel.send_bambu_upload(
+                        org.id,
+                        printer.bambu_dev_ip,
+                        printer.bambu_access_code,
+                        row.original_name,
+                        file_bytes=None if presigned else src.read_bytes(),
+                        presigned_url=presigned,
+                    )
+                else:
+                    ftp_name = await asyncio.to_thread(
+                        bambu_svc.upload_3mf,
+                        printer.bambu_dev_ip,
+                        printer.bambu_access_code,
+                        src,
+                        row.original_name,
+                    )
+                await asyncio.to_thread(
+                    bambu_svc.start_print,
+                    printer.bambu_dev_id,
+                    ftp_name,
+                    row.original_name,
+                    ams_mapping,
+                    use_ams,
+                )
+                return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
+            except (bambu_svc.BambuError, RuntimeError) as e:
+                return SendResult(ok=False, printer_name=printer.name, message=str(e))
+
+        # ── Moonraker path: optional gcode rewrite + upload + auto-start ──
+        if not printer.moonraker_url:
             raise HTTPException(
                 status_code=400,
-                detail=f"Принтер '{printer.name}': відсутній access_code або LAN IP для FTPS",
-            )
-        is_3mf = ".3mf" in Path(row.original_name).suffixes
-        if not is_3mf:
-            raise HTTPException(
-                status_code=400,
-                detail="Bambu Lab приймає лише .3mf файли",
+                detail=f"Принтер '{printer.name}' не має Moonraker URL",
             )
 
-        # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
-        # -1 marks unused slots so Bambu doesn't try to load them.
-        meta = row.filament_meta or {}
-        slot_count = max(
-            len(meta.get("colors") or []),
-            len(meta.get("types") or []),
-            1,
+        has_remap = any(k != v for k, v in payload.slot_map.items())
+        calibrate_set = (
+            set(payload.calibrate_slots) if payload.calibrate_slots is not None else None
         )
+
+        meta = row.filament_meta or {}
         used_g = meta.get("used_g") or []
-        ams_mapping: list[int] = []
-        for i in range(slot_count):
-            g = used_g[i] if i < len(used_g) else None
-            if g is not None and g <= 0:
-                ams_mapping.append(-1)
-            else:
-                ams_mapping.append(payload.slot_map.get(i, i))
-        use_ams = any(v >= 0 for v in ams_mapping)
+        slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 0)
+        used_set: set[int] | None = None
+        if used_g and slot_count:
+            candidate = {i for i in range(slot_count) if i >= len(used_g) or used_g[i] > 0}
+            if 0 < len(candidate) < slot_count:
+                used_set = candidate
+
+        has_options = (
+            payload.auto_bed_leveling is not None
+            or payload.timelapse is not None
+            or payload.ai_detection is not None
+            or used_set is not None
+            or calibrate_set is not None
+        )
 
         try:
-            ftp_name = await asyncio.to_thread(
-                bambu_svc.upload_3mf,
-                printer.bambu_dev_ip,
-                printer.bambu_access_code,
-                src,
-                row.original_name,
-            )
-            await asyncio.to_thread(
-                bambu_svc.start_print,
-                printer.bambu_dev_id,
-                ftp_name,
-                row.original_name,
-                ams_mapping,
-                use_ams,
-            )
-            return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
-        except bambu_svc.BambuError as e:
-            return SendResult(ok=False, printer_name=printer.name, message=str(e))
+            working: bytes | None = None
+            if has_options:
+                working = await asyncio.to_thread(
+                    mr.apply_print_options,
+                    src,
+                    payload.auto_bed_leveling,
+                    payload.timelapse,
+                    payload.ai_detection,
+                    used_set,
+                    calibrate_set,
+                )
+            if has_remap:
+                base = working if working is not None else src
+                working = await asyncio.to_thread(mr.remap_slots, base, payload.slot_map)
 
-    # ── Moonraker path: optional gcode rewrite + upload + auto-start ──
-    if not printer.moonraker_url:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Принтер '{printer.name}' не має Moonraker URL",
-        )
+            upload_bytes: bytes | None = working
+            if upload_bytes is None and _tunnel.has_tunnel(org.id):
+                upload_bytes = src.read_bytes()
 
-    has_remap = any(k != v for k, v in payload.slot_map.items())
-    calibrate_set = (
-        set(payload.calibrate_slots) if payload.calibrate_slots is not None else None
-    )
-
-    # Auto-derive which filament slots the print actually consumes so we can
-    # drop preheat/auto-feed/flow-calibrate for unused ones — those just waste
-    # time and material. Only filter when there's something to filter out
-    # (i.e. at least one slot has used_g == 0); when everything is used the
-    # file goes through unchanged.
-    meta = row.filament_meta or {}
-    used_g = meta.get("used_g") or []
-    slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 0)
-    used_set: set[int] | None = None
-    if used_g and slot_count:
-        candidate = {i for i in range(slot_count) if i >= len(used_g) or used_g[i] > 0}
-        if 0 < len(candidate) < slot_count:
-            used_set = candidate
-
-    has_options = (
-        payload.auto_bed_leveling is not None
-        or payload.timelapse is not None
-        or payload.ai_detection is not None
-        or used_set is not None
-        or calibrate_set is not None
-    )
-
-    try:
-        working: bytes | None = None
-        if has_options:
-            working = await asyncio.to_thread(
-                mr.apply_print_options,
-                src,
-                payload.auto_bed_leveling,
-                payload.timelapse,
-                payload.ai_detection,
-                used_set,
-                calibrate_set,
-            )
-        if has_remap:
-            base = working if working is not None else src
-            working = await asyncio.to_thread(mr.remap_slots, base, payload.slot_map)
-
-        if working is not None:
-            with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
-                tmp.write(working)
-                tmp_path = Path(tmp.name)
-            try:
+            if _tunnel.has_tunnel(org.id):
+                await _tunnel.send_moonraker_upload(
+                    org.id,
+                    printer.moonraker_url,
+                    row.original_name,
+                    upload_bytes,  # type: ignore[arg-type]
+                    start_print=True,
+                )
+            elif working is not None:
+                with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
+                    tmp.write(working)
+                    tmp_path = Path(tmp.name)
+                try:
+                    await asyncio.to_thread(
+                        mr.upload_gcode,
+                        printer.moonraker_url,
+                        tmp_path,
+                        row.original_name,
+                        start_print=True,
+                    )
+                finally:
+                    tmp_path.unlink(missing_ok=True)
+            else:
                 await asyncio.to_thread(
                     mr.upload_gcode,
                     printer.moonraker_url,
-                    tmp_path,
+                    src,
                     row.original_name,
                     start_print=True,
                 )
-            finally:
-                tmp_path.unlink(missing_ok=True)
-        else:
-            await asyncio.to_thread(
-                mr.upload_gcode,
-                printer.moonraker_url,
-                src,
-                row.original_name,
-                start_print=True,
-            )
-        return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
-    except mr.MoonrakerError as e:
-        return SendResult(ok=False, printer_name=printer.name, message=str(e))
+            return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
+        except mr.MoonrakerError as e:
+            return SendResult(ok=False, printer_name=printer.name, message=str(e))

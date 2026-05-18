@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ApiError, api, getToken, setToken } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface TokenResponse {
   access_token: string;
@@ -13,6 +14,7 @@ interface TokenResponse {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const t = useT();
   const [orgName, setOrgName] = useState("");
   const [adminName, setAdminName] = useState("");
   const [email, setEmail] = useState("");
@@ -42,7 +44,7 @@ export default function RegisterPage() {
       router.replace("/onboarding");
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-      else setError("Не вдалося з'єднатися з сервером");
+      else setError(t("errors.networkError"));
     } finally {
       setBusy(false);
     }
@@ -76,13 +78,13 @@ export default function RegisterPage() {
           </svg>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">monofarm</h1>
-            <p className="text-xs text-neutral-500">Реєстрація нової ферми</p>
+            <p className="text-xs text-neutral-500">{t("auth.registerTitle")}</p>
           </div>
         </div>
 
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-sm">Назва ферми</span>
+            <span className="mb-1 block text-sm">{t("auth.farmName")}</span>
             <input
               type="text"
               required
@@ -95,7 +97,7 @@ export default function RegisterPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm">Ваше ім&apos;я</span>
+            <span className="mb-1 block text-sm">{t("auth.name")}</span>
             <input
               type="text"
               required
@@ -117,7 +119,7 @@ export default function RegisterPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm">Пароль</span>
+            <span className="mb-1 block text-sm">{t("auth.password")}</span>
             <input
               type="password"
               required
@@ -127,7 +129,7 @@ export default function RegisterPage() {
               className={inputCls}
               autoComplete="new-password"
             />
-            <span className="mt-1 block text-xs text-neutral-400">Мінімум 8 символів</span>
+            <span className="mt-1 block text-xs text-neutral-400">{t("auth.passwordMin8")}</span>
           </label>
         </div>
 
@@ -140,13 +142,13 @@ export default function RegisterPage() {
           disabled={busy}
           className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
         >
-          {busy ? "Реєстрація…" : "Зареєструватись"}
+          {busy ? t("auth.registering") : t("auth.signUp")}
         </button>
 
         <p className="text-center text-sm text-neutral-500">
-          Вже є акаунт?{" "}
+          {t("auth.alreadyHave")}{" "}
           <Link href="/login" className="underline hover:text-neutral-900 dark:hover:text-neutral-100">
-            Увійти
+            {t("auth.signIn")}
           </Link>
         </p>
       </form>

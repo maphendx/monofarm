@@ -17,6 +17,14 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
+AGENT_VERSION = "0.4.5"
+
+
+@router.get("/api/agent/version")
+def agent_version() -> dict:
+    """Current agent version — checked by the agent at startup for auto-update."""
+    return {"version": AGENT_VERSION}
+
 
 @router.get("/api/agent/status")
 def agent_status(org: Organization = Depends(get_current_org)) -> dict:

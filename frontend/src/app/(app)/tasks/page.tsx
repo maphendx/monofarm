@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { FarmTask, FarmTaskStatus, PrintTask, PrintTaskStatus } from "@/lib/types";
 
@@ -392,6 +393,7 @@ function PrintTasksTab() {
 // ════════════════════════════════════════════════════════════════════════
 
 export default function TasksPage() {
+  const t = useT();
   useUser();
   const [tab, setTab] = useState<"farm" | "print">("farm");
 
@@ -452,7 +454,7 @@ export default function TasksPage() {
     <div className="flex flex-col gap-4">
       {/* tab switcher */}
       <div className="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800">
-        {([["farm", "Завдання ферми"], ["print", "Завдання друку"]] as const).map(([id, label]) => (
+        {([["farm", t("tasks.farmTasks")], ["print", t("tasks.printTasks")]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={["px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px",
               tab === id
@@ -465,14 +467,17 @@ export default function TasksPage() {
       </div>
 
       {tab === "farm" && (
-        loadingFarm ? <div className="text-sm text-neutral-500">Завантаження…</div> : (
+        loadingFarm ? <div className="text-sm text-neutral-500">{t("common.loading")}</div> : (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex gap-4 overflow-x-auto pb-4 items-start">
-              {COLUMNS.map(col => (
-                <KanbanColumn key={col.id} col={col} tasks={byStatus(col.id)}
+              {COLUMNS.map(col => {
+                const colLabels: Record<string, string> = { todo: t("tasks.todo"), in_progress: t("tasks.inProgress"), done: t("tasks.done"), cancelled: t("tasks.cancelled") };
+                return (
+                <KanbanColumn key={col.id} col={{...col, label: colLabels[col.id] ?? col.label}} tasks={byStatus(col.id)}
                   onEdit={setEditing} onDelete={removeFarm}
                   onQuickAdd={quickAdd} draggingId={draggingTask?.id ?? null} />
-              ))}
+                );
+              })}
             </div>
             <DragOverlay dropAnimation={null}>
               {draggingTask && (

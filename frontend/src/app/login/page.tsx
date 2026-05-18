@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { ApiError, api, getToken, setToken } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface TokenResponse {
   access_token: string;
@@ -13,6 +14,7 @@ interface TokenResponse {
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export default function LoginPage() {
       router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-      else setError("Не вдалося з'єднатися з сервером");
+      else setError(t("errors.networkError"));
     } finally {
       setBusy(false);
     }
@@ -66,13 +68,13 @@ export default function LoginPage() {
           </svg>
           <div>
             <h1 className="text-xl font-semibold tracking-tight">monofarm</h1>
-            <p className="text-xs text-neutral-500">Вхід в систему</p>
+            <p className="text-xs text-neutral-500">{t("auth.loginSubtitle")}</p>
           </div>
         </div>
 
         <div className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-sm">Email</span>
+            <span className="mb-1 block text-sm">{t("auth.email")}</span>
             <input
               type="email"
               required
@@ -84,7 +86,7 @@ export default function LoginPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm">Пароль</span>
+            <span className="mb-1 block text-sm">{t("auth.password")}</span>
             <input
               type="password"
               required
@@ -105,13 +107,13 @@ export default function LoginPage() {
           disabled={busy}
           className="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
         >
-          {busy ? "Вхід…" : "Увійти"}
+          {busy ? t("auth.loggingIn") : t("auth.loginBtn")}
         </button>
 
         <p className="text-center text-sm text-neutral-500">
-          Ще немає акаунту?{" "}
+          {t("auth.noAccount")}{" "}
           <Link href="/register" className="underline hover:text-neutral-900 dark:hover:text-neutral-100">
-            Зареєструватись
+            {t("auth.signUp")}
           </Link>
         </p>
       </form>

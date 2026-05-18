@@ -90,7 +90,8 @@ def test_upload_handles_double_extension_gcode_3mf(client, auth_headers, cleanup
     assert body["filament_meta"]["types"] == ["PLA", "PETG"]
 
 
-def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads):
+def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads, admin_user):
+    from app.services import storage as storage_svc
     up = client.post(
         "/api/files/upload",
         headers=auth_headers,
@@ -98,12 +99,12 @@ def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads)
     )
     file_id = up.json()["id"]
     stored_name = up.json()["stored_name"]
-    on_disk = GCODES_DIR / stored_name
-    assert on_disk.exists()
+    assert storage_svc.exists(stored_name, admin_user.organization_id) or (GCODES_DIR / stored_name).exists()
 
     resp = client.delete(f"/api/files/{file_id}", headers=auth_headers)
     assert resp.status_code == 204
-    assert not on_disk.exists()
+    assert not storage_svc.exists(stored_name, admin_user.organization_id)
+    assert not (GCODES_DIR / stored_name).exists()
 
 
 def test_send_file_to_moonraker_printer_calls_upload(

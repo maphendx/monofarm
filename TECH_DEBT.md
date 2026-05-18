@@ -11,41 +11,13 @@ Keep this list short and current. When an item is fixed, remove it.
 
 ## A. Multi-tenancy (blocks SaaS)
 
-The current data model assumes a single organization. Every printer, user, file
-and filament row is global. Converting to SaaS requires an `Organization` (or
-`Tenant`, `Workspace`) entity and `organization_id` FKs on every domain row,
-plus scoped queries in every endpoint.
+### A1. ✅ Tenant scoping — DONE
 
-### A1. No tenant scoping in models
-**Where:** `backend/app/models/*.py` — `Printer`, `User`, `GcodeFile`,
-`Filament`, `FilamentColor`, `PrinterGroup`, `PrintTask`, `FarmTask`,
-`PlanEntry` all lack `organization_id`.
+`Organization` model + `organization_id` FK on all tables + `get_current_org` dependency + scoped queries in every endpoint. Migration `0012_organizations`.
 
-**Why it matters:** Any tenant could read or modify another tenant's printers,
-files, jobs. Catastrophic at SaaS launch.
+### A2. ✅ Per-org Bambu credentials — DONE
 
-**Fix sketch:**
-1. Create `Organization` model + `users.organization_id` FK + invite/join flow.
-2. Add `organization_id` to every domain table (Alembic migration with
-   `nullable=False` after backfill).
-3. Add a `CurrentOrg` dependency in `api/deps.py` that resolves from the JWT
-   (embed `org_id` claim in `create_access_token`).
-4. Refactor every query in `app/api/*.py` to `.filter(Model.organization_id ==
-   org.id)`. **High-risk step — needs systematic audit, ideally via a base
-   class or query helper that fails closed.**
-
-### A2. Global integration credentials in environment
-**Where:** `backend/app/core/config.py` → `SIMPLYPRINT_API_KEY`,
-`SIMPLYPRINT_ORG_ID`, `BAMBU_EMAIL`, `BAMBU_PASSWORD`, `BAMBU_REFRESH_TOKEN`,
-`TG_BOT_TOKEN`.
-
-**Why it matters:** Every tenant would share the same SimplyPrint org and
-Bambu Cloud account. Impossible to onboard a second tenant.
-
-**Fix sketch:** Move all integration credentials into a per-organization
-`Integration` table (encrypted at rest — see C2). The Bambu MQTT singleton in
-`services/bambu.py` becomes a per-org client pool keyed by `organization_id`;
-same for SimplyPrint's cached overview.
+`bambu_email`, `bambu_password`, `bambu_refresh_token`, `bambu_region` stored in `Organization` table. Env vars seed the default org only.
 
 ### A3. Telegram bot is single-tenant
 **Where:** `backend/app/services/telegram_bot.py` — embedded in FastAPI
@@ -69,16 +41,9 @@ one time doesn't scale.
 **Fix sketch:** Per-org scheduled job, or a single hourly job that picks orgs
 whose local time is 09:00. Move `TIMEZONE` from env to `Organization.timezone`.
 
-### A5. File storage is on a single local disk
-**Where:** `backend/app/api/files.py` → `GCODES_DIR = backend/data/gcodes/`.
+### A5. ✅ File storage — DONE
 
-**Why it matters:** Doesn't scale past one VM; no per-tenant quotas; no backup
-isolation; cross-tenant data leak if `stored_name` collides.
-
-**Fix sketch:** S3-compatible blob storage (Tigris, R2, S3) with a per-tenant
-prefix `{org_id}/{file_id}`. Replace `FileResponse` with presigned URLs.
-Enforce a per-tenant byte quota at upload time (cheap — sum `size_bytes`
-per `organization_id`).
+`services/storage.py` — local disk when `S3_BUCKET` empty, Cloudflare R2 (boto3 S3-compatible) when configured. Key pattern `orgs/{org_id}/gcodes/{stored_name}`. Download endpoint redirects to presigned URL for S3. Per-tenant quota enforcement still TODO (sum `size_bytes` per org).
 
 ---
 
@@ -98,16 +63,9 @@ Telegram at a time. Today this works because production runs a single worker.
 Postgres (APScheduler supports `SQLAlchemyJobStore`) and use Postgres advisory
 locks so only one scheduler instance fires each job.
 
-### B2. In-memory caches that don't survive restarts or scale across workers
-**Where:**
-- `services/moonraker.py` → `_status_cache`, `_meta_cache`
-- `services/simplyprint.py` → 30s cache
-- `services/bambu.py` → `_state_cache`, `_ams_cache`
+### B2. ✅ Shared Redis cache — DONE
 
-**Why it matters:** Restarts cause UI to show "offline" briefly. Multi-worker
-deployments have inconsistent caches per worker.
-
-**Fix sketch:** Redis for shared cache layer. Already needed for B1.
+`services/cache.py` — Redis (`REDIS_URL`) with in-process dict fallback. Moonraker status (10s) + meta (300s) and Bambu state (30s) + AMS (300s) all go through Redis. Cross-worker consistent. Local dicts kept as stale fallback on network errors.
 
 ### B3. No request rate limiting
 **Why it matters:** No protection against credential-stuffing on `/api/auth/

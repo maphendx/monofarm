@@ -12,5 +12,53 @@ services:
     volumes:
       - printfarm-pgdata:/var/lib/postgresql/data
 
+  web:
+    build: ./backend
+    container_name: monofarm-web
+    restart: unless-stopped
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"
+    env_file: ./backend/.env
+    environment:
+      INLINE_WORKERS: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./backend/data:/app/data
+
+  worker:
+    build: ./backend
+    container_name: monofarm-worker
+    restart: unless-stopped
+    command: python -m app.workers.main
+    env_file: ./backend/.env
+    environment:
+      INLINE_WORKERS: "false"
+    depends_on:
+      - db
+    # No published ports — worker talks outbound only (MQTT, Telegram, APScheduler)
+
+  frontend:
+    build: ./frontend
+    container_name: monofarm-frontend
+    restart: unless-stopped
+    command: bun run start
+    env_file: ./frontend/.env.local
+    ports:
+      - "3000:3000"
+    depends_on:
+      - web
+
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: printfarm-go2rtc
+    restart: unless-stopped
+    # host networking so go2rtc can reach printers on the local LAN
+    network_mode: host
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+
 volumes:
   printfarm-pgdata:

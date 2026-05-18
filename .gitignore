@@ -34,10 +34,18 @@ CLAUDE.local.md
 # Claude Code (machine-specific allowlist; keep shared hooks in settings.json)
 .claude/settings.local.json
 
-# Data
+# Data (uploaded files, local storage)
+backend/data/
 data/
 *.sqlite
 *.db
+
+# Agent local config (generated on install)
+agent/.env
+agent/agent.log
+
+# Bun lockfile variants
+bun.lock
 
 # Graphify (generated knowledge graph; rebuild with graphify extract/update)
 graphify-out/

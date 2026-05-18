@@ -87,12 +87,13 @@ async def update_org_settings(
     if user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
+    from app.services.encryption import encrypt
     if payload.bambu_email is not None:
-        org.bambu_email = payload.bambu_email
+        org.bambu_email = encrypt(payload.bambu_email)
     if payload.bambu_password is not None:
-        org.bambu_password = payload.bambu_password
+        org.bambu_password = encrypt(payload.bambu_password)
     if payload.bambu_refresh_token is not None:
-        org.bambu_refresh_token = payload.bambu_refresh_token
+        org.bambu_refresh_token = encrypt(payload.bambu_refresh_token)
     if payload.bambu_region is not None:
         org.bambu_region = payload.bambu_region
 
@@ -195,10 +196,11 @@ async def bambu_verify_code(
         msg = data.get("message") or f"Невірний або прострочений код (HTTP {resp.status_code})"
         raise HTTPException(status_code=400, detail=msg)
 
-    org.bambu_email = payload.email
+    from app.services.encryption import encrypt
+    org.bambu_email = encrypt(payload.email)
     # Store the access token (JWT) — MQTT authentication requires the JWT access token,
     # not the opaque refresh token. For Google/email-code accounts the JWT is long-lived.
-    org.bambu_refresh_token = access_token
+    org.bambu_refresh_token = encrypt(access_token)
     if payload.region:
         org.bambu_region = payload.region
     db.commit()

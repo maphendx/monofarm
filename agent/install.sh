@@ -74,7 +74,7 @@ chmod 600 "$INSTALL_DIR/.env"
 
 # ── systemd (user-level, no sudo) ─────────────────────────────────────────────
 
-if command -v systemctl &>/dev/null && systemctl --user &>/dev/null 2>&1; then
+if command -v systemctl &>/dev/null && systemctl --user daemon-reload &>/dev/null 2>&1; then
   echo "Setting up systemd user service…"
   mkdir -p "$(dirname "$SERVICE_FILE")"
   cat > "$SERVICE_FILE" <<EOF
@@ -105,7 +105,7 @@ EOF
 
   echo ""
   if [[ "$STATUS" == "active" ]]; then
-    echo "  ✓ monofarm-agent is running"
+    echo "  ✓ monofarm-agent is running (systemd)"
     echo "  Logs:    journalctl --user -u monofarm-agent -f"
     echo "  Restart: systemctl --user restart monofarm-agent"
     echo "  Stop:    systemctl --user stop monofarm-agent"
@@ -117,8 +117,42 @@ EOF
     echo "  PID: $!  |  Logs: tail -f $INSTALL_DIR/agent.log"
   fi
 
+elif [[ "$(uname)" == "Darwin" ]]; then
+  # macOS — use launchd (survives reboots, auto-restart)
+  PLIST_DIR="$HOME/Library/LaunchAgents"
+  PLIST_FILE="$PLIST_DIR/app.monofarm.agent.plist"
+  echo "Setting up macOS LaunchAgent…"
+  mkdir -p "$PLIST_DIR"
+  cat > "$PLIST_FILE" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>app.monofarm.agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${INSTALL_DIR}/venv/bin/python</string>
+    <string>${INSTALL_DIR}/monofarm_agent.py</string>
+    <string>--server</string><string>${SERVER}</string>
+    <string>--token</string><string>${TOKEN}</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>${INSTALL_DIR}/agent.log</string>
+  <key>StandardErrorPath</key><string>${INSTALL_DIR}/agent.log</string>
+</dict>
+</plist>
+EOF
+  launchctl unload "$PLIST_FILE" 2>/dev/null || true
+  launchctl load -w "$PLIST_FILE"
+  echo ""
+  echo "  ✓ monofarm-agent installed as LaunchAgent"
+  echo "  Logs:    tail -f $INSTALL_DIR/agent.log"
+  echo "  Restart: launchctl kickstart -k gui/$(id -u)/app.monofarm.agent"
+  echo "  Stop:    launchctl unload $PLIST_FILE"
+
 else
-  # No systemd — run in background directly
+  # Linux without systemd (Docker, WSL, etc.) — run in background
   echo "systemd not available — starting in background…"
   nohup "$VENV_PYTHON" "$INSTALL_DIR/monofarm_agent.py" \
     --server "$SERVER" --token "$TOKEN" \
@@ -128,8 +162,6 @@ else
   echo "  ✓ monofarm-agent started (PID: $AGENT_PID)"
   echo "  Logs: tail -f $INSTALL_DIR/agent.log"
   echo "  Stop: kill $AGENT_PID"
-
-  # Save PID for future reference
   echo "$AGENT_PID" > "$INSTALL_DIR/agent.pid"
 fi
 

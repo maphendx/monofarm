@@ -30,7 +30,7 @@ def test_create_manual_printer(client, auth_headers):
 def test_create_printer_forbidden_for_operator(client, operator_user):
     from app.core.security import create_access_token
 
-    token = create_access_token(str(operator_user.id), operator_user.role.value)
+    token = create_access_token(str(operator_user.id), operator_user.role.value, org_id=operator_user.organization_id)
     resp = client.post(
         "/api/printers",
         headers={"Authorization": f"Bearer {token}"},

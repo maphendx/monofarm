@@ -170,12 +170,14 @@ function SendModal({
   file,
   printers,
   onClose,
+  defaultPrinterId,
 }: {
   file: GcodeFile;
   printers: Printer[];
   onClose: () => void;
+  defaultPrinterId?: number;
 }) {
-  const [selectedId, setSelectedId] = useState<number | "">("");
+  const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   // slotMap: key = file slot index (0-based), value = printer slot (0-based)
@@ -709,6 +711,7 @@ export default function FilesPage() {
   const canEdit = user.role === "admin" || user.role === "operator" || user.role === "manager";
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight") ? Number(searchParams.get("highlight")) : null;
+  const defaultPrinterId = searchParams.get("printer") ? Number(searchParams.get("printer")) : null;
 
   const [files, setFiles] = useState<GcodeFile[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -785,8 +788,22 @@ export default function FilesPage() {
 
   if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
 
+  const targetPrinter = defaultPrinterId ? printers.find(p => p.id === defaultPrinterId) : null;
+
   return (
     <>
+      {/* pre-selected printer banner */}
+      {targetPrinter && !sendFile && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-900/20">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-600 dark:text-blue-400">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <p className="text-sm text-blue-800 dark:text-blue-300">
+            Вибери файл для відправки на <strong>{targetPrinter.name}</strong>
+          </p>
+        </div>
+      )}
+
       {/* header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -876,6 +893,7 @@ export default function FilesPage() {
           file={sendFile}
           printers={printers}
           onClose={() => setSendFile(null)}
+          defaultPrinterId={defaultPrinterId ?? undefined}
         />
       )}
     </>

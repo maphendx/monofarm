@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface HistoryEntry {
   id: number;
@@ -22,12 +23,7 @@ const RESULT_STYLE: Record<string, string> = {
   in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
 };
 
-const RESULT_LABEL: Record<string, string> = {
-  completed: "✓ Завершено",
-  failed: "✕ Помилка",
-  cancelled: "— Скасовано",
-  in_progress: "Друкує",
-};
+// Labels are resolved via t() at render time in the table cell
 
 function fmt(dt: string | null): string {
   if (!dt) return "—";
@@ -42,6 +38,7 @@ function dur(min: number | null): string {
 }
 
 export default function HistoryPage() {
+  const t = useT();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("");
@@ -56,35 +53,35 @@ export default function HistoryPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">Історія друку</h1>
+        <h1 className="text-xl font-semibold">{t("history.title")}</h1>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm dark:border-neutral-800 dark:bg-neutral-900"
         >
-          <option value="">Всі</option>
-          <option value="completed">Завершені</option>
-          <option value="failed">Помилки</option>
-          <option value="cancelled">Скасовані</option>
-          <option value="in_progress">Зараз</option>
+          <option value="">{t("common.all")}</option>
+          <option value="completed">{t("tasks.done")}</option>
+          <option value="failed">{t("common.error")}</option>
+          <option value="cancelled">{t("tasks.cancelled")}</option>
+          <option value="in_progress">{t("analytics.now")}</option>
         </select>
       </div>
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Завантаження…</p>
+        <p className="text-sm text-neutral-500">{t("common.loading")}</p>
       ) : entries.length === 0 ? (
-        <p className="text-sm text-neutral-500">Записів ще немає. Трекер запишe перший друк протягом 30 секунд після старту.</p>
+        <p className="text-sm text-neutral-500">{t("history.noRecords")}</p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-xs text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Принтер</th>
-                <th className="px-4 py-3 text-left font-medium">Файл</th>
-                <th className="px-4 py-3 text-left font-medium">Початок</th>
-                <th className="px-4 py-3 text-left font-medium">Тривалість</th>
-                <th className="px-4 py-3 text-left font-medium">Результат</th>
-                <th className="px-4 py-3 text-right font-medium">Філамент</th>
+                <th className="px-4 py-3 text-left font-medium">{t("printers.title")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("files.title")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("analytics.start")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("printers.printTime")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("analytics.title")}</th>
+                <th className="px-4 py-3 text-right font-medium">{t("filament.title")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
@@ -100,7 +97,7 @@ export default function HistoryPage() {
                   <td className="px-4 py-3 text-neutral-500">{dur(e.duration_minutes)}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[e.result] ?? ""}`}>
-                      {RESULT_LABEL[e.result] ?? e.result}
+                      {e.result === "completed" ? `✓ ${t("tasks.done")}` : e.result === "failed" ? `✕ ${t("common.error")}` : e.result === "cancelled" ? `— ${t("tasks.cancelled")}` : e.result === "in_progress" ? t("dashboard.printing") : e.result}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-neutral-500">

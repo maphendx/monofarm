@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, FilamentColor } from "@/lib/types";
 
@@ -362,6 +363,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FilamentPage() {
+  const t = useT();
   const me = useUser();
   const isAdmin = me.role === "admin";
   const canEdit = isAdmin || me.role === "operator";
@@ -398,13 +400,13 @@ export default function FilamentPage() {
 
   const lowCount = useMemo(() => filaments.filter(f => f.is_low).length, [filaments]);
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-neutral-500">{t("common.loading")}</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">Пластик</h1>
+          <h1 className="text-lg font-semibold">{t("filament.title")}</h1>
           {lowCount > 0 && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
               ⚠️ {lowCount} закінчується

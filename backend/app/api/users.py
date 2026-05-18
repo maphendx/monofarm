@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.core.security import hash_password
-from app.models.organization import Organization
+from app.models.organization import PLAN_LIMITS, Organization
 from app.models.user import User, UserRole
 from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
 from app.services import telegram_bot
@@ -39,6 +39,15 @@ def create_user(
 ) -> User:
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Користувач з таким email вже існує")
+    active_count = db.query(User).filter(
+        User.organization_id == org.id, User.is_active == True  # noqa: E712
+    ).count()
+    limit = PLAN_LIMITS[org.plan]["users"]
+    if active_count >= limit:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Ліміт плану «{org.plan.value}»: {limit} активних користувачів. Перейдіть на вищий план.",
+        )
     user = User(
         organization_id=org.id,
         email=payload.email,

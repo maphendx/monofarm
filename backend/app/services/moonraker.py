@@ -17,8 +17,9 @@ import requests
 
 log = logging.getLogger(__name__)
 TIMEOUT = 30
-STATUS_TIMEOUT = 3  # short timeout for live status polling
-STATUS_CACHE_TTL = 10.0  # seconds
+STATUS_TIMEOUT = 1.5  # short timeout for live status polling
+STATUS_CACHE_TTL = 35.0  # seconds — slightly above the 30s frontend poll interval so polls always hit cache
+STALE_CACHE_TTL = 300    # 5 min stale fallback for the very first load
 META_CACHE_TTL = 300.0  # file metadata is static for a given filename
 META_TAIL_BYTES = 96 * 1024  # how much to download from remote file for parsing
 
@@ -27,8 +28,9 @@ class MoonrakerError(Exception):
     """Raised when Moonraker returns an error response."""
 
 
-_status_cache: dict[str, tuple[float, dict]] = {}
-_meta_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+# Local dicts kept as stale-data fallback when Redis is unavailable or a fetch fails
+_status_cache: dict[str, dict] = {}
+_meta_cache: dict[tuple[str, str], dict] = {}
 
 
 def _api_base(url: str) -> str:
@@ -343,21 +345,22 @@ def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
     """
     if not moonraker_url or not filename:
         return {}
-    key = (moonraker_url, filename)
-    now = time.monotonic()
-    cached = _meta_cache.get(key)
-    if cached and now - cached[0] < META_CACHE_TTL:
-        return cached[1]
+
+    from app.services.cache import cache_get, cache_set
+    redis_key = f"mr:meta:{moonraker_url}:{filename}"
+    fresh = cache_get(redis_key)
+    if fresh is not None:
+        return fresh
 
     meta = _fetch_moonraker_metadata(moonraker_url, filename)
     # If colors are missing, fall back to parsing the file ourselves
     if not meta.get("colors"):
         parsed = _fetch_file_tail_and_parse(moonraker_url, filename)
         if parsed:
-            # parsed wins for any field it has, but keep moonraker fields too
             meta = {**meta, **parsed}
 
-    _meta_cache[key] = (now, meta)
+    cache_set(redis_key, meta, int(META_CACHE_TTL))
+    _meta_cache[(moonraker_url, filename)] = meta
     return meta
 
 
@@ -522,17 +525,35 @@ def get_live_status(moonraker_url: str) -> dict:
     """Get cached live status. On error, returns stale data or {state:'offline'}."""
     if not moonraker_url:
         return {"state": "unknown"}
-    now = time.monotonic()
-    cached = _status_cache.get(moonraker_url)
-    if cached and now - cached[0] < STATUS_CACHE_TTL:
-        return cached[1]
+
+    from app.services.cache import cache_get, cache_set
+    fresh_key = f"mr:status:{moonraker_url}"
+    stale_key = f"mr:stale:{moonraker_url}"
+
+    fresh = cache_get(fresh_key)
+    if fresh is not None:
+        return fresh
+
+    # Serve stale data instantly (from previous cycle) while fresh is missing
+    stale = cache_get(stale_key) or _status_cache.get(moonraker_url)
+    if stale is not None:
+        return stale
+
+    # No cached data at all — must fetch (first ever load or >5min gap)
     try:
         status = _fetch_live_status(moonraker_url)
     except MoonrakerError as e:
         log.debug("Moonraker status fetch failed for %s: %s", moonraker_url, e)
-        if cached:
-            # serve stale within a longer window so transient blips don't flap UI
-            return cached[1]
-        status = {"state": "offline"}
-    _status_cache[moonraker_url] = (now, status)
+        return {"state": "offline"}
+
+    cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
+    cache_set(stale_key, status, STALE_CACHE_TTL)
+    _status_cache[moonraker_url] = status
     return status
+
+
+def invalidate_status(moonraker_url: str) -> None:
+    """Force the next poll to fetch fresh state (call after pause/resume/cancel)."""
+    from app.services.cache import cache_delete
+    cache_delete(f"mr:status:{moonraker_url}")
+    _status_cache.pop(moonraker_url, None)

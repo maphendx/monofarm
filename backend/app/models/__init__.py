@@ -8,6 +8,7 @@ from app.models.filament import Filament
 from app.models.filament_color import FilamentColor
 from app.models.gcode_file import GcodeFile
 from app.models.print_history import PrintHistory
+from app.models.api_key import ApiKey
 
 __all__ = [
     "Organization",
@@ -25,4 +26,5 @@ __all__ = [
     "FilamentColor",
     "GcodeFile",
     "PrintHistory",
+    "ApiKey",
 ]

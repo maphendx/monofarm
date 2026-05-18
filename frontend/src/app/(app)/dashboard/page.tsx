@@ -9,8 +9,10 @@ import { DaySummary } from "@/components/DaySummary";
 import { PrinterCard } from "@/components/PrinterCard";
 import { PrinterDetailModal } from "@/components/PrinterDetailModal";
 import { PrinterGroupsModal } from "@/components/PrinterGroupsModal";
+import { StartPrintModal } from "@/components/StartPrintModal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
+import { useT } from "@/lib/i18n";
 import {
   kindLabel,
   printerTone,
@@ -59,33 +61,14 @@ function StatBadge({
 }
 
 function GroupStatsBadges({ stats }: { stats: GroupStats }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-1.5">
-      <StatBadge
-        count={stats.printing}
-        label="друкує"
-        className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-      />
-      <StatBadge
-        count={stats.paused}
-        label="пауза"
-        className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-      />
-      <StatBadge
-        count={stats.action}
-        label="дія"
-        className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-      />
-      <StatBadge
-        count={stats.ready}
-        label="готові"
-        className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-      />
-      <StatBadge
-        count={stats.offline}
-        label="офлайн"
-        className="bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-      />
+      <StatBadge count={stats.printing} label={t("dashboard.printing")} className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" />
+      <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" />
+      <StatBadge count={stats.action}   label={t("dashboard.action")}   className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" />
+      <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" />
+      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" />
     </div>
   );
 }
@@ -93,23 +76,7 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
 // ── filter ───────────────────────────────────────────────────────────────────
 
 type Filter = "all" | "snapmaker_u1" | "problems";
-
-const FILTER_OPTS: { id: Filter; label: string }[] = [
-  { id: "all", label: "Всі принтери" },
-  { id: "snapmaker_u1", label: "Snapmaker U1" },
-  { id: "problems", label: "Лише проблеми" },
-];
-
-// ── grouping ──────────────────────────────────────────────────────────────────
-
 type GroupBy = "mygroup" | "none" | "kind" | "state";
-
-const GROUP_OPTS: { id: GroupBy; label: string }[] = [
-  { id: "mygroup", label: "За моїми групами" },
-  { id: "none", label: "Без групування" },
-  { id: "kind", label: "За типом" },
-  { id: "state", label: "За станом" },
-];
 
 const KIND_ORDER: PrinterKind[] = ["bambu", "snapmaker_u1", "other"];
 
@@ -133,7 +100,7 @@ function groupPrinters(
 
     for (const p of printers) {
       const key = p.group_id !== null ? `g${p.group_id}` : "__ungrouped__";
-      const label = p.group_name ?? "Без групи";
+      const label = p.group_name ?? "";
       if (!seen.has(key)) {
         seen.set(key, sections.length);
         sections.push({ key, label, items: [] });
@@ -196,6 +163,19 @@ function CompactSelect<T extends string>({
 export default function DashboardPage() {
   const user = useUser();
   const router = useRouter();
+  const t = useT();
+
+  const FILTER_OPTS: { id: Filter; label: string }[] = [
+    { id: "all",          label: t("dashboard.allPrinters") },
+    { id: "snapmaker_u1", label: "Snapmaker U1" },
+    { id: "problems",     label: t("dashboard.problemsOnly") },
+  ];
+  const GROUP_OPTS: { id: GroupBy; label: string }[] = [
+    { id: "mygroup", label: t("dashboard.byMyGroups") },
+    { id: "none",    label: t("dashboard.noGrouping") },
+    { id: "kind",    label: t("dashboard.byType") },
+    { id: "state",   label: t("dashboard.byState") },
+  ];
 
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,6 +186,7 @@ export default function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
+  const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -213,12 +194,21 @@ export default function DashboardPage() {
       const data = await api<Printer[]>("/api/printers");
       setPrinters(data);
       setRefreshedAt(new Date());
+      try { localStorage.setItem("printers_cache", JSON.stringify(data)); } catch {}
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-      else setError("Помилка завантаження");
+      else setError(t("errors.loadFailed"));
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Show cached printers instantly on first render while fresh data loads
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("printers_cache");
+      if (cached) { setPrinters(JSON.parse(cached)); setLoading(false); }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -289,15 +279,15 @@ export default function DashboardPage() {
             onClick={load}
             className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs transition hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"
           >
-            ↻ Оновити
+            ↻ {t("common.update")}
           </button>
           {(user.role === "admin" || user.role === "operator") && (
             <button
               onClick={() => setGroupsOpen(true)}
               className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800"
-              title="Керувати групами принтерів"
+              title={t("dashboard.manageGroups")}
             >
-              Групи
+              {t("printers.groups")}
             </button>
           )}
           {user.role === "admin" && (
@@ -305,7 +295,7 @@ export default function DashboardPage() {
               onClick={() => setCreateOpen(true)}
               className="rounded-md bg-neutral-900 px-2.5 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
-              + Принтер
+              + {t("printers.add")}
             </button>
           )}
         </div>
@@ -319,15 +309,15 @@ export default function DashboardPage() {
 
       {/* ── content ── */}
       {loading && printers.length === 0 ? (
-        <div className="text-sm text-neutral-500">Завантаження…</div>
+        <div className="text-sm text-neutral-500">{t("common.loading")}</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 px-4 py-12 text-center text-sm text-neutral-500 dark:border-neutral-700">
-          Принтерів не знайдено
+          {t("dashboard.noPrinters")}
         </div>
       ) : !isGrouped ? (
         <div className={GRID}>
           {filtered.map((p) => (
-            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} />
+            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
           ))}
         </div>
       ) : (
@@ -346,7 +336,7 @@ export default function DashboardPage() {
                 </div>
                 <div className={GRID}>
                   {g.items.map((p) => (
-                    <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} />
+                    <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
                   ))}
                 </div>
               </section>
@@ -375,6 +365,14 @@ export default function DashboardPage() {
       />
 
       {!loading && printers.length > 0 && <DashboardPet printers={printers} />}
+
+      {printPrinter && (
+        <StartPrintModal
+          printer={printPrinter}
+          printers={printers}
+          onClose={() => setPrintPrinter(null)}
+        />
+      )}
     </div>
   );
 }

@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
+import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const t = useT();
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -35,7 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!ready || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">
-        Завантаження…
+        {t("common.loading")}
       </div>
     );
   }

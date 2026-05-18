@@ -16,13 +16,14 @@ def seed_admin(db: Session) -> None:
     if db.query(User).count() > 0:
         return
 
+    from app.services.encryption import encrypt
     # Create default org, seeding Bambu creds from .env if present
     org = Organization(
         name="Default Farm",
         slug="default-farm",
-        bambu_email=settings.BAMBU_EMAIL,
-        bambu_password=settings.BAMBU_PASSWORD,
-        bambu_refresh_token=settings.BAMBU_REFRESH_TOKEN,
+        bambu_email=encrypt(settings.BAMBU_EMAIL),
+        bambu_password=encrypt(settings.BAMBU_PASSWORD),
+        bambu_refresh_token=encrypt(settings.BAMBU_REFRESH_TOKEN),
         bambu_region=settings.BAMBU_REGION,
     )
     db.add(org)

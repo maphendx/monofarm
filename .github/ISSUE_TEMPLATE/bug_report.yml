@@ -1,0 +1,35 @@
+name: Bug report
+description: Щось не працює
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Backend / API
+        - Frontend
+        - Agent
+        - Bambu integration
+        - Moonraker / Klipper
+        - Telegram bot
+        - Білінг
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Опис
+      placeholder: Що сталось? Що очікувалось?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Кроки для відтворення
+      placeholder: "1. ...\n2. ...\n3. ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи / скріншоти
+      render: shell

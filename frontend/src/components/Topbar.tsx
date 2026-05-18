@@ -6,19 +6,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearToken } from "@/lib/api";
+import { useLocale, useT, type Locale } from "@/lib/i18n";
 import type { User } from "@/lib/types";
-
-const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
-  { href: "/dashboard", label: "Дашборд" },
-  { href: "/plan", label: "План друку" },
-  { href: "/files", label: "Файли" },
-  { href: "/tasks", label: "Завдання" },
-  { href: "/filament", label: "Пластик" },
-  { href: "/analytics", label: "Аналітика" },
-  { href: "/history", label: "Історія" },
-  { href: "/printers", label: "Принтери", adminOnly: true },
-  { href: "/users", label: "Користувачі", adminOnly: true },
-];
 
 function initials(user: User): string {
   if (user.name) {
@@ -30,8 +19,23 @@ function initials(user: User): string {
   return user.email.slice(0, 2).toUpperCase();
 }
 
+function LangToggle() {
+  const { locale, setLocale } = useLocale();
+  const next: Locale = locale === "en" ? "uk" : "en";
+  return (
+    <button
+      onClick={() => setLocale(next)}
+      title={locale === "en" ? "Switch to Ukrainian" : "Switch to English"}
+      className="flex h-8 items-center rounded-md border border-neutral-200 px-2 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
+    >
+      {locale === "en" ? "UA" : "EN"}
+    </button>
+  );
+}
+
 function ProfileMenu({ user }: { user: User }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -72,14 +76,14 @@ function ProfileMenu({ user }: { user: User }) {
               onClick={() => setOpen(false)}
               className="flex w-full items-center px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              Налаштування
+              {t("nav.settings")}
             </Link>
           )}
           <button
             onClick={logout}
             className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-neutral-50 dark:text-red-400 dark:hover:bg-neutral-800"
           >
-            Вийти
+            {t("auth.logout")}
           </button>
         </div>
       )}
@@ -89,6 +93,19 @@ function ProfileMenu({ user }: { user: User }) {
 
 export function Topbar({ user }: { user: User | null }) {
   const pathname = usePathname();
+  const t = useT();
+
+  const NAV = [
+    { href: "/dashboard", label: t("nav.dashboard") },
+    { href: "/plan",      label: t("nav.plan") },
+    { href: "/files",     label: t("nav.files") },
+    { href: "/tasks",     label: t("nav.tasks") },
+    { href: "/filament",  label: t("nav.filament") },
+    { href: "/analytics", label: t("nav.analytics") },
+    { href: "/history",   label: t("nav.history") },
+    { href: "/printers",  label: t("nav.printers"),  adminOnly: true },
+    { href: "/users",     label: t("nav.users"),     adminOnly: true },
+  ] as const;
 
   return (
     <header className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -98,7 +115,7 @@ export function Topbar({ user }: { user: User | null }) {
             monofarm
           </Link>
           <nav className="flex items-center gap-1 text-sm">
-            {NAV.filter((i) => !i.adminOnly || user?.role === "admin").map((item) => {
+            {NAV.filter((i) => !("adminOnly" in i) || !i.adminOnly || user?.role === "admin").map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
@@ -117,7 +134,8 @@ export function Topbar({ user }: { user: User | null }) {
             })}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <LangToggle />
           <ThemeToggle />
           {user && <ProfileMenu user={user} />}
         </div>

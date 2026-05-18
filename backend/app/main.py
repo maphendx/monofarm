@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.agent import router as agent_router
+from app.api.api_keys import router as api_keys_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
 from app.api.history import router as history_router
@@ -45,32 +46,36 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         seed_admin(db)
 
-    try:
-        await telegram_bot.init()
-        scheduler.start()
-    except Exception:
-        log.exception("Failed to start telegram bot / scheduler")
+    if settings.INLINE_WORKERS:
+        try:
+            await telegram_bot.init()
+            scheduler.start()
+        except Exception:
+            log.exception("Failed to start telegram bot / scheduler")
 
-    try:
-        with SessionLocal() as db:
-            orgs = db.query(Organization).all()
-        for org in orgs:
-            await bambu.init(org)
-    except Exception:
-        log.exception("Failed to start Bambu MQTT")
+        try:
+            with SessionLocal() as db:
+                orgs = db.query(Organization).all()
+            for org in orgs:
+                await bambu.init(org)
+        except Exception:
+            log.exception("Failed to start Bambu MQTT")
+    else:
+        log.info("INLINE_WORKERS=false — Telegram/Scheduler/Bambu run in separate worker process")
 
     log.info("monofarm api started")
     yield
 
-    try:
-        await bambu.shutdown()
-    except Exception:
-        log.exception("Bambu MQTT shutdown failed (all orgs)")
-    scheduler.shutdown()
-    try:
-        await telegram_bot.shutdown()
-    except Exception:
-        log.exception("Telegram bot shutdown failed")
+    if settings.INLINE_WORKERS:
+        try:
+            await bambu.shutdown()
+        except Exception:
+            log.exception("Bambu MQTT shutdown failed (all orgs)")
+        scheduler.shutdown()
+        try:
+            await telegram_bot.shutdown()
+        except Exception:
+            log.exception("Telegram bot shutdown failed")
 
 
 app = FastAPI(title="Printfarm API", version="0.1.0", lifespan=lifespan)
@@ -100,7 +105,7 @@ async def send_plan_now(
 
 
 _AGENT_DIR = Path(__file__).parent.parent.parent / "agent"
-_AGENT_FILES = {"monofarm_agent.py", "install.sh", "Dockerfile"}
+_AGENT_FILES = {"monofarm_agent.py", "monofarm_tray.py", "install.sh", "install.ps1", "Dockerfile", "requirements.txt", "bambu_camera_test.py"}
 
 
 @app.get("/agent/{filename}")
@@ -117,6 +122,7 @@ async def serve_agent_file(filename: str) -> FileResponse:
 app.include_router(auth_router, prefix="/api")
 app.include_router(orgs_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(api_keys_router, prefix="/api")
 app.include_router(printer_groups_router, prefix="/api")
 app.include_router(printers_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")

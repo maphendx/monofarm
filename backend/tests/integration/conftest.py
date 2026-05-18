@@ -22,6 +22,7 @@ from app.core.db import Base
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import User, UserRole  # noqa: F401 — ensures all model modules register on Base
+from app.models.organization import Organization
 
 
 @pytest.fixture(scope="session")
@@ -50,8 +51,18 @@ def db_session(db_engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def admin_user(db_session: Session) -> User:
+def test_org(db_session: Session) -> Organization:
+    org = Organization(name="Test Farm", slug="test-farm")
+    db_session.add(org)
+    db_session.commit()
+    db_session.refresh(org)
+    return org
+
+
+@pytest.fixture
+def admin_user(db_session: Session, test_org: Organization) -> User:
     user = User(
+        organization_id=test_org.id,
         email="admin@example.com",
         password_hash=hash_password("test-admin-pw"),
         name="Test Admin",
@@ -65,8 +76,9 @@ def admin_user(db_session: Session) -> User:
 
 
 @pytest.fixture
-def operator_user(db_session: Session) -> User:
+def operator_user(db_session: Session, test_org: Organization) -> User:
     user = User(
+        organization_id=test_org.id,
         email="op@example.com",
         password_hash=hash_password("test-op-pw"),
         name="Test Operator",
@@ -80,8 +92,8 @@ def operator_user(db_session: Session) -> User:
 
 
 @pytest.fixture
-def admin_token(admin_user: User) -> str:
-    return create_access_token(subject=str(admin_user.id), role=admin_user.role.value)
+def admin_token(admin_user: User, test_org: Organization) -> str:
+    return create_access_token(subject=str(admin_user.id), role=admin_user.role.value, org_id=test_org.id)
 
 
 @pytest.fixture
@@ -92,11 +104,7 @@ def auth_headers(admin_token: str) -> dict[str, str]:
 @pytest.fixture
 def mock_external_services(monkeypatch) -> dict[str, MagicMock]:
     """Patch every outbound integration so tests stay offline."""
-    from app.services import bambu, moonraker, simplyprint
-
-    sp_overview = MagicMock(return_value={})
-    monkeypatch.setattr(simplyprint, "get_farm_overview", sp_overview)
-    monkeypatch.setattr(simplyprint, "extract_printers", MagicMock(return_value=[]))
+    from app.services import bambu, moonraker
 
     bambu_list = MagicMock(return_value=[])
     monkeypatch.setattr(bambu, "list_devices", bambu_list, raising=False)
@@ -111,7 +119,6 @@ def mock_external_services(monkeypatch) -> dict[str, MagicMock]:
     monkeypatch.setattr(moonraker, "upload_gcode", mr_upload)
 
     return {
-        "simplyprint_overview": sp_overview,
         "bambu_list": bambu_list,
         "bambu_status": bambu_status,
         "moonraker_status": mr_status,

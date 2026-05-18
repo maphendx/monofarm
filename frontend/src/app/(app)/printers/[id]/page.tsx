@@ -42,18 +42,20 @@ function Card({ title, children, className = "", accent }: { title?: string; chi
 
 function CameraCard({ printer }: { printer: Printer }) {
   const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_ip;
-  const [tick, setTick] = useState(0);
-  const [visible, setVisible] = useState(true);
+  const [open, setOpen]       = useState(false);
+  const [error, setError]     = useState(false);
+  const [tick, setTick]       = useState(0);
   const token = getToken();
 
-  // Moonraker: poll snapshot every 2s. Bambu: native MJPEG stream, no polling needed.
+  // Moonraker snapshot poll — only while open
   useEffect(() => {
-    if (isBambu) return;
+    if (!open || isBambu) return;
     const id = setInterval(() => setTick((n) => n + 1), 2000);
     return () => clearInterval(id);
-  }, [isBambu]);
+  }, [open, isBambu]);
 
-  if (!visible) return null;
+  // Reset error state when reopened
+  useEffect(() => { if (open) setError(false); }, [open]);
 
   const src = isBambu
     ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
@@ -61,17 +63,49 @@ function CameraCard({ printer }: { printer: Printer }) {
 
   return (
     <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-950 dark:border-neutral-800">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt="Camera"
-        className="w-full object-cover"
-        onError={() => setVisible(false)}
-      />
-      <div className="flex items-center gap-1.5 px-3 py-2">
-        <span className="size-1.5 rounded-full bg-red-500" />
-        <span className="text-[10px] font-medium text-neutral-400">LIVE</span>
-      </div>
+      {/* toggle button */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-800/50 transition"
+      >
+        <div className="flex items-center gap-1.5">
+          {open && !error
+            ? <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
+            : <span className="size-1.5 rounded-full bg-neutral-600" />}
+          <span className="text-[10px] font-medium text-neutral-400">
+            {open && !error ? "LIVE" : "Camera"}
+          </span>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className={`text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+
+      {/* stream — only mounted when open */}
+      {open && (
+        error ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-neutral-500">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+            </svg>
+            <span className="text-[11px]">Camera unavailable</span>
+            <button onClick={() => setError(false)}
+              className="text-[10px] text-neutral-400 underline hover:text-neutral-200">
+              Retry
+            </button>
+          </div>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={src}
+            alt="Camera"
+            className="w-full object-cover"
+            onError={() => setError(true)}
+          />
+        )
+      )}
     </div>
   );
 }
@@ -1033,7 +1067,7 @@ function LoadedFilamentsCard({
   function addSlot() {
     setSlots((prev) => [
       ...prev,
-      { slot: prev.length, color: "#888888", color_name: null, type: "PLA", brand: null, filament_id: null },
+      { slot: prev.length, color: "#888888", color_name: null, type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null },
     ]);
   }
 
@@ -1242,46 +1276,6 @@ function LoadedFilamentsCard({
 }
 
 
-// ── bambu LAN discovery ───────────────────────────────────────────────────────
-
-function DiscoverButton({ devId, onFound }: { devId: string | null; onFound: (ip: string) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function discover() {
-    setBusy(true);
-    setMsg(null);
-    try {
-      const devices = await api<{ dev_id: string; ip: string }[]>("/api/printers/bambu-discover");
-      const match = devices.find((d) => d.dev_id === devId);
-      if (match) {
-        onFound(match.ip);
-        setMsg("✓");
-      } else {
-        setMsg("не знайдено");
-      }
-    } catch {
-      setMsg("помилка");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <button
-        type="button"
-        onClick={discover}
-        disabled={busy}
-        title="Знайти IP автоматично (UDP broadcast)"
-        className="rounded-lg border border-neutral-300 px-3 py-2 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800"
-      >
-        {busy ? "…" : "Знайти"}
-      </button>
-      {msg && <span className={`text-xs ${msg === "✓" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>{msg}</span>}
-    </div>
-  );
-}
 
 // ── settings card ─────────────────────────────────────────────────────────────
 
@@ -1400,7 +1394,6 @@ function SettingsCard({
                   placeholder="192.168.1.100"
                   className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-300"
                 />
-                <DiscoverButton devId={printer.bambu_dev_id} onFound={setBambuIp} />
               </div>
             </label>
           )}

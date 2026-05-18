@@ -1,0 +1,25 @@
+name: Feature request
+description: Нова функція або покращення
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема / мотивація
+      placeholder: Яку задачу це вирішує?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Бажана поведінка
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Тарифний план
+      options:
+        - Всі (free + paid)
+        - Тільки paid
+        - Не визначено

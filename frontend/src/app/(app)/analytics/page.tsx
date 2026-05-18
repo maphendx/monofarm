@@ -13,6 +13,7 @@ import {
 } from "recharts";
 
 import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface Summary {
   tasks: { queued: number; in_progress: number; done: number; cancelled: number };
@@ -76,6 +77,7 @@ function materialColor(m: string) {
 }
 
 export default function AnalyticsPage() {
+  const t = useT();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [daily, setDaily] = useState<DailyPoint[]>([]);
   const [printers, setPrinters] = useState<PrinterStat[]>([]);
@@ -101,35 +103,35 @@ export default function AnalyticsPage() {
   }, [days]);
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">Завантаження…</p>;
+    return <p className="text-sm text-neutral-500">{t("common.loading")}</p>;
   }
 
   const maxDone = Math.max(...daily.map((d) => d.done), 1);
 
   return (
     <div className="space-y-8">
-      <h1 className="text-lg font-semibold">Аналітика</h1>
+      <h1 className="text-lg font-semibold">{t("analytics.title")}</h1>
 
       {/* Summary cards */}
       {summary && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard
-            label="Надруковано завдань"
+            label={t("analytics.printedJobs")}
             value={summary.plan_entries_done}
-            sub={`у черзі: ${summary.tasks.queued}`}
+            sub={`${t("tasks.queue")}: ${summary.tasks.queued}`}
           />
           <StatCard
-            label="Час друку"
+            label={t("printers.printTime")}
             value={fmtHours(summary.total_print_minutes)}
-            sub="за весь час"
+            sub={t("history.allTime")}
           />
           <StatCard
-            label="Пластик використано"
+            label={t("files.filamentUsed")}
             value={`${summary.total_filament_g} г`}
             sub={`≈ ${(summary.total_filament_g / 1000).toFixed(2)} кг`}
           />
           <StatCard
-            label="Активних принтерів"
+            label={t("dashboard.activePrinters")}
             value={summary.active_printers}
           />
         </div>
@@ -138,7 +140,7 @@ export default function AnalyticsPage() {
       {/* Daily chart */}
       <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-medium">Виконано завдань по днях</h2>
+          <h2 className="font-medium">{t("analytics.completedByDay")}</h2>
           <div className="flex gap-1">
             {[7, 14, 30].map((d) => (
               <button
@@ -167,8 +169,8 @@ export default function AnalyticsPage() {
             />
             <YAxis allowDecimals={false} tick={{ fontSize: 11 }} domain={[0, maxDone + 1]} />
             <Tooltip
-              formatter={(v: number) => [v, "виконано"]}
-              labelFormatter={fmtDate}
+              formatter={(v) => [v, t("history.completed")]}
+              labelFormatter={(label) => fmtDate(String(label))}
               contentStyle={{ fontSize: 12 }}
             />
             <Bar dataKey="done" radius={[4, 4, 0, 0]} fill="#171717" />
@@ -179,9 +181,9 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Printer stats */}
         <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-4 font-medium">Принтери — топ активності</h2>
+          <h2 className="mb-4 font-medium">{t("analytics.topPrinters")}</h2>
           {printers.length === 0 ? (
-            <p className="text-sm text-neutral-400">Немає даних</p>
+            <p className="text-sm text-neutral-400">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-3">
               {printers.slice(0, 10).map((p) => {
@@ -214,9 +216,9 @@ export default function AnalyticsPage() {
 
         {/* Filament usage */}
         <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-          <h2 className="mb-4 font-medium">Пластик за матеріалом</h2>
+          <h2 className="mb-4 font-medium">{t("analytics.filamentByMaterial")}</h2>
           {!filament || filament.by_material.length === 0 ? (
-            <p className="text-sm text-neutral-400">Немає даних</p>
+            <p className="text-sm text-neutral-400">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-3">
               {filament.by_material.map((row) => {

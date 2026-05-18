@@ -79,7 +79,11 @@ def _next_seq() -> str:
 
 
 def _is_configured(org: "Organization") -> bool:
-    return bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token)
+    from app.services.encryption import decrypt
+    return bool(
+        (decrypt(org.bambu_email) and decrypt(org.bambu_password))
+        or decrypt(org.bambu_refresh_token)
+    )
 
 
 def _api_base(org_id: int) -> str:
@@ -151,11 +155,12 @@ def _extract_user_id(org_id: int, token: str) -> None:
 
 def _login_with_refresh_token(org: "Organization", stored_token: str) -> str:
     """Try Bambu's loginType=refreshToken endpoint (used by email-code/Google accounts)."""
+    from app.services.encryption import decrypt
     base = _api_base(org.id)
     try:
         resp = requests.post(
             f"{base}/v1/user-service/user/login",
-            json={"account": org.bambu_email, "refreshToken": stored_token, "loginType": "refreshToken"},
+            json={"account": decrypt(org.bambu_email), "refreshToken": stored_token, "loginType": "refreshToken"},
             timeout=CLOUD_TIMEOUT,
         )
         resp.raise_for_status()
@@ -180,32 +185,34 @@ def login(org: "Organization") -> str:
     back to using the stored token directly as an access token (email-code accounts
     return a long-lived token that doesn't work with the refresh endpoint).
     """
-    if org.bambu_refresh_token:
+    from app.services.encryption import decrypt
+    _refresh = decrypt(org.bambu_refresh_token)
+    _email   = decrypt(org.bambu_email)
+    _password = decrypt(org.bambu_password)
+
+    if _refresh:
         r = org.bambu_region or "us"
         _regions[org.id] = r
-        stored = org.bambu_refresh_token
-        # Try the standard refreshtoken endpoint first (password accounts, JWT tokens)
         try:
-            return refresh_token(org, stored)
+            return refresh_token(org, _refresh)
         except BambuError as e:
             log.warning("Bambu /refreshtoken failed (org_id=%s): %s", org.id, e)
-        # For email-code/Google accounts, try loginType=refreshToken on the login endpoint
         try:
-            return _login_with_refresh_token(org, stored)
+            return _login_with_refresh_token(org, _refresh)
         except BambuError as e:
             log.warning("Bambu loginType=refreshToken failed (org_id=%s): %s", org.id, e)
         # Last resort: use the stored token directly (may be a long-lived JWT access token)
-        _access_tokens[org.id] = stored
-        _extract_user_id(org.id, stored)
+        _access_tokens[org.id] = _refresh
+        _extract_user_id(org.id, _refresh)
         uid = _user_ids.get(org.id)
         if uid:
             log.info("Bambu: using stored token as-is (org_id=%s, user_id=%s)", org.id, uid)
-            return stored
+            return _refresh
         raise BambuError(
             f"Bambu authentication failed (org_id={org.id}) — please re-authenticate via email code"
         )
 
-    if not (org.bambu_email and org.bambu_password):
+    if not (_email and _password):
         raise BambuError("Bambu credentials not configured for this organization")
 
     r = org.bambu_region or "us"
@@ -214,7 +221,7 @@ def login(org: "Organization") -> str:
     try:
         resp = requests.post(
             f"{base}/v1/user-service/user/login",
-            json={"account": org.bambu_email, "password": org.bambu_password, "apiError": ""},
+            json={"account": _email, "password": _password, "apiError": ""},
             timeout=CLOUD_TIMEOUT,
         )
         resp.raise_for_status()
@@ -320,8 +327,10 @@ def do_token_refresh() -> None:
         if not _is_configured(org):
             continue
         try:
-            if org.bambu_refresh_token:
-                refresh_token(org, org.bambu_refresh_token)
+            from app.services.encryption import decrypt
+            rt = decrypt(org.bambu_refresh_token)
+            if rt:
+                refresh_token(org, rt)
             else:
                 login(org)
         except BambuError:
@@ -397,6 +406,8 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         ),
     }
     _state_cache[dev_id] = updated
+    from app.services.cache import cache_set
+    cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
 
     ams_data = print_data.get("ams")
     if isinstance(ams_data, dict):
@@ -407,6 +418,7 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
             try:
                 t = int(tray_now)
                 _state_cache[dev_id]["active_tray"] = 254 if t == 255 else t
+                cache_set(f"bambu:state:{dev_id}", _state_cache[dev_id], int(STATUS_CACHE_TTL))
             except (ValueError, TypeError):
                 pass
 
@@ -451,6 +463,8 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
 
     if trays:
         _ams_cache[dev_id] = trays
+        from app.services.cache import cache_set
+        cache_set(f"bambu:ams:{dev_id}", trays, 300)
 
 
 # ── HMS error lookup ──────────────────────────────────────────────────────────
@@ -582,14 +596,23 @@ def subscribe_device(dev_id: str, org_id: int) -> None:
 
 def get_cached_state(dev_id: str) -> dict:
     """Return cached MQTT state for a device, or offline placeholder."""
+    from app.services.cache import cache_get
+    fresh = cache_get(f"bambu:state:{dev_id}")
+    if fresh is not None:
+        return fresh
+    # Local dict fallback (same-worker stale data)
     entry = _state_cache.get(dev_id)
-    if not entry or time.monotonic() - entry.get("ts", 0) > STATUS_CACHE_TTL:
-        return {"state": "offline"}
-    return entry
+    if entry and time.monotonic() - entry.get("ts", 0) <= STATUS_CACHE_TTL:
+        return entry
+    return {"state": "offline"}
 
 
 def get_ams_filaments(dev_id: str) -> list[dict]:
     """Return cached AMS tray data for a device."""
+    from app.services.cache import cache_get
+    fresh = cache_get(f"bambu:ams:{dev_id}")
+    if fresh is not None:
+        return fresh
     return _ams_cache.get(dev_id, [])
 
 
@@ -599,9 +622,19 @@ def get_ams_filaments(dev_id: str) -> list[dict]:
 def _publish(dev_id: str, payload: dict) -> None:
     org_id = _dev_to_org.get(dev_id)
     client = _mqtt_clients.get(org_id) if org_id is not None else None
-    if client is None:
-        raise BambuError("Bambu MQTT не підключений")
-    client.publish(f"device/{dev_id}/request", json.dumps(payload))
+    if client is not None:
+        client.publish(f"device/{dev_id}/request", json.dumps(payload))
+        return
+    # No local MQTT client (web process with INLINE_WORKERS=false) — relay via Redis
+    from app.services.cache import _r
+    r = _r()
+    if r is not None:
+        r.publish("bambu:cmd", json.dumps({
+            "topic": f"device/{dev_id}/request",
+            "payload": json.dumps(payload),
+        }))
+        return
+    raise BambuError("Bambu MQTT не підключений (no local client, no Redis)")
 
 
 def send_gcode(dev_id: str, script: str) -> None:

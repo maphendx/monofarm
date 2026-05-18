@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Full-stack 3D print farm management platform ("printfarm"). Manages ~50 printers: SimplyPrint-connected printers (live state from SimplyPrint API), 12 Snapmaker U1 printers tracked via Moonraker/Klipper REST, and Bambu Lab printers (P1S, A1, A1 mini) via Cloud MQTT + LAN FTPS. Two operators with shifts, a remote manager, daily print planning, farm task management, and filament inventory.
+Full-stack 3D print farm management SaaS ("monofarm"). Multi-tenant: each customer gets an isolated `Organization` (printers, files, users, filaments). Manages printers via Moonraker/Klipper REST (Snapmaker U1 and other Klipper machines) and Bambu Lab (P1S, A1, A1 mini) via Cloud MQTT + LAN FTPS. Two operators with shifts, a remote manager, daily print planning, farm task management, and filament inventory. Billing via Paddle (free / starter $19 / pro $49 / farm $99).
 
 ## Commands
 
@@ -64,13 +64,15 @@ Telegram long-poll never start. CI: `.github/workflows/ci.yml`.
 - `main.py` — FastAPI app; lifespan manages APScheduler (09:00 Kyiv daily report), Telegram bot long-polling, and Bambu MQTT client in the same asyncio event loop. Routers: auth, printers, tasks, farm_tasks, plan, filaments, files, octoprint, users.
 - `core/security.py` — PyJWT + bcrypt directly (not passlib/python-jose, both broken on Python 3.14).
 - `api/deps.py` — `HTTPBearer` scheme (not OAuth2PasswordBearer) so Swagger /docs shows a raw token input field.
-- `api/printers.py` — `list_printers` is **async** and parallelizes SimplyPrint, Bambu Cloud, and Moonraker status fetches via `asyncio.gather`. `_ensure_bambu_rows()` auto-imports Bambu printers from cloud. `_to_dto()` dispatches to SP/Bambu/Moonraker/manual branches. `_dispatch()` routes pause/resume/cancel to the right backend (SP, Moonraker, or Bambu MQTT).
-- `api/files.py` — central gcode/3mf storage at `data/gcodes/<uuid>.<ext>`. Endpoints: list, upload (parses filament_meta), download, delete, **send to printer with slot remapping**. For Moonraker: `slot_map` triggers gcode T-command rewrite via `moonraker.remap_slots()`. For Bambu: `slot_map` is converted to `ams_mapping` list and passed in the MQTT `project_file` command (no file rewrite). Bambu only accepts `.3mf` files.
+- `api/deps.py` — `get_current_org()` resolves org from JWT, **auto-downgrades expired paid plans to `free`** on every request.
+- `api/printers.py` — `list_printers` is **async** and parallelizes Bambu Cloud and Moonraker status fetches via `asyncio.gather`. `_ensure_bambu_rows()` auto-imports Bambu printers from cloud. `_to_dto()` dispatches to Bambu/Moonraker/manual branches. `_dispatch()` routes pause/resume/cancel to the right backend (Moonraker or Bambu MQTT). After pause/resume/cancel calls `moonraker.invalidate_status(url)`.
+- `api/files.py` — gcode/3mf storage via `services/storage.py` (local disk or S3/R2). Endpoints: list, upload (parses filament_meta), download (redirects to presigned URL for S3), delete, **send to printer with slot remapping**. Upload writes locally first for parsing, then uploads to S3 if configured. Send uses `storage.local_path_for()` context manager. For Moonraker: `slot_map` triggers gcode rewrite via `moonraker.remap_slots()`. For Bambu: `slot_map` → `ams_mapping` in MQTT command. Bambu only accepts `.3mf` files.
 - `api/octoprint.py` — **OctoPrint API shim** for OrcaSlicer integration. Implements `GET /api/version`, `GET /api/printer`, `POST /api/files/local`. Auth via `X-Api-Key` header containing the user's JWT. Returns `url` field pointing to `FARM_PUBLIC_URL/files?highlight=<id>` so OrcaSlicer's "Device" tab opens the frontend file page (configure Device UI URL = frontend, Hostname = backend).
-- `services/moonraker.py` — sync `requests` calls to Moonraker REST API, called via `asyncio.to_thread`. Two caches: `_status_cache` (10s TTL per URL) and `_meta_cache` (300s TTL per URL+filename). `STATUS_TIMEOUT=3s` for live polling. `get_remote_file_meta()` tries `GET /server/files/metadata?filename=X` first, then falls back to Range-downloading the last 96KB of the file. **`remap_slots(src, slot_map)`** rewrites tool-change commands (`T0`, `T1`, etc., including in `M104/M109/M116 T<n>` params) using a two-pass placeholder strategy to handle slot swaps without collisions.
+- `services/cache.py` — shared key-value cache. Connects to Redis when `REDIS_URL` is set (`redis.from_url`); falls back silently to an in-process dict. `cache_get/cache_set/cache_delete` — thread-safe, used from sync code (MQTT callbacks, Moonraker) and async handlers alike.
+- `services/storage.py` — file storage abstraction. Local disk (`data/gcodes/<name>`) when `S3_BUCKET` is empty; S3-compatible (Cloudflare R2) when configured. Key functions: `put`, `get_bytes`, `delete`, `presigned_url`, `local_path_for` (context manager — yields local `Path`, downloads to temp for S3).
+- `services/moonraker.py` — sync `requests` calls to Moonraker REST API, called via `asyncio.to_thread`. Status cache (10s TTL) and meta cache (300s TTL) stored in Redis via `services/cache.py`; local dicts kept as stale fallback on fetch errors. `invalidate_status(url)` clears both Redis key and local dict. `get_remote_file_meta()` tries Moonraker metadata endpoint first, falls back to Range-downloading last 96KB. **`remap_slots(src, slot_map)`** two-pass placeholder rewrite for collision-safe slot swaps.
 - `services/gcode_meta.py` — parses slicer comments from gcode head+tail: `filament_colour`, `filament_type`, per-slot weights, `estimated_time`, layer count. **Supports `.3mf` / `.gcode.3mf`**: opens the ZIP and extracts `Metadata/plate_N.gcode` (OrcaSlicer/Bambu format). Works for PrusaSlicer, OrcaSlicer, Snaporca, Bambu Studio.
-- `services/bambu.py` — Bambu Lab Cloud HTTP (login/refresh/list_devices via sync `requests`) + paho-mqtt singleton (background thread, TLS :8883) for live status and commands + `ftplib.FTP_TLS` for LAN .3mf upload. `_state_cache[dev_id]` holds latest MQTT report; `_ams_cache[dev_id]` holds AMS tray data. Token auto-refreshes every 6h via APScheduler.
-- `services/simplyprint.py` — 30s-cached GET to SimplyPrint GetFarmOverview. Tolerates multiple response shapes.
+- `services/bambu.py` — Bambu Lab Cloud HTTP (login/refresh/list_devices via sync `requests`) + paho-mqtt per org (background thread, TLS :8883) for live status and commands + `ftplib.FTP_TLS` for LAN .3mf upload. MQTT callbacks write state + AMS trays to Redis via `cache_set` (30s TTL for state, 300s for AMS). `get_cached_state()`/`get_ams_filaments()` read Redis first for cross-worker consistency, fall back to local dicts. Token auto-refreshes every 6h via APScheduler.
 - `services/telegram_bot.py` — PTB 21+ embedded in FastAPI lifespan. Cyrillic commands (`/план`, `/статус`, etc.) registered via `MessageHandler(Regex(...))` not `CommandHandler` (PTB rejects non-ASCII command names at startup). Magic-link `/start <code>` for account linking.
 - `services/daily_report.py` — `build_status_text()` and `build_daily_report()` for 09:00 broadcast to all users with `telegram_chat_id`.
 
@@ -89,7 +91,7 @@ Telegram long-poll never start. CI: `.github/workflows/ci.yml`.
 - `PrintTask` — `filament_meta: JSONB` (FilamentMeta: types, colors, used_g, estimated_minutes, total_layers, layer_height).
 - `PlanEntry` — join between Printer and PrintTask for a given day; cascade-deleted when printer is deleted.
 - `Filament` — inventory rows with `grams_remaining`, `min_grams`, `is_low` computed property.
-- `GcodeFile` — central file storage. `stored_name` (UUID-based on disk), `original_name`, `size_bytes`, `filament_meta: JSONB` (parsed at upload time), `uploaded_by_id`. Files live at `backend/data/gcodes/<stored_name>`.
+- `GcodeFile` — central file storage. `stored_name` (UUID-based), `original_name`, `size_bytes`, `filament_meta: JSONB` (parsed at upload time), `uploaded_by_id`, `organization_id`. Files at `backend/data/gcodes/<stored_name>` (local) or `orgs/{org_id}/gcodes/<stored_name>` (S3/R2 when `S3_BUCKET` set).
 - `User` — roles: admin/operator/manager; `telegram_chat_id` for Telegram linking.
 
 ## Critical conventions
@@ -103,11 +105,9 @@ Telegram long-poll never start. CI: `.github/workflows/ci.yml`.
 2. Moonraker `/server/files/metadata` (parses slicer comments server-side).
 3. Range-download last 96KB of file + local `gcode_meta.parse_gcode()`.
 
-**SimplyPrint printers** are auto-imported into the DB on first `GET /api/printers` call (`_ensure_simplyprint_rows`). Never manually create SimplyPrint rows — names sync from the API.
+**Bambu Lab printers** are auto-imported via `_ensure_bambu_rows()` from Bambu Cloud `list_devices`. MQTT subscription happens on discovery. Live state comes from MQTT `device/{dev_id}/report` topic (written to Redis by MQTT callback, read by `bambu.get_cached_state()`). AMS tray data is parsed from `ams.ams[N].tray[M]` in MQTT reports (Redis key `bambu:ams:{dev_id}`, 300s TTL). File upload uses LAN FTPS (:990, user `bblp`, password = access_code). Print start uses MQTT `project_file` command with `ams_mapping`.
 
-**Bambu Lab printers** are auto-imported via `_ensure_bambu_rows()` from Bambu Cloud `list_devices`. MQTT subscription happens on discovery. Live state comes from MQTT `device/{dev_id}/report` topic (cached in `bambu._state_cache`). AMS tray data is parsed from `ams.ams[N].tray[M]` in MQTT reports. File upload uses LAN FTPS (:990, user `bblp`, password = access_code). Print start uses MQTT `project_file` command with `ams_mapping`.
-
-**Moonraker cache invalidation:** After pause/resume/cancel actions, `_status_cache.pop(url)` is called explicitly so the next poll returns fresh state.
+**Moonraker cache invalidation:** After pause/resume/cancel actions, `moonraker.invalidate_status(url)` is called — clears both the Redis key and the local stale dict so the next poll returns fresh state.
 
 **Slot indexing:** Internally everything is **0-based** (T0/T1/T2/T3 in gcode, slot 0..3 in `loaded_filaments`, slot_map in API). UI displays as **1-based** (Slot 1..4) — convert at render time only, never in storage. The API contract (`POST /api/files/{id}/send/{printer_id}` body `{slot_map: {0: 1, 1: 0}}`) uses 0-based on both sides.
 
@@ -117,7 +117,7 @@ Telegram long-poll never start. CI: `.github/workflows/ci.yml`.
 
 **3MF extension handling:** `.gcode.3mf` is a double extension — `Path(name).suffix` returns only `.3mf`. We use `"".join(p.suffixes)` to preserve the full extension when storing. `parse_gcode()` checks for `.3mf` in `path.suffixes` (not just `.suffix`) and uses `_extract_gcode_from_3mf()` (zipfile) before falling through to flat-file parsing.
 
-**Parallel printer fetch:** `list_printers` runs SimplyPrint overview, Bambu `list_devices`, and Moonraker status calls in parallel via `asyncio.gather`. Moonraker uses `asyncio.gather(*[asyncio.to_thread(...) for r in moonraker_rows], return_exceptions=True)` — failed/timeout requests yield `{"state": "offline"}`. Bambu state comes from MQTT cache (no per-request network call).
+**Parallel printer fetch:** `list_printers` runs Bambu `list_devices` and Moonraker status calls in parallel via `asyncio.gather`. Moonraker uses `asyncio.gather(*[asyncio.to_thread(...) for r in moonraker_rows], return_exceptions=True)` — failed/timeout requests yield `{"state": "offline"}`. Bambu state comes from Redis cache (MQTT callback writes it; no per-request network call).
 
 **Double-submit guard on plan actions:** Use a `useRef` inFlight guard (not `useState`) to prevent duplicate API calls from rapid clicks.
 
@@ -127,15 +127,26 @@ DATABASE_URL=postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm
 SECRET_KEY=<random>
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=<password>
-SIMPLYPRINT_API_KEY=<key>          # optional; SP printers won't show without it
-SIMPLYPRINT_ORG_ID=<org_id>        # optional
-BAMBU_EMAIL=<email>                # optional; Bambu printers won't show without creds
+
+# Bambu Lab Cloud (per-org credentials stored in DB; these seed the default org)
+BAMBU_EMAIL=<email>
 BAMBU_PASSWORD=<password>          # or use BAMBU_REFRESH_TOKEN instead
 BAMBU_REFRESH_TOKEN=<token>        # from Bambu Studio config; preferred for 2FA accounts
 BAMBU_REGION=us                    # us | eu | cn
+
+# Telegram
 TG_BOT_TOKEN=<token>               # optional; Telegram features disabled without it
-FARM_PUBLIC_URL=https://your-domain  # used in magic-link URLs sent via Telegram
+FARM_PUBLIC_URL=https://your-domain
 CORS_ORIGINS=http://localhost:3000,https://your-domain
+
+# Redis — shared cache (empty = in-process dict fallback)
+REDIS_URL=rediss://default:<password>@<host>:6379
+
+# S3-compatible storage (empty = local disk at data/gcodes/)
+S3_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+S3_ACCESS_KEY=<key>
+S3_SECRET_KEY=<secret>
+S3_BUCKET=monofarm-files
 ```
 
 **Python version:** 3.14. Do not use `passlib`, `python-jose`, or `psycopg-binary` (pinned version) — all broken on 3.14. Use `bcrypt` directly, `PyJWT`, `psycopg[binary]>=3.3.0`.

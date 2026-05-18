@@ -4,8 +4,10 @@ Strategy: DB stores persistent printer rows (name, kind, manual state).
 Bambu live state comes from MQTT cache; Moonraker from REST polling.
 """
 import asyncio
+import logging
 from datetime import datetime, timezone
 
+import httpx
 import requests as _requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
@@ -13,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user, require_roles
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.plan import PlanEntry
@@ -30,6 +33,8 @@ from app.schemas.printer import (
     PrinterUpdate,
 )
 from app.services import bambu, moonraker, tunnel as _tunnel
+
+log = logging.getLogger(__name__)
 
 
 class ClearBedPayload(BaseModel):
@@ -210,6 +215,98 @@ def _to_dto(
     )
 
 
+@router.get("/bambu-discover")
+async def bambu_discover(
+    org: Organization = Depends(get_current_org),
+) -> list[dict]:
+    """UDP LAN broadcast to find Bambu printers and their IPs.
+
+    If the agent is connected, the discovery runs on the agent machine
+    (same LAN as printers). Otherwise runs locally.
+    """
+    # ── Via agent tunnel (agent is on the farm network) ───────────────────────
+    if _tunnel.has_tunnel(org.id):
+        try:
+            resp = await _tunnel.proxy_request(org.id, "DISCOVER_BAMBU", "", timeout=10.0)
+            if resp.get("error") or resp.get("status", 0) >= 400:
+                raise ValueError(f"Agent error: {resp.get('error')}")
+            devices = (resp.get("body") or {}).get("devices", [])
+            if devices:
+                from app.core.db import SessionLocal
+                with SessionLocal() as db:
+                    for d in devices:
+                        row = db.query(Printer).filter(
+                            Printer.bambu_dev_id == d["dev_id"],
+                            Printer.organization_id == org.id,
+                        ).first()
+                        if row and d.get("ip") and row.bambu_dev_ip != d["ip"]:
+                            row.bambu_dev_ip = d["ip"]
+                    db.commit()
+            return devices
+        except Exception as e:
+            log.debug("Agent discover failed, falling back to local: %s", e)
+
+    import json
+    import socket
+
+    BAMBU_PORT = 2021
+    TIMEOUT = 3.0
+
+    def _discover() -> list[dict]:
+        import time
+        results: dict[str, dict] = {}
+        msg = json.dumps({"command": "get_version"}).encode()
+
+        # Try both global broadcast and any subnet broadcasts we can derive
+        targets = ["255.255.255.255"]
+        try:
+            import netifaces  # optional; skip if not installed
+            for iface in netifaces.interfaces():
+                addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
+                for a in addrs:
+                    if "broadcast" in a:
+                        targets.append(a["broadcast"])
+        except ImportError:
+            pass
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("", 0))
+        sock.settimeout(0.2)  # short per-recv timeout; loop for full TIMEOUT
+        try:
+            for target in dict.fromkeys(targets):  # deduplicate
+                try:
+                    sock.sendto(msg, (target, BAMBU_PORT))
+                except Exception:
+                    pass
+            deadline = time.monotonic() + TIMEOUT
+            while time.monotonic() < deadline:
+                try:
+                    data, addr = sock.recvfrom(4096)
+                    try:
+                        payload = json.loads(data)
+                    except Exception:
+                        continue
+                    dev_id = payload.get("dev_id") or payload.get("sn") or ""
+                    if dev_id:
+                        results[dev_id] = {
+                            "dev_id": dev_id,
+                            "ip": addr[0],
+                            "name": payload.get("dev_name") or payload.get("name") or "",
+                            "model": payload.get("dev_product_name") or payload.get("machine_type") or "",
+                        }
+                except socket.timeout:
+                    continue
+                except Exception:
+                    continue
+        finally:
+            sock.close()
+        return list(results.values())
+
+    return await asyncio.to_thread(_discover)
+
+
 @router.get("/{printer_id}", response_model=PrinterOut)
 async def get_printer(
     printer_id: int,
@@ -220,7 +317,6 @@ async def get_printer(
     if not row:
         raise HTTPException(status_code=404, detail="Printer not found")
     groups_by_id = {g.id: g.name for g in db.query(PrinterGroup).filter(PrinterGroup.organization_id == org.id).all()}
-    # Pre-fetch Moonraker status so _to_dto can stay synchronous
     live: dict | None = None
     if row.moonraker_url:
         if _tunnel.has_tunnel(org.id):
@@ -230,69 +326,61 @@ async def get_printer(
     return _to_dto(row, db, groups_by_id, prefetched_live=live)
 
 
-@router.get("/bambu-discover")
-async def bambu_discover(
-    org: Organization = Depends(get_current_org),
-) -> list[dict]:
-    """UDP LAN broadcast to find Bambu printers and their IPs (same protocol as Bambu Studio)."""
-    import json
-    import socket
-
-    BAMBU_PORT = 2021
-    TIMEOUT = 3.0
-
-    def _discover() -> list[dict]:
-        results: dict[str, dict] = {}
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(TIMEOUT)
-        try:
-            msg = json.dumps({"command": "get_version"}).encode()
-            sock.sendto(msg, ("255.255.255.255", BAMBU_PORT))
-            deadline = __import__("time").monotonic() + TIMEOUT
-            while __import__("time").monotonic() < deadline:
-                try:
-                    data, addr = sock.recvfrom(4096)
-                    payload = json.loads(data)
-                    dev_id = payload.get("dev_id") or payload.get("sn") or ""
-                    if dev_id:
-                        results[dev_id] = {
-                            "dev_id": dev_id,
-                            "ip": addr[0],
-                            "name": payload.get("dev_name") or payload.get("name") or "",
-                            "model": payload.get("dev_product_name") or payload.get("machine_type") or "",
-                        }
-                except socket.timeout:
-                    break
-                except Exception:
-                    continue
-        finally:
-            sock.close()
-        return list(results.values())
-
-    return await asyncio.to_thread(_discover)
-
-
 @router.get("/{printer_id}/webcam/snapshot")
 async def webcam_snapshot(
     printer_id: int,
+    token: str | None = None,
     db: Session = Depends(get_db),
-    org: Organization = Depends(get_current_org),
 ) -> Response:
-    """Proxy a single webcam snapshot from Moonraker — bypasses browser Private Network Access."""
-    row = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == org.id).first()
+    """Proxy a single webcam snapshot from Moonraker — bypasses browser Private Network Access.
+
+    Accepts token as query param (for <img> tags that can't set headers).
+    """
+    from app.core.security import decode_token
+    payload = decode_token(token or "")
+    if not payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = db.get(User, int(payload.get("sub", 0)))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid user")
+    row = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == user.organization_id).first()
     if not row or not row.moonraker_url:
         raise HTTPException(status_code=404, detail="No Moonraker URL")
-    webcams = await asyncio.to_thread(moonraker.get_webcams, row.moonraker_url)
-    if not webcams:
-        raise HTTPException(status_code=404, detail="No webcams configured on this printer")
-    snapshot_url: str = webcams[0].get("snapshot_url", "")
-    if not snapshot_url.startswith("http"):
-        base = moonraker._api_base(row.moonraker_url)  # noqa: SLF001
-        snapshot_url = base + snapshot_url
+    base = moonraker._api_base(row.moonraker_url)  # noqa: SLF001
+    org_id = user.organization_id
+
+    # Resolve snapshot URL — prefer Moonraker webcam config, fallback to crowsnest default
+    async def _get_snapshot_url() -> str:
+        try:
+            if _tunnel.has_tunnel(org_id):
+                resp = await _tunnel.proxy_request(org_id, "GET", f"{base}/server/webcams/list")
+                webcams = resp.get("body", {}).get("result", {}).get("webcams", [])
+            else:
+                webcams = await asyncio.to_thread(moonraker.get_webcams, row.moonraker_url)
+        except Exception:
+            webcams = []
+        if webcams:
+            url = webcams[0].get("snapshot_url", "")
+            return url if url.startswith("http") else base + url
+        return f"{base}/webcam/?action=snapshot"
+
+    snapshot_url = await _get_snapshot_url()
+
+    # Fetch snapshot — through tunnel if agent connected, direct otherwise
     try:
+        if _tunnel.has_tunnel(org_id):
+            result = await _tunnel.proxy_request(org_id, "GET", snapshot_url, timeout=8.0)
+            if result.get("status", 0) >= 400:
+                raise HTTPException(status_code=502, detail=f"Webcam unavailable via tunnel: {result.get('status')}")
+            if result.get("binary"):
+                import base64 as _b64
+                content = _b64.b64decode(result["binary"])
+                media_type = result.get("content_type", "image/jpeg")
+                return Response(content=content, media_type=media_type, headers={"Cache-Control": "no-store"})
         resp = await asyncio.to_thread(lambda: _requests.get(snapshot_url, timeout=5))
         resp.raise_for_status()
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Webcam unavailable: {exc}") from exc
     return Response(
@@ -308,43 +396,94 @@ async def camera_stream(
     token: str | None = None,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    """Stream Bambu Lab camera as MJPEG via FFmpeg RTSPS proxy.
+    """Stream Bambu Lab camera as MJPEG.
 
+    Uses go2rtc sidecar when GO2RTC_URL is configured (recommended).
+    Falls back to FFmpeg if available.
     Accepts token as query param (for <img> tags that can't set headers).
     """
-    import shutil
     from app.core.security import decode_token
+    from app.services import go2rtc
+
     payload = decode_token(token or "")
     if not payload:
         raise HTTPException(status_code=401, detail="Not authenticated")
     user = db.get(User, int(payload.get("sub", 0)))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid user")
-    row = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == user.organization_id).first()
+    row = db.query(Printer).filter(
+        Printer.id == printer_id,
+        Printer.organization_id == user.organization_id,
+    ).first()
     if not row or row.kind != PrinterKind.bambu or not row.bambu_dev_ip:
         raise HTTPException(status_code=404, detail="Camera not available: set LAN IP in printer settings")
+
+    org_id = user.organization_id
+
+    # go2rtc stream URL — uses bambu:// for A1/P1 (port 6000), rtsps:// for X1 (port 322)
+    go2rtc_stream_url = go2rtc._stream_url(row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
+    go2rtc_name = go2rtc.stream_name(row.bambu_dev_id)
+    # go2rtc MJPEG endpoint — accessed locally at localhost:1984 from farm PC
+    go2rtc_local_url = f"http://localhost:1984/api/stream.mjpeg?src={go2rtc_name}"
+
+    # ── Tunnel path: native Bambu binary protocol via agent ───────────────────
+    # Agent on farm PC connects directly to printer:6000 using the documented
+    # binary TLS protocol (github.com/Doridian/OpenBambuAPI/blob/main/video.md)
+    if _tunnel.has_tunnel(org_id):
+        async def _bambu_cam_stream():
+            try:
+                async for chunk in _tunnel.bambu_camera_stream(
+                    org_id, row.bambu_dev_ip, row.bambu_access_code
+                ):
+                    yield chunk
+            except Exception as exc:
+                log.warning("Bambu camera tunnel error printer %s: %s", printer_id, exc)
+
+        return StreamingResponse(
+            _bambu_cam_stream(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # ── go2rtc path (local, when backend is on the same LAN as printers) ──────
+    if go2rtc.is_available():
+        await go2rtc.register_stream(row.bambu_dev_id, row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
+
+        async def _go2rtc_proxy():
+            try:
+                async with httpx.AsyncClient(timeout=None) as client:
+                    async with client.stream("GET", go2rtc.mjpeg_url(row.bambu_dev_id)) as resp:
+                        async for chunk in resp.aiter_bytes(32768):
+                            yield chunk
+            except Exception as exc:
+                log.warning("go2rtc stream error printer %s: %s", printer_id, exc)
+
+        return StreamingResponse(
+            _go2rtc_proxy(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # ── FFmpeg fallback ────────────────────────────────────────────────────────
+    import shutil
     if not shutil.which("ffmpeg"):
-        raise HTTPException(status_code=503, detail="ffmpeg not found on server")
+        raise HTTPException(
+            status_code=503,
+            detail="Camera unavailable: install go2rtc (recommended) or ffmpeg on the server.",
+        )
 
     rtsps_url = f"rtsps://bblp:{row.bambu_access_code}@{row.bambu_dev_ip}:322/streaming/live/1"
     cmd = [
-        "ffmpeg",
-        "-loglevel", "quiet",
-        "-rtsp_transport", "tcp",
-        "-tls_verify", "0",
+        "ffmpeg", "-loglevel", "quiet",
+        "-rtsp_transport", "tcp", "-tls_verify", "0",
         "-i", rtsps_url,
-        "-vf", "fps=5",
-        "-f", "image2pipe",
-        "-vcodec", "mjpeg",
-        "-q:v", "3",
+        "-vf", "fps=5", "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "3",
         "pipe:1",
     ]
 
-    async def generate():
+    async def _ffmpeg_generate():
         proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
         )
         buf = b""
         try:
@@ -353,7 +492,6 @@ async def camera_stream(
                 if not chunk:
                     break
                 buf += chunk
-                # Extract complete JPEG frames (SOI=FFD8, EOI=FFD9)
                 while True:
                     start = buf.find(b"\xff\xd8")
                     if start < 0:
@@ -363,18 +501,13 @@ async def camera_stream(
                         break
                     frame = buf[start:end + 2]
                     buf = buf[end + 2:]
-                    yield (
-                        b"--frame\r\n"
-                        b"Content-Type: image/jpeg\r\n\r\n"
-                        + frame
-                        + b"\r\n"
-                    )
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
         finally:
             proc.kill()
             await proc.wait()
 
     return StreamingResponse(
-        generate(),
+        _ffmpeg_generate(),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-store"},
     )
@@ -633,7 +766,7 @@ async def _moonraker_action(
             await asyncio.to_thread(action_fn, row.moonraker_url)
     except (moonraker.MoonrakerError, RuntimeError) as e:
         raise HTTPException(status_code=502, detail=str(e))
-    moonraker._status_cache.pop(row.moonraker_url, None)  # noqa: SLF001
+    moonraker.invalidate_status(row.moonraker_url)
     return {"ok": True, "action": action_name}
 
 
@@ -706,7 +839,7 @@ async def _dispatch(
                 await asyncio.to_thread(mr_fn, row.moonraker_url)
         except (moonraker.MoonrakerError, RuntimeError) as e:
             raise HTTPException(status_code=502, detail=str(e))
-        moonraker._status_cache.pop(row.moonraker_url, None)  # noqa: SLF001
+        moonraker.invalidate_status(row.moonraker_url)
     else:
         raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
     return {"ok": True, "action": action}
@@ -838,7 +971,7 @@ async def print_skip_object(
             await asyncio.to_thread(moonraker.skip_object, row.moonraker_url)
         except moonraker.MoonrakerError as e:
             raise HTTPException(status_code=502, detail=str(e))
-        moonraker._status_cache.pop(row.moonraker_url, None)  # noqa: SLF001
+        moonraker.invalidate_status(row.moonraker_url)
         return {"ok": True, "action": "skip_object"}
     raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
 
