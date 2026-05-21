@@ -1,0 +1,195 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { api } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type StockEntry = {
+  product_id:    number;
+  product_name:  string;
+  warehouse_name: string;
+  quantity:      string;
+  reserved_qty:  string;
+  available:     string;
+};
+
+type Batch = {
+  id:           number;
+  product_name: string;
+  target_qty:   number;
+  printed_qty:  number;
+  status:       string;
+  due_date:     string | null;
+};
+
+type Movement = {
+  id:              number;
+  type:            string;
+  product_name:    string;
+  quantity:        string;
+  warehouse_to_id: number | null;
+  created_at:      string;
+};
+
+const TYPE_META: Record<string, { label: string; cls: string }> = {
+  PRODUCTION_IN:  { label: "Виробництво +", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  PRODUCTION_OUT: { label: "Сировина −",    cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
+  SALE_OUT:       { label: "Продаж",        cls: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" },
+  PURCHASE_IN:    { label: "Закупка",       cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  DEFECT:         { label: "Брак",          cls: "bg-red-500/15 text-red-600 dark:text-red-400" },
+  ADJUSTMENT:     { label: "Коригування",   cls: "bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" },
+  TRANSFER:       { label: "Переміщення",   cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+};
+
+// ── Components ────────────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+      <p className="mt-0.5 text-xs text-neutral-400">{sub}</p>
+    </div>
+  );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const pct = Math.min(100, Math.round(value));
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+      <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function fmtDate(s: string) {
+  return new Date(s).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function WarehouseDashboard() {
+  const [stock,     setStock]     = useState<StockEntry[]>([]);
+  const [batches,   setBatches]   = useState<Batch[]>([]);
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [loading,   setLoading]   = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, b, m] = await Promise.all([
+        api<StockEntry[]>("/api/warehouse/stock"),
+        api<Batch[]>("/api/warehouse/batches"),
+        api<Movement[]>("/api/warehouse/movements?limit=5"),
+      ]);
+      setStock(s);
+      setBatches(b);
+      setMovements(m);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const activeBatches = batches.filter((b) => b.status === "active");
+  const totalUnits    = stock.reduce((sum, s) => sum + parseFloat(s.quantity), 0);
+  const pendingOrders = 0; // orders endpoint — placeholder
+
+  const lowStock = stock.filter((s) => {
+    const avail = parseFloat(s.available);
+    return avail < 10 && s.warehouse_name === "Готова продукція";
+  });
+
+  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+
+  return (
+    <div className="space-y-6">
+
+      {/* KPI */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Товари (SKU)"       value={String(new Set(stock.map((s) => s.product_id)).size)} sub="активних позицій" />
+        <KpiCard label="Готова продукція"   value={String(Math.round(totalUnits))} sub="одиниць на складах" />
+        <KpiCard label="Активні партії"     value={String(activeBatches.length)} sub="у виробництві" />
+        <KpiCard label="Нові замовлення"    value={String(pendingOrders)} sub="очікують обробки" />
+      </div>
+
+      {/* Low stock alert */}
+      {lowStock.length > 0 && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
+          <p className="mb-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+            ⚠ {lowStock.length} позиції нижче мінімального залишку
+          </p>
+          <ul className="space-y-1">
+            {lowStock.map((s) => (
+              <li key={s.product_id} className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                <span className="font-medium">{s.product_name}</span>
+                <span className="text-amber-500">—</span>
+                <span>{parseFloat(s.available).toFixed(0)} шт</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+
+        {/* Active batches */}
+        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-3 text-sm font-medium">Активні партії</h2>
+          {activeBatches.length === 0 ? (
+            <p className="text-sm text-neutral-400">Немає активних партій</p>
+          ) : (
+            <div className="space-y-4">
+              {activeBatches.map((b) => {
+                const pct = b.target_qty > 0 ? (b.printed_qty / b.target_qty) * 100 : 0;
+                return (
+                  <div key={b.id}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium">{b.product_name}</span>
+                      {b.due_date && (
+                        <span className="text-xs text-neutral-400">до {new Date(b.due_date).toLocaleDateString("uk-UA")}</span>
+                      )}
+                    </div>
+                    <ProgressBar value={pct} />
+                    <p className="mt-1 text-xs text-neutral-400">
+                      {b.printed_qty} / {b.target_qty} шт · {pct.toFixed(0)}%
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Recent movements */}
+        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+          <h2 className="mb-3 text-sm font-medium">Останні рухи</h2>
+          {movements.length === 0 ? (
+            <p className="text-sm text-neutral-400">Немає рухів</p>
+          ) : (
+            <div className="space-y-2">
+              {movements.map((m) => {
+                const meta = TYPE_META[m.type] ?? { label: m.type, cls: "bg-neutral-100 text-neutral-600" };
+                return (
+                  <div key={m.id} className="flex items-center gap-3 text-sm">
+                    <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
+                      {meta.label}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-neutral-700 dark:text-neutral-300">
+                      {m.product_name}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-500">
+                      {parseFloat(m.quantity) > 0 ? "+" : ""}{parseFloat(m.quantity).toFixed(0)}
+                    </span>
+                    <span className="shrink-0 text-xs text-neutral-400">{fmtDate(m.created_at)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

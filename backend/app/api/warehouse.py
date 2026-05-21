@@ -1,0 +1,1371 @@
+"""Warehouse module — counterparties, products, specifications, stock, movements, batches, orders."""
+from datetime import date, timedelta
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_org, require_roles
+from app.core.db import get_db
+from app.models.organization import Organization
+from app.models.user import User, UserRole
+from app.models.warehouse import (
+    BatchStatus, CashTransaction, CashTxType, CashTxCategory,
+    Counterparty, MovementType, Order, OrderItem,
+    OrderStatus, ProductionBatch, SpecComponent, SpecOperation,
+    Specification, StockEntry, Warehouse, WarehouseMovement, Product,
+)
+from app.schemas.warehouse import (
+    BatchClose, BatchCreate, BatchOut, BatchUpdate,
+    CashFlowSummary, CashTxCreate, CashTxOut,
+    CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
+    CounterpartyOut, CounterpartyUpdate,
+    MovementCreate, MovementOut,
+    OrderCreate, OrderItemOut, OrderOut, OrderUpdate,
+    ProductCreate, ProductOut, ProductUpdate, ReserveRequest,
+    SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
+    StockEntryOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
+)
+
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
+
+_ELECTRICITY_RATE = Decimal("4.5")   # ₴/кВт·год
+_LABOR_RATE       = Decimal("150")   # ₴/год
+_PRINTER_WATTS    = 200              # Вт
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _get_product(product_id: int, org: Organization, db: Session) -> Product:
+    p = db.query(Product).filter(Product.id == product_id, Product.organization_id == org.id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return p
+
+
+def _get_warehouse(wh_id: int, org: Organization, db: Session) -> Warehouse:
+    wh = db.query(Warehouse).filter(Warehouse.id == wh_id, Warehouse.organization_id == org.id).first()
+    if not wh:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    return wh
+
+
+def _get_counterparty(cp_id: int, org: Organization, db: Session) -> Counterparty:
+    cp = db.query(Counterparty).filter(Counterparty.id == cp_id, Counterparty.organization_id == org.id).first()
+    if not cp:
+        raise HTTPException(status_code=404, detail="Counterparty not found")
+    return cp
+
+
+def _get_spec(spec_id: int, org: Organization, db: Session) -> Specification:
+    spec = (
+        db.query(Specification)
+        .join(Product, Product.id == Specification.product_id)
+        .filter(Specification.id == spec_id, Product.organization_id == org.id)
+        .first()
+    )
+    if not spec:
+        raise HTTPException(status_code=404, detail="Specification not found")
+    return spec
+
+
+def _spec_to_out(spec: Specification, db: Session) -> SpecOut:
+    components = db.query(SpecComponent).filter(SpecComponent.specification_id == spec.id).order_by(SpecComponent.sort_order).all()
+    operations = db.query(SpecOperation).filter(SpecOperation.specification_id == spec.id).order_by(SpecOperation.sort_order).all()
+    return SpecOut.model_validate({**spec.__dict__, "components": components, "operations": operations})
+
+
+def _calc_cost(spec: Specification, db: Session) -> CostBreakdown:
+    components = db.query(SpecComponent).filter(SpecComponent.specification_id == spec.id).all()
+    operations = db.query(SpecOperation).filter(SpecOperation.specification_id == spec.id).all()
+
+    material_cost = Decimal("0")
+    for c in components:
+        if c.unit_price is not None:
+            waste = Decimal("1") + (c.waste_pct or Decimal("0")) / 100
+            material_cost += c.quantity * c.unit_price * waste
+
+    electricity_cost = Decimal("0")
+    labor_cost       = Decimal("0")
+    other_cost       = Decimal("0")
+    print_time_min   = Decimal("0")
+
+    for op in operations:
+        if op.type.value == "print" and op.print_time_min:
+            hours = op.print_time_min / 60
+            kwh   = Decimal(op.power_watts or _PRINTER_WATTS) * hours / 1000
+            electricity_cost += kwh * _ELECTRICITY_RATE
+            print_time_min   += op.print_time_min
+        if op.labor_minutes:
+            rate       = op.labor_rate_per_hour or _LABOR_RATE
+            labor_cost += (op.labor_minutes / 60) * rate
+        if op.explicit_cost:
+            other_cost += op.explicit_cost
+
+    total = material_cost + electricity_cost + labor_cost + other_cost
+
+    product = db.get(Product, spec.product_id)
+    margin = None
+    if product and product.sale_price and total > 0:
+        margin = ((product.sale_price - total) / product.sale_price * 100).quantize(Decimal("0.01"))
+
+    return CostBreakdown(
+        material_cost=material_cost.quantize(Decimal("0.0001")),
+        electricity_cost=electricity_cost.quantize(Decimal("0.0001")),
+        labor_cost=labor_cost.quantize(Decimal("0.0001")),
+        other_cost=other_cost.quantize(Decimal("0.0001")),
+        total=total.quantize(Decimal("0.0001")),
+        print_time_min=print_time_min,
+        margin_pct=margin,
+    )
+
+
+def _next_order_number(org: Organization, db: Session) -> str:
+    count = db.query(Order).filter(Order.organization_id == org.id).count()
+    return f"#ORD-{count + 1:04d}"
+
+
+def _update_avco(product_id: int, incoming_qty: Decimal, incoming_cost: Decimal, db: Session) -> None:
+    """Recalculate product.cost_price using Average Cost (AVCO) method.
+
+    Must be called BEFORE the new stock is added to StockEntry so that
+    current_qty reflects the quantity already on hand.
+    """
+    product = db.query(Product).with_for_update().filter(Product.id == product_id).first()
+    if product is None:
+        return
+
+    current_qty = db.query(func.sum(StockEntry.quantity)).filter(
+        StockEntry.product_id == product_id
+    ).scalar() or Decimal("0")
+
+    current_cost = product.cost_price or Decimal("0")
+
+    if current_qty > 0 and current_cost > 0:
+        new_cost = (current_qty * current_cost + incoming_qty * incoming_cost) / (current_qty + incoming_qty)
+    else:
+        new_cost = incoming_cost
+
+    product.cost_price = new_cost.quantize(Decimal("0.0001"))
+
+
+def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
+    """Update StockEntry rows to reflect a committed movement.
+
+    For PURCHASE_IN, updates AVCO on the product BEFORE adding stock so
+    the formula uses the quantity currently on hand.
+    """
+    q   = movement.quantity
+    mt  = movement.type
+    pid = movement.product_id
+
+    def _entry(product_id: int, warehouse_id: int) -> StockEntry:
+        row = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+        if not row:
+            product = db.get(Product, product_id)
+            row = StockEntry(
+                organization_id=product.organization_id,  # type: ignore[union-attr]
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+            )
+            db.add(row)
+        return row
+
+    if mt == MovementType.PURCHASE_IN and movement.warehouse_to_id:
+        if movement.unit_cost:
+            _update_avco(pid, q, movement.unit_cost, db)
+        _entry(pid, movement.warehouse_to_id).quantity += q
+
+    elif mt == MovementType.PRODUCTION_IN and movement.warehouse_to_id:
+        _entry(pid, movement.warehouse_to_id).quantity += q
+
+    elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.DEFECT) and movement.warehouse_from_id:
+        _entry(pid, movement.warehouse_from_id).quantity -= q
+
+    elif mt == MovementType.ADJUSTMENT:
+        wh_id = movement.warehouse_to_id or movement.warehouse_from_id
+        if wh_id:
+            _entry(pid, wh_id).quantity += q
+
+    elif mt == MovementType.TRANSFER and movement.warehouse_from_id and movement.warehouse_to_id:
+        _entry(pid, movement.warehouse_from_id).quantity -= q
+        _entry(pid, movement.warehouse_to_id).quantity   += q
+
+
+def _order_to_out(o: Order, db: Session) -> OrderOut:
+    items = db.query(OrderItem).filter_by(order_id=o.id).all()
+    item_outs = []
+    for it in items:
+        p = db.get(Product, it.product_id)
+        item_outs.append(OrderItemOut(
+            id=it.id,
+            product_id=it.product_id,
+            product_name=p.name if p else "",  # type: ignore[union-attr]
+            warehouse_id=it.warehouse_id,
+            quantity=it.quantity,
+            unit_price=it.unit_price,
+            total_price=it.total_price,
+        ))
+
+    counterparty_name: str | None = None
+    if o.counterparty_id:
+        cp = db.get(Counterparty, o.counterparty_id)
+        if cp:
+            counterparty_name = cp.name
+
+    total      = o.total_amount or Decimal("0")
+    paid       = o.paid_amount  or Decimal("0")
+    outstanding = max(total - paid, Decimal("0"))
+
+    return OrderOut(
+        id=o.id,
+        order_number=o.order_number,
+        counterparty_id=o.counterparty_id,
+        counterparty_name=counterparty_name,
+        customer_name=o.customer_name,
+        source=o.source,
+        status=o.status,
+        total_amount=o.total_amount,
+        paid_amount=paid,
+        outstanding=outstanding,
+        currency=o.currency,
+        due_date=o.due_date,
+        notes=o.notes,
+        items=item_outs,
+        created_at=o.created_at,
+    )
+
+
+# ── Warehouses ────────────────────────────────────────────────────────────────
+
+@router.get("/warehouses", response_model=list[WarehouseOut])
+def list_warehouses(db: Session = Depends(get_db), org: Organization = Depends(get_current_org)) -> list[WarehouseOut]:
+    rows = db.query(Warehouse).filter(Warehouse.organization_id == org.id).order_by(Warehouse.name).all()
+    return [WarehouseOut.model_validate(r) for r in rows]
+
+
+@router.post("/warehouses", response_model=WarehouseOut, status_code=status.HTTP_201_CREATED)
+def create_warehouse(
+    payload: WarehouseCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> WarehouseOut:
+    wh = Warehouse(**payload.model_dump(), organization_id=org.id)
+    db.add(wh)
+    db.commit()
+    db.refresh(wh)
+    return WarehouseOut.model_validate(wh)
+
+
+@router.patch("/warehouses/{wh_id}", response_model=WarehouseOut)
+def update_warehouse(
+    wh_id:   int,
+    payload: WarehouseUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> WarehouseOut:
+    wh = _get_warehouse(wh_id, org, db)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(wh, k, v)
+    db.commit()
+    db.refresh(wh)
+    return WarehouseOut.model_validate(wh)
+
+
+# ── Counterparties ────────────────────────────────────────────────────────────
+
+@router.get("/counterparties", response_model=list[CounterpartyOut])
+def list_counterparties(
+    cp_type: str | None = Query(None, alias="type"),
+    search:  str | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[CounterpartyOut]:
+    q = db.query(Counterparty).filter(Counterparty.organization_id == org.id)
+    if cp_type:
+        q = q.filter(Counterparty.type == cp_type)
+    if search:
+        q = q.filter(Counterparty.name.ilike(f"%{search}%") | Counterparty.email.ilike(f"%{search}%"))
+    rows = q.order_by(Counterparty.name).all()
+    return [CounterpartyOut.model_validate(r) for r in rows]
+
+
+@router.post("/counterparties", response_model=CounterpartyOut, status_code=status.HTTP_201_CREATED)
+def create_counterparty(
+    payload: CounterpartyCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CounterpartyOut:
+    cp = Counterparty(**payload.model_dump(), organization_id=org.id)
+    db.add(cp)
+    db.commit()
+    db.refresh(cp)
+    return CounterpartyOut.model_validate(cp)
+
+
+@router.get("/counterparties/{cp_id}", response_model=CounterpartyOut)
+def get_counterparty(
+    cp_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> CounterpartyOut:
+    return CounterpartyOut.model_validate(_get_counterparty(cp_id, org, db))
+
+
+@router.patch("/counterparties/{cp_id}", response_model=CounterpartyOut)
+def update_counterparty(
+    cp_id:   int,
+    payload: CounterpartyUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CounterpartyOut:
+    cp = _get_counterparty(cp_id, org, db)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(cp, k, v)
+    db.commit()
+    db.refresh(cp)
+    return CounterpartyOut.model_validate(cp)
+
+
+@router.delete("/counterparties/{cp_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_counterparty(
+    cp_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    cp = _get_counterparty(cp_id, org, db)
+    # Nullify references before deletion so existing orders are not orphaned
+    db.query(Order).filter_by(counterparty_id=cp.id).update({"counterparty_id": None})
+    db.delete(cp)
+    db.commit()
+
+
+@router.post("/counterparties/{cp_id}/adjust-balance", response_model=CounterpartyOut)
+def adjust_balance(
+    cp_id:   int,
+    payload: CounterpartyBalanceAdjust,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CounterpartyOut:
+    """Manually adjust counterparty balance (record a payment)."""
+    cp = _get_counterparty(cp_id, org, db)
+    cp.balance -= payload.delta   # delta positive = they paid us → reduces their balance
+    db.commit()
+    db.refresh(cp)
+    return CounterpartyOut.model_validate(cp)
+
+
+# ── Products ──────────────────────────────────────────────────────────────────
+
+@router.get("/products", response_model=list[ProductOut])
+def list_products(
+    search:   str | None = Query(None),
+    category: str | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ProductOut]:
+    q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
+    if search:
+        q = q.filter(Product.name.ilike(f"%{search}%") | Product.sku.ilike(f"%{search}%"))
+    if category:
+        q = q.filter(Product.categories.contains([category]))
+    rows = q.order_by(Product.name).all()
+    return [ProductOut.model_validate(r) for r in rows]
+
+
+@router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
+def create_product(
+    payload: ProductCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin)),
+) -> ProductOut:
+    p = Product(**payload.model_dump(), organization_id=org.id, created_by_id=user.id)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return ProductOut.model_validate(p)
+
+
+@router.get("/products/{product_id}", response_model=ProductOut)
+def get_product(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> ProductOut:
+    return ProductOut.model_validate(_get_product(product_id, org, db))
+
+
+@router.patch("/products/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: int,
+    payload:    ProductUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> ProductOut:
+    p = _get_product(product_id, org, db)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(p, k, v)
+    db.commit()
+    db.refresh(p)
+    return ProductOut.model_validate(p)
+
+
+# ── Specifications ────────────────────────────────────────────────────────────
+
+@router.get("/products/{product_id}/specs", response_model=list[SpecOut])
+def list_specs(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[SpecOut]:
+    _get_product(product_id, org, db)
+    specs = db.query(Specification).filter(Specification.product_id == product_id).order_by(Specification.version).all()
+    return [_spec_to_out(s, db) for s in specs]
+
+
+@router.post("/products/{product_id}/specs", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+def create_spec(
+    product_id: int,
+    payload:    SpecCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> SpecOut:
+    _get_product(product_id, org, db)
+    existing = db.query(Specification).filter(Specification.product_id == product_id).count()
+    spec = Specification(product_id=product_id, name=payload.name, notes=payload.notes, version=existing + 1)
+    if existing == 0:
+        spec.is_default = True
+    db.add(spec)
+    db.commit()
+    db.refresh(spec)
+    return _spec_to_out(spec, db)
+
+
+@router.get("/specs/{spec_id}", response_model=SpecOut)
+def get_spec(
+    spec_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> SpecOut:
+    return _spec_to_out(_get_spec(spec_id, org, db), db)
+
+
+@router.post("/specs/{spec_id}/set-default", response_model=SpecOut)
+def set_default_spec(
+    spec_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> SpecOut:
+    spec = _get_spec(spec_id, org, db)
+    db.query(Specification).filter(Specification.product_id == spec.product_id).update({"is_default": False})
+    spec.is_default = True
+    db.commit()
+    db.refresh(spec)
+    return _spec_to_out(spec, db)
+
+
+@router.post("/specs/{spec_id}/components", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+def add_component(
+    spec_id: int,
+    payload: SpecComponentCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> SpecOut:
+    spec = _get_spec(spec_id, org, db)
+    comp = SpecComponent(specification_id=spec.id, **payload.model_dump())
+    db.add(comp)
+    db.commit()
+    return _spec_to_out(spec, db)
+
+
+@router.delete("/specs/{spec_id}/components/{comp_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_component(
+    spec_id: int,
+    comp_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    _get_spec(spec_id, org, db)
+    comp = db.query(SpecComponent).filter_by(id=comp_id, specification_id=spec_id).first()
+    if not comp:
+        raise HTTPException(status_code=404, detail="Component not found")
+    db.delete(comp)
+    db.commit()
+
+
+@router.post("/specs/{spec_id}/operations", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+def add_operation(
+    spec_id: int,
+    payload: SpecOperationCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> SpecOut:
+    spec = _get_spec(spec_id, org, db)
+    op = SpecOperation(specification_id=spec.id, **payload.model_dump())
+    db.add(op)
+    db.commit()
+    return _spec_to_out(spec, db)
+
+
+@router.delete("/specs/{spec_id}/operations/{op_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_operation(
+    spec_id: int,
+    op_id:   int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    _get_spec(spec_id, org, db)
+    op = db.query(SpecOperation).filter_by(id=op_id, specification_id=spec_id).first()
+    if not op:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    db.delete(op)
+    db.commit()
+
+
+@router.get("/products/{product_id}/cost", response_model=CostBreakdown)
+def compute_cost(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> CostBreakdown:
+    _get_product(product_id, org, db)
+    spec = (
+        db.query(Specification)
+        .filter(Specification.product_id == product_id, Specification.is_default)
+        .first()
+    )
+    if not spec:
+        raise HTTPException(status_code=404, detail="No default specification")
+    cost = _calc_cost(spec, db)
+    p = db.get(Product, product_id)
+    if p:
+        p.direct_cost = cost.material_cost + cost.electricity_cost
+        p.full_cost   = cost.total
+        db.commit()
+    return cost
+
+
+# ── Stock ─────────────────────────────────────────────────────────────────────
+
+@router.get("/stock", response_model=list[StockEntryOut])
+def list_stock(
+    warehouse_id: int | None = Query(None),
+    product_id:   int | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[StockEntryOut]:
+    q = (
+        db.query(StockEntry, Product, Warehouse)
+        .join(Product,   Product.id   == StockEntry.product_id)
+        .join(Warehouse, Warehouse.id == StockEntry.warehouse_id)
+        .filter(StockEntry.organization_id == org.id)
+    )
+    if warehouse_id:
+        q = q.filter(StockEntry.warehouse_id == warehouse_id)
+    if product_id:
+        q = q.filter(StockEntry.product_id == product_id)
+    rows = q.order_by(Product.name).all()
+    return [
+        StockEntryOut(
+            id=e.id,
+            product_id=e.product_id,
+            product_name=p.name,
+            warehouse_id=e.warehouse_id,
+            warehouse_name=wh.name,
+            quantity=e.quantity,
+            reserved_qty=e.reserved_qty,
+            available=e.quantity - e.reserved_qty,
+            updated_at=e.updated_at,
+        )
+        for e, p, wh in rows
+    ]
+
+
+# ── Movements ─────────────────────────────────────────────────────────────────
+
+@router.get("/movements", response_model=list[MovementOut])
+def list_movements(
+    movement_type: MovementType | None = Query(None),
+    product_id:    int | None          = Query(None),
+    batch_id:      int | None          = Query(None),
+    order_id:      int | None          = Query(None),
+    limit:         int                 = Query(100, le=500),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[MovementOut]:
+    q = (
+        db.query(WarehouseMovement, Product)
+        .join(Product, Product.id == WarehouseMovement.product_id)
+        .filter(WarehouseMovement.organization_id == org.id)
+    )
+    if movement_type:
+        q = q.filter(WarehouseMovement.type == movement_type)
+    if product_id:
+        q = q.filter(WarehouseMovement.product_id == product_id)
+    if batch_id:
+        q = q.filter(WarehouseMovement.batch_id == batch_id)
+    if order_id:
+        q = q.filter(WarehouseMovement.order_id == order_id)
+    rows = q.order_by(WarehouseMovement.created_at.desc()).limit(limit).all()
+    return [
+        MovementOut(
+            id=m.id, type=m.type,
+            product_id=m.product_id, product_name=p.name,
+            warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
+            quantity=m.quantity, unit=m.unit,
+            unit_cost=m.unit_cost, total_cost=m.total_cost,
+            reason=m.reason, batch_id=m.batch_id, order_id=m.order_id,
+            created_at=m.created_at,
+        )
+        for m, p in rows
+    ]
+
+
+@router.post("/movements", response_model=MovementOut, status_code=status.HTTP_201_CREATED)
+def create_movement(
+    payload: MovementCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> MovementOut:
+    _get_product(payload.product_id, org, db)
+    total = (payload.quantity * payload.unit_cost) if payload.unit_cost else None
+    m = WarehouseMovement(
+        organization_id=org.id,
+        created_by_id=user.id,
+        total_cost=total,
+        **payload.model_dump(),
+    )
+    db.add(m)
+    db.flush()
+    _apply_movement(m, db)
+    db.commit()
+    db.refresh(m)
+    p = db.get(Product, m.product_id)
+    return MovementOut(
+        id=m.id, type=m.type,
+        product_id=m.product_id, product_name=p.name if p else "",  # type: ignore[union-attr]
+        warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
+        quantity=m.quantity, unit=m.unit,
+        unit_cost=m.unit_cost, total_cost=m.total_cost,
+        reason=m.reason, batch_id=m.batch_id, order_id=m.order_id,
+        created_at=m.created_at,
+    )
+
+
+# ── ProductionBatch ───────────────────────────────────────────────────────────
+
+def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
+    p = db.get(Product, b.product_id)
+    return BatchOut(
+        id=b.id, product_id=b.product_id,
+        product_name=p.name if p else "",  # type: ignore[union-attr]
+        specification_id=b.specification_id,
+        target_qty=b.target_qty, printed_qty=b.printed_qty,
+        good_qty=b.good_qty, defect_qty=b.defect_qty,
+        status=b.status, due_date=b.due_date,
+        order_id=b.order_id, notes=b.notes,
+        created_at=b.created_at, updated_at=b.updated_at,
+    )
+
+
+@router.get("/batches", response_model=list[BatchOut])
+def list_batches(
+    batch_status: BatchStatus | None = Query(None),
+    product_id:   int | None         = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[BatchOut]:
+    q = db.query(ProductionBatch).filter(ProductionBatch.organization_id == org.id)
+    if batch_status:
+        q = q.filter(ProductionBatch.status == batch_status)
+    if product_id:
+        q = q.filter(ProductionBatch.product_id == product_id)
+    rows = q.order_by(ProductionBatch.created_at.desc()).all()
+    return [_batch_to_out(b, db) for b in rows]
+
+
+@router.post("/batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
+def create_batch(
+    payload: BatchCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BatchOut:
+    _get_product(payload.product_id, org, db)
+    b = ProductionBatch(organization_id=org.id, created_by_id=user.id, **payload.model_dump())
+    db.add(b)
+    db.commit()
+    db.refresh(b)
+    return _batch_to_out(b, db)
+
+
+@router.get("/batches/{batch_id}", response_model=BatchOut)
+def get_batch(
+    batch_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> BatchOut:
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return _batch_to_out(b, db)
+
+
+@router.patch("/batches/{batch_id}", response_model=BatchOut)
+def update_batch(
+    batch_id: int,
+    payload:  BatchUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BatchOut:
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(b, k, v)
+    db.commit()
+    db.refresh(b)
+    return _batch_to_out(b, db)
+
+
+@router.post("/batches/{batch_id}/close", response_model=BatchOut)
+def close_batch(
+    batch_id: int,
+    payload:  BatchClose,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BatchOut:
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if b.status == BatchStatus.done:
+        raise HTTPException(status_code=400, detail="Batch already closed")
+
+    b.good_qty   = payload.good_qty
+    b.defect_qty = payload.defect_qty
+    b.status     = BatchStatus.done
+
+    if payload.good_qty > 0 and payload.finished_warehouse_id:
+        m_in = WarehouseMovement(
+            organization_id=org.id, created_by_id=user.id,
+            type=MovementType.PRODUCTION_IN,
+            product_id=b.product_id,
+            warehouse_to_id=payload.finished_warehouse_id,
+            quantity=Decimal(payload.good_qty), unit="шт",
+            batch_id=b.id,
+        )
+        db.add(m_in)
+        db.flush()
+        _apply_movement(m_in, db)
+
+    if payload.defect_qty > 0 and payload.defect_warehouse_id:
+        m_def = WarehouseMovement(
+            organization_id=org.id, created_by_id=user.id,
+            type=MovementType.DEFECT,
+            product_id=b.product_id,
+            warehouse_to_id=payload.defect_warehouse_id,
+            quantity=Decimal(payload.defect_qty), unit="шт",
+            batch_id=b.id,
+        )
+        db.add(m_def)
+        db.flush()
+        _apply_movement(m_def, db)
+
+    db.commit()
+    db.refresh(b)
+    return _batch_to_out(b, db)
+
+
+# ── Orders ────────────────────────────────────────────────────────────────────
+
+@router.get("/orders", response_model=list[OrderOut])
+def list_orders(
+    order_status: OrderStatus | None = Query(None),
+    counterparty_id: int | None      = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[OrderOut]:
+    q = db.query(Order).filter(Order.organization_id == org.id)
+    if order_status:
+        q = q.filter(Order.status == order_status)
+    if counterparty_id:
+        q = q.filter(Order.counterparty_id == counterparty_id)
+    rows = q.order_by(Order.created_at.desc()).all()
+    return [_order_to_out(o, db) for o in rows]
+
+
+@router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+def create_order(
+    payload: OrderCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderOut:
+    if payload.counterparty_id:
+        _get_counterparty(payload.counterparty_id, org, db)
+
+    order_number = _next_order_number(org, db)
+    total = sum(it.unit_price * it.quantity for it in payload.items) if payload.items else None
+
+    o = Order(
+        organization_id=org.id,
+        created_by_id=user.id,
+        order_number=order_number,
+        counterparty_id=payload.counterparty_id,
+        customer_name=payload.customer_name,
+        source=payload.source,
+        due_date=payload.due_date,
+        currency=payload.currency,
+        notes=payload.notes,
+        total_amount=total,
+    )
+    db.add(o)
+    db.flush()
+
+    for it in payload.items:
+        _get_product(it.product_id, org, db)
+        db.add(OrderItem(
+            order_id=o.id,
+            product_id=it.product_id,
+            warehouse_id=it.warehouse_id,
+            quantity=it.quantity,
+            unit_price=it.unit_price,
+            total_price=it.unit_price * it.quantity,
+        ))
+
+    db.commit()
+    db.refresh(o)
+    return _order_to_out(o, db)
+
+
+@router.get("/orders/{order_id}", response_model=OrderOut)
+def get_order(
+    order_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> OrderOut:
+    o = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return _order_to_out(o, db)
+
+
+@router.patch("/orders/{order_id}", response_model=OrderOut)
+def update_order(
+    order_id: int,
+    payload:  OrderUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderOut:
+    o = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if payload.counterparty_id is not None:
+        _get_counterparty(payload.counterparty_id, org, db)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(o, k, v)
+    db.commit()
+    db.refresh(o)
+    return _order_to_out(o, db)
+
+
+@router.post("/orders/{order_id}/reserve", response_model=OrderOut)
+def reserve_order(
+    order_id: int,
+    payload:  ReserveRequest,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderOut:
+    """Lock stock for all items in the order using SELECT FOR UPDATE.
+
+    Transitions order: new → confirmed.
+    Sets item.warehouse_id to the chosen warehouse for each item.
+    """
+    _get_warehouse(payload.warehouse_id, org, db)
+
+    # Lock the order row first to prevent double-reserve races
+    o = (
+        db.query(Order)
+        .filter_by(id=order_id, organization_id=org.id)
+        .with_for_update()
+        .first()
+    )
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if o.status != OrderStatus.new:
+        raise HTTPException(status_code=400, detail=f"Cannot reserve order with status '{o.status}'")
+
+    items = db.query(OrderItem).filter_by(order_id=o.id).all()
+    if not items:
+        raise HTTPException(status_code=400, detail="Order has no items")
+
+    # Check and lock stock for every item before mutating anything
+    shortage: list[str] = []
+    for item in items:
+        wh_id = item.warehouse_id or payload.warehouse_id
+        entry = (
+            db.query(StockEntry)
+            .filter_by(product_id=item.product_id, warehouse_id=wh_id)
+            .with_for_update()
+            .first()
+        )
+        available = (entry.quantity - entry.reserved_qty) if entry else Decimal("0")
+        if available < item.quantity:
+            product = db.get(Product, item.product_id)
+            name = product.name if product else f"#{item.product_id}"
+            shortage.append(f"{name}: потрібно {item.quantity}, доступно {available:.0f}")
+
+    if shortage:
+        raise HTTPException(
+            status_code=422,
+            detail="Недостатньо товару на складі:\n" + "\n".join(shortage),
+        )
+
+    # All checks passed — apply reservations
+    for item in items:
+        wh_id = item.warehouse_id or payload.warehouse_id
+
+        entry = db.query(StockEntry).filter_by(product_id=item.product_id, warehouse_id=wh_id).first()
+        if entry:
+            entry.reserved_qty += item.quantity
+
+        # Record which warehouse this item is reserved from
+        item.warehouse_id = wh_id
+
+    o.status = OrderStatus.confirmed
+    db.commit()
+    db.refresh(o)
+    return _order_to_out(o, db)
+
+
+@router.post("/orders/{order_id}/ship", response_model=OrderOut)
+def ship_order(
+    order_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderOut:
+    """Deduct stock, create SALE_OUT movements, update counterparty balance.
+
+    Transitions order: confirmed | ready → shipped.
+    """
+    o = (
+        db.query(Order)
+        .filter_by(id=order_id, organization_id=org.id)
+        .with_for_update()
+        .first()
+    )
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if o.status not in (OrderStatus.confirmed, OrderStatus.ready):
+        raise HTTPException(status_code=400, detail=f"Cannot ship order with status '{o.status}'")
+
+    items = db.query(OrderItem).filter_by(order_id=o.id).all()
+
+    for item in items:
+        if not item.warehouse_id:
+            product = db.get(Product, item.product_id)
+            name = product.name if product else f"#{item.product_id}"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item '{name}' has no warehouse assigned — reserve the order first",
+            )
+
+        # Lock and deduct
+        entry = (
+            db.query(StockEntry)
+            .filter_by(product_id=item.product_id, warehouse_id=item.warehouse_id)
+            .with_for_update()
+            .first()
+        )
+        if entry:
+            entry.quantity     -= item.quantity
+            entry.reserved_qty -= min(entry.reserved_qty, Decimal(item.quantity))
+
+        # Create audit movement
+        cost_price = db.get(Product, item.product_id)
+        unit_cost  = cost_price.cost_price if cost_price else None
+        total_cost = (unit_cost * item.quantity) if unit_cost else None
+
+        m = WarehouseMovement(
+            organization_id=org.id,
+            created_by_id=user.id,
+            type=MovementType.SALE_OUT,
+            product_id=item.product_id,
+            warehouse_from_id=item.warehouse_id,
+            quantity=Decimal(item.quantity),
+            unit="шт",
+            unit_cost=unit_cost,
+            total_cost=total_cost,
+            order_id=o.id,
+        )
+        db.add(m)
+
+    # Update counterparty balance (outstanding debt)
+    if o.counterparty_id:
+        outstanding = (o.total_amount or Decimal("0")) - (o.paid_amount or Decimal("0"))
+        if outstanding > 0:
+            cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+            if cp:
+                cp.balance += outstanding
+
+    # Auto-create cash transaction for the paid portion
+    paid = o.paid_amount or Decimal("0")
+    if paid > 0:
+        tx = CashTransaction(
+            organization_id=org.id,
+            created_by_id=user.id,
+            type=CashTxType.income,
+            category=CashTxCategory.order_payment,
+            amount=paid,
+            counterparty_id=o.counterparty_id,
+            order_id=o.id,
+            description=f"Оплата {o.order_number}",
+            transaction_date=date.today(),
+        )
+        db.add(tx)
+
+    o.status = OrderStatus.shipped
+    db.commit()
+    db.refresh(o)
+    return _order_to_out(o, db)
+
+
+@router.post("/orders/{order_id}/cancel", response_model=OrderOut)
+def cancel_order(
+    order_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderOut:
+    """Cancel an order and release any reserved stock."""
+    o = (
+        db.query(Order)
+        .filter_by(id=order_id, organization_id=org.id)
+        .with_for_update()
+        .first()
+    )
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if o.status == OrderStatus.shipped:
+        raise HTTPException(status_code=400, detail="Cannot cancel a shipped order")
+
+    # Release reservations if the order was confirmed
+    if o.status == OrderStatus.confirmed:
+        items = db.query(OrderItem).filter_by(order_id=o.id).all()
+        for item in items:
+            if item.warehouse_id:
+                entry = (
+                    db.query(StockEntry)
+                    .filter_by(product_id=item.product_id, warehouse_id=item.warehouse_id)
+                    .with_for_update()
+                    .first()
+                )
+                if entry:
+                    entry.reserved_qty -= min(entry.reserved_qty, Decimal(item.quantity))
+
+    o.status = OrderStatus.cancelled
+    db.commit()
+    db.refresh(o)
+    return _order_to_out(o, db)
+
+
+# ── Cash Flow ─────────────────────────────────────────────────────────────────
+
+def _tx_to_out(tx: CashTransaction, db: Session) -> CashTxOut:
+    cp_name: str | None = None
+    if tx.counterparty_id:
+        cp = db.get(Counterparty, tx.counterparty_id)
+        if cp:
+            cp_name = cp.name
+
+    order_number: str | None = None
+    if tx.order_id:
+        o = db.get(Order, tx.order_id)
+        if o:
+            order_number = o.order_number
+
+    return CashTxOut(
+        id=tx.id,
+        type=tx.type,
+        category=tx.category,
+        amount=tx.amount,
+        counterparty_id=tx.counterparty_id,
+        counterparty_name=cp_name,
+        order_id=tx.order_id,
+        order_number=order_number,
+        description=tx.description,
+        transaction_date=tx.transaction_date,
+        created_at=tx.created_at,
+    )
+
+
+@router.get("/cashflow", response_model=list[CashTxOut])
+def list_cashflow(
+    tx_type:    str | None = Query(None, alias="type"),
+    date_from:  date | None = Query(None),
+    date_to:    date | None = Query(None),
+    counterparty_id: int | None = Query(None),
+    limit:      int = Query(200, le=1000),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[CashTxOut]:
+    q = db.query(CashTransaction).filter(CashTransaction.organization_id == org.id)
+    if tx_type:
+        q = q.filter(CashTransaction.type == tx_type)
+    if date_from:
+        q = q.filter(CashTransaction.transaction_date >= date_from)
+    if date_to:
+        q = q.filter(CashTransaction.transaction_date <= date_to)
+    if counterparty_id:
+        q = q.filter(CashTransaction.counterparty_id == counterparty_id)
+    rows = q.order_by(CashTransaction.transaction_date.desc(), CashTransaction.id.desc()).limit(limit).all()
+    return [_tx_to_out(tx, db) for tx in rows]
+
+
+@router.post("/cashflow", response_model=CashTxOut, status_code=status.HTTP_201_CREATED)
+def create_cash_tx(
+    payload: CashTxCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CashTxOut:
+    if payload.counterparty_id:
+        _get_counterparty(payload.counterparty_id, org, db)
+    if payload.order_id:
+        o = db.query(Order).filter_by(id=payload.order_id, organization_id=org.id).first()
+        if not o:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+    tx = CashTransaction(
+        organization_id=org.id,
+        created_by_id=user.id,
+        **payload.model_dump(),
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return _tx_to_out(tx, db)
+
+
+@router.delete("/cashflow/{tx_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cash_tx(
+    tx_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    tx = db.query(CashTransaction).filter_by(id=tx_id, organization_id=org.id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    db.delete(tx)
+    db.commit()
+
+
+@router.get("/cashflow/summary", response_model=CashFlowSummary)
+def cashflow_summary(
+    date_from: date | None = Query(None),
+    date_to:   date | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> CashFlowSummary:
+    q = db.query(CashTransaction).filter(CashTransaction.organization_id == org.id)
+    if date_from:
+        q = q.filter(CashTransaction.transaction_date >= date_from)
+    if date_to:
+        q = q.filter(CashTransaction.transaction_date <= date_to)
+    txs = q.all()
+
+    total_income  = sum(tx.amount for tx in txs if tx.type == CashTxType.income)
+    total_expense = sum(tx.amount for tx in txs if tx.type == CashTxType.expense)
+
+    # Group by category
+    cat_totals: dict[tuple, Decimal] = {}
+    for tx in txs:
+        key = (tx.category.value, tx.type.value)
+        cat_totals[key] = cat_totals.get(key, Decimal("0")) + tx.amount
+
+    by_category = [
+        {"category": cat, "type": typ, "total": float(total)}
+        for (cat, typ), total in sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return CashFlowSummary(
+        total_income=total_income,
+        total_expense=total_expense,
+        net=total_income - total_expense,
+        by_category=by_category,
+    )
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+class TopProduct(BaseModel):
+    product_id:   int
+    product_name: str
+    revenue:      Decimal
+    units:        int
+
+class MaterialCost(BaseModel):
+    name: str
+    cost: Decimal
+
+class CashFlowBucket(BaseModel):
+    label:   str
+    inflow:  Decimal
+    outflow: Decimal
+
+class WarehouseAnalytics(BaseModel):
+    revenue:        Decimal
+    cogs:           Decimal
+    gross_profit:   Decimal
+    margin_pct:     Decimal
+    units_produced: int
+    units_sold:     int
+    defect_rate:    Decimal
+    top_products:   list[TopProduct]
+    material_costs: list[MaterialCost]
+    cash_flow:      list[CashFlowBucket]
+
+
+def _period_range(period: str) -> tuple[date, date]:
+    today = date.today()
+    if period == "month":
+        start = today.replace(day=1)
+    elif period == "quarter":
+        q_start_month = ((today.month - 1) // 3) * 3 + 1
+        start = today.replace(month=q_start_month, day=1)
+    else:
+        start = today.replace(month=1, day=1)
+    return start, today
+
+
+@router.get("/analytics", response_model=WarehouseAnalytics)
+def get_analytics(
+    period: str          = Query("month", pattern="^(month|quarter|year)$"),
+    db:     Session      = Depends(get_db),
+    org:    Organization = Depends(get_current_org),
+) -> WarehouseAnalytics:
+    start, end = _period_range(period)
+
+    def _mvmt(mtype: MovementType) -> list[WarehouseMovement]:
+        return (
+            db.query(WarehouseMovement)
+            .filter(
+                WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == mtype,
+                func.date(WarehouseMovement.created_at) >= start,
+                func.date(WarehouseMovement.created_at) <= end,
+            )
+            .all()
+        )
+
+    sales     = _mvmt(MovementType.SALE_OUT)
+    prod_out  = _mvmt(MovementType.PRODUCTION_OUT)
+    purchases = _mvmt(MovementType.PURCHASE_IN)
+
+    revenue      = sum((m.total_cost or Decimal("0")) for m in sales)
+    cogs         = sum((m.total_cost or Decimal("0")) for m in prod_out)
+    gross_profit = revenue - cogs
+    margin_pct   = (gross_profit / revenue * 100) if revenue > 0 else Decimal("0")
+
+    batches_done = (
+        db.query(ProductionBatch)
+        .filter(
+            ProductionBatch.organization_id == org.id,
+            ProductionBatch.status == BatchStatus.done,
+            func.date(ProductionBatch.updated_at) >= start,
+        )
+        .all()
+    )
+    total_printed  = sum(b.good_qty + b.defect_qty for b in batches_done)
+    units_produced = sum(b.good_qty for b in batches_done)
+    units_sold     = int(sum(m.quantity for m in sales))
+    defect_rate    = (
+        Decimal(sum(b.defect_qty for b in batches_done)) / Decimal(total_printed) * 100
+        if total_printed > 0 else Decimal("0")
+    )
+
+    rev_by: dict[int, Decimal] = {}
+    qty_by: dict[int, int]    = {}
+    for m in sales:
+        rev_by[m.product_id] = rev_by.get(m.product_id, Decimal("0")) + (m.total_cost or Decimal("0"))
+        qty_by[m.product_id] = qty_by.get(m.product_id, 0) + int(m.quantity)
+
+    top_products = [
+        TopProduct(
+            product_id=pid,
+            product_name=(db.get(Product, pid).name if db.get(Product, pid) else f"#{pid}"),
+            revenue=rev,
+            units=qty_by.get(pid, 0),
+        )
+        for pid, rev in sorted(rev_by.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    mat: dict[str, Decimal] = {}
+    for m in purchases:
+        p = db.get(Product, m.product_id)
+        key = p.name if p else f"#{m.product_id}"
+        mat[key] = mat.get(key, Decimal("0")) + (m.total_cost or Decimal("0"))
+    material_costs = [
+        MaterialCost(name=n, cost=c)
+        for n, c in sorted(mat.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    month_names = ["Січ","Лют","Бер","Квіт","Трав","Черв","Лип","Серп","Вер","Жовт","Лист","Груд"]
+    cash_flow: list[CashFlowBucket] = []
+
+    if period == "month":
+        week = start
+        while week <= end:
+            w_end = min(week + timedelta(days=6), end)
+            label   = f"{week.day}–{w_end.day} {week.strftime('%b')}"
+            inflow  = sum((m.total_cost or Decimal("0")) for m in (sales + purchases) if week <= m.created_at.date() <= w_end)
+            outflow = sum((m.total_cost or Decimal("0")) for m in prod_out             if week <= m.created_at.date() <= w_end)
+            cash_flow.append(CashFlowBucket(label=label, inflow=inflow, outflow=outflow))
+            week = w_end + timedelta(days=1)
+    else:
+        buckets: dict[str, tuple[Decimal, Decimal]] = {}
+        for m in (sales + purchases):
+            k = m.created_at.strftime("%Y-%m")
+            i, o_val = buckets.get(k, (Decimal("0"), Decimal("0")))
+            buckets[k] = (i + (m.total_cost or Decimal("0")), o_val)
+        for m in prod_out:
+            k = m.created_at.strftime("%Y-%m")
+            i, o_val = buckets.get(k, (Decimal("0"), Decimal("0")))
+            buckets[k] = (i, o_val + (m.total_cost or Decimal("0")))
+        for k in sorted(buckets):
+            mo = int(k[5:])
+            i, o_val = buckets[k]
+            cash_flow.append(CashFlowBucket(label=month_names[mo - 1], inflow=i, outflow=o_val))
+
+    return WarehouseAnalytics(
+        revenue=revenue, cogs=cogs, gross_profit=gross_profit,
+        margin_pct=margin_pct.quantize(Decimal("0.1")),
+        units_produced=units_produced, units_sold=units_sold,
+        defect_rate=defect_rate.quantize(Decimal("0.1")),
+        top_products=top_products,
+        material_costs=material_costs,
+        cash_flow=cash_flow,
+    )
