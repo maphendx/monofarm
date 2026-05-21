@@ -420,6 +420,18 @@ def update_product(
     return ProductOut.model_validate(p)
 
 
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    p = _get_product(product_id, org, db)
+    p.is_active = False
+    db.commit()
+
+
 # ── Specifications ────────────────────────────────────────────────────────────
 
 @router.get("/products/{product_id}/specs", response_model=list[SpecOut])
