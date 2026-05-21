@@ -42,50 +42,81 @@ const NAV_GROUPS = [
   },
 ];
 
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+
 function isActive(href: string, pathname: string, exact?: boolean) {
   if (exact) return pathname === href;
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-export default function WarehouseLayout({ children }: { children: React.ReactNode }) {
+function NavLink({ href, label, exact }: { href: string; label: string; exact?: boolean }) {
   const pathname = usePathname();
-
+  const active = isActive(href, pathname, exact);
   return (
-    // Break out of parent px-6 py-6 to let the sub-nav sit flush on the left
-    <div className="-mx-6 -mt-6 flex min-h-[calc(100vh-56px)]">
+    <Link
+      href={href}
+      className={[
+        "flex items-center rounded-md px-3 py-1.5 text-sm transition-colors",
+        active
+          ? "bg-cyan-500/10 font-medium text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-400"
+          : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-neutral-100",
+      ].join(" ")}
+    >
+      {label}
+    </Link>
+  );
+}
 
-      {/* ── Sub-nav ───────────────────────────────────────────────────────────── */}
-      <nav className="w-44 shrink-0 border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#161614] flex flex-col py-4 px-2 gap-0.5">
+export default function WarehouseLayout({ children }: { children: React.ReactNode }) {
+  return (
+    /*
+     * Break out of the parent's px-6 py-6 padding AND the mx-auto max-w-[1400px] centering
+     * so the warehouse section fills the full width of <main> (100vw - sidebar 3.5rem).
+     *
+     * margin-left = -(parent padding 1.5rem) - auto margin from max-w centering
+     * auto margin = max(0, (100vw - sidebar - max-w) / 2)
+     *             = max(0, (100vw - 3.5rem - 87.5rem) / 2)   [87.5rem = 1400px]
+     *
+     * On screens ≤ 1456px (sidebar + 1400px): auto margin = 0, so just -1.5rem (normal px-6 removal).
+     * On wider screens: negative margin grows to pull content flush left.
+     */
+    <div
+      className="-mt-6 flex min-h-screen flex-col md:flex-row"
+      style={{
+        marginLeft: "calc(-1.5rem - max(0px, (100vw - 3.5rem - 87.5rem) / 2))",
+        width: "calc(100vw - 3.5rem)",
+      }}
+    >
+
+      {/* ── Mobile: horizontal scrolling nav ─────────────────────────────── */}
+      <div className="shrink-0 border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#161614] md:hidden">
+        <div className="flex gap-0.5 overflow-x-auto px-3 py-2">
+          {ALL_ITEMS.map((item) => (
+            <NavLink key={item.href} {...item} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Desktop: vertical sub-nav ─────────────────────────────────────── */}
+      <nav className="hidden w-44 shrink-0 flex-col overflow-y-auto border-r border-neutral-200 bg-white px-3 pb-6 pt-3 dark:border-neutral-800 dark:bg-[#161614] md:flex">
         {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} className={gi > 0 ? "mt-3" : ""}>
+          <div key={gi} className={gi > 0 ? "mt-6" : ""}>
             {group.label && (
-              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-600 select-none">
+              <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400/60 select-none dark:text-neutral-600">
                 {group.label}
               </p>
             )}
-            {group.items.map((item) => {
-              const active = isActive(item.href, pathname, (item as { exact?: boolean }).exact);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={[
-                    "flex h-8 items-center rounded-md px-2 text-sm transition-colors",
-                    active
-                      ? "bg-cyan-50 text-cyan-700 font-medium dark:bg-cyan-950/40 dark:text-cyan-400"
-                      : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
-                  ].join(" ")}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            <div className="flex flex-col gap-0.5">
+              {group.items.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
+            </div>
           </div>
         ))}
       </nav>
 
-      {/* ── Content ───────────────────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 px-6 py-6">
+      {/* ── Content ───────────────────────────────────────────────────────── */}
+      <div className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-6">
         {children}
       </div>
     </div>
