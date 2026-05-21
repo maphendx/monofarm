@@ -83,6 +83,19 @@ class CashTxCategory(str, enum.Enum):
     other            = "other"
 
 
+# ── Product category ──────────────────────────────────────────────────────────
+
+class ProductCategory(Base):
+    __tablename__ = "wh_product_categories"
+
+    id:              Mapped[int]      = mapped_column(primary_key=True)
+    organization_id: Mapped[int]      = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name:            Mapped[str]      = mapped_column(String(120))
+    color:           Mapped[str | None] = mapped_column(String(7), nullable=True)   # hex e.g. #e5e7eb
+    sort_order:      Mapped[int]      = mapped_column(Integer, default=0)
+    created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # ── Warehouse ─────────────────────────────────────────────────────────────────
 
 class Warehouse(Base):

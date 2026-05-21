@@ -9,6 +9,31 @@ from app.models.warehouse import (
 )
 
 
+# ── Product category ──────────────────────────────────────────────────────────
+
+class ProductCategoryCreate(BaseModel):
+    name:       str
+    color:      str | None = None
+    sort_order: int = 0
+
+
+class ProductCategoryUpdate(BaseModel):
+    name:       str | None = None
+    color:      str | None = None
+    sort_order: int | None = None
+
+
+class ProductCategoryOut(BaseModel):
+    id:         int
+    name:       str
+    color:      str | None
+    sort_order: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Warehouse ─────────────────────────────────────────────────────────────────
 
 class WarehouseCreate(BaseModel):

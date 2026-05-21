@@ -14,7 +14,7 @@ from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
     Counterparty, MovementType, Order, OrderItem,
-    OrderStatus, ProductionBatch, SpecComponent, SpecOperation,
+    OrderStatus, ProductCategory, ProductionBatch, SpecComponent, SpecOperation,
     Specification, StockEntry, Warehouse, WarehouseMovement, Product,
 )
 from app.schemas.warehouse import (
@@ -24,6 +24,7 @@ from app.schemas.warehouse import (
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementOut,
     OrderCreate, OrderItemOut, OrderOut, OrderUpdate,
+    ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
     ProductCreate, ProductOut, ProductUpdate, ReserveRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
     StockEntryOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
@@ -34,6 +35,68 @@ router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 _ELECTRICITY_RATE = Decimal("4.5")   # ₴/кВт·год
 _LABOR_RATE       = Decimal("150")   # ₴/год
 _PRINTER_WATTS    = 200              # Вт
+
+
+# ── Product categories ────────────────────────────────────────────────────────
+
+@router.get("/categories", response_model=list[ProductCategoryOut])
+def list_categories(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ProductCategoryOut]:
+    rows = (
+        db.query(ProductCategory)
+        .filter(ProductCategory.organization_id == org.id)
+        .order_by(ProductCategory.sort_order, ProductCategory.name)
+        .all()
+    )
+    return [ProductCategoryOut.model_validate(r) for r in rows]
+
+
+@router.post("/categories", response_model=ProductCategoryOut, status_code=status.HTTP_201_CREATED)
+def create_category(
+    payload: ProductCategoryCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin)),
+) -> ProductCategoryOut:
+    cat = ProductCategory(**payload.model_dump(), organization_id=org.id)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return ProductCategoryOut.model_validate(cat)
+
+
+@router.patch("/categories/{cat_id}", response_model=ProductCategoryOut)
+def update_category(
+    cat_id:  int,
+    payload: ProductCategoryUpdate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin)),
+) -> ProductCategoryOut:
+    cat = db.query(ProductCategory).filter_by(id=cat_id, organization_id=org.id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(cat, k, v)
+    db.commit()
+    db.refresh(cat)
+    return ProductCategoryOut.model_validate(cat)
+
+
+@router.delete("/categories/{cat_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(
+    cat_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    cat = db.query(ProductCategory).filter_by(id=cat_id, organization_id=org.id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    db.delete(cat)
+    db.commit()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -13,8 +13,9 @@ const NAV_GROUPS = [
   {
     label: "Товари",
     items: [
-      { href: "/warehouse/products", label: "Номенклатура" },
-      { href: "/warehouse/stock",    label: "Залишки" },
+      { href: "/warehouse/products",    label: "Номенклатура" },
+      { href: "/warehouse/stock",       label: "Залишки" },
+      { href: "/warehouse/categories",  label: "Категорії" },
     ],
   },
   {

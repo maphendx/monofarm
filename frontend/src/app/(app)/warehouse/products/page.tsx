@@ -13,6 +13,7 @@ type Product = {
 };
 
 type StockEntry = { product_id: number; available: string };
+type ProductCat = { id: number; name: string; color: string | null };
 
 type Spec = {
   id: number; product_id: number; version: number; name: string; is_default: boolean;
@@ -652,9 +653,10 @@ function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [stock,    setStock]    = useState<StockEntry[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [products,   setProducts]   = useState<Product[]>([]);
+  const [stock,      setStock]      = useState<StockEntry[]>([]);
+  const [cats,       setCats]       = useState<ProductCat[]>([]);
+  const [loading,    setLoading]    = useState(true);
 
   const [search,   setSearch]   = useState("");
   const [category, setCategory] = useState("Всі");
@@ -671,12 +673,14 @@ export default function ProductsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [prods, stk] = await Promise.all([
+      const [prods, stk, cs] = await Promise.all([
         api<Product[]>("/api/warehouse/products"),
         api<StockEntry[]>("/api/warehouse/stock"),
+        api<ProductCat[]>("/api/warehouse/categories"),
       ]);
       setProducts(prods);
       setStock(stk);
+      setCats(cs);
     } finally { setLoading(false); }
   }, []);
 
@@ -688,10 +692,19 @@ export default function ProductsPage() {
     return map;
   }, [stock]);
 
-  const allCategories = useMemo(
-    () => ["Всі", ...Array.from(new Set(products.flatMap((p) => p.categories))).sort()],
-    [products],
-  );
+  // Merge: API categories + any ad-hoc tags from products not yet in registry
+  const allCategories = useMemo(() => {
+    const fromApi  = cats.map((c) => c.name);
+    const fromProds = Array.from(new Set(products.flatMap((p) => p.categories)));
+    const extra = fromProds.filter((n) => !fromApi.includes(n));
+    return ["Всі", ...fromApi, ...extra.sort()];
+  }, [cats, products]);
+
+  const catColorMap = useMemo(() => {
+    const m = new Map<string, string | null>();
+    cats.forEach((c) => m.set(c.name, c.color));
+    return m;
+  }, [cats]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -778,10 +791,35 @@ export default function ProductsPage() {
                 value={search} onChange={(e) => setSearch(e.target.value)}
                 className="h-9 rounded-lg border border-neutral-200 bg-white pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200" />
             </div>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}
-              className="h-9 rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-700 outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-              {allCategories.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <div className="flex flex-wrap gap-1">
+              {allCategories.map((c) => {
+                const color  = c === "Всі" ? null : catColorMap.get(c);
+                const active = category === c;
+                return (
+                  <button
+                    key={c}
+                    onClick={() => setCategory(c)}
+                    className={[
+                      "h-7 rounded-full px-2.5 text-xs font-medium transition-colors",
+                      active
+                        ? "ring-2 ring-offset-1 ring-neutral-900 dark:ring-neutral-100"
+                        : "opacity-70 hover:opacity-100",
+                    ].join(" ")}
+                    style={color ? { background: color, color: "#111" } : undefined}
+                    {...(!color ? {
+                      className: [
+                        "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
+                        active
+                          ? "bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100"
+                          : "border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500",
+                      ].join(" "),
+                    } : {})}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
             <span className="text-sm text-neutral-400">{filtered.length} позицій</span>
           </div>
           <button onClick={() => setEditProduct("create")}
@@ -853,13 +891,20 @@ export default function ProductsPage() {
                       <td className="px-4 py-3 font-mono text-xs text-neutral-500">{p.sku}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
-                          {p.categories.map((c) => (
-                            <span key={c}
-                              className="cursor-pointer rounded-full bg-neutral-100 px-2 py-0.5 text-xs hover:bg-neutral-200 dark:bg-neutral-800"
-                              onClick={() => setCategory(c)}>
-                              {c}
-                            </span>
-                          ))}
+                          {p.categories.map((c) => {
+                            const color = catColorMap.get(c);
+                            return (
+                              <span
+                                key={c}
+                                onClick={() => setCategory(c)}
+                                className="cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
+                                style={color ? { background: color, color: "#111" } : undefined}
+                                {...(!color ? { className: "cursor-pointer rounded-full bg-neutral-100 px-2 py-0.5 text-xs hover:bg-neutral-200 dark:bg-neutral-800 transition-opacity" } : {})}
+                              >
+                                {c}
+                              </span>
+                            );
+                          })}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-neutral-500">{p.unit}</td>
