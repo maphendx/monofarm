@@ -1,8 +1,12 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # "development" | "production"
+    ENV: str = "development"
 
     DATABASE_URL: str
     SECRET_KEY: str
@@ -34,12 +38,13 @@ class Settings(BaseSettings):
 
     # Fernet key for encrypting sensitive DB fields (Bambu credentials).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    # Empty = encryption disabled (plain text stored — acceptable for dev, not for production).
+    # Required when ENV=production — server refuses to start without it.
     ENCRYPTION_KEY: str = ""
 
-    # Set to false when running uvicorn --workers N (use separate worker process instead).
-    # True = dev-friendly: Telegram + APScheduler + Bambu MQTT start inside the web process.
-    INLINE_WORKERS: bool = True
+    # Set to true in dev (single uvicorn process).
+    # False = Telegram + APScheduler + Bambu MQTT run in a separate worker process.
+    # Required when running uvicorn --workers N to avoid duplicate bots/schedulers.
+    INLINE_WORKERS: bool = False
 
     REDIS_URL: str = ""             # e.g. redis://localhost:6379 — empty = in-process fallback
 
@@ -48,6 +53,15 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str = ""
     S3_SECRET_KEY: str = ""
     S3_BUCKET: str = ""
+
+    @model_validator(mode="after")
+    def _check_production_requirements(self) -> "Settings":
+        if self.ENV == "production" and not self.ENCRYPTION_KEY:
+            raise ValueError(
+                "ENCRYPTION_KEY must be set in production. "
+                "Generate one: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:
