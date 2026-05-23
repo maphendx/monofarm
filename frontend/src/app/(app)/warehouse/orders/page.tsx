@@ -32,7 +32,8 @@ type Order = {
   customer_name: string | null; source: string;
   status: OrderStatus; total_amount: string | null;
   paid_amount: string; outstanding: string;
-  due_date: string | null; items: OrderItem[]; created_at: string;
+  due_date: string | null; notes: string | null;
+  items: OrderItem[]; created_at: string;
 };
 
 type Product     = { id: number; name: string; sku: string; sale_price: string | null };
