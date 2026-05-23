@@ -3,8 +3,8 @@
 Allows OrcaSlicer (and any other OctoPrint-aware slicer) to upload gcode files
 directly to this server. Configure in OrcaSlicer:
   Host Type:  OctoPrint
-  Hostname:   https://your-domain.com   (or http://localhost:8000)
-  API Key:    <your JWT token from this app>
+  Hostname:   https://api.monofarm.app
+  API Key:    <your API key from this app>
 
 Implemented endpoints (minimal subset OrcaSlicer requires):
   GET  /api/version       — version handshake / connection test
@@ -157,7 +157,7 @@ async def octo_upload(
 
     # Frontend URL for the Device tab webview in OrcaSlicer
     frontend = settings.FARM_PUBLIC_URL.rstrip("/")
-    backend = "http://localhost:8000"
+    backend = settings.FARM_PUBLIC_URL.rstrip("/")
     files_url = f"{frontend}/files?highlight={row.id}"
 
     return {

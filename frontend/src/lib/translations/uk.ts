@@ -367,7 +367,7 @@ const uk = {
     agentChecking: "Перевірка…",
     agentDesc: "Запусти агент на Raspberry Pi або PC у мережі принтерів — одна команда, і всі Klipper-принтери з'являться віддалено.",
     agentLocal: "Локальна розробка:",
-    agentLocalDesc: "сервер на localhost:8000. Агент на тому самому PC підключиться, але для тесту з іншого пристрою потрібна реальна IP-адреса сервера.",
+    agentLocalDesc: "сервер на api.monofarm.app. Агент на PC у мережі принтерів підключиться через хмарний сервер.",
     agentLinux: "Raspberry Pi / Linux",
     agentDocker: "Docker",
     agentLinuxDesc: "Одна команда: встановлює залежності, завантажує агент і додає його в systemd (автозапуск при перезавантаженні).",

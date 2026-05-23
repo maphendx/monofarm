@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # monofarm-agent installer
-# Usage: curl -sSL http://localhost:8000/agent/install.sh | bash -s -- --server http://localhost:8000
+# Usage: curl -sSL https://api.monofarm.app/agent/install.sh | bash
 # Token is NOT required — the agent opens a browser for pairing on first start.
 
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 # ── parse args ────────────────────────────────────────────────────────────────
 
 TOKEN=""
-SERVER="http://localhost:8000"
+SERVER="https://api.monofarm.app"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -61,7 +61,7 @@ curl -sSL "$SERVER/agent/monofarm_agent.py" -o "$INSTALL_DIR/monofarm_agent.py"
 
 # ── write config ──────────────────────────────────────────────────────────────
 
-FRONTEND="${SERVER//:8000/:3000}"
+FRONTEND="https://monofarm.app"
 cat > "$INSTALL_DIR/.env" <<EOF
 MONOFARM_SERVER=${SERVER}
 MONOFARM_FRONTEND=${FRONTEND}

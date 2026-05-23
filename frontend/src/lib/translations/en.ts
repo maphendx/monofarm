@@ -373,7 +373,7 @@ const en = {
     agentChecking: "Checking…",
     agentDesc: "Run the agent on a Raspberry Pi or PC in the printer network — one command and all Klipper printers appear remotely.",
     agentLocal: "Local development:",
-    agentLocalDesc: "server on localhost:8000. The agent on the same PC will connect, but to test from another device you need the real server IP.",
+    agentLocalDesc: "server at api.monofarm.app. The agent on the printer network PC connects through the cloud server.",
     agentLinux: "Raspberry Pi / Linux",
     agentDocker: "Docker",
     agentLinuxDesc: "One command: installs dependencies, downloads the agent and adds it to systemd (auto-start on reboot).",
