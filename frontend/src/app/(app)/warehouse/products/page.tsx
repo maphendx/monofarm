@@ -799,21 +799,16 @@ export default function ProductsPage() {
                   <button
                     key={c}
                     onClick={() => setCategory(c)}
-                    className={[
+                    className={color ? [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors",
+                      active ? "ring-2 ring-offset-1 ring-neutral-900 dark:ring-neutral-100" : "opacity-70 hover:opacity-100",
+                    ].join(" ") : [
+                      "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
                       active
-                        ? "ring-2 ring-offset-1 ring-neutral-900 dark:ring-neutral-100"
-                        : "opacity-70 hover:opacity-100",
+                        ? "bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100"
+                        : "border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500",
                     ].join(" ")}
                     style={color ? { background: color, color: "#111" } : undefined}
-                    {...(!color ? {
-                      className: [
-                        "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
-                        active
-                          ? "bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100"
-                          : "border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500",
-                      ].join(" "),
-                    } : {})}
                   >
                     {c}
                   </button>
@@ -897,9 +892,10 @@ export default function ProductsPage() {
                               <span
                                 key={c}
                                 onClick={() => setCategory(c)}
-                                className="cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
+                                className={color
+                                  ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
+                                  : "cursor-pointer rounded-full bg-neutral-100 px-2 py-0.5 text-xs hover:bg-neutral-200 dark:bg-neutral-800 transition-opacity"}
                                 style={color ? { background: color, color: "#111" } : undefined}
-                                {...(!color ? { className: "cursor-pointer rounded-full bg-neutral-100 px-2 py-0.5 text-xs hover:bg-neutral-200 dark:bg-neutral-800 transition-opacity" } : {})}
                               >
                                 {c}
                               </span>
