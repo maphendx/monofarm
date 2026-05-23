@@ -1,0 +1,9 @@
+meta {
+  name: Send plan entry to printer
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/plan/{{planEntryId}}/send
+}

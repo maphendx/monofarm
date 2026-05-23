@@ -1,0 +1,13 @@
+meta {
+  name: Upload local file
+  type: http
+  seq: 3
+}
+
+headers {
+  X-Api-Key: {{apiKey}}
+}
+
+post {
+  url: {{baseUrl}}/api/files/local
+}

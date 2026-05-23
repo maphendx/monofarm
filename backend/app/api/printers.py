@@ -681,7 +681,7 @@ def set_manual_state(
     return _to_dto(row, db)
 
 
-@router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{printer_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_printer(
     printer_id: int,
     db: Session = Depends(get_db),
@@ -717,7 +717,7 @@ def bulk_delete_printers(
     return {"deleted": len(ids)}
 
 
-@router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def reorder_printers(
     items: list[PrinterReorderItem],
     db: Session = Depends(get_db),

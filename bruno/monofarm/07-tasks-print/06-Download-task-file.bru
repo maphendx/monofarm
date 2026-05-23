@@ -1,0 +1,9 @@
+meta {
+  name: Download task file
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/tasks/print/{{taskId}}/file
+}

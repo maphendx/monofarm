@@ -196,7 +196,7 @@ async def upload_file(
     return _to_out(row, db)
 
 
-@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_file(
     file_id: int,
     db: Session = Depends(get_db),

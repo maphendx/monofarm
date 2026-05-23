@@ -92,7 +92,7 @@ def adjust_stock(
     return _to_out(f)
 
 
-@router.delete("/{filament_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{filament_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_filament(
     filament_id: int,
     db: Session = Depends(get_db),

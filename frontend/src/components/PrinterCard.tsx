@@ -14,13 +14,13 @@ import {
 import { StateIcon } from "@/components/StateIcon";
 import type { Printer } from "@/lib/types";
 
-const TONE_BORDER: Record<string, string> = {
-  printing: "border-blue-500/60",
-  ok: "border-emerald-500/50",
-  warn: "border-amber-500/50",
-  bad: "border-red-500/50",
-  idle: "border-neutral-200 dark:border-neutral-800",
-  muted: "border-neutral-200 dark:border-neutral-800 opacity-60",
+const TONE_TOP_COLOR: Record<string, string> = {
+  printing: "#3b82f6",
+  ok:       "#10b981",
+  warn:     "#f59e0b",
+  bad:      "#ef4444",
+  idle:     "transparent",
+  muted:    "transparent",
 };
 
 const TONE_STATE: Record<string, string> = {
@@ -105,16 +105,17 @@ export function PrinterCard({
       onKeyDown={(e) => e.key === "Enter" && onClick?.(printer)}
       className={[
         "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-white p-3",
+        "border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900",
+        tone === "muted" ? "opacity-60" : "",
         "text-left transition-shadow hover:shadow-md",
-        "dark:bg-neutral-900",
-        TONE_BORDER[tone],
       ].join(" ")}
+      style={{ borderTopWidth: 2, borderTopColor: TONE_TOP_COLOR[tone] }}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-semibold leading-tight">{printer.name}</div>
-          <div className="text-[10px] text-neutral-400">{kindLabel(printer.kind)}</div>
+          <div className="text-xs text-neutral-400">{kindLabel(printer.kind)}</div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {onSettings && (
@@ -139,12 +140,12 @@ export function PrinterCard({
 
       {/* Error — compact single line */}
       {printer.error_msg && (
-        <div className="truncate rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-600 dark:bg-red-900/20 dark:text-red-400" title={printer.error_msg}>
+        <div className="truncate rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400" title={printer.error_msg}>
           {printer.error_msg}
         </div>
       )}
       {printer.state === "error" && !printer.error_msg && (
-        <div className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] text-red-600 dark:bg-red-900/20 dark:text-red-400">
+        <div className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
           Невідома помилка
         </div>
       )}
@@ -176,7 +177,7 @@ export function PrinterCard({
           {printer.flags.map((f) => (
             <span
               key={f}
-              className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
+              className="rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
             >
               {flagLabel(f)}
             </span>
@@ -186,15 +187,15 @@ export function PrinterCard({
 
       {/* Job + ETA */}
       {(printer.job || eta) && (
-        <div className="border-t border-neutral-100 pt-1.5 text-[10px] text-neutral-400 dark:border-neutral-800">
+        <div className="border-t border-neutral-100 pt-1.5 text-xs text-neutral-400 dark:border-neutral-800">
           {printer.job && <div className="truncate">{printer.job}</div>}
-          {eta && <div>{eta} залишилось</div>}
+          {eta && <div className="tabular-nums">{eta} залишилось</div>}
         </div>
       )}
 
       {/* Temps */}
       {(printer.extruder_temp != null || printer.bed_temp != null) && (
-        <div className="flex gap-2 text-[10px] text-neutral-400">
+        <div className="flex gap-2 text-xs text-neutral-400 tabular-nums">
           {printer.extruder_temp != null && (
             <span title="Сопло">
               {Math.round(printer.extruder_temp)}°
@@ -212,7 +213,7 @@ export function PrinterCard({
 
       {/* Progress bar */}
       {showProgress && (
-        <div className="h-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+        <div className="h-[3px] overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
           <div
             className="h-full rounded-full bg-blue-500 transition-[width] duration-1000 ease-linear"
             style={{ width: `${printer.progress_pct}%` }}
@@ -228,7 +229,7 @@ export function PrinterCard({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onPrint(printer); }}
-                className="flex-1 rounded-md bg-blue-500/10 py-1 text-[10px] font-medium text-blue-700 transition hover:bg-blue-500/25 dark:text-blue-400"
+                className="flex-1 rounded-md bg-cyan-600 py-1 text-xs font-medium font-mono tracking-wide text-white transition hover:bg-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-400 dark:hover:bg-cyan-500/25"
               >
                 ▶ Друк
               </button>
@@ -238,7 +239,7 @@ export function PrinterCard({
                 type="button"
                 onClick={(e) => act(e, "clear-bed")}
                 disabled={busy !== null}
-                className="flex-1 rounded-md bg-emerald-500/10 py-1 text-[10px] font-medium text-emerald-700 transition hover:bg-emerald-500/25 disabled:opacity-40 dark:text-emerald-400"
+                className="flex-1 rounded-md bg-emerald-500 py-1 text-xs font-medium font-mono tracking-wide text-white transition hover:bg-emerald-600 disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/25"
               >
                 {busy === "clear-bed" ? "…" : "Стіл очищено"}
               </button>
@@ -248,7 +249,7 @@ export function PrinterCard({
                 type="button"
                 onClick={(e) => act(e, "pause")}
                 disabled={busy !== null}
-                className="flex-1 rounded-md bg-amber-500/10 py-1 text-[10px] font-medium text-amber-700 transition hover:bg-amber-500/25 disabled:opacity-40 dark:text-amber-400"
+                className="flex-1 rounded-md bg-amber-500 py-1 text-xs font-medium font-mono tracking-wide text-black transition hover:bg-amber-600 disabled:opacity-40 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/25"
               >
                 {busy === "pause" ? "…" : "Пауза"}
               </button>
@@ -258,7 +259,7 @@ export function PrinterCard({
                 type="button"
                 onClick={(e) => act(e, "resume")}
                 disabled={busy !== null}
-                className="flex-1 rounded-md bg-emerald-500/10 py-1 text-[10px] font-medium text-emerald-700 transition hover:bg-emerald-500/25 disabled:opacity-40 dark:text-emerald-400"
+                className="flex-1 rounded-md bg-emerald-500 py-1 text-xs font-medium font-mono tracking-wide text-white transition hover:bg-emerald-600 disabled:opacity-40 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/25"
               >
                 {busy === "resume" ? "…" : "Продовж."}
               </button>
@@ -270,14 +271,14 @@ export function PrinterCard({
                     type="button"
                     onClick={(e) => act(e, "cancel")}
                     disabled={busy !== null}
-                    className="flex-1 rounded-md bg-red-500/10 py-1 text-[10px] font-medium text-red-700 hover:bg-red-500/25 disabled:opacity-40 dark:text-red-400"
+                    className="flex-1 rounded-md bg-red-500 py-1 text-xs font-medium font-mono tracking-wide text-white hover:bg-red-600 disabled:opacity-40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/25"
                   >
                     {busy === "cancel" ? "…" : "Підтвердити"}
                   </button>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setConfirmCancel(false); }}
-                    className="rounded-md bg-neutral-100 px-2 py-1 text-[10px] text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                    className="rounded-md bg-neutral-100 px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700"
                   >
                     Ні
                   </button>
@@ -287,7 +288,7 @@ export function PrinterCard({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setConfirmCancel(true); }}
                   disabled={busy !== null}
-                  className="flex-1 rounded-md bg-red-500/10 py-1 text-[10px] font-medium text-red-700 transition hover:bg-red-500/25 disabled:opacity-40 dark:text-red-400"
+                  className="flex-1 rounded-md bg-red-500 py-1 text-xs font-medium font-mono tracking-wide text-white transition hover:bg-red-600 disabled:opacity-40 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/25"
                 >
                   Стоп
                 </button>
@@ -299,7 +300,7 @@ export function PrinterCard({
                 onClick={(e) => act(e, "skip-object")}
                 disabled={busy !== null}
                 title="Пропустити об'єкт ([exclude_object] в printer.cfg)"
-                className="rounded-md bg-neutral-100 px-2 py-1 text-[10px] font-medium text-neutral-500 transition hover:bg-neutral-200 disabled:opacity-40 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                className="rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium font-mono tracking-wide text-neutral-500 transition hover:bg-neutral-200 disabled:opacity-40 dark:bg-neutral-800 dark:hover:bg-neutral-700"
               >
                 {busy === "skip-object" ? "…" : "Скіп"}
               </button>

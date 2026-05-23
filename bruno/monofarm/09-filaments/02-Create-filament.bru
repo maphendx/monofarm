@@ -1,0 +1,19 @@
+meta {
+  name: Create filament
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/filaments
+  body: json
+}
+
+body:json {
+{
+  "material": "PLA",
+  "color": "чорний",
+  "grams_remaining": 1000,
+  "min_grams": 200
+}
+}

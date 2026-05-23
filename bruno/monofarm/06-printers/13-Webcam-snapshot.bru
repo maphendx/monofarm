@@ -1,0 +1,16 @@
+meta {
+  name: Webcam snapshot
+  type: http
+  seq: 13
+}
+
+auth {
+  mode: none
+}
+
+get {
+  url: {{baseUrl}}/api/printers/{{printerId}}/webcam/snapshot
+  params:query {
+    token: {{token}}
+  }
+}

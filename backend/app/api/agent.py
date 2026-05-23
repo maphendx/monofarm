@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.4.5"
+AGENT_VERSION = "0.4.6"
 
 
 @router.get("/api/agent/version")
@@ -60,7 +60,7 @@ async def agent_connect(
             except json.JSONDecodeError:
                 log.warning("Agent org %s sent invalid JSON", org_id)
                 continue
-            await tunnel.handle_agent_message(data)
+            await tunnel.handle_agent_message(data, org_id=org_id)
     except WebSocketDisconnect:
         pass
     except Exception as e:

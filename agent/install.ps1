@@ -1,7 +1,8 @@
 # monofarm-agent Windows installer
 # Usage: irm https://monofarm.app/agent/install.ps1 | iex
-# Or with args: powershell -ExecutionPolicy Bypass -File install.ps1 -Token TOKEN -Server https://monofarm.app
+# Or with server: powershell -ExecutionPolicy Bypass -File install.ps1 -Server https://monofarm.app
 #
+# Token is NOT required — the agent opens a browser for pairing on first start.
 # Installs to %USERPROFILE%\.monofarm-agent and registers a Task Scheduler entry
 # so the agent starts automatically at login (no admin rights required).
 
@@ -11,15 +12,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-
-if (-not $Token) {
-    # Prompt interactively if not provided
-    $Token = Read-Host "Enter your monofarm token (from Settings → Agent Connection)"
-}
-if (-not $Token) {
-    Write-Error "Token is required. Run: install.ps1 -Token YOUR_TOKEN"
-    exit 1
-}
 
 $InstallDir = Join-Path $env:USERPROFILE ".monofarm-agent"
 $AgentScript = Join-Path $InstallDir "monofarm_agent.py"
@@ -76,6 +68,7 @@ Invoke-WebRequest -Uri "$Server/agent/monofarm_agent.py" -OutFile $AgentScript
 
 $EnvFile = Join-Path $InstallDir ".env"
 Set-Content -Path $EnvFile -Value "MONOFARM_SERVER=$Server`nMONOFARM_TOKEN=$Token"
+Write-Host "Config written to $EnvFile"
 # Restrict permissions — only current user can read
 $acl = Get-Acl $EnvFile
 $acl.SetAccessRuleProtection($true, $false)
@@ -94,7 +87,7 @@ Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Silent
 
 $action  = New-ScheduledTaskAction `
     -Execute $VenvPython `
-    -Argument "`"$AgentScript`" --server `"$Server`" --token `"$Token`"" `
+    -Argument "`"$AgentScript`"" `
     -WorkingDirectory $InstallDir
 
 $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME

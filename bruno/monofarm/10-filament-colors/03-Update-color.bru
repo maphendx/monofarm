@@ -1,0 +1,14 @@
+meta {
+  name: Update color
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/filament-colors/{{colorId}}
+  body: json
+}
+
+body:json {
+{"name": "Червоний яскравий"}
+}

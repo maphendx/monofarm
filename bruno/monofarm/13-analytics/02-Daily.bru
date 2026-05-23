@@ -1,0 +1,12 @@
+meta {
+  name: Daily
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/analytics/daily
+  params:query {
+    days: 30
+  }
+}

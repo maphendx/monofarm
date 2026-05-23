@@ -38,7 +38,7 @@ except ImportError:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-AGENT_VERSION      = "0.4.5"
+AGENT_VERSION      = "0.4.6"
 UI_HTTP_PORT       = 4747   # browser navigates here for the HTML page
 UI_WS_PORT         = 4748   # browser WebSocket connects here for live updates
 CONFIG_DIR         = pathlib.Path.home() / ".monofarm-agent"
@@ -535,209 +535,260 @@ _HTML = r"""<!DOCTYPE html>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --green:#22c55e;--yellow:#eab308;--red:#ef4444;--blue:#60a5fa;
-  --bg:#080808;--card:#111;--border:#1e1e1e;--input:#161616;
-  --text:#e5e7eb;--muted:#6b7280;--dim:#4b5563
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--blue:#38bdf8;
+  --bg:#09090b;--sidebar:#0f0f11;--card:#131316;--card2:#1a1a1e;
+  --border:#1f1f23;--border2:#2a2a2f;--input:#0d0d10;
+  --text:#e4e4e7;--sub:#a1a1aa;--dim:#52525b;--faint:#27272a
 }
-body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;min-height:100vh;padding:24px 16px}
-.wrap{max-width:760px;margin:0 auto}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column}
 
-/* Header */
-.hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px}
-.logo{font-family:'Courier New',monospace;font-size:18px;font-weight:700;color:#fff}
-.logo em{color:#333;font-style:normal;font-weight:400}
-.ver{font-size:11px;color:var(--dim);background:#111;border:1px solid #222;border-radius:4px;padding:2px 7px}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
-
-/* Toast */
-.toast{font-size:11px;color:var(--dim);transition:opacity .3s}
+/* ── TOP BAR ── */
+.topbar{
+  height:48px;display:flex;align-items:center;gap:12px;
+  padding:0 18px;border-bottom:1px solid var(--border);
+  background:var(--sidebar);flex-shrink:0
+}
+.logo{font-size:13px;font-weight:700;letter-spacing:-.01em;color:#fff}
+.logo span{color:var(--dim);font-weight:400}
+.ver-badge{font-size:10px;color:var(--dim);background:var(--faint);border:1px solid var(--border2);border-radius:4px;padding:2px 6px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.toast{font-size:11px;color:var(--dim);margin-right:4px;transition:color .3s}
 .toast.show{color:var(--green)}
+.tb-btn{background:var(--card);border:1px solid var(--border2);color:var(--sub);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.tb-btn:hover{color:#fff;border-color:#3a3a40}
+.tb-btn.accent{background:#1e3a5f;border-color:#1d4ed8;color:var(--blue)}
+.tb-btn.accent:hover{background:#1d4ed8;color:#fff}
+.offline-pill{display:none;background:#1a0000;border:1px solid #3d0000;color:#f87171;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:600}
+.offline-pill.show{display:block}
 
-/* Card */
-.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:12px}
-.card-title{font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+/* ── LAYOUT ── */
+.layout{display:flex;flex:1;overflow:hidden}
 
-/* Top row: status + quick actions */
-.top-row{display:flex;gap:12px;margin-bottom:12px}
-.top-row .card{flex:1;margin-bottom:0}
-.s-row{display:flex;align-items:center;gap:9px}
-.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.dot.connected{background:var(--green);box-shadow:0 0 7px #22c55e55}
-.dot.connecting{background:var(--yellow);animation:blink 1.1s ease-in-out infinite}
-.dot.disconnected,.dot.offline{background:#2a2a2a}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.s-label{font-size:14px;font-weight:500}
-.s-label.connected{color:var(--green)}
-.s-label.connecting{color:var(--yellow)}
-.s-label.disconnected,.s-label.offline{color:var(--dim)}
+/* ── SIDEBAR ── */
+.sidebar{
+  width:260px;flex-shrink:0;display:flex;flex-direction:column;
+  border-right:1px solid var(--border);background:var(--sidebar);overflow-y:auto
+}
+.sidebar-block{padding:16px 16px 0}
+.sidebar-block+.sidebar-block{border-top:1px solid var(--border);padding-top:16px}
+.sidebar-block:last-child{padding-bottom:16px}
 
-/* Settings (collapsible) */
-.settings-body{display:none}
-.settings-body.open{display:block}
-.field{margin-bottom:11px}
-.lbl{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
-.inp{width:100%;background:var(--input);border:1px solid #252525;border-radius:6px;color:#fff;font-size:13px;padding:7px 10px;outline:none;transition:border-color .15s}
-.inp:focus{border-color:#444}
-.inp-row{display:flex;gap:6px}
+/* Status */
+.status-wrap{padding:18px 16px 16px}
+.status-dot-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.big-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.big-dot.connected{background:var(--green);box-shadow:0 0 10px #22c55e44}
+.big-dot.connecting{background:var(--yellow);animation:pulse 1.2s ease-in-out infinite}
+.big-dot.disconnected,.big-dot.offline{background:var(--faint)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.status-label{font-size:16px;font-weight:600}
+.status-label.connected{color:var(--green)}
+.status-label.connecting{color:var(--yellow)}
+.status-label.disconnected,.status-label.offline{color:var(--dim)}
+.status-desc{font-size:11px;color:var(--dim);padding-left:22px}
+
+/* Form */
+.field{margin-bottom:12px}
+.lbl{display:block;font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.inp{width:100%;background:var(--input);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:7px 10px;outline:none;transition:border-color .15s}
+.inp:focus{border-color:#3a3a50}
+.inp-row{display:flex;gap:5px}
 .inp-row .inp{flex:1;min-width:0}
-.chk-row{display:flex;align-items:center;gap:7px;cursor:pointer;margin-top:2px}
+.show-btn{background:var(--card2);border:1px solid var(--border2);color:var(--sub);border-radius:6px;padding:0 10px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.show-btn:hover{color:#fff}
+.chk-row{display:flex;align-items:center;gap:7px;cursor:pointer;margin-top:4px}
 .chk-row input{accent-color:var(--green);width:13px;height:13px;cursor:pointer}
-.chk-row span{font-size:12px;color:var(--muted)}
-.btns{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.chk-row span{font-size:12px;color:var(--sub)}
 
 /* Buttons */
-.btn{padding:7px 14px;border:none;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:opacity .15s;white-space:nowrap;line-height:1}
-.btn:hover{opacity:.8}
-.btn:disabled{opacity:.4;cursor:default}
-.btn-primary{background:#fff;color:#111}
-.btn-danger{background:#161616;color:var(--red);border:1px solid #252525}
-.btn-link{background:#161616;color:var(--blue);border:1px solid #252525}
-.btn-ghost{background:transparent;color:var(--dim);border:1px solid #252525;font-size:11px;padding:5px 10px}
-.btn-ghost:hover{color:#fff}
-.btn-ml{margin-left:auto}
-.show-btn{background:#161616;border:1px solid #252525;color:var(--muted);border-radius:6px;padding:0 11px;font-size:12px;cursor:pointer;flex-shrink:0}
-.show-btn:hover{color:#fff}
+.btn-row{display:flex;gap:6px;padding:12px 16px;border-top:1px solid var(--border)}
+.btn{flex:1;padding:8px 10px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:disabled{opacity:.35;cursor:default}
+.btn-connect{background:#fff;color:#09090b}
+.btn-connect:hover:not(:disabled){background:#e4e4e7}
+.btn-disc{background:var(--card2);color:#f87171;border:1px solid #2a1515}
+.btn-disc:hover:not(:disabled){background:#2a1515}
 
-/* Printers grid */
-.p-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-@media(max-width:600px){.p-grid{grid-template-columns:repeat(2,1fr)}}
-.p-card{background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;padding:10px 12px;min-width:0}
-.p-card.local{border-color:#1a2a1a}
-.p-head{display:flex;align-items:center;gap:7px;margin-bottom:5px}
-.p-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.p-dot.ok{background:var(--green);box-shadow:0 0 4px #22c55e55}
-.p-dot.nok{background:#222}
-.p-name{font-size:13px;font-weight:600;color:#e5e7eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
-.p-state{font-size:10px;font-weight:600;border-radius:3px;padding:1px 5px;flex-shrink:0}
-.p-state.printing{background:#0c1a2e;color:var(--blue)}
-.p-state.paused{background:#1a1400;color:var(--yellow)}
-.p-state.error{background:#1a0000;color:var(--red)}
-.p-state.offline{background:#111;color:#333}
-.p-state.idle,.p-state.operational,.p-state.unknown{background:#111;color:#4b5563}
-.p-job{font-size:10px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
-.p-meta{font-size:10px;color:#2a2a2a}
-.p-meta.local{color:#374151}
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 
-/* Log */
-.log-box{background:#060606;border:1px solid #181818;border-radius:6px;height:160px;overflow-y:auto;padding:8px 11px;font-family:'Courier New',monospace;font-size:11px;line-height:1.65}
+/* Section header */
+.sec-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 18px 10px;border-bottom:1px solid var(--border);
+  flex-shrink:0;min-height:42px
+}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+.sec-meta{font-size:11px;color:var(--dim)}
+
+/* Printers area */
+.printers-area{flex-shrink:0}
+.printers-empty{padding:28px 18px;text-align:center;font-size:12px;color:var(--dim)}
+.p-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:10px 18px 14px}
+
+/* Printer card */
+.p-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0;transition:border-color .2s}
+.p-card.local{border-color:#1a2d1a}
+.p-card.printing{border-color:#0c1e33}
+.p-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.p-dot.ok{background:var(--green);box-shadow:0 0 5px #22c55e44}
+.p-dot.ok.printing{background:var(--blue);box-shadow:0 0 5px #38bdf844;animation:pulse 2s ease-in-out infinite}
+.p-dot.nok{background:var(--faint)}
+.p-name{font-size:13px;font-weight:600;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p-badge{font-size:9px;font-weight:700;border-radius:4px;padding:2px 5px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.p-badge.printing{background:#0c1e33;color:var(--blue)}
+.p-badge.paused{background:#1e1400;color:var(--yellow)}
+.p-badge.error{background:#1e0000;color:var(--red)}
+.p-badge.idle,.p-badge.operational{background:var(--faint);color:var(--dim)}
+.p-badge.offline,.p-badge.unknown{background:var(--faint);color:#3f3f46}
+.p-job{font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.p-bar-wrap{height:3px;background:var(--faint);border-radius:2px;overflow:hidden;margin-bottom:5px}
+.p-bar{height:3px;background:var(--blue);border-radius:2px;transition:width 1s linear}
+.p-foot{display:flex;justify-content:space-between;align-items:center}
+.p-ip{font-size:9px;color:var(--dim);font-family:'Courier New',monospace}
+.p-ms{font-size:9px;color:#22c55e66}
+
+/* ── LOG ── */
+.log-area{flex:1;display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--border)}
+.log-box{flex:1;overflow-y:auto;padding:8px 18px;font-family:'Courier New',monospace;font-size:11px;line-height:1.7}
 .l{white-space:pre-wrap;word-break:break-all}
-.l.info{color:#374151}
-.l.warn{color:#6b3a00}
-.l.error{color:#6b0000}
+.l.info{color:#3f3f46}
+.l.warn{color:#713f12}
+.l.err{color:#7f1d1d}
+.l.info.recent{color:var(--sub)}
+.l.warn.recent{color:#ca8a04}
+.l.err.recent{color:#f87171}
 
-/* Offline bar */
-.offline-bar{text-align:center;font-size:12px;color:#333;padding:8px;background:#0d0d0d;border:1px solid #181818;border-radius:7px;margin-bottom:12px;display:none}
-.offline-bar.show{display:block}
-
-/* Toggle arrow */
-.toggle-arrow{font-size:10px;cursor:pointer;color:var(--dim);user-select:none;padding:2px 6px}
-.toggle-arrow:hover{color:#fff}
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--faint);border-radius:2px}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div class="hdr">
-    <div class="logo">monofarm <em>agent</em></div>
-    <div class="ver" id="ver">v—</div>
-    <div class="hdr-right">
-      <span class="toast" id="toast"></span>
-      <button class="btn btn-ghost" id="btn-update" onclick="checkUpdate()">↻ Update</button>
-      <button class="btn btn-link" onclick="openDash()">Dashboard ↗</button>
-    </div>
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">monofarm <span>agent</span></div>
+  <div class="ver-badge" id="ver">v—</div>
+  <span class="offline-pill" id="offline-pill">● disconnected from agent</span>
+  <div class="topbar-right">
+    <span class="toast" id="toast"></span>
+    <button class="tb-btn" id="btn-update" onclick="checkUpdate()">↻ Check update</button>
+    <button class="tb-btn accent" onclick="openDash()">Open dashboard ↗</button>
   </div>
-
-  <div class="offline-bar" id="offline-bar">agent UI offline — retrying…</div>
-
-  <div class="top-row">
-    <div class="card" style="min-width:0">
-      <div class="card-title" style="margin-bottom:10px">Status</div>
-      <div class="s-row">
-        <div class="dot disconnected" id="dot"></div>
-        <div class="s-label disconnected" id="slabel">Disconnected</div>
-      </div>
-    </div>
-    <div class="card" style="min-width:0;display:flex;flex-direction:column;justify-content:space-between">
-      <div class="card-title" style="margin-bottom:10px">
-        <span>Settings</span>
-        <span class="toggle-arrow" onclick="toggleSettings()" id="settings-arrow">▼ show</span>
-      </div>
-      <div class="btns" style="margin-top:0">
-        <button class="btn btn-primary" onclick="doConnect()">Connect</button>
-        <button class="btn btn-danger" onclick="doDisconnect()">Disconnect</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card settings-body" id="settings-body">
-    <div class="field">
-      <label class="lbl">Server URL</label>
-      <input class="inp" id="inp-server" type="text" placeholder="https://monofarm.app">
-    </div>
-    <div class="field">
-      <label class="lbl">Token</label>
-      <div class="inp-row">
-        <input class="inp" id="inp-token" type="password" placeholder="eyJ…">
-        <button class="show-btn" onclick="toggleTok(this)">Show</button>
-      </div>
-    </div>
-    <label class="chk-row">
-      <input type="checkbox" id="inp-autostart">
-      <span>Start with system</span>
-    </label>
-    <div class="btns">
-      <button class="btn btn-primary" onclick="doConnect()">Save & Connect</button>
-    </div>
-  </div>
-
-  <div class="card" id="printers-card" style="display:none">
-    <div class="card-title">
-      <span>Printers</span>
-      <span id="printer-count" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px"></span>
-    </div>
-    <div class="p-grid" id="printers-list"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Log</div>
-    <div class="log-box" id="log"></div>
-  </div>
-
 </div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Status -->
+    <div class="status-wrap">
+      <div class="status-dot-row">
+        <div class="big-dot disconnected" id="dot"></div>
+        <div class="status-label disconnected" id="slabel">Disconnected</div>
+      </div>
+      <div class="status-desc" id="sdesc">Not connected to monofarm cloud</div>
+    </div>
+
+    <!-- Settings form -->
+    <div class="sidebar-block">
+      <div class="field">
+        <label class="lbl" for="inp-server">Server URL</label>
+        <input class="inp" id="inp-server" type="text" placeholder="https://monofarm.app" autocomplete="off">
+      </div>
+      <div class="field">
+        <label class="lbl" for="inp-token">Token</label>
+        <div class="inp-row">
+          <input class="inp" id="inp-token" type="password" placeholder="eyJ…" autocomplete="off">
+          <button class="show-btn" onclick="toggleTok(this)">Show</button>
+        </div>
+      </div>
+      <label class="chk-row">
+        <input type="checkbox" id="inp-autostart">
+        <span>Start with system</span>
+      </label>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="btn-row">
+      <button class="btn btn-connect" onclick="doConnect()">Connect</button>
+      <button class="btn btn-disc" onclick="doDisconnect()">Disconnect</button>
+    </div>
+
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- Printers section -->
+    <div class="printers-area" id="printers-area">
+      <div class="sec-hdr">
+        <span class="sec-title">Printers</span>
+        <span class="sec-meta" id="printer-count"></span>
+      </div>
+      <div id="printers-empty" class="printers-empty">No printers — connect the agent to see them here.</div>
+      <div class="p-grid" id="printers-list" style="display:none"></div>
+    </div>
+
+    <!-- Log section -->
+    <div class="log-area">
+      <div class="sec-hdr">
+        <span class="sec-title">Log</span>
+        <button class="tb-btn" onclick="clearLog()" style="font-size:10px;padding:3px 8px">Clear</button>
+      </div>
+      <div class="log-box" id="log"></div>
+    </div>
+
+  </div>
+</div>
+
 <script>
 const WS_PORT = """ + str(UI_WS_PORT) + r""";
-let ws, reconnTimer;
+let ws, reconnTimer, logCount = 0;
+
+const STATES = {
+  connected:    ['Connected',    'Tunnel active — proxying requests'],
+  connecting:   ['Connecting…',  'Establishing WebSocket tunnel'],
+  disconnected: ['Disconnected', 'Not connected to monofarm cloud'],
+  offline:      ['Agent offline','Cannot reach local agent UI'],
+};
 
 function connect() {
   clearTimeout(reconnTimer);
   try {
     ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}`);
-    ws.onopen = () => document.getElementById('offline-bar').classList.remove('show');
+    ws.onopen = () => document.getElementById('offline-pill').classList.remove('show');
     ws.onmessage = e => {
       const m = JSON.parse(e.data);
       if (m.type === 'init') {
-        document.getElementById('ver').textContent       = 'v' + (m.version || '?');
-        document.getElementById('inp-server').value      = m.server || '';
-        document.getElementById('inp-token').value       = m.token  || '';
-        document.getElementById('inp-autostart').checked = !!m.autostart;
+        document.getElementById('ver').textContent        = 'v' + (m.version || '?');
+        document.getElementById('inp-server').value       = m.server || '';
+        document.getElementById('inp-token').value        = m.token  || '';
+        document.getElementById('inp-autostart').checked  = !!m.autostart;
         setState(m.state);
-        (m.logs || []).forEach(addLog);
+        (m.logs || []).forEach(l => addLog(l, false));
         renderPrinters(m.printers || []);
       } else if (m.type === 'state_change') {
         setState(m.state);
       } else if (m.type === 'log') {
-        addLog(m.line);
+        addLog(m.line, true);
       } else if (m.type === 'printers') {
         renderPrinters(m.printers || []);
       } else if (m.type === 'update_status') {
         const btn = document.getElementById('btn-update');
         btn.disabled = m.checking;
-        btn.textContent = m.checking ? '↻ Checking…' : '↻ Update';
+        btn.textContent = m.checking ? '↻ Checking…' : '↻ Check update';
         if (m.message) showToast(m.message);
       }
     };
     ws.onclose = () => {
-      document.getElementById('offline-bar').classList.add('show');
+      document.getElementById('offline-pill').classList.add('show');
       setState('offline');
       reconnTimer = setTimeout(connect, 2000);
     };
@@ -746,22 +797,35 @@ function connect() {
 }
 
 function setState(s) {
-  const dot = document.getElementById('dot');
-  const lbl = document.getElementById('slabel');
-  const n = {connected:'Connected',connecting:'Connecting…',disconnected:'Disconnected',offline:'Agent offline'};
-  dot.className = 'dot ' + s;
-  lbl.className = 's-label ' + s;
-  lbl.textContent = n[s] || s;
+  const info = STATES[s] || [s, ''];
+  const dot  = document.getElementById('dot');
+  const lbl  = document.getElementById('slabel');
+  const desc = document.getElementById('sdesc');
+  dot.className   = 'big-dot ' + s;
+  lbl.className   = 'status-label ' + s;
+  lbl.textContent = info[0];
+  desc.textContent = info[1];
 }
 
-function addLog(line) {
+function addLog(line, isRecent) {
   const box = document.getElementById('log');
   const d = document.createElement('div');
-  d.className = 'l ' + (/ERROR/.test(line) ? 'error' : /WARNING/.test(line) ? 'warn' : 'info');
+  const lvl = /ERROR/.test(line) ? 'err' : /WARNING/.test(line) ? 'warn' : 'info';
+  d.className = 'l ' + lvl + (isRecent ? ' recent' : '');
   d.textContent = line;
   box.appendChild(d);
-  while (box.children.length > 500) box.removeChild(box.firstChild);
-  box.scrollTop = box.scrollHeight;
+  logCount++;
+  if (isRecent) {
+    setTimeout(() => d.classList.remove('recent'), 3000);
+  }
+  while (box.children.length > 600) box.removeChild(box.firstChild);
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  if (atBottom || isRecent) box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+  logCount = 0;
 }
 
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
@@ -770,25 +834,23 @@ function doConnect() {
   const s = document.getElementById('inp-server').value.trim();
   const t = document.getElementById('inp-token').value.trim();
   const a = document.getElementById('inp-autostart').checked;
-  if (!t) { alert('Token is required'); return; }
+  if (!t) { showToast('Token is required'); return; }
   send({type:'connect', server:s, token:t, autostart:a});
 }
 function doDisconnect() { send({type:'disconnect'}); }
-function openDash()      { send({type:'open_dashboard'}); }
-function checkUpdate()   { send({type:'check_update'}); document.getElementById('btn-update').disabled=true; document.getElementById('btn-update').textContent='↻ Checking…'; }
-
-function toggleSettings() {
-  const body  = document.getElementById('settings-body');
-  const arrow = document.getElementById('settings-arrow');
-  const open  = body.classList.toggle('open');
-  arrow.textContent = open ? '▲ hide' : '▼ show';
+function openDash()     { send({type:'open_dashboard'}); }
+function checkUpdate()  {
+  send({type:'check_update'});
+  const btn = document.getElementById('btn-update');
+  btn.disabled = true;
+  btn.textContent = '↻ Checking…';
 }
 
 function toggleTok(btn) {
   const inp = document.getElementById('inp-token');
-  const h = inp.type === 'password';
-  inp.type = h ? 'text' : 'password';
-  btn.textContent = h ? 'Hide' : 'Show';
+  const hide = inp.type === 'password';
+  inp.type = hide ? 'text' : 'password';
+  btn.textContent = hide ? 'Hide' : 'Show';
 }
 
 let toastTimer;
@@ -797,41 +859,57 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.classList.remove('show'); t.textContent=''; }, 4000);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); }, 3500);
 }
 
 function cleanJob(job) {
   if (!job) return '';
-  job = job.replace(/^cache\//, '');
-  job = job.replace(/\.3mf\.3mf$/, '.3mf');
-  job = job.replace(/\.gcode\.3mf$/, '.3mf');
+  job = job.replace(/^cache\//, '').replace(/\.3mf\.3mf$/, '.3mf').replace(/\.gcode\.3mf$/, '.3mf');
   job = job.replace(/_(?:PLA|PETG|ABS|TPU|ASA|PC|FLEX|SILK|WOOD)_\d.*$/, '');
-  return job.length > 28 ? job.slice(0, 26) + '…' : job;
+  return job.length > 32 ? job.slice(0, 30) + '…' : job;
 }
 
 function renderPrinters(list) {
-  const card  = document.getElementById('printers-card');
-  const cont  = document.getElementById('printers-list');
-  const count = document.getElementById('printer-count');
-  if (!list || !list.length) { card.style.display = 'none'; return; }
-  card.style.display = '';
+  const grid    = document.getElementById('printers-list');
+  const empty   = document.getElementById('printers-empty');
+  const count   = document.getElementById('printer-count');
+
+  if (!list || !list.length) {
+    grid.style.display  = 'none';
+    empty.style.display = '';
+    count.textContent   = '';
+    return;
+  }
+  grid.style.display  = '';
+  empty.style.display = 'none';
+
   const printing = list.filter(p => p.state === 'printing').length;
   const online   = list.filter(p => p.local_ok).length;
-  count.textContent = `${printing} printing · ${online}/${list.length} local`;
-  cont.innerHTML = list.map(p => {
-    const isBambu = (p.kind || '').includes('bambu');
-    const ip      = p.bambu_dev_ip || (p.moonraker_url ? p.moonraker_url.replace(/https?:\/\//, '').split(/[/?]/)[0] : '');
-    const state   = p.state || 'unknown';
-    const job     = cleanJob(p.job || '');
-    const ms      = p.local_ms ? `${ip} · ${p.local_ms}ms` : ip;
-    return `<div class="p-card${p.local_ok ? ' local' : ''}">
+  const parts = [];
+  if (printing) parts.push(`${printing} printing`);
+  parts.push(`${online}/${list.length} reachable`);
+  count.textContent = parts.join(' · ');
+
+  grid.innerHTML = list.map(p => {
+    const isBambu  = (p.kind || '').includes('bambu');
+    const ip       = p.bambu_dev_ip || (p.moonraker_url ? p.moonraker_url.replace(/https?:\/\//, '').split(/[/?]/)[0] : '');
+    const state    = p.state || 'unknown';
+    const job      = cleanJob(p.job || '');
+    const pct      = p.progress_pct != null ? p.progress_pct : null;
+    const dotClass = p.local_ok ? (state === 'printing' ? 'ok printing' : 'ok') : 'nok';
+    const cardCls  = 'p-card' + (p.local_ok ? ' local' : '') + (state === 'printing' ? ' printing' : '');
+    return `<div class="${cardCls}">
       <div class="p-head">
-        <div class="p-dot ${p.local_ok ? 'ok' : 'nok'}"></div>
-        <div class="p-name">${p.name || 'Printer'}</div>
-        <div class="p-state ${state}">${state}</div>
+        <div class="p-dot ${dotClass}"></div>
+        <div class="p-name" title="${p.name || ''}">${p.name || 'Printer'}</div>
+        <div class="p-badge ${state}">${state}</div>
       </div>
-      ${job ? `<div class="p-job">${job}</div>` : ''}
-      <div class="p-meta${p.local_ok ? ' local' : ''}">${ms || (isBambu ? 'Bambu Cloud' : '—')}</div>
+      ${job ? `<div class="p-job" title="${job}">${job}</div>` : ''}
+      ${pct != null ? `<div class="p-bar-wrap"><div class="p-bar" style="width:${pct}%"></div></div>` : ''}
+      <div class="p-foot">
+        <span class="p-ip">${ip || (isBambu ? 'Bambu Cloud' : '—')}</span>
+        ${p.local_ms ? `<span class="p-ms">${p.local_ms}ms</span>` : ''}
+      </div>
     </div>`;
   }).join('');
 }

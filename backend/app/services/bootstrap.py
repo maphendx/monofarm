@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 def seed_admin(db: Session) -> None:
     """Create the default organization and initial admin user if none exist."""
-    if db.query(User).count() > 0:
+    if db.query(User).count() > 0 or db.query(Organization).filter_by(slug="default-farm").count() > 0:
         return
 
     from app.services.encryption import encrypt

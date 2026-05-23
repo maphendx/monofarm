@@ -112,7 +112,7 @@ def create_api_key(
     return ApiKeyCreated(**out.model_dump(), key=raw)
 
 
-@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_api_key(
     key_id: int,
     db: Session = Depends(get_db),

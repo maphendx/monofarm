@@ -1,0 +1,18 @@
+meta {
+  name: Webhook (manual)
+  type: http
+  seq: 4
+}
+
+auth {
+  mode: none
+}
+
+post {
+  url: {{baseUrl}}/api/billing/webhook
+  body: json
+}
+
+body:json {
+{}
+}

@@ -64,11 +64,11 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
   const t = useT();
   return (
     <div className="flex items-center gap-1.5">
-      <StatBadge count={stats.printing} label={t("dashboard.printing")} className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" />
-      <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" />
-      <StatBadge count={stats.action}   label={t("dashboard.action")}   className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" />
-      <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" />
-      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" />
+      <StatBadge count={stats.printing} label={t("dashboard.printing")} className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" />
+      <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
+      <StatBadge count={stats.action}   label={t("dashboard.action")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
+      <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" />
+      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-neutral-100 text-neutral-500 dark:bg-neutral-500/20 dark:text-neutral-400" />
     </div>
   );
 }
@@ -213,6 +213,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
+    // One-time background Bambu LAN discovery to populate missing IPs.
+    api<{ devices: unknown[] }>("/api/printers/bambu-discover")
+      .then((r) => { if (r.devices?.length) load(); })
+      .catch(() => {});
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
   }, [load]);
@@ -364,7 +368,7 @@ export default function DashboardPage() {
         onDeleted={(id) => setPrinters((prev) => prev.filter((p) => p.id !== id))}
       />
 
-      {!loading && printers.length > 0 && <DashboardPet printers={printers} />}
+      {!loading && printers.length > 0 && <div className="hidden dark:block"><DashboardPet printers={printers} /></div>}
 
       {printPrinter && (
         <StartPrintModal

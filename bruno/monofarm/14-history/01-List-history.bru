@@ -1,0 +1,12 @@
+meta {
+  name: List history
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/history
+  params:query {
+    limit: 50
+  }
+}

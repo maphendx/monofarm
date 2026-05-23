@@ -1,0 +1,18 @@
+meta {
+  name: Create farm task
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/tasks/farm
+  body: json
+}
+
+body:json {
+{
+  "title": "Прибрати стіл",
+  "description": null,
+  "deadline": "2026-06-01"
+}
+}

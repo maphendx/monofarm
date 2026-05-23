@@ -1,4 +1,15 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"/Users/maphendx/Documents/monofarm/frontend/src/app/\\(app\\)/warehouse/products/[id]\")",
+      "Bash(.venv/bin/python3 -c ' *)",
+      "Bash(sudo rm /Users/maphendx/Library/LaunchAgents/app.monofarm.agent.plist)",
+      "Bash(sudo pkill -9 -f monofarm_agent.py)"
+    ],
+    "additionalDirectories": [
+      "/Users/maphendx/Documents/monofarm/frontend/src/app/(app)/warehouse/products"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

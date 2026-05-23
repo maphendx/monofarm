@@ -1,0 +1,9 @@
+meta {
+  name: Upload task file
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/tasks/print/{{taskId}}/file
+}

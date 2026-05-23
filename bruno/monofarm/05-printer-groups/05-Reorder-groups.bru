@@ -1,0 +1,14 @@
+meta {
+  name: Reorder groups
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/printer-groups/reorder
+  body: json
+}
+
+body:json {
+[{"id": 1, "sort_order": 0}]
+}

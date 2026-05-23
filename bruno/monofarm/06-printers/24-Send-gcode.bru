@@ -1,0 +1,14 @@
+meta {
+  name: Send gcode
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/printers/{{printerId}}/gcode
+  body: json
+}
+
+body:json {
+{"script": "G28"}
+}

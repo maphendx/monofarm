@@ -41,6 +41,40 @@ def has_tunnel(org_id: int) -> bool:
     return org_id in _tunnels
 
 
+# ── Telegram helpers ──────────────────────────────────────────────────────────
+
+async def send_tg_config(org_id: int, token: str | None) -> None:
+    """Push a new bot token to the agent (fire-and-forget). token=None means disable."""
+    ws = _tunnels.get(org_id)
+    if not ws:
+        return
+    try:
+        await ws.send_text(json.dumps({"type": "TG_CONFIG", "token": token or ""}))
+    except Exception:
+        log.debug("send_tg_config: failed to send to org %s", org_id)
+
+
+async def send_telegram(
+    org_id: int, chat_id: int, text: str, parse_mode: str | None = "Markdown"
+) -> bool:
+    """Send a Telegram message via the org's local agent bot (fire-and-forget)."""
+    ws = _tunnels.get(org_id)
+    if not ws:
+        log.warning("send_telegram: no agent connected for org %s", org_id)
+        return False
+    try:
+        await ws.send_text(json.dumps({
+            "type": "TG_SEND",
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": parse_mode,
+        }))
+        return True
+    except Exception:
+        log.warning("send_telegram: failed to send to org %s chat %s", org_id, chat_id)
+        return False
+
+
 async def register(org_id: int, ws: WebSocket) -> None:
     if org_id in _tunnels:
         log.info("Agent reconnected for org %s — replacing old connection", org_id)
@@ -53,8 +87,67 @@ async def unregister(org_id: int) -> None:
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
-async def handle_agent_message(data: dict) -> None:
+async def _handle_tg_bot_username(data: dict) -> None:
+    """Agent reported its bot username after a successful getMe."""
+    org_id   = data.get("org_id")
+    username = (data.get("username") or "").strip()
+    if not org_id or not username:
+        return
+    from app.core.db import SessionLocal
+    from app.models.organization import Organization
+    with SessionLocal() as db:
+        org = db.get(Organization, int(org_id))
+        if org:
+            org.tg_bot_username = username
+            db.commit()
+    log.info("Org %s Telegram bot username cached: @%s", org_id, username)
+
+
+async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
+    """Agent received /start <code> — validate and link the user's chat_id."""
+    from datetime import datetime, timezone
+    from app.core.db import SessionLocal
+    from app.models.user import User
+    code    = (data.get("code") or "").strip()
+    chat_id = data.get("chat_id")
+    if not code or not chat_id:
+        return
+    reply_text: str
+    parse_mode: str | None = None
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.telegram_link_code == code).first()
+        if not user:
+            reply_text = "Невірний код. Попроси адміна надіслати нове посилання."
+        elif user.telegram_link_expires_at and user.telegram_link_expires_at < datetime.now(timezone.utc):
+            reply_text = "Посилання прострочене. Попроси адміна нове."
+        else:
+            user.telegram_chat_id = int(chat_id)
+            user.telegram_link_code = None
+            user.telegram_link_expires_at = None
+            db.commit()
+            name = user.name or user.email
+            reply_text = (
+                f"✅ Готово, {name}!\n\n"
+                "Тут будуть приходити:\n"
+                "• ранкові плани о 09:00\n"
+                "• алерти про принтери\n\n"
+                "Команди: /план — план на сьогодні, /статус — стан принтерів."
+            )
+    await send_telegram(org_id_tunnel, int(chat_id), reply_text, parse_mode)
+
+
+async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
+    msg_type = data.get("type")
+
+    if msg_type == "TG_BOT_USERNAME":
+        await _handle_tg_bot_username({**data, "org_id": data.get("org_id") or org_id})
+        return
+
+    if msg_type == "TG_CLAIM_LINK":
+        await _handle_tg_claim_link(data, org_id)
+        return
+
     req_id = data.get("id")
     if not req_id:
         return

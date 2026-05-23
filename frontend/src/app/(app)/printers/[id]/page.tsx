@@ -42,69 +42,54 @@ function Card({ title, children, className = "", accent }: { title?: string; chi
 
 function CameraCard({ printer }: { printer: Printer }) {
   const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_ip;
-  const [open, setOpen]       = useState(false);
-  const [error, setError]     = useState(false);
-  const [tick, setTick]       = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError]   = useState(false);
+  const [tick, setTick]     = useState(0);
   const token = getToken();
 
-  // Moonraker snapshot poll — only while open
   useEffect(() => {
-    if (!open || isBambu) return;
-    const id = setInterval(() => setTick((n) => n + 1), 2000);
+    if (isBambu) return;
+    const id = setInterval(() => setTick((n) => n + 1), 2500);
     return () => clearInterval(id);
-  }, [open, isBambu]);
+  }, [isBambu]);
 
-  // Reset error state when reopened
-  useEffect(() => { if (open) setError(false); }, [open]);
+  // Reset loaded on each snapshot tick so badge blinks off briefly if feed stalls
+  useEffect(() => {
+    if (!isBambu) setLoaded(false);
+  }, [tick, isBambu]);
 
   const src = isBambu
     ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
     : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${tick}&token=${token}`;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-950 dark:border-neutral-800">
-      {/* toggle button */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-800/50 transition"
-      >
-        <div className="flex items-center gap-1.5">
-          {open && !error
-            ? <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
-            : <span className="size-1.5 rounded-full bg-neutral-600" />}
-          <span className="text-[10px] font-medium text-neutral-400">
-            {open && !error ? "LIVE" : "Camera"}
-          </span>
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-neutral-950">
+      {error ? (
+        <div className="flex h-full flex-col items-center justify-center gap-2 text-neutral-600">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+          </svg>
+          <span className="text-xs">Камера недоступна</span>
+          <button onClick={() => { setError(false); setLoaded(false); }}
+            className="text-[11px] text-neutral-500 underline hover:text-neutral-300">
+            Повторити
+          </button>
         </div>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`text-neutral-500 transition-transform ${open ? "rotate-180" : ""}`}>
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
-      </button>
-
-      {/* stream — only mounted when open */}
-      {open && (
-        error ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-neutral-500">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-            </svg>
-            <span className="text-[11px]">Camera unavailable</span>
-            <button onClick={() => setError(false)}
-              className="text-[10px] text-neutral-400 underline hover:text-neutral-200">
-              Retry
-            </button>
-          </div>
-        ) : (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={src}
-            alt="Camera"
-            className="w-full object-cover"
-            onError={() => setError(true)}
-          />
-        )
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={src}
+          alt="Camera"
+          className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+          onLoad={() => setLoaded(true)}
+          onError={() => setError(true)}
+        />
+      )}
+      {loaded && !error && (
+        <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-neutral-300 backdrop-blur-sm">
+          <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
+          LIVE
+        </span>
       )}
     </div>
   );
@@ -114,19 +99,25 @@ function CameraCard({ printer }: { printer: Printer }) {
 
 
 function TemperaturesCard({ printer }: { printer: Printer }) {
+  const isMoonraker = !!printer.moonraker_url;
+  const [targets, setTargets] = useState({
+    extruder: printer.extruder_target ?? 0,
+    bed: printer.bed_target ?? 0,
+  });
+
+  async function sendTemp(type: "extruder" | "bed", val: number) {
+    const script = type === "extruder" ? `M104 S${val}` : `M140 S${val}`;
+    try {
+      await api(`/api/printers/${printer.id}/gcode`, {
+        method: "POST",
+        body: JSON.stringify({ script }),
+      });
+    } catch { /* ignore */ }
+  }
+
   const rows = [
-    {
-      label: "Сопло",
-      icon: "nozzle",
-      current: printer.extruder_temp,
-      target: printer.extruder_target,
-    },
-    {
-      label: "Стіл",
-      icon: "bed",
-      current: printer.bed_temp,
-      target: printer.bed_target,
-    },
+    { label: "Сопло", icon: "nozzle", type: "extruder" as const, max: 350, current: printer.extruder_temp, target: printer.extruder_target },
+    { label: "Стіл",  icon: "bed",    type: "bed"      as const, max: 120, current: printer.bed_temp,      target: printer.bed_target },
   ].filter((r) => r.current != null);
 
   if (rows.length === 0) return null;
@@ -138,12 +129,12 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
       </div>
       <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
         {rows.map((r) => {
-          const max = r.target ? Math.max(r.target, r.current!, 30) : Math.max(r.current!, 30);
-          const pct = Math.min(100, (r.current! / max) * 100);
-          const isHot = r.current! > (r.target ?? 0) * 0.8 && r.current! > 40;
+          const tgt = targets[r.type];
+          const heating = r.current! < tgt - 5 && tgt > 40;
+          const pct = Math.min(100, (r.current! / Math.max(tgt, r.current!, 30)) * 100);
           return (
-            <div key={r.label} className="px-5 py-4">
-              <div className="mb-2 flex items-center justify-between">
+            <div key={r.label} className="px-5 py-3.5">
+              <div className="mb-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {r.icon === "nozzle" ? (
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400">
@@ -156,28 +147,46 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
                   )}
                   <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">{r.label}</span>
                 </div>
-                <div className="font-mono text-sm font-bold">
-                  <span className={isHot ? "text-orange-600 dark:text-orange-400" : "text-neutral-700 dark:text-neutral-300"}>
+
+                <div className="flex items-center gap-1.5">
+                  <span className={`font-mono text-sm font-bold tabular-nums ${
+                    heating ? "text-orange-500 dark:text-orange-400" : "text-neutral-700 dark:text-neutral-300"
+                  }`}>
                     {Math.round(r.current!)}°
                   </span>
-                  {r.target != null && r.target > 0 && (
-                    <span className="ml-1.5 text-xs font-normal text-neutral-400">→ {Math.round(r.target)}°</span>
-                  )}
+                  <span className="text-neutral-300 dark:text-neutral-700">→</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={r.max}
+                    value={tgt}
+                    disabled={!isMoonraker}
+                    onChange={(e) => setTargets((prev) => ({ ...prev, [r.type]: Number(e.target.value) }))}
+                    onBlur={(e) => { if (isMoonraker) sendTemp(r.type, Number(e.target.value)); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        if (isMoonraker) sendTemp(r.type, tgt);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    className={[
+                      "w-14 rounded bg-neutral-100 px-2 py-0.5 text-right font-mono text-sm tabular-nums outline-none dark:bg-neutral-800",
+                      isMoonraker
+                        ? "text-cyan-600 dark:text-cyan-400 border border-transparent focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 cursor-text"
+                        : "text-neutral-400 cursor-default",
+                    ].join(" ")}
+                  />
+                  <span className="text-sm text-neutral-400">°</span>
                 </div>
               </div>
-              {/* Segmented gauge */}
               <div className="flex gap-px">
                 {Array.from({ length: 20 }).map((_, i) => {
                   const filled = (i / 20) * 100 < pct;
                   return (
-                    <div
-                      key={i}
-                      className={`h-1.5 flex-1 rounded-sm transition-colors duration-300 ${
-                        filled
-                          ? pct > 90 ? "bg-red-500" : pct > 70 ? "bg-orange-400" : "bg-orange-300"
-                          : "bg-neutral-100 dark:bg-neutral-800"
-                      }`}
-                    />
+                    <div key={i} className={`h-1 flex-1 rounded-sm transition-colors duration-300 ${
+                      filled ? pct > 90 ? "bg-red-500" : pct > 70 ? "bg-orange-400" : "bg-orange-300"
+                             : "bg-neutral-100 dark:bg-neutral-800"
+                    }`} />
                   );
                 })}
               </div>
@@ -185,6 +194,11 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
           );
         })}
       </div>
+      {isMoonraker && (
+        <p className="px-5 pb-3 text-[10px] text-neutral-400 dark:text-neutral-600">
+          Enter або blur — надсилає M104/M140
+        </p>
+      )}
     </div>
   );
 }
@@ -1459,7 +1473,6 @@ export default function PrinterPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [controlOpen, setControlOpen] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -1544,49 +1557,24 @@ export default function PrinterPage() {
         </div>
       </div>
 
-      {/* ── main grid ── */}
-      <div className="grid gap-4 lg:grid-cols-5">
+      {/* ── main grid — 3 columns ── */}
+      <div className="grid gap-4 xl:grid-cols-[360px_1fr_300px] lg:grid-cols-2">
 
-        {/* left — status + filaments (3 cols) */}
-        <div className="space-y-4 lg:col-span-3">
+        {/* Col 1 — status + loaded filaments */}
+        <div className="space-y-4">
           <PrintStatusCard printer={printer} onUpdated={load} />
           <LoadedFilamentsCard printer={printer} onUpdated={load} />
-          {printer.current_filament_meta && <FilamentCard printer={printer} />}
-
-          {/* ── Collapsible control panel ── */}
-          <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800">
-            <button
-              type="button"
-              onClick={() => setControlOpen((v) => !v)}
-              className="flex w-full items-center justify-between px-5 py-3.5 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
-            >
-              <div className="flex items-center gap-2.5">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400">
-                  <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-                </svg>
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">Керування</span>
-              </div>
-              <svg
-                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className={`text-neutral-400 transition-transform duration-200 ${controlOpen ? "rotate-180" : ""}`}
-              >
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            {controlOpen && (
-              <div className="border-t border-neutral-100 dark:border-neutral-800">
-                <ControlPanel printer={printer} />
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* right — camera + temps + info (2 cols) */}
-        <div className="space-y-4 lg:col-span-2">
+        {/* Col 2 — camera + job filament meta */}
+        <div className="space-y-4">
           {(hasMoonraker || (isBambu && !!printer.bambu_dev_ip)) && <CameraCard printer={printer} />}
-          <TemperaturesCard printer={printer} />
+          {printer.current_filament_meta && <FilamentCard printer={printer} />}
+        </div>
 
-          {/* Connection info — compact */}
+        {/* Col 3 — temps + connection */}
+        <div className="space-y-4">
+          <TemperaturesCard printer={printer} />
           {(isBambu || hasMoonraker) && (
             <Card title="Підключення">
               <div className="space-y-2 text-xs text-neutral-500 dark:text-neutral-400">
@@ -1610,6 +1598,9 @@ export default function PrinterPage() {
           )}
         </div>
       </div>
+
+      {/* ── Controls — always visible, full width ── */}
+      <ControlPanel printer={printer} />
 
       {/* ── Settings modal ── */}
       {settingsOpen && (

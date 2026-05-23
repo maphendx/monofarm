@@ -28,6 +28,19 @@ class BambuVerifyCodeRequest(BaseModel):
 router = APIRouter(prefix="/orgs", tags=["orgs"])
 
 
+def _org_settings_out(org: Organization) -> OrgSettingsOut:
+    return OrgSettingsOut(
+        id=org.id,
+        name=org.name,
+        slug=org.slug,
+        bambu_email=org.bambu_email,
+        bambu_region=org.bambu_region,
+        bambu_configured=bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
+        tg_configured=bool(org.tg_bot_token),
+        tg_bot_username=org.tg_bot_username or None,
+    )
+
+
 def _unique_slug(db: Session, base: str) -> str:
     slug = base
     n = 2
@@ -67,14 +80,7 @@ def register(payload: OrgRegisterRequest, db: Session = Depends(get_db)) -> Toke
 def get_org(
     org: Organization = Depends(get_current_org),
 ) -> OrgSettingsOut:
-    return OrgSettingsOut(
-        id=org.id,
-        name=org.name,
-        slug=org.slug,
-        bambu_email=org.bambu_email,
-        bambu_region=org.bambu_region,
-        bambu_configured=bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
-    )
+    return _org_settings_out(org)
 
 
 @router.put("/me/settings", response_model=OrgSettingsOut)
@@ -87,6 +93,9 @@ async def update_org_settings(
     if user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
 
+    if payload.name is not None:
+        org.name = payload.name
+
     from app.services.encryption import encrypt
     if payload.bambu_email is not None:
         org.bambu_email = encrypt(payload.bambu_email)
@@ -97,23 +106,69 @@ async def update_org_settings(
     if payload.bambu_region is not None:
         org.bambu_region = payload.bambu_region
 
+    tg_token_changed = payload.tg_bot_token is not None
+    if tg_token_changed:
+        if payload.tg_bot_token:
+            org.tg_bot_token = encrypt(payload.tg_bot_token)
+        else:
+            org.tg_bot_token = ""
+        org.tg_bot_username = ""  # agent will refresh after restart
+
     db.commit()
     db.refresh(org)
 
     # Re-init Bambu MQTT for this org if Bambu creds changed
-    from app.services import bambu
+    from app.services import bambu, tunnel
     if payload.bambu_email is not None or payload.bambu_password is not None or payload.bambu_refresh_token is not None:
         await bambu.shutdown(org.id)
         await bambu.init(org)
 
-    return OrgSettingsOut(
-        id=org.id,
-        name=org.name,
-        slug=org.slug,
-        bambu_email=org.bambu_email,
-        bambu_region=org.bambu_region,
-        bambu_configured=bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
-    )
+    # Push new TG token to the live agent (if connected)
+    if tg_token_changed:
+        new_token: str | None = None
+        if org.tg_bot_token:
+            from app.services.encryption import decrypt
+            try:
+                new_token = decrypt(org.tg_bot_token)
+            except Exception:
+                pass
+        await tunnel.send_tg_config(org.id, new_token)
+
+    return _org_settings_out(org)
+
+
+@router.get("/me/keycrm-settings")
+def get_keycrm_settings(
+    org:    Organization = Depends(get_current_org),
+    _admin: User         = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    from app.core.config import settings as app_settings
+    webhook_url = f"{app_settings.FARM_PUBLIC_URL}/api/keycrm/webhook/{org.slug}"
+    return {
+        "keycrm_api_key":    org.keycrm_api_key or "",
+        "keycrm_configured": bool(org.keycrm_webhook_secret),
+        "webhook_url":       webhook_url,
+    }
+
+
+@router.put("/me/keycrm-settings")
+def update_keycrm_settings(
+    payload: dict,
+    db:      Session      = Depends(get_db),
+    org:     Organization = Depends(get_current_org),
+    _admin:  User         = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    if "keycrm_api_key" in payload:
+        org.keycrm_api_key = (payload["keycrm_api_key"] or "").strip()
+    if "keycrm_webhook_secret" in payload:
+        org.keycrm_webhook_secret = (payload["keycrm_webhook_secret"] or "").strip()
+    db.commit()
+    from app.core.config import settings as app_settings
+    return {
+        "keycrm_api_key":    org.keycrm_api_key,
+        "keycrm_configured": bool(org.keycrm_webhook_secret),
+        "webhook_url":       f"{app_settings.FARM_PUBLIC_URL}/api/keycrm/webhook/{org.slug}",
+    }
 
 
 @router.get("/me/bambu-status")
@@ -213,11 +268,4 @@ async def bambu_verify_code(
     await bambu.shutdown(org.id)
     await bambu.init(org)
 
-    return OrgSettingsOut(
-        id=org.id,
-        name=org.name,
-        slug=org.slug,
-        bambu_email=org.bambu_email,
-        bambu_region=org.bambu_region,
-        bambu_configured=bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
-    )
+    return _org_settings_out(org)

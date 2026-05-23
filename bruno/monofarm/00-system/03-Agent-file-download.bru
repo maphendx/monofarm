@@ -1,0 +1,13 @@
+meta {
+  name: Agent file download
+  type: http
+  seq: 3
+}
+
+auth {
+  mode: none
+}
+
+get {
+  url: {{baseUrl}}/agent/{{agentFilename}}
+}

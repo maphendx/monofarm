@@ -1,0 +1,14 @@
+meta {
+  name: Create group
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/printer-groups
+  body: json
+}
+
+body:json {
+{"name": "Зона A"}
+}

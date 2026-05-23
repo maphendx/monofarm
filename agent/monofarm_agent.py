@@ -30,7 +30,7 @@ import logging
 import sys
 from pathlib import Path
 
-AGENT_VERSION = "0.4.5"
+AGENT_VERSION = "0.4.6"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -41,6 +41,13 @@ except ImportError:
     print("Missing dependencies. Run: pip install websockets httpx")
     sys.exit(1)
 
+try:
+    from telegram import Update
+    from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters as tg_filters
+    _TG_AVAILABLE = True
+except ImportError:
+    _TG_AVAILABLE = False
+
 
 log = logging.getLogger("monofarm-agent")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
@@ -48,6 +55,126 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(mes
 RECONNECT_DELAY = 5    # seconds between reconnect attempts
 REQUEST_TIMEOUT = 10   # seconds per regular proxied request
 STREAM_CHUNK    = 32768  # bytes per chunk for streaming
+
+CONFIG_DIR  = Path.home() / ".monofarm-agent"
+CONFIG_FILE = CONFIG_DIR / ".env"
+
+# ── Telegram bot state (per-agent, started after receiving token from SaaS) ───
+
+_tg_app: "Application | None" = None
+_tg_token: str | None = None
+_tg_lock = asyncio.Lock()
+_tg_server: str = ""
+_tg_jwt: str = ""
+
+
+async def _tg_cmd_handler(update: "Update", _ctx: "ContextTypes.DEFAULT_TYPE") -> None:
+    """Generic handler: forwards the command to SaaS and replies with the result."""
+    if not update.message or not update.effective_chat:
+        return
+    chat_id = update.effective_chat.id
+    text    = update.message.text or ""
+    # Parse command and args (handles /start abc, /план, /статус)
+    parts   = text.split()
+    raw_cmd = parts[0].lstrip("/").split("@")[0].lower() if parts else ""
+    args    = parts[1:] if len(parts) > 1 else []
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{_tg_server}/api/agent/tg-command",
+                json={"command": raw_cmd, "chat_id": chat_id, "args": args},
+                headers={"Authorization": f"Bearer {_tg_jwt}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            reply = data.get("text") or ""
+            parse_mode = data.get("parse_mode")
+    except Exception as exc:
+        log.warning("tg-command %s failed: %s", raw_cmd, exc)
+        reply = "Помилка звʼязку з сервером. Спробуй ще раз."
+        parse_mode = None
+    if reply:
+        await update.message.reply_text(reply, parse_mode=parse_mode)
+
+
+async def _tg_start(token: str) -> None:
+    """Build and start the PTB Application, then report the bot username back to SaaS."""
+    global _tg_app, _tg_token
+    if not _TG_AVAILABLE:
+        log.warning("python-telegram-bot not installed — Telegram bot disabled")
+        return
+    app = Application.builder().token(token).build()
+    app.add_handler(CommandHandler("start", _tg_cmd_handler))
+    app.add_handler(MessageHandler(tg_filters.Regex(r"^/план(@\w+)?(\s|$)"), _tg_cmd_handler))
+    app.add_handler(MessageHandler(tg_filters.Regex(r"^/статус(@\w+)?(\s|$)"), _tg_cmd_handler))
+    await app.initialize()
+    me = await app.bot.get_me()
+    await app.start()
+    if app.updater:
+        await app.updater.start_polling(drop_pending_updates=True)
+    _tg_app   = app
+    _tg_token = token
+    log.info("Telegram bot @%s online", me.username)
+    # Report username back to SaaS so it can cache it for deep-link generation
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{_tg_server}/api/agent/tg-report-username",
+                json={"username": me.username},
+                headers={"Authorization": f"Bearer {_tg_jwt}"},
+            )
+    except Exception as exc:
+        log.debug("Failed to report bot username to SaaS: %s", exc)
+
+
+async def _tg_stop() -> None:
+    global _tg_app, _tg_token
+    if _tg_app is None:
+        return
+    app = _tg_app
+    _tg_app   = None
+    _tg_token = None
+    try:
+        if app.updater:
+            await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+    except Exception as exc:
+        log.debug("Telegram bot stop error: %s", exc)
+    log.info("Telegram bot stopped")
+
+
+async def _tg_reconfigure(new_token: str | None) -> None:
+    async with _tg_lock:
+        if new_token == _tg_token:
+            return
+        await _tg_stop()
+        if new_token:
+            try:
+                await _tg_start(new_token)
+            except Exception as exc:
+                log.error("Failed to start Telegram bot: %s", exc)
+
+
+def _load_config() -> dict[str, str]:
+    cfg = {"MONOFARM_SERVER": "https://monofarm.app", "MONOFARM_FRONTEND": "", "MONOFARM_TOKEN": ""}
+    if CONFIG_FILE.exists():
+        for line in CONFIG_FILE.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                cfg[k.strip()] = v.strip()
+    return cfg
+
+
+def _save_config(server: str, token: str) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(
+        f"MONOFARM_SERVER={server}\nMONOFARM_TOKEN={token}\n", encoding="utf-8"
+    )
+    try:
+        CONFIG_FILE.chmod(0o600)
+    except Exception:
+        pass
 
 
 async def check_for_update(server: str) -> None:
@@ -418,7 +545,72 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
     await ws.send(json.dumps(result))
 
 
+async def _pair_flow(server: str) -> str:
+    """Open browser to monofarm Settings and wait for the user to click 'Connect Agent'.
+    The frontend sends the JWT to our localhost callback; we save it and return it.
+    """
+    import socket as _sock
+    import threading as _t
+    import urllib.parse as _up
+    import webbrowser as _wb
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    loop = asyncio.get_running_loop()
+    token_fut: asyncio.Future[str] = loop.create_future()
+
+    with _sock.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    class _H(BaseHTTPRequestHandler):
+        def do_OPTIONS(self) -> None:
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.end_headers()
+
+        def do_GET(self) -> None:
+            qs  = _up.parse_qs(_up.urlparse(self.path).query)
+            tok = qs.get("token", [""])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b"ok")
+            if tok and not token_fut.done():
+                loop.call_soon_threadsafe(token_fut.set_result, tok)
+
+        def log_message(self, *_) -> None:
+            pass
+
+    srv = HTTPServer(("127.0.0.1", port), _H)
+    _t.Thread(target=srv.serve_forever, daemon=True).start()
+
+    cfg      = _load_config()
+    fe_url   = cfg.get("MONOFARM_FRONTEND") or server.replace(":8000", ":3000")
+    pair_url = f"{fe_url}/settings?agent_pair={port}"
+    log.info("Opening browser to pair agent: %s", pair_url)
+    _wb.open(pair_url)
+    log.info("Waiting for approval in browser (120s)…")
+
+    try:
+        token = await asyncio.wait_for(token_fut, timeout=120)
+    except asyncio.TimeoutError:
+        srv.shutdown()
+        log.error("Pairing timed out. Run with --token to skip.")
+        sys.exit(1)
+
+    srv.shutdown()
+    _save_config(server, token)
+    log.info("Token saved to %s — future runs need no arguments.", CONFIG_FILE)
+    return token
+
+
 async def run(server: str, token: str) -> None:
+    global _tg_server, _tg_jwt
+    _tg_server = server
+    _tg_jwt    = token
+
     ws_url = (
         server.replace("https://", "wss://").replace("http://", "ws://")
         + f"/api/agent/connect?token={token}"
@@ -437,11 +629,45 @@ async def run(server: str, token: str) -> None:
                 max_size=None,  # allow large messages (base64 chunks)
             ) as ws:
                 log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
+
+                # Fetch TG config on every connect (token may have changed while disconnected)
+                try:
+                    async with httpx.AsyncClient(timeout=10) as client:
+                        r = await client.get(
+                            f"{server}/api/agent/tg-config",
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                        if r.status_code == 200:
+                            tg_cfg = r.json()
+                            asyncio.create_task(_tg_reconfigure(tg_cfg.get("token") or None))
+                except Exception as exc:
+                    log.debug("Could not fetch tg-config: %s", exc)
+
                 async for message in ws:
                     try:
                         req = json.loads(message)
                     except json.JSONDecodeError:
                         log.warning("Received invalid JSON from server")
+                        continue
+
+                    msg_type = req.get("type", "")
+                    if msg_type == "TG_CONFIG":
+                        asyncio.create_task(_tg_reconfigure(req.get("token") or None))
+                        continue
+                    if msg_type == "TG_SEND":
+                        if _tg_app:
+                            async def _send(r=req) -> None:
+                                try:
+                                    await _tg_app.bot.send_message(
+                                        chat_id=r["chat_id"],
+                                        text=r["text"],
+                                        parse_mode=r.get("parse_mode"),
+                                    )
+                                except Exception as exc:
+                                    log.warning("TG_SEND failed: %s", exc)
+                            asyncio.create_task(_send())
+                        else:
+                            log.warning("TG_SEND received but bot not running")
                         continue
 
                     method = req.get("method", "GET").upper()
@@ -479,20 +705,38 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python monofarm_agent.py --token eyJ...
-  python monofarm_agent.py --server https://my.monofarm.app --token eyJ...
+  python monofarm_agent.py                                    # pair via browser (first run)
+  python monofarm_agent.py --server http://192.168.1.10:8000 # custom server, pair via browser
+  python monofarm_agent.py --token eyJ...                    # skip pairing, use token directly
 
-Get your token in monofarm → Settings → Agent Connection.
+On first run without --token the browser opens to monofarm Settings automatically.
+Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
         """,
     )
-    parser.add_argument("--server", default="https://monofarm.app",
-                        help="monofarm server URL (default: https://monofarm.app)")
-    parser.add_argument("--token", required=True,
-                        help="Your monofarm JWT token (from Settings → Agent Connection)")
+    parser.add_argument("--server", default=None,
+                        help="monofarm server URL (default: from saved config or https://monofarm.app)")
+    parser.add_argument("--token", default=None,
+                        help="JWT token — omit to use saved config or pair via browser")
     args = parser.parse_args()
 
+    cfg    = _load_config()
+    server = args.server or cfg["MONOFARM_SERVER"]
+    token  = args.token  or cfg["MONOFARM_TOKEN"]
+
+    async def _run() -> None:
+        nonlocal token
+        if not token:
+            token = await _pair_flow(server)
+        await run(server, token)
+
+    async def _run_with_cleanup() -> None:
+        try:
+            await _run()
+        finally:
+            await _tg_stop()
+
     try:
-        asyncio.run(run(args.server, args.token))
+        asyncio.run(_run_with_cleanup())
     except KeyboardInterrupt:
         log.info("Agent stopped.")
 

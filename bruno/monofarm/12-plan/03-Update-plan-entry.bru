@@ -1,0 +1,14 @@
+meta {
+  name: Update plan entry
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/plan/{{planEntryId}}
+  body: json
+}
+
+body:json {
+{"done": true}
+}

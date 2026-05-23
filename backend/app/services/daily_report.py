@@ -140,7 +140,7 @@ async def send_daily_plan_to_all() -> None:
     """Called by scheduler at 09:00. Sends per-org plan to every linked active user."""
     with SessionLocal() as db:
         orgs = db.query(Organization).all()
-        by_org: list[tuple[str, list[int]]] = []
+        by_org: list[tuple[str, int, list[int]]] = []
         for org in orgs:
             chat_ids = [
                 int(row[0])
@@ -154,15 +154,15 @@ async def send_daily_plan_to_all() -> None:
             ]
             if chat_ids:
                 text = build_daily_plan_text(db, org.id)
-                by_org.append((text, chat_ids))
+                by_org.append((text, org.id, chat_ids))
 
     if not by_org:
         log.info("Daily plan: no linked users to send to")
         return
     sent = total = 0
-    for text, chat_ids in by_org:
+    for text, org_id, chat_ids in by_org:
         for chat_id in chat_ids:
-            ok = await telegram_bot.send_message(chat_id, text)
+            ok = await telegram_bot.send_message(chat_id, org_id, text)
             sent += int(ok)
             total += 1
     log.info("Daily plan: sent to %d/%d users", sent, total)

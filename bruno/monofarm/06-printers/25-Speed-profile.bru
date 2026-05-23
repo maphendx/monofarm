@@ -1,0 +1,14 @@
+meta {
+  name: Speed profile
+  type: http
+  seq: 25
+}
+
+post {
+  url: {{baseUrl}}/api/printers/{{printerId}}/speed-profile
+  body: json
+}
+
+body:json {
+{"profile": 2}
+}

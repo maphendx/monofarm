@@ -1,0 +1,14 @@
+meta {
+  name: Adjust stock
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/filaments/{{filamentId}}/adjust
+  body: json
+}
+
+body:json {
+{"delta_grams": -50, "reason": "друк"}
+}

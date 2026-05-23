@@ -1,0 +1,12 @@
+meta {
+  name: Bulk delete printers
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/printers
+  params:query {
+    kind: bambu
+  }
+}

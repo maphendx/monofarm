@@ -1,0 +1,14 @@
+meta {
+  name: Update print task
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/tasks/print/{{taskId}}
+  body: json
+}
+
+body:json {
+{"status": "in_progress"}
+}

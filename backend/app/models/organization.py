@@ -55,3 +55,11 @@ class Organization(Base):
     bambu_password: Mapped[str] = mapped_column(String(255), default="", server_default="")
     bambu_refresh_token: Mapped[str] = mapped_column(String(512), default="", server_default="")
     bambu_region: Mapped[str] = mapped_column(String(8), default="", server_default="")
+
+    # Telegram bot (per-org, runs in local agent)
+    tg_bot_token:    Mapped[str] = mapped_column(String(512), default="", server_default="")  # Fernet-encrypted
+    tg_bot_username: Mapped[str] = mapped_column(String(64),  default="", server_default="")  # cached after agent getMe
+
+    # KeyCRM integration
+    keycrm_api_key:        Mapped[str] = mapped_column(String(255), default="", server_default="")
+    keycrm_webhook_secret: Mapped[str] = mapped_column(String(255), default="", server_default="")

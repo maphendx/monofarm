@@ -1,0 +1,18 @@
+meta {
+  name: Bambu verify code
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/orgs/me/bambu-verify-code
+  body: json
+}
+
+body:json {
+{
+  "email": "user@example.com",
+  "code": "123456",
+  "region": "eu"
+}
+}

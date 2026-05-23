@@ -1,0 +1,14 @@
+meta {
+  name: Update group
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/printer-groups/{{groupId}}
+  body: json
+}
+
+body:json {
+{"name": "Зона B"}
+}

@@ -104,7 +104,7 @@ def generate_telegram_link(
     if not user:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
     code = telegram_bot.generate_link_code(db, user)
-    bot_username = telegram_bot.get_bot_username()
+    bot_username = telegram_bot.get_bot_username(db, org.id)
     deep_link = f"https://t.me/{bot_username}?start={code}" if bot_username else None
     return TelegramLinkOut(
         code=code,
@@ -132,7 +132,7 @@ def unlink_telegram(
     return user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),

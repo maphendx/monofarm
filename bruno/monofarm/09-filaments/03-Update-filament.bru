@@ -1,0 +1,14 @@
+meta {
+  name: Update filament
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/filaments/{{filamentId}}
+  body: json
+}
+
+body:json {
+{"grams_remaining": 800}
+}

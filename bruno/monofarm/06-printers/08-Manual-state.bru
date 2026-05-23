@@ -1,0 +1,14 @@
+meta {
+  name: Manual state
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/printers/{{printerId}}/manual
+  body: json
+}
+
+body:json {
+{"status": "printing", "job": "test.gcode", "eta_minutes": 60}
+}

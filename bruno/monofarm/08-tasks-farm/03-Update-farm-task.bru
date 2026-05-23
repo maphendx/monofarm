@@ -1,0 +1,14 @@
+meta {
+  name: Update farm task
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/api/tasks/farm/{{taskId}}
+  body: json
+}
+
+body:json {
+{"status": "in_progress"}
+}

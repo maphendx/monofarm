@@ -1,0 +1,16 @@
+meta {
+  name: Update org settings
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/api/orgs/me/settings
+  body: json
+}
+
+body:json {
+{
+  "bambu_region": "eu"
+}
+}

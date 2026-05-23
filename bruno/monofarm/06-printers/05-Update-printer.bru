@@ -1,0 +1,14 @@
+meta {
+  name: Update printer
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/printers/{{printerId}}
+  body: json
+}
+
+body:json {
+{"name": "U1-01 renamed"}
+}

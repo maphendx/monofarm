@@ -1,0 +1,23 @@
+meta {
+  name: Register
+  type: http
+  seq: 1
+}
+
+auth {
+  mode: none
+}
+
+post {
+  url: {{baseUrl}}/api/orgs/register
+  body: json
+}
+
+body:json {
+{
+  "org_name": "Test Farm",
+  "admin_name": "Admin",
+  "admin_email": "test@example.com",
+  "admin_password": "password123"
+}
+}

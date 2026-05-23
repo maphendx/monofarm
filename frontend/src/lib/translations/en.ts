@@ -10,6 +10,7 @@ const en = {
     printers: "Printers",
     users: "Users",
     settings: "Settings",
+    warehouse: "Warehouse",
   },
   common: {
     save: "Save",

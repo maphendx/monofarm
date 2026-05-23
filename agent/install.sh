@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # monofarm-agent installer
-# Usage: curl -sSL http://localhost:8000/agent/install.sh | bash -s -- --token TOKEN --server http://localhost:8000
+# Usage: curl -sSL http://localhost:8000/agent/install.sh | bash -s -- --server http://localhost:8000
+# Token is NOT required — the agent opens a browser for pairing on first start.
 
 set -euo pipefail
 
@@ -16,12 +17,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
-
-if [[ -z "$TOKEN" ]]; then
-  echo "Error: --token is required"
-  echo "Usage: bash install.sh --token YOUR_TOKEN --server http://YOUR_SERVER"
-  exit 1
-fi
 
 # ── decide install dir (no sudo needed) ──────────────────────────────────────
 
@@ -66,11 +61,14 @@ curl -sSL "$SERVER/agent/monofarm_agent.py" -o "$INSTALL_DIR/monofarm_agent.py"
 
 # ── write config ──────────────────────────────────────────────────────────────
 
+FRONTEND="${SERVER//:8000/:3000}"
 cat > "$INSTALL_DIR/.env" <<EOF
 MONOFARM_SERVER=${SERVER}
+MONOFARM_FRONTEND=${FRONTEND}
 MONOFARM_TOKEN=${TOKEN}
 EOF
 chmod 600 "$INSTALL_DIR/.env"
+echo "Config written to $INSTALL_DIR/.env"
 
 # ── systemd (user-level, no sudo) ─────────────────────────────────────────────
 
@@ -86,9 +84,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/venv/bin/python ${INSTALL_DIR}/monofarm_agent.py \
-  --server ${SERVER} \
-  --token ${TOKEN}
+ExecStart=${INSTALL_DIR}/venv/bin/python ${INSTALL_DIR}/monofarm_agent.py
 Restart=always
 RestartSec=5
 
@@ -112,7 +108,6 @@ EOF
   else
     echo "  ✗ Status: $STATUS — starting manually instead"
     nohup "$VENV_PYTHON" "$INSTALL_DIR/monofarm_agent.py" \
-      --server "$SERVER" --token "$TOKEN" \
       > "$INSTALL_DIR/agent.log" 2>&1 &
     echo "  PID: $!  |  Logs: tail -f $INSTALL_DIR/agent.log"
   fi
@@ -133,13 +128,14 @@ elif [[ "$(uname)" == "Darwin" ]]; then
   <array>
     <string>${INSTALL_DIR}/venv/bin/python</string>
     <string>${INSTALL_DIR}/monofarm_agent.py</string>
-    <string>--server</string><string>${SERVER}</string>
-    <string>--token</string><string>${TOKEN}</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>${INSTALL_DIR}/agent.log</string>
   <key>StandardErrorPath</key><string>${INSTALL_DIR}/agent.log</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>${HOME}</string>
+  </dict>
 </dict>
 </plist>
 EOF
@@ -155,7 +151,6 @@ else
   # Linux without systemd (Docker, WSL, etc.) — run in background
   echo "systemd not available — starting in background…"
   nohup "$VENV_PYTHON" "$INSTALL_DIR/monofarm_agent.py" \
-    --server "$SERVER" --token "$TOKEN" \
     > "$INSTALL_DIR/agent.log" 2>&1 &
   AGENT_PID=$!
   echo ""

@@ -1,0 +1,12 @@
+meta {
+  name: List print tasks
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/tasks/print
+  params:query {
+    status: queued
+  }
+}

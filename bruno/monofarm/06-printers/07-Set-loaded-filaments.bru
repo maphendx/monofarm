@@ -1,0 +1,17 @@
+meta {
+  name: Set loaded filaments
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/printers/{{printerId}}/loaded-filaments
+  body: json
+}
+
+body:json {
+[
+  {"slot": 0, "color": "#FF0000", "type": "PLA", "empty": false},
+  {"slot": 1, "color": "#0000FF", "type": "PETG", "empty": false}
+]
+}

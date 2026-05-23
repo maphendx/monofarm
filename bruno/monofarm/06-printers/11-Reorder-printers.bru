@@ -1,0 +1,14 @@
+meta {
+  name: Reorder printers
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/printers/reorder
+  body: json
+}
+
+body:json {
+[{"id": 1, "sort_order": 0}]
+}

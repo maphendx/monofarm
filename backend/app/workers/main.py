@@ -89,19 +89,12 @@ async def _refresh_bambu_subscriptions() -> None:
 
 
 async def main() -> None:
-    from app.services import bambu, scheduler, telegram_bot
+    from app.services import bambu, scheduler
     from app.core.db import SessionLocal
     from app.models.organization import Organization
 
     # Redis command relay (runs in daemon thread — dies with the process)
     threading.Thread(target=_redis_cmd_relay, daemon=True, name="redis-cmd-relay").start()
-
-    # Telegram bot
-    try:
-        await telegram_bot.init()
-        log.info("Telegram bot started")
-    except Exception:
-        log.exception("Telegram bot failed to start")
 
     # APScheduler (daily report + Bambu token refresh + print tracker)
     try:
@@ -146,10 +139,6 @@ async def main() -> None:
         await bambu.shutdown()
     except Exception:
         log.exception("Bambu MQTT shutdown error")
-    try:
-        await telegram_bot.shutdown()
-    except Exception:
-        log.exception("Telegram shutdown error")
     log.info("Worker stopped")
 
 

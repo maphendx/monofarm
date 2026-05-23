@@ -1,0 +1,16 @@
+meta {
+  name: Camera stream
+  type: http
+  seq: 14
+}
+
+auth {
+  mode: none
+}
+
+get {
+  url: {{baseUrl}}/api/printers/{{printerId}}/camera/stream
+  params:query {
+    token: {{token}}
+  }
+}

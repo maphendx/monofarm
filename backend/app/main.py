@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.agent import router as agent_router
+from app.api.agent_tg import router as agent_tg_router
 from app.api.api_keys import router as api_keys_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
@@ -24,11 +25,13 @@ from app.api.printer_groups import router as printer_groups_router
 from app.api.printers import router as printers_router
 from app.api.tasks import router as tasks_router
 from app.api.users import router as users_router
+from app.api.warehouse import router as warehouse_router
+from app.api.keycrm import router as keycrm_router
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.organization import Organization
 from app.models.user import UserRole
-from app.services import bambu, scheduler, telegram_bot
+from app.services import bambu, scheduler
 from app.services.bootstrap import seed_admin
 
 
@@ -48,10 +51,9 @@ async def lifespan(_: FastAPI):
 
     if settings.INLINE_WORKERS:
         try:
-            await telegram_bot.init()
             scheduler.start()
         except Exception:
-            log.exception("Failed to start telegram bot / scheduler")
+            log.exception("Failed to start scheduler")
 
         try:
             with SessionLocal() as db:
@@ -72,10 +74,6 @@ async def lifespan(_: FastAPI):
         except Exception:
             log.exception("Bambu MQTT shutdown failed (all orgs)")
         scheduler.shutdown()
-        try:
-            await telegram_bot.shutdown()
-        except Exception:
-            log.exception("Telegram bot shutdown failed")
 
 
 app = FastAPI(title="Printfarm API", version="0.1.0", lifespan=lifespan)
@@ -132,8 +130,11 @@ app.include_router(filament_colors_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(octoprint_router)  # no prefix — OctoPrint paths are already /api/...
 app.include_router(plan_router, prefix="/api")
-app.include_router(agent_router)   # WebSocket + status endpoint
+app.include_router(agent_router)      # WebSocket + status endpoint
+app.include_router(agent_tg_router)   # Telegram bot data endpoints for local agent
 
 app.include_router(analytics_router, prefix="/api")
 app.include_router(history_router, prefix="/api")
 app.include_router(billing_router)
+app.include_router(warehouse_router, prefix="/api")
+app.include_router(keycrm_router, prefix="/api")

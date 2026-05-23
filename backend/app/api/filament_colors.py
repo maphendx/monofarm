@@ -56,7 +56,7 @@ def update_color(
     return row
 
 
-@router.delete("/{color_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{color_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_color(
     color_id: int,
     org: Organization = Depends(get_current_org),

@@ -1,0 +1,18 @@
+meta {
+  name: Create printer
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/printers
+  body: json
+}
+
+body:json {
+{
+  "name": "U1-01",
+  "kind": "snapmaker_u1",
+  "moonraker_url": "http://192.168.1.50"
+}
+}

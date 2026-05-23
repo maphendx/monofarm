@@ -497,7 +497,14 @@ export default function PrintersPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Silently run Bambu LAN discovery to populate missing IPs via agent UDP broadcast.
+    // If new IPs are found, reload the list so FTPS send works immediately.
+    api<{ devices: { dev_id: string; ip: string }[] }>("/api/printers/bambu-discover")
+      .then((r) => { if (r.devices?.length) load(); })
+      .catch(() => {});
+  }, []);
 
   async function handleDelete(id: number) {
     if (inFlight.current) return;

@@ -1,0 +1,18 @@
+meta {
+  name: Send to printer
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/files/{{fileId}}/send/{{printerId}}
+  body: json
+}
+
+body:json {
+{
+  "slot_map": {},
+  "auto_bed_leveling": true,
+  "timelapse": false
+}
+}

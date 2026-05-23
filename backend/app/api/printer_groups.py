@@ -86,7 +86,7 @@ def update_group(
     return _to_dto(group, db, org.id)
 
 
-@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
@@ -100,7 +100,7 @@ def delete_group(
     db.commit()
 
 
-@router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def reorder_groups(
     items: list[PrinterGroupReorderItem],
     db: Session = Depends(get_db),
