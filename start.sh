@@ -40,9 +40,7 @@ until curl -sf http://localhost:8000/docs > /dev/null 2>&1; do sleep 1; echo -n 
 echo " ready"
 
 echo ""
-TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "0.0.0.0")
-
 echo "✓ All services up"
-echo "  Frontend : http://${TAILSCALE_IP}:3000"
-echo "  Backend  : http://${TAILSCALE_IP}:8000"
+echo "  Frontend : http://localhost:3000"
+echo "  Backend  : http://localhost:8000"
 echo "  Logs     : /tmp/monofarm-backend.log  /tmp/monofarm-frontend.log"
