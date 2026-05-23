@@ -1,4 +1,4 @@
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +9,16 @@ class Settings(BaseSettings):
     ENV: str = "development"
 
     DATABASE_URL: str
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def _fix_db_scheme(cls, v: str) -> str:
+        # Railway provides postgres:// or postgresql:// — psycopg3 needs postgresql+psycopg://
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
 
