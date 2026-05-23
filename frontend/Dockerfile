@@ -4,6 +4,8 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_API_URL=https://api.monofarm.app
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN bun run build
 
 FROM oven/bun:1-alpine AS runner
