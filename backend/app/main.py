@@ -102,7 +102,7 @@ async def send_plan_now(
     return {"ok": True}
 
 
-_AGENT_DIR = Path(__file__).parent.parent.parent / "agent"
+_AGENT_DIR = Path(__file__).parent.parent / "agent"
 _AGENT_FILES = {"monofarm_agent.py", "monofarm_tray.py", "install.sh", "install.ps1", "Dockerfile", "requirements.txt", "bambu_camera_test.py"}
 
 
