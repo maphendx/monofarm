@@ -32,7 +32,7 @@ PLAN_LIMITS: dict[OrgPlan, dict[str, int]] = {
 PLAN_MAX_PRINTERS: dict[OrgPlan, int | None] = {
     OrgPlan.free:    2,
     OrgPlan.starter: 5,
-    OrgPlan.pro:     30,
+    OrgPlan.pro:     15,
     OrgPlan.farm:    None,
 }
 
