@@ -203,62 +203,157 @@ const STATE_COLOR: Record<string, string> = {
   unknown:           "bg-neutral-500",
 };
 
-function PrinterPhotoCard({ printer, onClick }: { printer: Printer; onClick: () => void }) {
-  const cover = printer.kind === "bambu" ? bambuCover(printer.bambu_model) : null;
-  const dot   = STATE_COLOR[printer.state ?? "unknown"] ?? "bg-neutral-500";
-  const eta   = printer.eta_minutes != null
-    ? printer.eta_minutes >= 60
-      ? `${Math.floor(printer.eta_minutes / 60)}h ${printer.eta_minutes % 60}m`
-      : `${printer.eta_minutes}m`
-    : null;
+function fmtFinish(eta_minutes: number): string {
+  const finish = new Date(Date.now() + eta_minutes * 60_000);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
+  const dayAfter = new Date(todayStart.getTime() + 2 * 86_400_000);
+  const time = finish.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+  if (finish < tomorrowStart) return `Сьогодні, ${time}`;
+  if (finish < dayAfter) return `Завтра, ${time}`;
+  return finish.toLocaleDateString("uk-UA", { weekday: "short", day: "numeric", month: "short" }) + `, ${time}`;
+}
+
+function fmtEtaShort(min: number): string {
+  if (min < 60) return `${min}хв`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}г ${m}хв` : `${h}год`;
+}
+
+function PrinterPhotoCard({
+  printer,
+  onClick,
+  onUpdated,
+}: {
+  printer: Printer;
+  onClick: () => void;
+  onUpdated: (p: Printer) => void;
+}) {
+  const cover      = printer.kind === "bambu" ? bambuCover(printer.bambu_model) : null;
+  const isPrinting = printer.state === "printing";
+  const isPaused   = printer.state === "paused";
+  const isReady    = printer.state === "idle" || printer.state === "operational";
+  const isError    = printer.state === "error";
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const filaments  = printer.loaded_filaments ?? [];
+  const pct        = printer.progress_pct ?? 0;
+
+  async function act(e: React.MouseEvent, action: string) {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(action);
+    try {
+      await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
+      const list = await api<Printer[]>("/api/printers");
+      const updated = list.find((p) => p.id === printer.id);
+      if (updated) onUpdated(updated);
+    } catch { /* ignore */ }
+    finally { setBusy(null); }
+  }
+
+  const borderTop = isPrinting ? "#3b82f6" : isPaused ? "#f59e0b" : isError ? "#ef4444" : isReady ? "#10b981" : "#525252";
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className="group flex flex-col rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden text-left transition hover:border-neutral-600 hover:shadow-lg"
+      className="group flex cursor-pointer flex-col rounded-2xl border border-neutral-700 bg-neutral-800 overflow-hidden text-left transition hover:border-neutral-500 hover:shadow-xl select-none"
+      style={{ borderTopWidth: 3, borderTopColor: borderTop }}
     >
-      {/* photo area */}
-      <div className="relative flex items-center justify-center bg-neutral-950 h-40 w-full">
-        {cover ? (
-          <img
-            src={cover}
-            alt={printer.bambu_model ?? printer.name}
-            className="h-36 w-full object-contain px-4 drop-shadow-md"
+      {/* ── top bar ── */}
+      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
+        {/* filament color dots */}
+        {filaments.slice(0, 6).map((s, i) => (
+          <span
+            key={i}
+            className="size-3.5 rounded-sm ring-1 ring-black/20 shrink-0"
+            style={{ backgroundColor: s.color.startsWith("#") ? s.color.slice(0, 7) : s.color }}
           />
-        ) : (
-          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
-            className="text-neutral-700">
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-            <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
-            <rect x="6" y="18" width="12" height="4" rx="1"/>
-          </svg>
+        ))}
+        {filaments.length > 6 && (
+          <span className="text-[10px] font-semibold text-neutral-400">+{filaments.length - 6}</span>
         )}
-        {/* state dot */}
-        <span className={`absolute top-2 right-2 size-2.5 rounded-full ${dot} shadow`} />
+        <div className="flex-1" />
+        <button
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          className="rounded p-0.5 text-neutral-500 opacity-0 transition hover:text-neutral-300 group-hover:opacity-100"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
 
-      {/* info */}
-      <div className="px-3 py-2.5">
-        <p className="text-sm font-semibold text-neutral-100 truncate">{printer.name}</p>
-        <p className="text-[11px] text-neutral-500 truncate">{printer.bambu_model ?? printer.kind}</p>
-        {printer.state === "printing" && (
-          <p className="mt-1 text-xs text-blue-400 truncate">
-            {eta ? `${eta} залишилось` : "Друкує"}
-            {printer.job ? ` · ${printer.job}` : ""}
-          </p>
-        )}
-        {printer.state === "error" && (
-          <p className="mt-1 text-xs text-red-400 truncate">Помилка</p>
-        )}
-        {(printer.state === "idle" || printer.state === "operational") && (
-          <p className="mt-1 text-xs text-emerald-400">Готовий</p>
-        )}
-        {printer.state === "paused" && (
-          <p className="mt-1 text-xs text-amber-400">На паузі</p>
-        )}
+      {/* ── photo + name ── */}
+      <div className="flex items-center gap-3 px-3 pb-2">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-neutral-900">
+          {cover ? (
+            <img src={cover} alt="" className="h-14 w-14 object-contain drop-shadow" />
+          ) : (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-600">
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
+              <rect x="6" y="18" width="12" height="4" rx="1"/>
+            </svg>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-bold text-neutral-100">{printer.name}</p>
+          <p className="text-[11px] text-neutral-500">{printer.bambu_model ?? printer.kind}</p>
+          {isError && <p className="mt-0.5 text-xs text-red-400 truncate">{printer.error_msg ?? "Помилка"}</p>}
+          {isReady && <p className="mt-0.5 text-xs text-emerald-400">Готовий</p>}
+          {isPaused && <p className="mt-0.5 text-xs text-amber-400">На паузі</p>}
+        </div>
       </div>
-    </button>
+
+      {/* ── ETA row (printing/paused) ── */}
+      {(isPrinting || isPaused) && printer.eta_minutes != null && (
+        <div className="flex items-baseline gap-2 px-3 pb-1.5 text-xs text-neutral-400">
+          <span>Закінчення через</span>
+          <span className="font-semibold text-neutral-200">{fmtEtaShort(printer.eta_minutes)}</span>
+          <span className="ml-auto text-neutral-500">{fmtFinish(printer.eta_minutes)}</span>
+        </div>
+      )}
+
+      {/* ── progress bar ── */}
+      {(isPrinting || isPaused) && (
+        <div className="px-3 pb-2">
+          <div className="h-5 w-full overflow-hidden rounded-md bg-neutral-700">
+            <div
+              className={`flex h-full items-center justify-center text-[10px] font-bold text-white transition-all ${isPrinting ? "bg-blue-500" : "bg-amber-500"}`}
+              style={{ width: `${Math.max(pct, 4)}%` }}
+            >
+              {pct >= 10 ? `${Math.round(pct)}%` : ""}
+            </div>
+          </div>
+          {pct < 10 && (
+            <p className="mt-0.5 text-center text-[10px] text-neutral-500">{Math.round(pct)}%</p>
+          )}
+        </div>
+      )}
+
+      {/* ── action buttons ── */}
+      {(isPrinting || isPaused) && (
+        <div className="flex gap-2 border-t border-neutral-700 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+          {/* Pause / Resume */}
+          <button
+            onClick={(e) => act(e, isPaused ? "resume" : "pause")}
+            disabled={!!busy}
+            className={`flex flex-1 items-center justify-center rounded-xl border py-2.5 text-sm font-semibold transition disabled:opacity-40 ${isPaused ? "border-emerald-500 text-emerald-400 hover:bg-emerald-500/10" : "border-amber-500 text-amber-400 hover:bg-amber-500/10"}`}
+          >
+            {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
+          </button>
+          {/* Stop */}
+          <button
+            onClick={(e) => act(e, "cancel")}
+            disabled={!!busy}
+            className="flex flex-1 items-center justify-center rounded-xl border border-red-500 bg-red-500/10 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-40"
+          >
+            {busy === "cancel" ? "…" : "⏹"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -512,9 +607,9 @@ export default function DashboardPage() {
           {t("dashboard.noPrinters")}
         </div>
       ) : view === "photos" ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filtered.map((p) => (
-            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} />
+            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} onUpdated={upsertPrinter} />
           ))}
         </div>
       ) : !isGrouped ? (
