@@ -673,19 +673,25 @@ def stop_print(dev_id: str) -> None:
 
 def start_print(
     dev_id: str,
-    ftp_filename: str,
     subtask_name: str,
     ams_mapping: list[int] | None = None,
     use_ams: bool = True,
+    http_url: str | None = None,
+    ftp_filename: str | None = None,
 ) -> None:
-    """Send MQTT command to start printing a file already uploaded via FTPS."""
+    """Send MQTT project_file command to start printing.
+
+    Prefers http_url (printer downloads from R2 — no LAN FTPS needed).
+    Falls back to ftp://ftp_filename for local-disk setups.
+    """
+    url = http_url if http_url else f"ftp://{ftp_filename}"
     cmd: dict[str, Any] = {
         "print": {
             "command": "project_file",
             "sequence_id": _next_seq(),
             "param": "Metadata/plate_1.gcode",
             "subtask_name": subtask_name,
-            "url": f"ftp://{ftp_filename}",
+            "url": url,
             "use_ams": use_ams,
         },
     }

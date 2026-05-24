@@ -259,31 +259,14 @@ async def send_to_printer(
         if printer.kind == PrinterKind.bambu:
             if not printer.bambu_dev_id:
                 raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
-            if not printer.bambu_dev_ip:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Принтер '{printer.name}': не вказано LAN IP. Відкрийте налаштування принтера і введіть IP.",
-                )
-            if not printer.bambu_access_code:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Принтер '{printer.name}': не вказано Access Code. Це 8-значний код зі Settings → LAN на принтері.",
-                )
             is_3mf = ".3mf" in Path(row.original_name).suffixes
             if not is_3mf:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Bambu Lab приймає лише .3mf файли",
-                )
+                raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
             # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
             # -1 marks unused slots so Bambu doesn't try to load them.
             meta = row.filament_meta or {}
-            slot_count = max(
-                len(meta.get("colors") or []),
-                len(meta.get("types") or []),
-                1,
-            )
+            slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 1)
             used_g = meta.get("used_g") or []
             ams_mapping: list[int] = []
             for i in range(slot_count):
@@ -295,15 +278,37 @@ async def send_to_printer(
             use_ams = any(v >= 0 for v in ams_mapping)
 
             try:
+                # ── HTTP mode: printer downloads directly from R2 (no FTPS needed) ──
+                presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=86400)
+                if presigned:
+                    await asyncio.to_thread(
+                        bambu_svc.start_print,
+                        printer.bambu_dev_id,
+                        row.original_name,
+                        ams_mapping,
+                        use_ams,
+                        presigned,  # http_url
+                    )
+                    return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
+
+                # ── FTPS fallback: local disk, no S3 ──
+                if not printer.bambu_dev_ip:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Принтер '{printer.name}': не вказано LAN IP (потрібен для FTPS без S3).",
+                    )
+                if not printer.bambu_access_code:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Принтер '{printer.name}': не вказано Access Code (Settings → LAN на принтері).",
+                    )
                 if _tunnel.has_tunnel(org.id):
-                    presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=1800)
                     ftp_name = await _tunnel.send_bambu_upload(
                         org.id,
                         printer.bambu_dev_ip,
                         printer.bambu_access_code,
                         row.original_name,
-                        file_bytes=None if presigned else src.read_bytes(),
-                        presigned_url=presigned,
+                        file_bytes=src.read_bytes(),
                     )
                 else:
                     ftp_name = await asyncio.to_thread(
@@ -316,10 +321,11 @@ async def send_to_printer(
                 await asyncio.to_thread(
                     bambu_svc.start_print,
                     printer.bambu_dev_id,
-                    ftp_name,
                     row.original_name,
                     ams_mapping,
                     use_ams,
+                    None,         # http_url
+                    ftp_name,     # ftp_filename
                 )
                 return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
             except (bambu_svc.BambuError, RuntimeError) as e:
