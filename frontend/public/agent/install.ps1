@@ -70,14 +70,6 @@ Invoke-WebRequest -Uri "$Server/agent/monofarm_agent.py" -OutFile $AgentScript
 $EnvFile = Join-Path $InstallDir ".env"
 Set-Content -Path $EnvFile -Value "MONOFARM_SERVER=$Server`nMONOFARM_FRONTEND=$Frontend`nMONOFARM_TOKEN=$Token"
 Write-Host "Config written to $EnvFile"
-# Restrict permissions — only current user can read
-$acl = Get-Acl $EnvFile
-$acl.SetAccessRuleProtection($true, $false)
-$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    $env:USERNAME, "FullControl", "Allow"
-)
-$acl.SetAccessRule($rule)
-Set-Acl $EnvFile $acl
 
 # ── Task Scheduler (no admin needed for current-user tasks) ───────────────────
 
