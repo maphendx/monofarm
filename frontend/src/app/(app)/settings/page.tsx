@@ -1,5 +1,6 @@
 "use client";
 
+import { PrintersManager } from "@/components/PrintersManager";
 import { ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useEffect, useRef, useState } from "react";
@@ -1307,7 +1308,7 @@ function PrintersSection() {
 
   return (
     <div className="space-y-6">
-      <ComingSoon label="Принтери" />
+      <PrintersManager />
 
       <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm dark:border-red-900/50 dark:bg-neutral-900">
         <h2 className="mb-4 font-semibold text-red-600 dark:text-red-400">Небезпечна зона</h2>

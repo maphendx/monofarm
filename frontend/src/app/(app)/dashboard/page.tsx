@@ -19,6 +19,42 @@ import {
 } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
 
+// ── StatusCard ────────────────────────────────────────────────────────────────
+
+function StatusCard({
+  label,
+  value,
+  sub,
+  color,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  color: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={[
+        "relative overflow-hidden rounded-xl border px-4 py-3 transition-colors",
+        onClick ? "cursor-pointer" : "",
+        active
+          ? "border-neutral-600 bg-neutral-800"
+          : "border-neutral-800 bg-neutral-900 hover:border-neutral-700 hover:bg-neutral-800/60",
+      ].join(" ")}
+    >
+      <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-xl" style={{ background: color }} />
+      <p className="text-[11px] font-medium text-neutral-400">{label}</p>
+      <p className="mt-0.5 text-lg font-semibold leading-tight text-neutral-100">{value}</p>
+      {sub && <p className="truncate text-[11px] text-neutral-500">{sub}</p>}
+    </div>
+  );
+}
+
 // ── group stats ───────────────────────────────────────────────────────────────
 
 interface GroupStats {
@@ -74,7 +110,7 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
 
 // ── filter ───────────────────────────────────────────────────────────────────
 
-type Filter = "all" | "snapmaker_u1" | "problems";
+type Filter = "all" | "printing" | "attention" | "idle" | "paused" | "awaiting" | "offline";
 type GroupBy = "mygroup" | "none" | "kind" | "state";
 
 const KIND_ORDER: PrinterKind[] = ["bambu", "snapmaker_u1", "other"];
@@ -164,11 +200,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const t = useT();
 
-  const FILTER_OPTS: { id: Filter; label: string }[] = [
-    { id: "all",          label: t("dashboard.allPrinters") },
-    { id: "snapmaker_u1", label: "Snapmaker U1" },
-    { id: "problems",     label: t("dashboard.problemsOnly") },
-  ];
   const GROUP_OPTS: { id: GroupBy; label: string }[] = [
     { id: "mygroup", label: t("dashboard.byMyGroups") },
     { id: "none",    label: t("dashboard.noGrouping") },
@@ -221,12 +252,13 @@ export default function DashboardPage() {
 
   const filtered = useMemo(() => {
     if (filter === "all") return printers;
-    if (filter === "problems")
-      return printers.filter((p) => {
-        const t = printerTone(p);
-        return t === "bad" || t === "warn";
-      });
-    return printers.filter((p) => p.kind === filter);
+    if (filter === "printing") return printers.filter((p) => p.state === "printing");
+    if (filter === "attention") return printers.filter((p) => p.state === "error");
+    if (filter === "idle") return printers.filter((p) => p.state === "idle" || p.state === "operational");
+    if (filter === "paused") return printers.filter((p) => p.state === "paused");
+    if (filter === "awaiting") return printers.filter((p) => p.state === "awaiting_bed_clear");
+    if (filter === "offline") return printers.filter((p) => p.state === "offline" || p.state === "unknown");
+    return printers;
   }, [printers, filter]);
 
   const groups = useMemo(
@@ -257,14 +289,52 @@ export default function DashboardPage() {
   const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
   const isGrouped = groupBy !== "none";
 
+  const statusStats = useMemo(() => {
+    let attention = 0, idle = 0, paused = 0, printing = 0, awaiting = 0, offline = 0;
+    let nextFinish: { name: string; eta: number } | null = null;
+    for (const p of printers) {
+      const s = p.state ?? "unknown";
+      if (s === "error") attention++;
+      else if (s === "idle" || s === "operational") idle++;
+      else if (s === "paused") paused++;
+      else if (s === "awaiting_bed_clear") awaiting++;
+      else if (s === "printing") {
+        printing++;
+        if (p.eta_minutes && (!nextFinish || p.eta_minutes < nextFinish.eta))
+          nextFinish = { name: p.name, eta: p.eta_minutes };
+      }
+      if (s === "offline" || s === "unknown") offline++;
+    }
+    return { attention, idle, paused, printing, awaiting, offline, nextFinish };
+  }, [printers]);
+
   return (
     <div className="space-y-4">
+      {/* ── status bar ── */}
+      {printers.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
+          <StatusCard
+            label="Next printer finish"
+            value={statusStats.nextFinish
+              ? `${statusStats.nextFinish.eta >= 60 ? `${Math.floor(statusStats.nextFinish.eta / 60)}h ${statusStats.nextFinish.eta % 60}m` : `${statusStats.nextFinish.eta}m`}`
+              : "—"}
+            sub={statusStats.nextFinish?.name}
+            color="#3b82f6"
+          />
+          <StatusCard label="Requires attention" value={statusStats.attention} color="#ef4444" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
+          <StatusCard label="Idle & ready" value={statusStats.idle} color="#22c55e" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
+          <StatusCard label="Paused" value={statusStats.paused} color="#eab308" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
+          <StatusCard label="Awaiting" value={statusStats.awaiting} color="#f97316" active={filter === "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
+          <StatusCard label="Printing" value={statusStats.printing} color="#8b5cf6" active={filter === "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
+          <StatusCard label="Offline / not connected" value={statusStats.offline} color="#6b7280" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
+        </div>
+      )}
+
       <DaySummary />
 
       {/* ── toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <CompactSelect value={filter} onChange={setFilter} options={FILTER_OPTS} />
           <span className="text-xs text-neutral-400">
             {filtered.length !== counts.all
               ? `${filtered.length} з ${counts.all}`
