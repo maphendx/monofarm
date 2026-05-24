@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class FilamentCreate(BaseModel):
     material: str
     color: str
+    hex_color: str | None = None
     brand: str | None = None
     grams_remaining: int = 0
     min_grams: int = 0
@@ -16,6 +17,7 @@ class FilamentCreate(BaseModel):
 class FilamentUpdate(BaseModel):
     material: str | None = None
     color: str | None = None
+    hex_color: str | None = None
     brand: str | None = None
     grams_remaining: int | None = None
     min_grams: int | None = None
@@ -49,6 +51,7 @@ class FilamentOut(BaseModel):
     sku: str | None
     material: str
     color: str
+    hex_color: str | None
     brand: str | None
     grams_remaining: int
     min_grams: int
@@ -56,6 +59,7 @@ class FilamentOut(BaseModel):
     note: str | None
     updated_at: datetime
     is_low: bool
+    warehouse_product_id: int | None = None
 
     class Config:
         from_attributes = True

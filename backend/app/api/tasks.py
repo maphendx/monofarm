@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org, get_current_user, require_roles
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.task import PrintTask, PrintTaskStatus
@@ -114,6 +114,7 @@ def update_task(
     # deduct filaments and calculate cost when task is marked done
     if payload.status == PrintTaskStatus.done and consumptions:
         from app.models.filament import Filament, FilamentLog
+        from app.api.filaments import _warehouse_movement
 
         # scale consumptions by actual printed vs planned if pieces given
         planned_qty = task.quantity or 1
@@ -142,6 +143,7 @@ def update_task(
                 task_id=task_id,
                 user_id=user.id,
             ))
+            _warehouse_movement(fil, -actual_grams, reason, user.id, db)
             if fil.cost_per_kg:
                 total_cost += actual_grams * fil.cost_per_kg / 1000.0
             stored.append({"filament_id": fil.id, "grams": actual_grams})

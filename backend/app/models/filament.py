@@ -16,7 +16,11 @@ class Filament(Base):
     sku: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     material: Mapped[str] = mapped_column(String(40))
     color: Mapped[str] = mapped_column(String(40))
+    hex_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     brand: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    warehouse_product_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("wh_products.id", ondelete="SET NULL"), nullable=True
+    )
     grams_remaining: Mapped[int] = mapped_column(Integer, default=0)
     min_grams: Mapped[int] = mapped_column(Integer, default=0)
     cost_per_kg: Mapped[int | None] = mapped_column(Integer, nullable=True)

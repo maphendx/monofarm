@@ -115,6 +115,7 @@ export interface Filament {
   sku: string | null;
   material: string;
   color: string;
+  hex_color: string | null;
   brand: string | null;
   grams_remaining: number;
   min_grams: number;
@@ -122,6 +123,7 @@ export interface Filament {
   note: string | null;
   updated_at: string;
   is_low: boolean;
+  warehouse_product_id: number | null;
 }
 
 export interface FarmTask {
