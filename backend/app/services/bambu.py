@@ -779,6 +779,7 @@ def cloud_upload_and_print(
         "modelId": model_id,
         "projectId": project_id,
         "title": filename,
+        "cover": cover_url,
         "deviceId": dev_id,
         "plateIndex": 1,
         "useAms": use_ams,
