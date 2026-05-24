@@ -168,6 +168,100 @@ function groupPrinters(
   }));
 }
 
+// ── printer photo view ────────────────────────────────────────────────────────
+
+const BAMBU_COVER: [RegExp, string][] = [
+  [/a1[\s_-]*mini/i,  "/printers/a1_mini.png"],
+  [/a1[\s_-]*combo/i, "/printers/a1_mini.png"],
+  [/\ba1\b/i,         "/printers/a1.png"],
+  [/p1s/i,            "/printers/p1s.png"],
+  [/p1p/i,            "/printers/p1p.png"],
+  [/x1[\s_-]*carbon/i,"/printers/x1c.png"],
+  [/x1c/i,            "/printers/x1c.png"],
+  [/x1e/i,            "/printers/x1e.png"],
+  [/\bx1\b/i,         "/printers/x1.png"],
+  [/h2d[\s_-]*pro/i,  "/printers/h2d_pro.png"],
+  [/h2d/i,            "/printers/h2d.png"],
+];
+
+function bambuCover(model: string | null | undefined): string | null {
+  if (!model) return null;
+  for (const [re, path] of BAMBU_COVER) {
+    if (re.test(model)) return path;
+  }
+  return null;
+}
+
+const STATE_COLOR: Record<string, string> = {
+  printing:          "bg-blue-500",
+  idle:              "bg-emerald-500",
+  operational:       "bg-emerald-500",
+  paused:            "bg-amber-500",
+  awaiting_bed_clear:"bg-orange-500",
+  error:             "bg-red-500",
+  offline:           "bg-neutral-500",
+  unknown:           "bg-neutral-500",
+};
+
+function PrinterPhotoCard({ printer, onClick }: { printer: Printer; onClick: () => void }) {
+  const cover = printer.kind === "bambu" ? bambuCover(printer.bambu_model) : null;
+  const dot   = STATE_COLOR[printer.state ?? "unknown"] ?? "bg-neutral-500";
+  const eta   = printer.eta_minutes != null
+    ? printer.eta_minutes >= 60
+      ? `${Math.floor(printer.eta_minutes / 60)}h ${printer.eta_minutes % 60}m`
+      : `${printer.eta_minutes}m`
+    : null;
+
+  return (
+    <button
+      onClick={onClick}
+      className="group flex flex-col rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden text-left transition hover:border-neutral-600 hover:shadow-lg"
+    >
+      {/* photo area */}
+      <div className="relative flex items-center justify-center bg-neutral-950 h-40 w-full">
+        {cover ? (
+          <img
+            src={cover}
+            alt={printer.bambu_model ?? printer.name}
+            className="h-36 w-full object-contain px-4 drop-shadow-md"
+          />
+        ) : (
+          <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
+            className="text-neutral-700">
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
+            <rect x="6" y="18" width="12" height="4" rx="1"/>
+          </svg>
+        )}
+        {/* state dot */}
+        <span className={`absolute top-2 right-2 size-2.5 rounded-full ${dot} shadow`} />
+      </div>
+
+      {/* info */}
+      <div className="px-3 py-2.5">
+        <p className="text-sm font-semibold text-neutral-100 truncate">{printer.name}</p>
+        <p className="text-[11px] text-neutral-500 truncate">{printer.bambu_model ?? printer.kind}</p>
+        {printer.state === "printing" && (
+          <p className="mt-1 text-xs text-blue-400 truncate">
+            {eta ? `${eta} залишилось` : "Друкує"}
+            {printer.job ? ` · ${printer.job}` : ""}
+          </p>
+        )}
+        {printer.state === "error" && (
+          <p className="mt-1 text-xs text-red-400 truncate">Помилка</p>
+        )}
+        {(printer.state === "idle" || printer.state === "operational") && (
+          <p className="mt-1 text-xs text-emerald-400">Готовий</p>
+        )}
+        {printer.state === "paused" && (
+          <p className="mt-1 text-xs text-amber-400">На паузі</p>
+        )}
+      </div>
+    </button>
+  );
+}
+
 // ── compact select ────────────────────────────────────────────────────────────
 
 function CompactSelect<T extends string>({
@@ -215,6 +309,7 @@ export default function DashboardPage() {
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
+  const [view, setView] = useState<"cards" | "photos">("cards");
 
   const load = useCallback(async () => {
     setError(null);
@@ -374,6 +469,24 @@ export default function DashboardPage() {
               {t("printers.groups")}
             </button>
           )}
+          {/* view toggle */}
+          <div className="flex rounded-md border border-neutral-800 overflow-hidden">
+            <button
+              onClick={() => setView("cards")}
+              title="Картки"
+              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:bg-neutral-800"}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </button>
+            <button
+              onClick={() => setView("photos")}
+              title="Фото"
+              className={`px-2.5 py-1.5 text-xs transition border-l border-neutral-800 ${view === "photos" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:bg-neutral-800"}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+            </button>
+          </div>
+
           {user.role === "admin" && (
             <button
               onClick={() => router.push("/settings?section=printers")}
@@ -397,6 +510,12 @@ export default function DashboardPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 px-4 py-12 text-center text-sm text-neutral-500 dark:border-neutral-700">
           {t("dashboard.noPrinters")}
+        </div>
+      ) : view === "photos" ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+          {filtered.map((p) => (
+            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} />
+          ))}
         </div>
       ) : !isGrouped ? (
         <div className={GRID}>
