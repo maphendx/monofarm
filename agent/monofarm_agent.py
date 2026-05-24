@@ -15,7 +15,7 @@ Wire protocol:
              Agent→Server  {"id":"…","type":"stream_end"}
 
 Usage:
-    python monofarm_agent.py --server https://monofarm.app --token YOUR_JWT_TOKEN
+    python monofarm_agent.py --server https://api.monofarm.app --token YOUR_JWT_TOKEN
 """
 from __future__ import annotations
 
@@ -157,7 +157,7 @@ async def _tg_reconfigure(new_token: str | None) -> None:
 
 
 def _load_config() -> dict[str, str]:
-    cfg = {"MONOFARM_SERVER": "https://monofarm.app", "MONOFARM_FRONTEND": "", "MONOFARM_TOKEN": ""}
+    cfg = {"MONOFARM_SERVER": "https://api.monofarm.app", "MONOFARM_FRONTEND": "https://monofarm.app", "MONOFARM_TOKEN": ""}
     if CONFIG_FILE.exists():
         for line in CONFIG_FILE.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.startswith("#"):
@@ -780,7 +780,7 @@ Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
         """,
     )
     parser.add_argument("--server", default=None,
-                        help="monofarm server URL (default: from saved config or https://monofarm.app)")
+                        help="monofarm server URL (default: from saved config or https://api.monofarm.app)")
     parser.add_argument("--token", default=None,
                         help="JWT token — omit to use saved config or pair via browser")
     args = parser.parse_args()

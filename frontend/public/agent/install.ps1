@@ -7,8 +7,9 @@
 # so the agent starts automatically at login (no admin rights required).
 
 param(
-    [string]$Token  = $env:MONOFARM_TOKEN,
-    [string]$Server = "https://monofarm.app"
+    [string]$Token    = $env:MONOFARM_TOKEN,
+    [string]$Server   = "https://api.monofarm.app",
+    [string]$Frontend = "https://monofarm.app"
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,7 +68,7 @@ Invoke-WebRequest -Uri "$Server/agent/monofarm_agent.py" -OutFile $AgentScript
 # ── write config ──────────────────────────────────────────────────────────────
 
 $EnvFile = Join-Path $InstallDir ".env"
-Set-Content -Path $EnvFile -Value "MONOFARM_SERVER=$Server`nMONOFARM_TOKEN=$Token"
+Set-Content -Path $EnvFile -Value "MONOFARM_SERVER=$Server`nMONOFARM_FRONTEND=$Frontend`nMONOFARM_TOKEN=$Token"
 Write-Host "Config written to $EnvFile"
 # Restrict permissions — only current user can read
 $acl = Get-Acl $EnvFile
