@@ -47,6 +47,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<Step>("install");
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [os, setOs] = useState<"windows" | "linux">("windows");
 
   // Poll for agent connection
   useEffect(() => {
@@ -66,9 +67,14 @@ export default function OnboardingPage() {
     return () => clearInterval(id);
   }, [step]);
 
+  function installCmd(platform: "windows" | "linux") {
+    return platform === "windows"
+      ? `irm https://monofarm.app/agent/install.ps1 | iex`
+      : `curl -sSL ${API_BASE}/agent/install.sh | bash`;
+  }
+
   function copy() {
-    const cmd = `curl -sSL ${API_BASE}/agent/install.sh | bash`;
-    navigator.clipboard.writeText(cmd).then(() => {
+    navigator.clipboard.writeText(installCmd(os)).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -128,20 +134,35 @@ export default function OnboardingPage() {
                 </div>
               </div>
 
-              {/* Install command */}
+              {/* OS tabs + install command */}
               <div>
-                <p className="mb-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">Linux / Raspberry Pi / macOS</p>
+                <div className="mb-2 flex gap-1">
+                  {(["windows", "linux"] as const).map((platform) => (
+                    <button key={platform} onClick={() => setOs(platform)}
+                      className={[
+                        "rounded-md px-3 py-1 text-xs font-medium transition",
+                        os === platform
+                          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                          : "border border-neutral-200 text-neutral-500 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400",
+                      ].join(" ")}>
+                      {platform === "windows" ? "Windows" : "Linux / macOS"}
+                    </button>
+                  ))}
+                </div>
                 <div className="relative">
                   <pre className="overflow-x-auto rounded-lg bg-neutral-950 px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
-                    {`curl -sSL ${API_BASE}/agent/install.sh | bash`}
+                    {installCmd(os)}
                   </pre>
-                  <button
-                    onClick={copy}
-                    className="absolute right-2 top-2 rounded bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400 transition hover:bg-neutral-700 hover:text-white"
-                  >
+                  <button onClick={copy}
+                    className="absolute right-2 top-2 rounded bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400 transition hover:bg-neutral-700 hover:text-white">
                     {copied ? "✓" : "Копіювати"}
                   </button>
                 </div>
+                {os === "windows" && (
+                  <p className="mt-1.5 text-[10px] text-neutral-400">
+                    Запусти в PowerShell (не cmd). Після встановлення значок з'явиться в системному треї.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-3">
