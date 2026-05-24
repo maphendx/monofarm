@@ -175,8 +175,8 @@ function fmtEta(minutes: number): string {
   return `${minutes}m`;
 }
 
-function FinishingQueue({ printers, onClose }: { printers: Printer[]; onClose: () => void }) {
-  const printing = printers
+function FinishingQueue({ printers }: { printers: Printer[] }) {
+  const printing = [...printers]
     .filter((p) => p.state === "printing")
     .sort((a, b) => {
       if (a.eta_minutes == null && b.eta_minutes == null) return 0;
@@ -185,27 +185,32 @@ function FinishingQueue({ printers, onClose }: { printers: Printer[]; onClose: (
       return a.eta_minutes - b.eta_minutes;
     });
 
+  if (printing.length === 0) return null;
+
   return (
-    <div className="rounded-xl border border-neutral-700 bg-neutral-900 shadow-xl">
-      <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-2.5">
-        <span className="text-xs font-medium text-neutral-400">Завершуються по порядку</span>
-        <button onClick={onClose} className="text-neutral-600 hover:text-neutral-300 text-sm leading-none">✕</button>
-      </div>
-      <div className="divide-y divide-neutral-800">
-        {printing.map((p, i) => (
-          <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-            <span className="w-5 text-center text-[11px] font-bold text-neutral-600">#{i + 1}</span>
-            <span className="flex-1 text-sm font-medium text-neutral-200">{p.name}</span>
-            {p.job && <span className="max-w-[200px] truncate text-xs text-neutral-500">{p.job}</span>}
-            <span className="shrink-0 text-sm font-semibold text-blue-400">
-              {p.eta_minutes != null ? fmtEta(p.eta_minutes) : "—"}
-            </span>
-          </div>
-        ))}
-        {printing.length === 0 && (
-          <p className="px-4 py-3 text-xs text-neutral-500">Немає принтерів що друкують</p>
-        )}
-      </div>
+    <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-neutral-800 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+            <th className="px-4 py-2">#</th>
+            <th className="px-4 py-2">Принтер</th>
+            <th className="px-4 py-2">Файл</th>
+            <th className="px-4 py-2 text-right">Залишилось</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-neutral-800">
+          {printing.map((p, i) => (
+            <tr key={p.id} className="hover:bg-neutral-800/40">
+              <td className="px-4 py-2.5 text-xs font-bold text-neutral-600">#{i + 1}</td>
+              <td className="px-4 py-2.5 font-medium text-neutral-200">{p.name}</td>
+              <td className="max-w-[260px] truncate px-4 py-2.5 text-xs text-neutral-500">{p.job ?? "—"}</td>
+              <td className="px-4 py-2.5 text-right font-semibold text-blue-400">
+                {p.eta_minutes != null ? fmtEta(p.eta_minutes) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -257,7 +262,6 @@ export default function DashboardPage() {
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
-  const [finishOpen, setFinishOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -355,23 +359,14 @@ export default function DashboardPage() {
       {/* ── status cards ── */}
       {printers.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
-          <div className="relative">
-            <StatusCard
-              label="Next printer finish"
-              value={statusStats.nextFinish
-                ? fmtEta(statusStats.nextFinish.eta)
-                : "—"}
-              sub={statusStats.nextFinish?.name}
-              color="#3b82f6"
-              active={finishOpen}
-              onClick={() => setFinishOpen((o) => !o)}
-            />
-            {finishOpen && (
-              <div className="absolute left-0 top-full z-30 mt-1 w-72">
-                <FinishingQueue printers={printers} onClose={() => setFinishOpen(false)} />
-              </div>
-            )}
-          </div>
+          <StatusCard
+            label="Next printer finish"
+            value={statusStats.nextFinish ? fmtEta(statusStats.nextFinish.eta) : "—"}
+            sub={statusStats.nextFinish?.name}
+            color="#3b82f6"
+            active={filter === "printing"}
+            onClick={() => setFilter(filter === "printing" ? "all" : "printing")}
+          />
           <StatusCard label="Requires attention" value={statusStats.attention} color="#ef4444" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
           <StatusCard label="Idle & ready" value={statusStats.idle} color="#22c55e" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
           <StatusCard label="Paused" value={statusStats.paused} color="#eab308" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
@@ -380,6 +375,8 @@ export default function DashboardPage() {
           <StatusCard label="Offline / not connected" value={statusStats.offline} color="#6b7280" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
         </div>
       )}
+
+      {statusStats.printing > 0 && <FinishingQueue printers={printers} />}
 
       {/* ── toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
