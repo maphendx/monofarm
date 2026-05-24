@@ -301,6 +301,208 @@ function CmdBlock({ cmd, id, copied, onCopy }: { cmd: string; id: string; copied
   );
 }
 
+// ── Discover sub-component ─────────────────────────────────────────────────
+
+type BambuDev = { dev_id: string; ip: string; name: string; model: string };
+type MrDev    = { url: string; name: string };
+
+function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
+  const [discovering, setDiscovering] = useState(false);
+  const [result, setResult]   = useState<{ bambu: BambuDev[]; moonraker: MrDev[] } | null>(null);
+  const [limit,  setLimit]    = useState<{ count: number; limit: number } | null>(null);
+  const [err, setErr]         = useState<string | null>(null);
+  const [addingKey, setAddingKey]   = useState<string | null>(null);
+  const [addedKeys, setAddedKeys]   = useState<Set<string>>(new Set());
+  const [inputs, setInputs]         = useState<Record<string, { name: string; access_code: string }>>({});
+
+  useEffect(() => {
+    api<{ count: number; limit: number; plan: string }>("/api/printers/limit")
+      .then((r) => setLimit({ count: r.count, limit: r.limit }))
+      .catch(() => {});
+  }, [addedKeys]);
+
+  async function scan() {
+    setDiscovering(true); setErr(null); setResult(null);
+    try {
+      const r = await api<{ bambu: BambuDev[]; moonraker: MrDev[] }>("/api/printers/discover");
+      setResult(r);
+      const init: Record<string, { name: string; access_code: string }> = {};
+      r.bambu.forEach((d) => { init[d.dev_id] = { name: d.name || d.model || d.dev_id, access_code: "" }; });
+      r.moonraker.forEach((d) => { init[d.url] = { name: d.name || d.url, access_code: "" }; });
+      setInputs(init);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Помилка сканування");
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  async function addBambu(d: BambuDev) {
+    const inp = inputs[d.dev_id] ?? { name: d.name, access_code: "" };
+    setAddingKey(d.dev_id);
+    try {
+      await api("/api/printers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: inp.name || d.name || d.dev_id,
+          kind: "bambu",
+          bambu_dev_id: d.dev_id,
+          bambu_dev_ip: d.ip,
+          bambu_access_code: inp.access_code,
+          bambu_model: d.model,
+        }),
+      });
+      setAddedKeys((prev) => new Set(prev).add(d.dev_id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Помилка додавання");
+    } finally {
+      setAddingKey(null);
+    }
+  }
+
+  async function addMoonraker(d: MrDev) {
+    const inp = inputs[d.url] ?? { name: d.name, access_code: "" };
+    setAddingKey(d.url);
+    try {
+      await api("/api/printers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: inp.name || d.name || d.url,
+          kind: "snapmaker_u1",
+          moonraker_url: d.url,
+        }),
+      });
+      setAddedKeys((prev) => new Set(prev).add(d.url));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Помилка додавання");
+    } finally {
+      setAddingKey(null);
+    }
+  }
+
+  const atLimit = limit !== null && limit.count >= limit.limit;
+  const total   = (result?.bambu.length ?? 0) + (result?.moonraker.length ?? 0);
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Додати принтери</h3>
+          <p className="mt-0.5 text-xs text-neutral-400">Агент сканує локальну мережу і знаходить Bambu + Klipper принтери</p>
+        </div>
+        {limit && (
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${atLimit ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>
+            {limit.count}/{limit.limit} принтерів
+          </span>
+        )}
+      </div>
+
+      {atLimit && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300">
+          Досягнуто ліміт плану <strong>{orgPlan}</strong>. Оновіть план щоб додати більше принтерів.
+        </div>
+      )}
+
+      <button
+        onClick={scan}
+        disabled={discovering || atLimit}
+        className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+      >
+        {discovering ? "Сканування… (до 60 с)" : "Сканувати мережу"}
+      </button>
+
+      {err && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{err}</p>}
+
+      {result && total === 0 && (
+        <p className="mt-4 text-xs text-neutral-400">Нових принтерів не знайдено. Переконайся що принтери увімкнені та в одній мережі з агентом.</p>
+      )}
+
+      {result && total > 0 && (
+        <div className="mt-4 space-y-3">
+          {result.bambu.map((d) => {
+            const key = d.dev_id;
+            const done = addedKeys.has(key);
+            const inp  = inputs[key] ?? { name: d.name, access_code: "" };
+            return (
+              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Bambu</span>
+                  <span className="text-xs font-medium">{d.model || d.dev_id}</span>
+                  <span className="text-[11px] text-neutral-400">{d.ip}</span>
+                </div>
+                {!done && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="Назва"
+                      value={inp.name}
+                      onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
+                      className="rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                    />
+                    <input
+                      placeholder="Access Code (з принтера)"
+                      value={inp.access_code}
+                      onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, access_code: e.target.value } }))}
+                      className="rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                    />
+                  </div>
+                )}
+                <div className="mt-2 flex justify-end">
+                  {done ? (
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Додано</span>
+                  ) : (
+                    <button
+                      onClick={() => addBambu(d)}
+                      disabled={addingKey === key || !inp.access_code}
+                      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                    >
+                      {addingKey === key ? "Додавання…" : "Додати"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {result.moonraker.map((d) => {
+            const key = d.url;
+            const done = addedKeys.has(key);
+            const inp  = inputs[key] ?? { name: d.name, access_code: "" };
+            return (
+              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Klipper</span>
+                  <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{d.url}</span>
+                </div>
+                {!done && (
+                  <input
+                    placeholder="Назва принтера"
+                    value={inp.name}
+                    onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
+                    className="w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                  />
+                )}
+                <div className="mt-2 flex justify-end">
+                  {done ? (
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Додано</span>
+                  ) : (
+                    <button
+                      onClick={() => addMoonraker(d)}
+                      disabled={addingKey === key}
+                      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                    >
+                      {addingKey === key ? "Додавання…" : "Додати"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentSection() {
   const token = getToken() ?? "";
   const [copied, setCopied] = useState<string | null>(null);
@@ -513,6 +715,9 @@ function AgentSection() {
           ))}
         </div>
       </div>
+
+      {/* ── Discover printers (only when agent connected) ── */}
+      {connected && <DiscoverSection />}
 
     </div>
   );

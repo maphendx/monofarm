@@ -293,6 +293,70 @@ async def handle_discover_bambu(ws, req: dict) -> None:
     }))
 
 
+async def handle_discover_moonraker(ws, req: dict) -> None:
+    """Scan the local /24 subnet for Moonraker instances (port 7125)."""
+    import ipaddress
+
+    req_id = req.get("id")
+    results: list[dict] = []
+
+    # Determine local IPs to derive subnets to scan
+    subnets: set[str] = set()
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None):
+            addr = info[4][0]
+            if addr.startswith("192.168.") or addr.startswith("10.") or addr.startswith("172."):
+                net = ipaddress.IPv4Network(f"{addr}/24", strict=False)
+                subnets.add(str(net))
+    except Exception:
+        pass
+    if not subnets:
+        subnets.add("192.168.1.0/24")
+
+    async def _probe(ip: str) -> dict | None:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, 7125), timeout=0.3
+            )
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            # Confirm it's Moonraker
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    r = await client.get(f"http://{ip}:7125/printer/info")
+                    if r.status_code == 200:
+                        data = r.json().get("result", {})
+                        return {"url": f"http://{ip}:7125", "name": data.get("hostname") or ip}
+            except Exception:
+                return {"url": f"http://{ip}:7125", "name": ip}
+        except Exception:
+            return None
+
+    tasks = []
+    for subnet in subnets:
+        try:
+            net = ipaddress.IPv4Network(subnet)
+            for host in net.hosts():
+                tasks.append(_probe(str(host)))
+        except Exception:
+            pass
+
+    probed = await asyncio.gather(*tasks)
+    results = [r for r in probed if r is not None]
+
+    import json as _json
+    await ws.send(_json.dumps({
+        "id": req_id,
+        "status": 200,
+        "body": {"devices": results},
+        "error": None,
+    }))
+
+
 async def handle_stream(ws, req: dict) -> None:
     """Proxy a streaming HTTP response (e.g. MJPEG from go2rtc) chunk by chunk."""
     req_id = req.get("id")
@@ -677,6 +741,8 @@ async def run(server: str, token: str) -> None:
                         asyncio.create_task(handle_ffmpeg_stream(ws, req))
                     elif method == "DISCOVER_BAMBU":
                         asyncio.create_task(handle_discover_bambu(ws, req))
+                    elif method == "DISCOVER_MOONRAKER":
+                        asyncio.create_task(handle_discover_moonraker(ws, req))
                     elif method == "BAMBU_UPLOAD":
                         asyncio.create_task(handle_bambu_upload(ws, req))
                     elif method == "MOONRAKER_UPLOAD":

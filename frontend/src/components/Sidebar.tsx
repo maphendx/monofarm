@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearToken } from "@/lib/api";
-import { useT } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
 // ── SVG icons ──────────────────────────────────────────────────────────────
@@ -80,6 +80,7 @@ export function Sidebar({ user }: { user: User }) {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
+  const { locale, setLocale } = useLocale();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -175,7 +176,14 @@ export function Sidebar({ user }: { user: User }) {
                 <span className="text-xs text-neutral-400">{user.role}</span>
               </div>
             </button>
-            <div className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+              <button
+                onClick={() => setLocale(locale === "uk" ? "en" : "uk")}
+                title="Switch language"
+                className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+              >
+                {locale === "uk" ? "EN" : "UA"}
+              </button>
               <ThemeToggle compact />
             </div>
           </div>

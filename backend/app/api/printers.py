@@ -307,6 +307,57 @@ async def bambu_discover(
     return await asyncio.to_thread(_discover)
 
 
+@router.get("/limit")
+def get_printer_limit(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    from app.models.organization import PLAN_LIMITS
+    limit = PLAN_LIMITS[org.plan]["printers"]
+    count = db.query(Printer).filter(Printer.organization_id == org.id).count()
+    return {"count": count, "limit": limit, "plan": org.plan}
+
+
+@router.get("/discover")
+async def discover_printers(
+    org: Organization = Depends(get_current_org),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Trigger agent LAN scan for Bambu + Moonraker printers not yet in the DB."""
+    if not _tunnel.has_tunnel(org.id):
+        raise HTTPException(status_code=503, detail="Agent not connected")
+
+    existing_bambu_ids = {
+        p.bambu_dev_id
+        for p in db.query(Printer).filter(Printer.organization_id == org.id, Printer.bambu_dev_id.isnot(None)).all()
+    }
+    existing_moonraker_urls = {
+        p.moonraker_url
+        for p in db.query(Printer).filter(Printer.organization_id == org.id, Printer.moonraker_url.isnot(None)).all()
+    }
+
+    bambu_resp, moonraker_resp = await asyncio.gather(
+        _tunnel.proxy_request(org.id, "DISCOVER_BAMBU", "", timeout=10.0),
+        _tunnel.proxy_request(org.id, "DISCOVER_MOONRAKER", "", timeout=60.0),
+        return_exceptions=True,
+    )
+
+    bambu_devices: list[dict] = []
+    if isinstance(bambu_resp, dict):
+        for d in (bambu_resp.get("body") or {}).get("devices", []):
+            if d.get("dev_id") not in existing_bambu_ids:
+                bambu_devices.append(d)
+
+    moonraker_devices: list[dict] = []
+    if isinstance(moonraker_resp, dict):
+        for d in (moonraker_resp.get("body") or {}).get("devices", []):
+            url = (d.get("url") or "").rstrip("/")
+            if url not in existing_moonraker_urls:
+                moonraker_devices.append(d)
+
+    return {"bambu": bambu_devices, "moonraker": moonraker_devices}
+
+
 @router.get("/{printer_id}", response_model=PrinterOut)
 async def get_printer(
     printer_id: int,
