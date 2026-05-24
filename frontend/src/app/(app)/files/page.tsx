@@ -2,19 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-
 import { ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// XHR-based upload so we can show real upload progress (fetch doesn't expose it).
-function uploadWithProgress<T>(
-  path: string,
-  body: FormData,
-  onProgress: (pct: number) => void,
-): Promise<T> {
+// ── XHR upload ────────────────────────────────────────────────────────────────
+function uploadWithProgress<T>(path: string, body: FormData, onProgress: (pct: number) => void): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = getToken();
@@ -25,20 +20,12 @@ function uploadWithProgress<T>(
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as T);
-        } catch {
-          reject(new ApiError(xhr.status, "Bad JSON response"));
-        }
+        try { resolve(JSON.parse(xhr.responseText) as T); }
+        catch { reject(new ApiError(xhr.status, "Bad JSON")); }
         return;
       }
       let detail = xhr.statusText;
-      try {
-        const data = JSON.parse(xhr.responseText);
-        detail = data.detail ?? detail;
-      } catch {
-        /* ignore */
-      }
+      try { detail = JSON.parse(xhr.responseText).detail ?? detail; } catch { /* */ }
       reject(new ApiError(xhr.status, detail));
     };
     xhr.onerror = () => reject(new ApiError(0, "Помилка мережі"));
@@ -46,329 +33,180 @@ function uploadWithProgress<T>(
   });
 }
 
-// A file slot is "used" if used_g[i] > 0. When used_g is missing, assume
-// every configured slot is used (older slicer outputs without weight data).
-function usedSlotIndices(meta: GcodeFileMeta | null): number[] {
-  if (!meta) return [];
-  const total = Math.max(meta.colors?.length ?? 0, meta.types?.length ?? 0);
-  if (total === 0) return [];
-  const usedG = meta.used_g;
-  if (!usedG || usedG.length === 0) {
-    return Array.from({ length: total }, (_, i) => i);
-  }
-  const out: number[] = [];
-  for (let i = 0; i < total; i++) {
-    const g = usedG[i];
-    if (g === undefined || g > 0) out.push(i);
-  }
-  return out;
-}
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} КБ`;
   return `${bytes} Б`;
 }
-
 function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString("uk-UA", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(iso).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
-
-function extIcon(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "3mf") return "📦";
-  return "📄";
-}
-
 function fmtMinutes(m: number): string {
-  if (m < 60) return `${m} хв`;
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return min > 0 ? `${h} г ${min} хв` : `${h} г`;
+  const h = Math.floor(m / 60), min = m % 60;
+  return m < 60 ? `${m} хв` : min > 0 ? `${h} г ${min} хв` : `${h} г`;
+}
+function usedSlotIndices(meta: GcodeFileMeta | null): number[] {
+  if (!meta) return [];
+  const total = Math.max(meta.colors?.length ?? 0, meta.types?.length ?? 0);
+  if (total === 0) return [];
+  const usedG = meta.used_g;
+  if (!usedG || usedG.length === 0) return Array.from({ length: total }, (_, i) => i);
+  return Array.from({ length: total }, (_, i) => i).filter(i => (usedG[i] ?? 1) > 0);
 }
 
-// ── Filament slot swatches ────────────────────────────────────────────────────
-
-function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
-  const colors = meta.colors ?? [];
-  const types = meta.types ?? [];
-  const indices = usedSlotIndices(meta);
-  if (indices.length === 0) return null;
-
+// ── Folder SVG icon ───────────────────────────────────────────────────────────
+function FolderIcon({ className }: { className?: string }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {indices.map((i) => {
-        const color = colors[i] ?? null;
-        const type = types[i] ?? null;
-        const grams = meta.used_g?.[i];
-        const label = [type, grams != null ? `${grams}г` : null].filter(Boolean).join(" · ");
-        return (
-          <div
-            key={i}
-            title={`Слот ${i + 1}: ${label || "—"}`}
-            className="flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400"
-          >
-            {color && (
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10"
-                style={{ background: color }}
-              />
-            )}
-            <span>{`Слот ${i + 1}`}{type ? ` · ${type}` : ""}</span>
-          </div>
-        );
-      })}
+    <svg viewBox="0 0 56 46" fill="none" className={className} aria-hidden>
+      <path d="M2 6C2 3.79 3.79 2 6 2H20L25 8H50C52.21 8 54 9.79 54 12V42C54 44.21 52.21 46 50 46H6C3.79 46 2 44.21 2 42V6Z" fill="currentColor" opacity="0.55"/>
+      <path d="M2 12C2 9.79 3.79 8 6 8H50C52.21 8 54 9.79 54 12V42C54 44.21 52.21 46 50 46H6C3.79 46 2 44.21 2 42V12Z" fill="currentColor"/>
+      <rect x="2" y="20" width="52" height="26" rx="4" fill="white" opacity="0.07"/>
+    </svg>
+  );
+}
+
+// ── Slot swatches ─────────────────────────────────────────────────────────────
+function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
+  const colors = meta.colors ?? [], types = meta.types ?? [];
+  const indices = usedSlotIndices(meta);
+  if (!indices.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {indices.map(i => (
+        <span key={i} title={`Слот ${i + 1}${types[i] ? `: ${types[i]}` : ""}`}
+          className="flex items-center gap-1 rounded-full border border-white/10 bg-white/8 px-1.5 py-0.5 text-[10px] text-neutral-300">
+          {colors[i] && <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" style={{ background: colors[i] }} />}
+          {types[i] ?? `S${i + 1}`}
+        </span>
+      ))}
     </div>
   );
 }
 
-// ── Slot compatibility checker ────────────────────────────────────────────────
-
+// ── Slot compat ───────────────────────────────────────────────────────────────
 type SlotMatch = "ok" | "type_mismatch" | "missing";
-
-function checkSlots(
-  meta: GcodeFileMeta | null,
-  printer: Printer
-): { slot: number; fileColor: string | null; fileType: string | null; match: SlotMatch; printerColor: string | null; printerType: string | null }[] {
+function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
   if (!meta) return [];
-  return usedSlotIndices(meta).map((i) => {
-    const fileColor = meta.colors?.[i] ?? null;
-    const fileType = meta.types?.[i] ?? null;
-    const printerSlot = printer.loaded_filaments.find((s) => s.slot === i);
-    const printerColor = printerSlot?.color ?? null;
-    const printerType = printerSlot?.type ?? null;
-
-    let match: SlotMatch = "missing";
-    if (printerSlot) {
-      const typeOk = !fileType || !printerType || fileType.toLowerCase() === printerType.toLowerCase();
-      match = typeOk ? "ok" : "type_mismatch";
-    }
-    return { slot: i + 1, fileColor, fileType, match, printerColor, printerType };
+  return usedSlotIndices(meta).map(i => {
+    const fileColor = meta.colors?.[i] ?? null, fileType = meta.types?.[i] ?? null;
+    const ps = printer.loaded_filaments.find(s => s.slot === i);
+    const match: SlotMatch = !ps ? "missing" : (!fileType || !ps.type || fileType.toLowerCase() === ps.type.toLowerCase()) ? "ok" : "type_mismatch";
+    return { slot: i + 1, fileColor, fileType, match, printerColor: ps?.color ?? null, printerType: ps?.type ?? null };
   });
 }
-
-function compatBadge(slots: ReturnType<typeof checkSlots>): { label: string; cls: string } {
-  if (slots.length === 0) return { label: "немає даних", cls: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800" };
-  const missing = slots.filter((s) => s.match === "missing").length;
-  const mismatch = slots.filter((s) => s.match === "type_mismatch").length;
-  if (missing === 0 && mismatch === 0) return { label: "сумісний ✓", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" };
-  if (missing > 0) return { label: `${missing} слот${missing > 1 ? "и" : ""} відсутні`, cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" };
-  return { label: `тип не збігається (${mismatch})`, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" };
+function compatBadge(slots: ReturnType<typeof checkSlots>) {
+  if (!slots.length) return { label: "немає даних", cls: "bg-neutral-700 text-neutral-400" };
+  const missing = slots.filter(s => s.match === "missing").length;
+  const mismatch = slots.filter(s => s.match === "type_mismatch").length;
+  if (!missing && !mismatch) return { label: "✓ сумісний", cls: "bg-emerald-500/20 text-emerald-400" };
+  if (missing > 0) return { label: `${missing} слот відсутні`, cls: "bg-red-500/20 text-red-400" };
+  return { label: `тип не збігається (${mismatch})`, cls: "bg-amber-500/20 text-amber-400" };
 }
 
-// ── Send-to-printer modal ─────────────────────────────────────────────────────
-
-function SendModal({
-  file,
-  printers,
-  onClose,
-  defaultPrinterId,
-}: {
-  file: GcodeFile;
-  printers: Printer[];
-  onClose: () => void;
-  defaultPrinterId?: number;
+// ── Send modal ────────────────────────────────────────────────────────────────
+function SendModal({ file, printers, onClose, defaultPrinterId }: {
+  file: GcodeFile; printers: Printer[]; onClose: () => void; defaultPrinterId?: number;
 }) {
   const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
-  // slotMap: key = file slot index (0-based), value = printer slot (0-based)
   const [slotMap, setSlotMap] = useState<Record<number, number>>({});
-
-  // U1 print options (Moonraker only). Defaults mirror Snaporca's emitted
-  // gcode — bed mesh + timelapse + AI detection + all-slot flow calibration
-  // are all on, so keeping defaults leaves the file byte-identical to what
-  // the slicer wrote.
   const [autoBedLeveling, setAutoBedLeveling] = useState(true);
   const [timelapse, setTimelapse] = useState(true);
   const [aiDetection, setAiDetection] = useState(true);
-  // Set of file-slot indices (0-based) to calibrate via SM_PRINT_FLOW_CALIBRATE
   const [calibrateSlots, setCalibrateSlots] = useState<Set<number>>(new Set());
 
-  const sendablePrinters = printers.filter(
-    (p) => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)),
-  );
-  const selectedPrinter = sendablePrinters.find((p) => p.id === selectedId) ?? null;
-
+  const sendable = printers.filter(p => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)));
+  const selected = sendable.find(p => p.id === selectedId) ?? null;
   const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
-  const isMoonraker = !!selectedPrinter?.moonraker_url;
+  const isMoonraker = !!selected?.moonraker_url;
 
-  // When printer changes, reset slot map to identity for used slots only
   function selectPrinter(id: number) {
-    setSelectedId(id);
-    setResult(null);
-    const identity: Record<number, number> = {};
-    for (const i of usedSlots) identity[i] = i;
-    setSlotMap(identity);
-    // Default: calibrate every used slot (matches slicer's default output)
+    setSelectedId(id); setResult(null);
+    const m: Record<number, number> = {};
+    usedSlots.forEach(i => (m[i] = i));
+    setSlotMap(m);
     setCalibrateSlots(new Set(usedSlots));
-  }
-
-  function toggleCalibrate(slot: number) {
-    setCalibrateSlots((prev) => {
-      const next = new Set(prev);
-      if (next.has(slot)) next.delete(slot);
-      else next.add(slot);
-      return next;
-    });
   }
 
   async function send() {
     if (!selectedId) return;
-    setBusy(true);
-    setResult(null);
+    setBusy(true); setResult(null);
     try {
-      const apiSlotMap: Record<number, number> = {};
-      for (const i of usedSlots) {
-        apiSlotMap[i] = slotMap[i] ?? i;
-      }
-      const body: Record<string, unknown> = { slot_map: apiSlotMap };
+      const apiMap: Record<number, number> = {};
+      usedSlots.forEach(i => (apiMap[i] = slotMap[i] ?? i));
+      const body: Record<string, unknown> = { slot_map: apiMap };
       if (isMoonraker) {
-        // Only send disables — the backend leaves slicer output alone otherwise.
         if (!autoBedLeveling) body.auto_bed_leveling = false;
         if (!timelapse) body.timelapse = false;
         if (!aiDetection) body.ai_detection = false;
-        if (calibrateSlots.size !== usedSlots.length) {
+        if (calibrateSlots.size !== usedSlots.length)
           body.calibrate_slots = Array.from(calibrateSlots).sort((a, b) => a - b);
-        }
       }
       const res = await api<{ ok: boolean; printer_name: string; message: string }>(
-        `/api/files/${file.id}/send/${selectedId}`,
-        { method: "POST", body: JSON.stringify(body) }
+        `/api/files/${file.id}/send/${selectedId}`, { method: "POST", body: JSON.stringify(body) }
       );
       setResult({ ok: res.ok, message: res.message });
     } catch (e) {
       setResult({ ok: false, message: e instanceof ApiError ? e.message : "Помилка" });
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
-          <h2 className="font-semibold">Надіслати на принтер</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-sm rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+        <div className="border-b border-neutral-800 px-5 py-4">
+          <h2 className="font-semibold text-neutral-100">Надіслати на принтер</h2>
           <p className="mt-0.5 truncate text-xs text-neutral-500">{file.original_name}</p>
         </div>
 
-        {/* file slot summary */}
         {file.filament_meta && (
-          <div className="border-b border-neutral-100 px-5 pb-4 dark:border-neutral-800">
+          <div className="border-b border-neutral-800 px-5 pb-4 pt-3">
             <p className="mb-1.5 text-xs font-medium text-neutral-500">Потрібні матеріали</p>
             <SlotSwatches meta={file.filament_meta} />
             {file.filament_meta.estimated_minutes && (
-              <p className="mt-1.5 text-xs text-neutral-400">
-                Час: ~{fmtMinutes(file.filament_meta.estimated_minutes)}
+              <p className="mt-1.5 text-xs text-neutral-500">
+                ~{fmtMinutes(file.filament_meta.estimated_minutes)}
                 {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
               </p>
             )}
           </div>
         )}
 
-        <div className="space-y-4 px-5 py-4">
-          {sendablePrinters.length === 0 ? (
-            <p className="text-sm text-neutral-500">
-              Немає доступних принтерів для надсилання
-            </p>
+        <div className="space-y-3 px-5 py-4">
+          {sendable.length === 0 ? (
+            <p className="text-sm text-neutral-500">Немає доступних принтерів</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
-              {sendablePrinters.map((p) => {
+            <div className="grid gap-2 max-h-64 overflow-y-auto pr-1">
+              {sendable.map(p => {
                 const slots = checkSlots(file.filament_meta, p);
                 const compat = compatBadge(slots);
                 return (
-                  <label
-                    key={p.id}
-                    className={[
-                      "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
-                      selectedId === p.id
-                        ? "border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800"
-                        : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500",
-                    ].join(" ")}
-                  >
-                    {/* top row */}
+                  <label key={p.id} className={["flex cursor-pointer flex-col gap-1.5 rounded-lg border p-3 transition",
+                    selectedId === p.id ? "border-cyan-500 bg-cyan-500/10" : "border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800/50"].join(" ")}>
                     <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="printer"
-                        value={p.id}
-                        checked={selectedId === p.id}
-                        onChange={() => selectPrinter(p.id)}
-                        className="accent-neutral-900 dark:accent-white"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{p.name}</p>
-                      </div>
-                      <span
-                        className={[
-                          "shrink-0 rounded px-1.5 py-0.5 text-xs",
-                          p.state === "printing"
-                            ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                            : p.state === "idle" || p.state === "operational"
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                            : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
-                        ].join(" ")}
-                      >
+                      <input type="radio" name="printer" value={p.id} checked={selectedId === p.id} onChange={() => selectPrinter(p.id)} className="accent-cyan-500" />
+                      <span className="flex-1 truncate text-sm font-medium text-neutral-200">{p.name}</span>
+                      <span className={["shrink-0 rounded px-1.5 py-0.5 text-xs",
+                        p.state === "printing" ? "bg-amber-500/20 text-amber-400"
+                          : p.state === "idle" || p.state === "operational" ? "bg-emerald-500/20 text-emerald-400"
+                          : "bg-neutral-700 text-neutral-400"].join(" ")}>
                         {p.state ?? "—"}
                       </span>
                     </div>
-
-                    {/* slot-by-slot compatibility */}
                     {slots.length > 0 && (
                       <div className="ml-6 flex flex-wrap gap-1">
-                        {slots.map((s) => (
-                          <div
-                            key={s.slot}
-                            title={
-                              s.match === "ok"
-                                ? `Слот ${s.slot}: ${s.printerType ?? "?"} завантажено`
-                                : s.match === "type_mismatch"
-                                ? `Слот ${s.slot}: потрібно ${s.fileType}, завантажено ${s.printerType}`
-                                : `Слот ${s.slot}: нічого не завантажено`
-                            }
-                            className={[
-                              "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]",
-                              s.match === "ok"
-                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                                : s.match === "type_mismatch"
-                                ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
-                                : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400",
-                            ].join(" ")}
-                          >
-                            {s.fileColor && (
-                              <span
-                                className="h-2 w-2 shrink-0 rounded-full border border-black/10"
-                                style={{ background: s.fileColor }}
-                              />
-                            )}
-                            {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"}
-                            {" "}Слот {s.slot}
-                            {s.match === "type_mismatch" && s.printerType && ` (є ${s.printerType})`}
-                          </div>
+                        {slots.map(s => (
+                          <span key={s.slot} className={["flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]",
+                            s.match === "ok" ? "bg-emerald-500/15 text-emerald-400"
+                              : s.match === "type_mismatch" ? "bg-amber-500/15 text-amber-400"
+                              : "bg-red-500/15 text-red-400"].join(" ")}>
+                            {s.fileColor && <span className="h-2 w-2 rounded-full" style={{ background: s.fileColor }} />}
+                            {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} S{s.slot}
+                          </span>
                         ))}
-                        <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] ${compat.cls}`}>
-                          {compat.label}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* printer loaded filaments if no file meta */}
-                    {slots.length === 0 && p.loaded_filaments.length > 0 && (
-                      <div className="ml-6 flex flex-wrap gap-1">
-                        {p.loaded_filaments.map((lf) => (
-                          <div key={lf.slot} className="flex items-center gap-1 rounded-full border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-700">
-                            <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} />
-                            {lf.type}
-                          </div>
-                        ))}
+                        <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] ${compat.cls}`}>{compat.label}</span>
                       </div>
                     )}
                   </label>
@@ -377,184 +215,58 @@ function SendModal({
             </div>
           )}
 
-          {/* ── Slot remapping (only for slots actually used in this print) ── */}
-          {selectedPrinter && usedSlots.length > 0 && !result && (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/50">
-              <p className="mb-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Ремаппінг слотів
-              </p>
+          {selected && usedSlots.length > 0 && !result && (
+            <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-3">
+              <p className="mb-2 text-xs font-medium text-neutral-400">Ремаппінг слотів</p>
               <div className="space-y-2">
-                {usedSlots.map((i) => {
-                  const fileColor = file.filament_meta?.colors?.[i] ?? null;
-                  const fileType = file.filament_meta?.types?.[i] ?? null;
-                  const currentPrinterSlot = slotMap[i] ?? i;
-
-                  return (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      {/* file slot */}
-                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                        {fileColor && (
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
-                            style={{ background: fileColor }}
-                          />
-                        )}
-                        <span className="truncate text-neutral-700 dark:text-neutral-300">
-                          Слот {i + 1} {fileType ? `· ${fileType}` : ""}
-                        </span>
-                      </div>
-
-                      <span className="text-neutral-400">→</span>
-
-                      {/* printer slot selector */}
-                      <select
-                        value={currentPrinterSlot}
-                        onChange={(e) =>
-                          setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))
-                        }
-                        className="rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900"
-                      >
-                        {selectedPrinter.loaded_filaments.length > 0
-                          ? selectedPrinter.loaded_filaments.map((lf) => (
-                              <option key={lf.slot} value={lf.slot}>
-                                Слот {lf.slot + 1}
-                                {lf.type ? ` · ${lf.type}` : ""}
-                                {lf.color_name ? ` · ${lf.color_name}` : ""}
-                              </option>
-                            ))
-                          : Array.from({ length: 4 }).map((_, s) => (
-                              <option key={s} value={s}>
-                                Слот {s + 1}
-                              </option>
-                            ))}
-                      </select>
-
-                      {/* color swatch of selected printer slot */}
-                      {(() => {
-                        const lf = selectedPrinter.loaded_filaments.find(
-                          (f) => f.slot === currentPrinterSlot
-                        );
-                        return lf?.color ? (
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-full border border-black/10"
-                            style={{ background: lf.color }}
-                            title={lf.color_name ?? lf.color}
-                          />
-                        ) : null;
-                      })()}
+                {usedSlots.map(i => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <div className="flex flex-1 items-center gap-1.5">
+                      {file.filament_meta?.colors?.[i] && <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: file.filament_meta.colors[i] }} />}
+                      <span className="truncate text-neutral-300">Слот {i + 1}{file.filament_meta?.types?.[i] ? ` · ${file.filament_meta.types[i]}` : ""}</span>
                     </div>
-                  );
-                })}
+                    <span className="text-neutral-500">→</span>
+                    <select value={slotMap[i] ?? i} onChange={e => setSlotMap(p => ({ ...p, [i]: Number(e.target.value) }))}
+                      className="rounded border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-200 outline-none focus:border-cyan-500">
+                      {selected.loaded_filaments.length > 0
+                        ? selected.loaded_filaments.map(lf => <option key={lf.slot} value={lf.slot}>Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}</option>)
+                        : Array.from({ length: 4 }).map((_, s) => <option key={s} value={s}>Слот {s + 1}</option>)}
+                    </select>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* ── Snapmaker U1 print options ── */}
-          {selectedPrinter && isMoonraker && !result && (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/50">
-              <p className="mb-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Опції друку
-              </p>
-              <div className="space-y-1.5">
-                <label className="flex cursor-pointer items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={autoBedLeveling}
-                    onChange={(e) => setAutoBedLeveling(e.target.checked)}
-                    className="accent-neutral-900 dark:accent-white"
-                  />
-                  <span className="text-neutral-700 dark:text-neutral-300">Автокалібрування столу</span>
+          {selected && isMoonraker && !result && (
+            <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-3">
+              <p className="mb-2 text-xs font-medium text-neutral-400">Опції друку</p>
+              {[["autoBedLeveling", "Автокалібрування столу", autoBedLeveling, setAutoBedLeveling],
+                ["timelapse", "Таймлапс", timelapse, setTimelapse],
+                ["aiDetection", "AI детекція", aiDetection, setAiDetection],
+              ].map(([key, label, val, setter]) => (
+                <label key={key as string} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs">
+                  <input type="checkbox" checked={val as boolean} onChange={e => (setter as (v: boolean) => void)(e.target.checked)} className="accent-cyan-500" />
+                  <span className="text-neutral-300">{label as string}</span>
                 </label>
-                <label className="flex cursor-pointer items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={timelapse}
-                    onChange={(e) => setTimelapse(e.target.checked)}
-                    className="accent-neutral-900 dark:accent-white"
-                  />
-                  <span className="text-neutral-700 dark:text-neutral-300">Таймлапс</span>
-                </label>
-                <label
-                  className="flex cursor-pointer items-center gap-2 text-xs"
-                  title="Камерна перевірка чистоти столу, типу пластини та дефектів під час друку"
-                >
-                  <input
-                    type="checkbox"
-                    checked={aiDetection}
-                    onChange={(e) => setAiDetection(e.target.checked)}
-                    className="accent-neutral-900 dark:accent-white"
-                  />
-                  <span className="text-neutral-700 dark:text-neutral-300">AI детекція</span>
-                </label>
-              </div>
-
-              {usedSlots.length > 0 && (
-                <>
-                  <p className="mt-3 mb-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                    Калібрувати філамент у слоті
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {usedSlots.map((i) => {
-                      const fileColor = file.filament_meta?.colors?.[i] ?? null;
-                      const fileType = file.filament_meta?.types?.[i] ?? null;
-                      return (
-                        <label
-                          key={i}
-                          className="flex cursor-pointer items-center gap-1.5 text-xs"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={calibrateSlots.has(i)}
-                            onChange={() => toggleCalibrate(i)}
-                            className="accent-neutral-900 dark:accent-white"
-                          />
-                          {fileColor && (
-                            <span
-                              className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10"
-                              style={{ background: fileColor }}
-                            />
-                          )}
-                          <span className="truncate text-neutral-700 dark:text-neutral-300">
-                            Слот {i + 1}
-                            {fileType ? ` · ${fileType}` : ""}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+              ))}
             </div>
           )}
 
           {result && (
-            <div
-              className={[
-                "rounded-lg px-3 py-2 text-sm",
-                result.ok
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                  : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
-              ].join(" ")}
-            >
-              {result.ok ? "✓ " : "✕ "}
-              {result.message}
+            <div className={["rounded-lg px-3 py-2 text-sm", result.ok ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"].join(" ")}>
+              {result.ok ? "✓ " : "✕ "}{result.message}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3 dark:border-neutral-800">
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
+        <div className="flex justify-end gap-2 border-t border-neutral-800 px-5 py-3">
+          <button onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!result?.ok && (
-            <button
-              onClick={send}
-              disabled={!selectedId || busy}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900"
-            >
+            <button onClick={send} disabled={!selectedId || busy}
+              className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm text-white hover:bg-cyan-500 disabled:opacity-40">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
@@ -564,205 +276,41 @@ function SendModal({
   );
 }
 
-// ── Download button (fetch with auth header → blob URL) ───────────────────────
-
-function DownloadLink({ fileId, fileName }: { fileId: number; fileName: string }) {
-  const [busy, setBusy] = useState(false);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-  async function download() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const token = getToken();
-      const resp = await fetch(`${API_URL}/api/files/${fileId}/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!resp.ok) return;
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <button
-      onClick={download}
-      disabled={busy}
-      className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-      title="Завантажити"
-    >
-      {busy ? "…" : "↓"}
-    </button>
-  );
-}
-
-// Two-step delete button. Skips the native confirm() because Chrome lets users
-// permanently suppress it — after that, the button silently does nothing.
-function DeleteButton({ onDelete }: { onDelete: () => void }) {
-  const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    if (!confirming) return;
-    const t = setTimeout(() => setConfirming(false), 4000);
-    return () => clearTimeout(t);
-  }, [confirming]);
-
-  if (confirming) {
-    return (
-      <button
-        onClick={() => {
-          setConfirming(false);
-          onDelete();
-        }}
-        className="animate-pulse rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-red-700"
-        title="Натисніть ще раз щоб видалити"
-      >
-        ✕ Підтвердити
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={() => setConfirming(true)}
-      className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition hover:bg-red-50 hover:text-red-600 dark:border-neutral-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-      title="Видалити"
-    >
-      ✕
-    </button>
-  );
-}
-
-// ── Move-to-folder popup ──────────────────────────────────────────────────────
-
-function MovePopup({
-  file,
-  folders,
-  onMove,
-  onClose,
-}: {
-  file: GcodeFile;
-  folders: GcodeFolder[];
-  onMove: (folderId: number | null) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-xs rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
-          <h2 className="font-semibold text-sm">Перемістити до папки</h2>
-          <p className="mt-0.5 truncate text-xs text-neutral-500">{file.original_name}</p>
-        </div>
-        <div className="max-h-64 overflow-y-auto px-3 py-3 space-y-1">
-          <button
-            onClick={() => onMove(null)}
-            className={[
-              "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800",
-              file.folder_id === null ? "font-medium text-neutral-900 dark:text-neutral-100" : "text-neutral-600 dark:text-neutral-400",
-            ].join(" ")}
-          >
-            <span className="text-base">🏠</span> Без папки
-            {file.folder_id === null && <span className="ml-auto text-xs text-neutral-400">поточна</span>}
-          </button>
-          {folders.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => onMove(f.id)}
-              className={[
-                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800",
-                file.folder_id === f.id ? "font-medium text-neutral-900 dark:text-neutral-100" : "text-neutral-600 dark:text-neutral-400",
-              ].join(" ")}
-            >
-              <span className="text-base">📁</span>
-              <span className="truncate">{f.name}</span>
-              {file.folder_id === f.id && <span className="ml-auto text-xs text-neutral-400">поточна</span>}
-            </button>
-          ))}
-        </div>
-        <div className="flex justify-end border-t border-neutral-100 px-5 py-3 dark:border-neutral-800">
-          <button
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            Скасувати
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Create/Rename folder modal ────────────────────────────────────────────────
-
-function FolderNameModal({
-  title,
-  initialValue,
-  onConfirm,
-  onClose,
-}: {
-  title: string;
-  initialValue?: string;
-  onConfirm: (name: string) => Promise<void>;
-  onClose: () => void;
+// ── Folder name modal ─────────────────────────────────────────────────────────
+function FolderNameModal({ title, initialValue, onConfirm, onClose }: {
+  title: string; initialValue?: string;
+  onConfirm: (name: string) => Promise<void>; onClose: () => void;
 }) {
   const [name, setName] = useState(initialValue ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await onConfirm(trimmed);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка");
-    } finally {
-      setBusy(false);
-    }
+    const t = name.trim(); if (!t) return;
+    setBusy(true); setError(null);
+    try { await onConfirm(t); }
+    catch (err) { setError(err instanceof ApiError ? err.message : "Помилка"); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-xs rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
-          <h2 className="font-semibold text-sm">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-xs rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+        <div className="border-b border-neutral-800 px-5 py-4">
+          <h2 className="font-semibold text-sm text-neutral-100">{title}</h2>
         </div>
         <form onSubmit={submit} className="px-5 py-4 space-y-3">
-          <input
-            ref={inputRef}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Назва папки"
-            maxLength={255}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:focus:border-neutral-400"
-          />
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <input ref={ref} type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Назва папки" maxLength={255}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-cyan-500" />
+          {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              Скасувати
-            </button>
-            <button
-              type="submit"
-              disabled={busy || !name.trim()}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900"
-            >
+            <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800">Скасувати</button>
+            <button type="submit" disabled={busy || !name.trim()}
+              className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-40">
               {busy ? "…" : "Зберегти"}
             </button>
           </div>
@@ -772,84 +320,88 @@ function FolderNameModal({
   );
 }
 
-// ── Folder chip (sidebar item) ────────────────────────────────────────────────
-
-function FolderChip({
-  folder,
-  active,
-  canEdit,
-  onClick,
-  onRename,
-  onDelete,
-}: {
-  folder: GcodeFolder;
-  active: boolean;
-  canEdit: boolean;
-  onClick: () => void;
-  onRename: () => void;
-  onDelete: () => void;
+// ── Folder card ───────────────────────────────────────────────────────────────
+function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, onDragOver, onDragLeave, onDrop }: {
+  folder: GcodeFolder; isDragOver: boolean; canEdit: boolean;
+  onClick: () => void; onRename: () => void; onDelete: () => void;
+  onDragOver: (e: React.DragEvent) => void; onDragLeave: () => void; onDrop: (e: React.DragEvent) => void;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!confirmDelete) return;
-    const t = setTimeout(() => setConfirmDelete(false), 3000);
-    return () => clearTimeout(t);
-  }, [confirmDelete]);
+    if (!menuOpen) return;
+    function close(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
 
   return (
     <div
-      className={[
-        "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
-        active
-          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-          : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-      ].join(" ")}
+      role="button"
       onClick={onClick}
+      onDragOver={onDragOver}
+      onDragEnter={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={[
+        "group relative flex cursor-pointer select-none flex-col items-center gap-3 rounded-xl border p-4 transition-all duration-150",
+        isDragOver
+          ? "scale-105 border-cyan-400 bg-cyan-400/10 shadow-lg shadow-cyan-400/20"
+          : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
+      ].join(" ")}
     >
-      <span className="text-base leading-none shrink-0">📁</span>
-      <span className="truncate flex-1 min-w-0">{folder.name}</span>
-      <span
-        className={[
-          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-          active
-            ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
-            : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
-        ].join(" ")}
-      >
-        {folder.file_count}
-      </span>
+      <div className="relative">
+        <FolderIcon className={["h-16 w-16 transition-transform duration-150 group-hover:scale-105", isDragOver ? "text-cyan-400" : "text-cyan-500"].join(" ")} />
+        {folder.file_count > 0 && (
+          <span className="absolute -bottom-1 -right-1 rounded-full bg-neutral-700 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300 leading-none min-w-[18px] text-center">
+            {folder.file_count}
+          </span>
+        )}
+      </div>
+
+      <div className="w-full text-center">
+        <p className="truncate text-sm font-medium text-neutral-100" title={folder.name}>{folder.name}</p>
+        <p className="text-xs text-neutral-500">
+          {folder.file_count} {folder.file_count === 1 ? "файл" : folder.file_count < 5 ? "файли" : "файлів"}
+        </p>
+      </div>
+
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl">
+          <span className="rounded-md bg-cyan-500/90 px-2 py-1 text-xs font-semibold text-white shadow">
+            Перемістити →
+          </span>
+        </div>
+      )}
+
       {canEdit && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+        <div ref={menuRef} className="absolute right-2 top-2 z-10" onClick={e => e.stopPropagation()}>
           <button
-            onClick={onRename}
-            className={[
-              "rounded p-0.5 text-xs transition",
-              active ? "hover:bg-white/20 text-white" : "hover:bg-neutral-200 text-neutral-400 dark:hover:bg-neutral-700",
-            ].join(" ")}
-            title="Перейменувати"
-          >
-            ✏️
-          </button>
-          {confirmDelete ? (
-            <button
-              onClick={onDelete}
-              className="animate-pulse rounded p-0.5 text-xs text-red-500 hover:text-red-600"
-              title="Підтвердити видалення"
-            >
-              ✕
-            </button>
-          ) : (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              className={[
-                "rounded p-0.5 text-xs transition",
-                active ? "hover:bg-white/20 text-white/70" : "hover:bg-neutral-200 text-neutral-400 dark:hover:bg-neutral-700",
-              ].join(" ")}
-              title="Видалити папку"
-            >
-              🗑️
-            </button>
+            onClick={() => { setMenuOpen(v => !v); setConfirmDel(false); }}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 opacity-0 transition hover:bg-neutral-700 hover:text-neutral-200 group-hover:opacity-100 text-sm"
+          >⋮</button>
+          {menuOpen && (
+            <div className="absolute right-0 top-7 w-40 rounded-lg border border-neutral-700 bg-neutral-800 py-1 shadow-xl text-sm">
+              <button onClick={() => { setMenuOpen(false); onRename(); }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-neutral-300 hover:bg-neutral-700">
+                <span>✏️</span> Перейменувати
+              </button>
+              {confirmDel ? (
+                <button onClick={() => { setMenuOpen(false); setConfirmDel(false); onDelete(); }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-medium text-red-400 hover:bg-red-900/30 animate-pulse">
+                  <span>✕</span> Підтвердити
+                </button>
+              ) : (
+                <button onClick={() => setConfirmDel(true)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-400 hover:bg-red-900/30">
+                  <span>🗑️</span> Видалити
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -858,117 +410,144 @@ function FolderChip({
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
-
-function FileCard({
-  file,
-  canEdit,
-  highlighted = false,
-  folders,
-  onSend,
-  onDelete,
-  onMove,
-}: {
-  file: GcodeFile;
-  canEdit: boolean;
-  highlighted?: boolean;
-  folders: GcodeFolder[];
-  onSend: () => void;
-  onDelete: () => void;
-  onMove: (folderId: number | null) => void;
+function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, onDragStart, onDragEnd }: {
+  file: GcodeFile; canEdit: boolean; highlighted: boolean; isDragging: boolean;
+  onSend: () => void; onDelete: () => void;
+  onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
-  const [showMovePopup, setShowMovePopup] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [dlBusy, setDlBusy] = useState(false);
+  const ext = file.original_name.split(".").pop()?.toLowerCase() ?? "";
+
+  useEffect(() => {
+    if (!confirmDel) return;
+    const t = setTimeout(() => setConfirmDel(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmDel]);
+
+  async function download() {
+    if (dlBusy) return;
+    setDlBusy(true);
+    try {
+      const token = getToken();
+      const resp = await fetch(`${API_URL}/api/files/${file.id}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) return;
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = file.original_name; a.click();
+      URL.revokeObjectURL(url);
+    } finally { setDlBusy(false); }
+  }
 
   return (
-    <>
-      <div
-        className={[
-          "group relative flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition",
-          highlighted
-            ? "border-neutral-900 bg-neutral-50 ring-2 ring-neutral-900/20 dark:border-neutral-100 dark:bg-neutral-800 dark:ring-neutral-100/20"
-            : "border-neutral-200 bg-white hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600",
-        ].join(" ")}
-      >
-        {/* icon + name */}
-        <div className="flex items-start gap-3">
-          {file.has_thumbnail ? (
-            <img
-              src={`${API_URL}/api/files/${file.id}/thumbnail`}
-              alt=""
-              className="h-12 w-12 shrink-0 rounded-lg object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-                (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "");
-              }}
-            />
-          ) : null}
-          <span
-            className="mt-0.5 text-2xl leading-none"
-            style={{ display: file.has_thumbnail ? "none" : "" }}
-          >
-            {extIcon(file.original_name)}
+    <div
+      draggable={canEdit}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={[
+        "group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150",
+        canEdit ? "cursor-grab active:cursor-grabbing" : "",
+        isDragging
+          ? "scale-95 opacity-40 border-neutral-600 bg-neutral-800"
+          : highlighted
+          ? "border-cyan-500 bg-cyan-500/10 ring-2 ring-cyan-500/20"
+          : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
+      ].join(" ")}
+    >
+      {/* thumbnail */}
+      <div className="relative h-24 w-full overflow-hidden rounded-lg bg-neutral-900/80 flex items-center justify-center">
+        {file.has_thumbnail ? (
+          <img
+            src={`${API_URL}/api/files/${file.id}/thumbnail`} alt=""
+            className="h-full w-full object-cover"
+            onError={e => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+              const next = e.currentTarget.nextElementSibling as HTMLElement | null;
+              if (next) next.style.display = "flex";
+            }}
+          />
+        ) : null}
+        <span className={["text-3xl items-center justify-center", file.has_thumbnail ? "hidden" : "flex"].join(" ")}>
+          {ext === "3mf" ? "📦" : "📄"}
+        </span>
+        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-neutral-300">
+          {fmtSize(file.size_bytes)}
+        </span>
+        {canEdit && !isDragging && (
+          <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity select-none">
+            ⠿ drag
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-tight" title={file.original_name}>
-              {file.original_name}
-            </p>
-            <p className="mt-0.5 text-xs text-neutral-500">{fmtSize(file.size_bytes)}</p>
-          </div>
-        </div>
-
-        {/* filament swatches */}
-        {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
-
-        {/* meta */}
-        <div className="space-y-0.5 text-xs text-neutral-400">
-          <p>{fmtDate(file.uploaded_at)}</p>
-          {file.filament_meta?.estimated_minutes && (
-            <p>~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
-          )}
-          {file.uploaded_by_name && <p>{file.uploaded_by_name}</p>}
-          {file.notes && (
-            <p className="line-clamp-2 text-neutral-500 dark:text-neutral-400">{file.notes}</p>
-          )}
-        </div>
-
-        {/* actions */}
-        <div className="mt-auto flex gap-2">
-          <button
-            onClick={onSend}
-            className="flex-1 rounded-lg border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            Надіслати →
-          </button>
-          <DownloadLink fileId={file.id} fileName={file.original_name} />
-          {canEdit && (
-            <button
-              onClick={() => setShowMovePopup(true)}
-              className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-              title="Перемістити до папки"
-            >
-              📁
-            </button>
-          )}
-          {canEdit && <DeleteButton onDelete={onDelete} />}
-        </div>
+        )}
       </div>
 
-      {showMovePopup && (
-        <MovePopup
-          file={file}
-          folders={folders}
-          onMove={(folderId) => {
-            onMove(folderId);
-            setShowMovePopup(false);
-          }}
-          onClose={() => setShowMovePopup(false)}
-        />
+      {/* name */}
+      <p className="truncate text-xs font-medium text-neutral-200 leading-tight" title={file.original_name}>
+        {file.original_name}
+      </p>
+
+      {/* filament swatches */}
+      {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
+
+      {/* time estimate */}
+      {file.filament_meta?.estimated_minutes && (
+        <p className="text-[10px] text-neutral-500">~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
       )}
-    </>
+
+      {/* actions */}
+      <div className="mt-auto flex gap-1.5 pt-1">
+        <button onClick={onSend}
+          className="flex-1 rounded-lg border border-cyan-600/30 bg-cyan-600/15 py-1.5 text-xs font-medium text-cyan-400 transition hover:bg-cyan-600/25">
+          Надіслати →
+        </button>
+        <button onClick={download} disabled={dlBusy}
+          className="rounded-lg border border-neutral-700 px-2 py-1.5 text-xs text-neutral-400 transition hover:bg-neutral-700 disabled:opacity-40"
+          title="Завантажити">
+          {dlBusy ? "…" : "↓"}
+        </button>
+        {canEdit && (
+          confirmDel ? (
+            <button onClick={() => { setConfirmDel(false); onDelete(); }}
+              className="animate-pulse rounded-lg bg-red-600 px-2 py-1.5 text-xs font-medium text-white">✕</button>
+          ) : (
+            <button onClick={() => setConfirmDel(true)}
+              className="rounded-lg border border-neutral-700 px-2 py-1.5 text-xs text-neutral-500 transition hover:border-red-500/40 hover:bg-red-900/20 hover:text-red-400">✕</button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Root drop zone (move file back to root) ────────────────────────────────────
+function RootDropZone({ isDragOver, onDragOver, onDragLeave, onDrop }: {
+  isDragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragEnter={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={[
+        "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 px-4 text-sm transition-all duration-150",
+        isDragOver
+          ? "border-orange-400 bg-orange-400/10 text-orange-400 scale-[1.02]"
+          : "border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-500",
+      ].join(" ")}
+    >
+      <span>🏠</span>
+      <span>{isDragOver ? "Відпусти, щоб прибрати з папки" : "Перетягни сюди, щоб прибрати з папки"}</span>
+    </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function FilesPage() {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator" || user.role === "manager";
@@ -985,11 +564,21 @@ export default function FilesPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
   const [search, setSearch] = useState("");
-  const [activeFolderId, setActiveFolderId] = useState<number | null | "all">("all");
+
+  // Navigation: null = root, number = inside folder
+  const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
+
+  // Drag state
+  const [draggedFile, setDraggedFile] = useState<GcodeFile | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<number | "root" | null>(null);
+
+  // Modals
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<GcodeFolder | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Load ──
   const load = useCallback(async () => {
     try {
       const [f, p, fols] = await Promise.all([
@@ -997,359 +586,358 @@ export default function FilesPage() {
         api<Printer[]>("/api/printers"),
         api<GcodeFolder[]>("/api/folders"),
       ]);
-      setFiles(f);
-      setPrinters(p);
-      setFolders(fols);
-    } catch {
-      /* ignore */
-    } finally {
-      setLoading(false);
-    }
+      setFiles(f); setPrinters(p); setFolders(fols);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-open send modal for file highlighted via ?highlight= (from OrcaSlicer)
+  // Auto-open send modal from ?highlight=
   useEffect(() => {
     if (!highlightId || loading || sendFile) return;
-    const file = files.find((f) => f.id === highlightId);
-    if (!file) return;
-    setSendFile(file);
+    const f = files.find(f => f.id === highlightId);
+    if (f) setSendFile(f);
   }, [highlightId, loading, files]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Upload ──
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     e.target.value = "";
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadError(null);
+    setUploading(true); setUploadProgress(0); setUploadError(null);
     try {
       const form = new FormData();
       form.append("file", file);
-      // Upload into the currently-active folder (if any)
-      const uploadPath =
-        activeFolderId !== "all" && activeFolderId !== null
-          ? `/api/files/upload?folder_id=${activeFolderId}`
-          : "/api/files/upload";
-      const saved = await uploadWithProgress<GcodeFile>(
-        uploadPath,
-        form,
-        (pct) => setUploadProgress(pct),
-      );
-      setFiles((prev) => [saved, ...prev]);
-      // Refresh folder counts
+      const path = currentFolderId ? `/api/files/upload?folder_id=${currentFolderId}` : "/api/files/upload";
+      const saved = await uploadWithProgress<GcodeFile>(path, form, pct => setUploadProgress(pct));
+      setFiles(prev => [saved, ...prev]);
       const updatedFolders = await api<GcodeFolder[]>("/api/folders");
       setFolders(updatedFolders);
       setSendFile(saved);
     } catch (err) {
       setUploadError(err instanceof ApiError ? err.message : "Помилка завантаження");
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
+    } finally { setUploading(false); setUploadProgress(0); }
   }
 
+  // ── Delete ──
   async function handleDelete(file: GcodeFile) {
     try {
       await api(`/api/files/${file.id}`, { method: "DELETE" });
-      setFiles((prev) => prev.filter((f) => f.id !== file.id));
-      // Refresh folder counts
+      setFiles(prev => prev.filter(f => f.id !== file.id));
       const updatedFolders = await api<GcodeFolder[]>("/api/folders");
       setFolders(updatedFolders);
-    } catch (e) {
-      setUploadError(e instanceof ApiError ? e.message : "Не вдалося видалити файл");
-    }
+    } catch (e) { setUploadError(e instanceof ApiError ? e.message : "Помилка видалення"); }
   }
 
+  // ── Move ──
   async function handleMove(file: GcodeFile, folderId: number | null) {
+    if (file.folder_id === folderId) return;
     try {
       const updated = await api<GcodeFile>(`/api/files/${file.id}/move`, {
-        method: "PATCH",
-        body: JSON.stringify({ folder_id: folderId }),
+        method: "PATCH", body: JSON.stringify({ folder_id: folderId }),
       });
-      setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-      // Refresh folder counts
+      setFiles(prev => prev.map(f => f.id === updated.id ? updated : f));
       const updatedFolders = await api<GcodeFolder[]>("/api/folders");
       setFolders(updatedFolders);
-    } catch (e) {
-      setUploadError(e instanceof ApiError ? e.message : "Не вдалося перемістити файл");
-    }
+    } catch (e) { setUploadError(e instanceof ApiError ? e.message : "Помилка переміщення"); }
   }
 
+  // ── Folder CRUD ──
   async function handleCreateFolder(name: string) {
-    const folder = await api<GcodeFolder>("/api/folders", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
-    setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
+    const folder = await api<GcodeFolder>("/api/folders", { method: "POST", body: JSON.stringify({ name }) });
+    setFolders(prev => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
     setShowNewFolder(false);
-    setActiveFolderId(folder.id);
+    setCurrentFolderId(folder.id);
   }
 
   async function handleRenameFolder(folder: GcodeFolder, name: string) {
-    const updated = await api<GcodeFolder>(`/api/folders/${folder.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name }),
-    });
-    setFolders((prev) =>
-      prev.map((f) => (f.id === updated.id ? updated : f)).sort((a, b) => a.name.localeCompare(b.name))
-    );
+    const updated = await api<GcodeFolder>(`/api/folders/${folder.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+    setFolders(prev => prev.map(f => f.id === updated.id ? updated : f).sort((a, b) => a.name.localeCompare(b.name)));
     setRenamingFolder(null);
   }
 
   async function handleDeleteFolder(folder: GcodeFolder) {
     try {
       await api(`/api/folders/${folder.id}`, { method: "DELETE" });
-      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
-      // Files move to root — reset folder_id in local state
-      setFiles((prev) =>
-        prev.map((f) => (f.folder_id === folder.id ? { ...f, folder_id: null } : f))
-      );
-      if (activeFolderId === folder.id) setActiveFolderId("all");
-    } catch (e) {
-      setUploadError(e instanceof ApiError ? e.message : "Не вдалося видалити папку");
-    }
+      setFolders(prev => prev.filter(f => f.id !== folder.id));
+      setFiles(prev => prev.map(f => f.folder_id === folder.id ? { ...f, folder_id: null } : f));
+      if (currentFolderId === folder.id) setCurrentFolderId(null);
+    } catch (e) { setUploadError(e instanceof ApiError ? e.message : "Помилка видалення папки"); }
   }
 
-  // Filter files by active folder + search
-  const filtered = files.filter((f) => {
-    const matchesFolder =
-      activeFolderId === "all" ||
-      (activeFolderId === null ? f.folder_id === null : f.folder_id === activeFolderId);
-    const matchesSearch = f.original_name.toLowerCase().includes(search.toLowerCase());
-    return matchesFolder && matchesSearch;
-  });
+  // ── Drag handlers ──
+  function onFileDragStart(e: React.DragEvent, file: GcodeFile) {
+    e.dataTransfer.setData("fileId", file.id.toString());
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedFile(file);
+  }
 
-  const activeFolder = activeFolderId !== "all" && activeFolderId !== null
-    ? folders.find((f) => f.id === activeFolderId) ?? null
-    : null;
+  function onFolderDragOver(e: React.DragEvent, target: number | "root") {
+    if (!draggedFile) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverTarget(target);
+  }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  function onFolderDragLeave() {
+    setDragOverTarget(null);
+  }
+
+  function onFolderDrop(e: React.DragEvent, folderId: number | null) {
+    e.preventDefault();
+    setDragOverTarget(null);
+    const fileId = Number(e.dataTransfer.getData("fileId"));
+    if (!fileId) return;
+    const file = files.find(f => f.id === fileId);
+    if (file) handleMove(file, folderId);
+    setDraggedFile(null);
+  }
+
+  // ── Computed ──
+  const currentFolder = currentFolderId ? folders.find(f => f.id === currentFolderId) ?? null : null;
+
+  // At root: show files without a folder. Inside folder: show files in that folder.
+  const visibleFiles = (currentFolderId === null
+    ? files.filter(f => f.folder_id === null)
+    : files.filter(f => f.folder_id === currentFolderId)
+  ).filter(f => f.original_name.toLowerCase().includes(search.toLowerCase()));
 
   const targetPrinter = defaultPrinterId ? printers.find(p => p.id === defaultPrinterId) : null;
 
+  if (loading) return (
+    <div className="flex items-center justify-center py-24 text-sm text-neutral-500">
+      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-neutral-600 border-t-cyan-400 mr-2" />
+      Завантаження…
+    </div>
+  );
+
+  const isDragging = !!draggedFile;
+
   return (
-    <>
-      {/* pre-selected printer banner */}
+    <div className="min-h-screen">
+      {/* printer banner */}
       {targetPrinter && !sendFile && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-900/20">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-600 dark:text-blue-400">
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-blue-400">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          <p className="text-sm text-blue-800 dark:text-blue-300">
-            Вибери файл для відправки на <strong>{targetPrinter.name}</strong>
+          <p className="text-sm text-blue-300">
+            Вибери файл для відправки на <strong className="text-blue-200">{targetPrinter.name}</strong>
           </p>
         </div>
       )}
 
-      {/* header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Файли</h1>
-          <p className="text-sm text-neutral-500">
-            {files.length} {files.length === 1 ? "файл" : files.length < 5 ? "файли" : "файлів"} · центральне сховище нарізок
-          </p>
+      {/* ── Header ── */}
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        {/* breadcrumb */}
+        <div className="flex flex-1 items-center gap-2 min-w-0">
+          {currentFolder ? (
+            <>
+              <button onClick={() => setCurrentFolderId(null)}
+                className="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-neutral-200 transition">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                Файли
+              </button>
+              <span className="text-neutral-600">/</span>
+              <span className="text-sm font-semibold text-neutral-100">{currentFolder.name}</span>
+              <span className="rounded-full bg-neutral-700 px-1.5 py-0.5 text-[10px] text-neutral-400">
+                {currentFolder.file_count}
+              </span>
+            </>
+          ) : (
+            <div>
+              <h1 className="text-lg font-bold text-neutral-100">Файли</h1>
+              <p className="text-xs text-neutral-500">
+                {files.length} файлів · {folders.length} папок
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* search */}
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">🔍</span>
+          <input
+            type="text" placeholder="Пошук…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-48 rounded-lg border border-neutral-700 bg-neutral-800/60 py-2 pl-8 pr-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-cyan-500 transition"
+          />
+        </div>
+
+        {/* actions */}
         {canEdit && (
           <div className="flex items-center gap-2">
-            {uploadError && (
-              <span className="text-xs text-red-600 dark:text-red-400">{uploadError}</span>
+            {uploadError && <span className="text-xs text-red-400">{uploadError}</span>}
+            {!currentFolder && (
+              <button onClick={() => setShowNewFolder(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800/60 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800">
+                <FolderIcon className="h-4 w-4 text-cyan-500" />
+                Нова папка
+              </button>
             )}
-            <button
-              onClick={() => setShowNewFolder(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              <span>📁</span> Нова папка
-            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="relative flex min-w-44 items-center justify-center gap-2 overflow-hidden rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-default disabled:hover:bg-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 dark:disabled:hover:bg-neutral-100"
+              className="relative flex min-w-40 items-center justify-center gap-2 overflow-hidden rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-default disabled:opacity-70"
             >
               {uploading && (
-                <span
-                  className="pointer-events-none absolute inset-y-0 left-0 bg-white/25 transition-[width] duration-150 dark:bg-black/25"
-                  style={{ width: `${uploadProgress}%` }}
-                />
+                <span className="pointer-events-none absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
               )}
               <span className="relative flex items-center gap-2">
-                {uploading ? (
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <span className="text-base leading-none">↑</span>
-                )}
-                {uploading ? `Завантаження ${uploadProgress}%` : "Завантажити файл"}
+                {uploading
+                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  : <span>↑</span>}
+                {uploading ? `${uploadProgress}%` : "Завантажити"}
               </span>
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".gcode,.gco,.g,.3mf,.bgcode"
-              className="hidden"
-              onChange={handleUpload}
-            />
+            <input ref={fileInputRef} type="file" accept=".gcode,.gco,.g,.3mf,.bgcode" className="hidden" onChange={handleUpload} />
           </div>
         )}
       </div>
 
-      {/* folder strip + content */}
-      <div className="mt-4 flex gap-6">
-        {/* ── Folder sidebar ── */}
-        <div className="w-48 shrink-0 space-y-0.5">
-          {/* All files */}
-          <div
-            className={[
-              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
-              activeFolderId === "all"
-                ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-            ].join(" ")}
-            onClick={() => setActiveFolderId("all")}
-          >
-            <span className="text-base leading-none shrink-0">🗂️</span>
-            <span className="truncate flex-1">Всі файли</span>
-            <span
-              className={[
-                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                activeFolderId === "all"
-                  ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
-                  : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
-              ].join(" ")}
-            >
-              {files.length}
-            </span>
-          </div>
+      {/* ── Root drop zone (visible only while dragging inside a folder) ── */}
+      {isDragging && currentFolderId !== null && (
+        <div className="mb-4">
+          <RootDropZone
+            isDragOver={dragOverTarget === "root"}
+            onDragOver={e => onFolderDragOver(e, "root")}
+            onDragLeave={onFolderDragLeave}
+            onDrop={e => onFolderDrop(e, null)}
+          />
+        </div>
+      )}
 
-          {/* Root (no folder) — only show if there are unorganised files */}
-          {files.some((f) => f.folder_id === null) && (
-            <div
-              className={[
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
-                activeFolderId === null
-                  ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-              ].join(" ")}
-              onClick={() => setActiveFolderId(null)}
-            >
-              <span className="text-base leading-none shrink-0">🏠</span>
-              <span className="truncate flex-1">Без папки</span>
-              <span
+      {/* ── Folders grid (root only) ── */}
+      {currentFolderId === null && folders.length > 0 && (
+        <div className="mb-6">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            Папки · {folders.length}
+          </p>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+            {folders.map(folder => (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                isDragOver={dragOverTarget === folder.id}
+                canEdit={canEdit}
+                onClick={() => setCurrentFolderId(folder.id)}
+                onRename={() => setRenamingFolder(folder)}
+                onDelete={() => handleDeleteFolder(folder)}
+                onDragOver={e => onFolderDragOver(e, folder.id)}
+                onDragLeave={onFolderDragLeave}
+                onDrop={e => onFolderDrop(e, folder.id)}
+              />
+            ))}
+
+            {/* Drag-to-root zone at root level (only visible while dragging a file that's in a folder) */}
+            {isDragging && draggedFile?.folder_id !== null && (
+              <div
+                onDragOver={e => onFolderDragOver(e, "root")}
+                onDragEnter={e => onFolderDragOver(e, "root")}
+                onDragLeave={onFolderDragLeave}
+                onDrop={e => onFolderDrop(e, null)}
                 className={[
-                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                  activeFolderId === null
-                    ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
-                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
+                  "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition-all duration-150 cursor-default",
+                  dragOverTarget === "root"
+                    ? "border-orange-400 bg-orange-400/10 scale-105"
+                    : "border-neutral-700 opacity-60",
                 ].join(" ")}
               >
-                {files.filter((f) => f.folder_id === null).length}
-              </span>
-            </div>
-          )}
+                <span className="text-2xl">🏠</span>
+                <span className="text-center text-xs text-neutral-500 leading-tight">Без папки</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-          {folders.length > 0 && (
-            <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
-          )}
+      {/* ── Compact folder strip inside folder view (for drag targets) ── */}
+      {currentFolderId !== null && isDragging && folders.length > 1 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs text-neutral-500">Перетягни до іншої папки:</p>
+          <div className="flex flex-wrap gap-2">
+            {folders.filter(f => f.id !== currentFolderId).map(folder => (
+              <div
+                key={folder.id}
+                onDragOver={e => onFolderDragOver(e, folder.id)}
+                onDragEnter={e => onFolderDragOver(e, folder.id)}
+                onDragLeave={onFolderDragLeave}
+                onDrop={e => onFolderDrop(e, folder.id)}
+                className={[
+                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all duration-150 cursor-default select-none",
+                  dragOverTarget === folder.id
+                    ? "scale-105 border-cyan-400 bg-cyan-400/10 text-cyan-400"
+                    : "border-neutral-700 text-neutral-400 hover:border-neutral-600",
+                ].join(" ")}
+              >
+                <FolderIcon className="h-4 w-4 text-cyan-500" />
+                <span className="truncate max-w-[120px]">{folder.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-          {folders.map((folder) => (
-            <FolderChip
-              key={folder.id}
-              folder={folder}
-              active={activeFolderId === folder.id}
+      {/* ── Files grid ── */}
+      {currentFolderId === null && (
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          {files.filter(f => f.folder_id === null).length > 0 ? `Файли без папки · ${files.filter(f => f.folder_id === null).length}` : ""}
+        </p>
+      )}
+
+      {visibleFiles.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-20 text-neutral-500">
+          <span className="text-5xl">{currentFolderId ? "📁" : "🗂️"}</span>
+          <p className="text-sm">
+            {search ? "Нічого не знайдено" : currentFolderId ? "Папка порожня — перетягни сюди файли" : "Завантажте першу нарізку"}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+          {visibleFiles.map(f => (
+            <FileCard
+              key={f.id}
+              file={f}
               canEdit={canEdit}
-              onClick={() => setActiveFolderId(folder.id)}
-              onRename={() => setRenamingFolder(folder)}
-              onDelete={() => handleDeleteFolder(folder)}
+              highlighted={f.id === highlightId}
+              isDragging={draggedFile?.id === f.id}
+              onSend={() => setSendFile(f)}
+              onDelete={() => handleDelete(f)}
+              onDragStart={e => onFileDragStart(e, f)}
+              onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}
             />
           ))}
         </div>
+      )}
 
-        {/* ── Main area ── */}
-        <div className="min-w-0 flex-1">
-          {/* breadcrumb */}
-          <div className="mb-3 flex items-center gap-1.5 text-xs text-neutral-500">
-            <span
-              className="cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-300"
-              onClick={() => setActiveFolderId("all")}
-            >
-              Файли
-            </span>
-            {activeFolder && (
-              <>
-                <span>/</span>
-                <span className="font-medium text-neutral-700 dark:text-neutral-300">{activeFolder.name}</span>
-              </>
-            )}
-            {activeFolderId === null && (
-              <>
-                <span>/</span>
-                <span className="font-medium text-neutral-700 dark:text-neutral-300">Без папки</span>
-              </>
-            )}
-          </div>
-
-          {/* search */}
-          {files.length > 0 && (
-            <div className="relative mb-4 max-w-sm">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-                🔍
-              </span>
-              <input
-                type="text"
-                placeholder="Пошук файлів…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-400"
-              />
-            </div>
-          )}
-
-          {/* grid */}
-          {filtered.length === 0 ? (
-            <div className="mt-16 flex flex-col items-center gap-3 text-neutral-400">
-              <span className="text-5xl">📂</span>
-              <p className="text-sm">
-                {search ? "Нічого не знайдено" : activeFolderId !== "all"
-                  ? "У цій папці немає файлів"
-                  : "Файлів ще немає — завантажте першу нарізку"}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {filtered.map((f) => (
-                <FileCard
-                  key={f.id}
-                  file={f}
-                  canEdit={canEdit}
-                  highlighted={f.id === highlightId}
-                  folders={folders}
-                  onSend={() => setSendFile(f)}
-                  onDelete={() => handleDelete(f)}
-                  onMove={(folderId) => handleMove(f, folderId)}
-                />
-              ))}
-            </div>
-          )}
+      {/* Empty folder drop zone for dragging into empty folders */}
+      {currentFolderId !== null && visibleFiles.length === 0 && isDragging && (
+        <div
+          onDragOver={e => { e.preventDefault(); setDragOverTarget(currentFolderId); }}
+          onDragLeave={() => setDragOverTarget(null)}
+          onDrop={e => onFolderDrop(e, currentFolderId)}
+          className={[
+            "mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition-all",
+            dragOverTarget === currentFolderId
+              ? "border-cyan-400 bg-cyan-400/10 text-cyan-400"
+              : "border-neutral-700 text-neutral-600",
+          ].join(" ")}
+        >
+          <span className="text-4xl">📁</span>
+          <span className="text-sm">{dragOverTarget === currentFolderId ? "Відпусти!" : "Перетягни файли сюди"}</span>
         </div>
-      </div>
+      )}
 
       {/* send modal */}
       {sendFile && (
-        <SendModal
-          file={sendFile}
-          printers={printers}
-          onClose={() => setSendFile(null)}
-          defaultPrinterId={defaultPrinterId ?? undefined}
-        />
+        <SendModal file={sendFile} printers={printers} onClose={() => setSendFile(null)} defaultPrinterId={defaultPrinterId ?? undefined} />
       )}
 
       {/* create folder modal */}
       {showNewFolder && (
-        <FolderNameModal
-          title="Нова папка"
-          onConfirm={handleCreateFolder}
-          onClose={() => setShowNewFolder(false)}
-        />
+        <FolderNameModal title="Нова папка" onConfirm={handleCreateFolder} onClose={() => setShowNewFolder(false)} />
       )}
 
       {/* rename folder modal */}
@@ -1357,10 +945,10 @@ export default function FilesPage() {
         <FolderNameModal
           title="Перейменувати папку"
           initialValue={renamingFolder.name}
-          onConfirm={(name) => handleRenameFolder(renamingFolder, name)}
+          onConfirm={name => handleRenameFolder(renamingFolder, name)}
           onClose={() => setRenamingFolder(null)}
         />
       )}
-    </>
+    </div>
   );
 }
