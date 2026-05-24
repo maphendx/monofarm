@@ -57,8 +57,9 @@ router = APIRouter(prefix="/printers", tags=["printers"])
 
 
 
-def _ensure_bambu_rows(db: Session, devices: list[dict], org_id: int) -> dict[str, Printer]:
-    """Make sure every Bambu Cloud device has a DB row for this org.  Returns dev_id -> Printer map."""
+def _sync_bambu_rows(db: Session, devices: list[dict], org_id: int) -> dict[str, Printer]:
+    """Sync metadata (name, access_code, model) for already-claimed Bambu devices.
+    Does NOT auto-create new rows — use claim_bambu_printer for that."""
     if not devices:
         return {}
     dev_ids = [d["dev_id"] for d in devices]
@@ -70,39 +71,23 @@ def _ensure_bambu_rows(db: Session, devices: list[dict], org_id: int) -> dict[st
         )
     }
     dirty = False
-    new_rows: list[Printer] = []
     for d in devices:
         did = d["dev_id"]
-        if did in existing:
-            row = existing[did]
-            if row.name != d["name"]:
-                row.name = d["name"]
-                dirty = True
-            if d.get("dev_access_code") and row.bambu_access_code != d["dev_access_code"]:
-                row.bambu_access_code = d["dev_access_code"]
-                dirty = True
-            model = d.get("dev_product_name") or d.get("dev_model_name") or ""
-            if model and row.bambu_model != model:
-                row.bambu_model = model
-                dirty = True
+        if did not in existing:
             continue
-        row = Printer(
-            organization_id=org_id,
-            name=d["name"],
-            kind=PrinterKind.bambu,
-            bambu_dev_id=did,
-            bambu_access_code=d.get("dev_access_code", ""),
-            bambu_model=d.get("dev_product_name") or d.get("dev_model_name") or "",
-        )
-        db.add(row)
-        new_rows.append(row)
-        dirty = True
+        row = existing[did]
+        if row.name != d["name"]:
+            row.name = d["name"]
+            dirty = True
+        if d.get("dev_access_code") and row.bambu_access_code != d["dev_access_code"]:
+            row.bambu_access_code = d["dev_access_code"]
+            dirty = True
+        model = d.get("dev_product_name") or d.get("dev_model_name") or ""
+        if model and row.bambu_model != model:
+            row.bambu_model = model
+            dirty = True
     if dirty:
         db.commit()
-        for row in new_rows:
-            db.refresh(row)
-            existing[row.bambu_dev_id] = row
-            bambu.subscribe_device(row.bambu_dev_id, org_id)
     return existing
 
 
@@ -580,7 +565,7 @@ async def list_printers(
     org: Organization = Depends(get_current_org),
 ) -> list[PrinterOut]:
     bambu_devices = await asyncio.to_thread(bambu.list_devices, org.id)
-    _ensure_bambu_rows(db, bambu_devices, org.id)
+    _sync_bambu_rows(db, bambu_devices, org.id)
 
     groups_by_id = {g.id: g.name for g in db.query(PrinterGroup).filter(PrinterGroup.organization_id == org.id).all()}
     groups_order = {g.id: g.sort_order for g in db.query(PrinterGroup).filter(PrinterGroup.organization_id == org.id).all()}
@@ -615,6 +600,85 @@ async def list_printers(
         prefetched = live_by_url.get(row.moonraker_url) if row.moonraker_url else None
         out.append(_to_dto(row, db, groups_by_id, prefetched_live=prefetched))
     return out
+
+
+@router.get("/bambu/discovered")
+async def list_bambu_discovered(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> list[dict]:
+    """Bambu Cloud devices not yet claimed into this org."""
+    devices = await asyncio.to_thread(bambu.list_devices, org.id)
+    if not devices:
+        return []
+    claimed_ids = {
+        p.bambu_dev_id
+        for p in db.query(Printer).filter(
+            Printer.organization_id == org.id,
+            Printer.bambu_dev_id.isnot(None),
+        )
+    }
+    return [
+        {
+            "dev_id": d["dev_id"],
+            "name": d["name"],
+            "model": d.get("dev_product_name") or d.get("dev_model_name") or "",
+        }
+        for d in devices
+        if d["dev_id"] not in claimed_ids
+    ]
+
+
+@router.post("/bambu/claim", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)
+async def claim_bambu_printer(
+    payload: dict,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> PrinterOut:
+    """Explicitly add a discovered Bambu device to this org (checks plan limit)."""
+    from app.api.deps import printer_limit
+    dev_id = payload.get("dev_id", "").strip()
+    if not dev_id:
+        raise HTTPException(status_code=400, detail="dev_id is required")
+
+    already = db.query(Printer).filter(
+        Printer.bambu_dev_id == dev_id,
+        Printer.organization_id == org.id,
+    ).first()
+    if already:
+        raise HTTPException(status_code=409, detail="Printer already claimed")
+
+    active_count = db.query(Printer).filter(
+        Printer.organization_id == org.id,
+        Printer.is_active.is_(True),
+    ).count()
+    limit = printer_limit(org)
+    if active_count >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
+        )
+
+    devices = await asyncio.to_thread(bambu.list_devices, org.id)
+    device = next((d for d in devices if d["dev_id"] == dev_id), None)
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found in Bambu Cloud account")
+
+    row = Printer(
+        organization_id=org.id,
+        name=device["name"],
+        kind=PrinterKind.bambu,
+        bambu_dev_id=dev_id,
+        bambu_access_code=device.get("dev_access_code", ""),
+        bambu_model=device.get("dev_product_name") or device.get("dev_model_name") or "",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    bambu.subscribe_device(row.bambu_dev_id, org.id)
+    return _to_dto(row, db)
 
 
 @router.post("", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)

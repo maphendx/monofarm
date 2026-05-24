@@ -473,6 +473,8 @@ function PrinterModal({
   );
 }
 
+type DiscoveredDevice = { dev_id: string; name: string; model: string };
+
 export default function PrintersPage() {
   const user = useUser();
   const isAdmin = user?.role === "admin";
@@ -484,6 +486,8 @@ export default function PrintersPage() {
   const [editing, setEditing] = useState<Printer | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
+  const [claiming, setClaiming] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   async function load(showSyncing = false) {
@@ -497,8 +501,32 @@ export default function PrintersPage() {
     }
   }
 
+  async function loadDiscovered() {
+    try {
+      const devs = await api<DiscoveredDevice[]>("/api/printers/bambu/discovered");
+      setDiscovered(devs);
+    } catch {
+      setDiscovered([]);
+    }
+  }
+
+  async function claimDevice(dev_id: string) {
+    if (claiming) return;
+    setClaiming(dev_id);
+    try {
+      await api("/api/printers/bambu/claim", { method: "POST", body: JSON.stringify({ dev_id }) });
+      setDiscovered((prev) => prev.filter((d) => d.dev_id !== dev_id));
+      load();
+    } catch {
+      // error shown inline via claiming state reset
+    } finally {
+      setClaiming(null);
+    }
+  }
+
   useEffect(() => {
     load();
+    if (isAdmin) loadDiscovered();
     // Silently run Bambu LAN discovery to populate missing IPs via agent UDP broadcast.
     // If new IPs are found, reload the list so FTPS send works immediately.
     api<{ devices: { dev_id: string; ip: string }[] }>("/api/printers/bambu-discover")
@@ -560,10 +588,32 @@ export default function PrintersPage() {
           )}
         </div>
       </div>
-      <p className="text-xs text-neutral-400">
-        Bambu Lab принтери підтягуються автоматично якщо налаштовано акаунт в{" "}
-        <Link href="/settings" className="underline hover:text-neutral-600">Налаштуваннях</Link>.
-      </p>
+      {/* discovered but not yet claimed Bambu devices */}
+      {isAdmin && discovered.length > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+          <p className="mb-3 text-sm font-medium text-blue-800 dark:text-blue-300">
+            Виявлено нові Bambu пристрої ({discovered.length}) — оберіть які додати до ферми
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {discovered.map((d) => (
+              <div key={d.dev_id}
+                className="flex items-center gap-3 rounded-lg border border-blue-200 bg-white px-3 py-2 dark:border-blue-800 dark:bg-neutral-900">
+                <div>
+                  <p className="text-sm font-medium">{d.name}</p>
+                  <p className="text-xs text-neutral-400">{d.model || d.dev_id}</p>
+                </div>
+                <button
+                  onClick={() => claimDevice(d.dev_id)}
+                  disabled={claiming === d.dev_id}
+                  className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                >
+                  {claiming === d.dev_id ? "…" : "Додати"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-sm text-neutral-500">Завантаження…</p>
