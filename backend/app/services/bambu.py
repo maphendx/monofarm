@@ -683,16 +683,28 @@ def start_print(
 
     Prefers http_url (printer downloads from R2 — no LAN FTPS needed).
     Falls back to ftp://ftp_filename for local-disk setups.
+    A1 fw 1.03+ requires task_id / profile_id / project_id / bed_type.
     """
+    import uuid as _uuid
     url = http_url if http_url else f"ftp://{ftp_filename}"
     cmd: dict[str, Any] = {
         "print": {
             "command": "project_file",
             "sequence_id": _next_seq(),
+            "task_id": str(_uuid.uuid4()),
+            "profile_id": "0",
+            "project_id": "0",
+            "subtask_id": "0",
             "param": "Metadata/plate_1.gcode",
             "subtask_name": subtask_name,
             "url": url,
+            "bed_type": "auto",
             "use_ams": use_ams,
+            "timelapse": False,
+            "bed_leveling": True,
+            "flow_cali": False,
+            "vibration_cali": True,
+            "layer_inspect": False,
         },
     }
     if ams_mapping is not None:

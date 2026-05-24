@@ -1111,9 +1111,11 @@ async def print_clear_bed(
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
-        # Clear cached state so printer returns to IDLE on next MQTT push
+        from app.services.cache import cache_delete
         import time as _time
-        bambu._state_cache[row.bambu_dev_id] = {"ts": _time.monotonic(), "state": "idle"}
+        idle = {"ts": _time.monotonic(), "state": "idle"}
+        bambu._state_cache[row.bambu_dev_id] = idle
+        cache_delete(f"bambu:state:{row.bambu_dev_id}")
 
     elif row.moonraker_url:
         # Home the printer — typical Klipper post-print sequence
