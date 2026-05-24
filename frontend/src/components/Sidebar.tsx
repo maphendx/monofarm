@@ -29,6 +29,7 @@ const ICONS: Record<string, string[]> = {
   dashboard: ["M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
   files:     ["M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z", "M13 2v7h7"],
   tasks:     ["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"],
+  plan:      ["M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"],
   printers:  ["M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6", "M6 18h12v3H6z"],
   analytics: ["M18 20V10M12 20V4M6 20v-6"],
   history:   ["M12 8v4l3 3", "M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"],
@@ -54,6 +55,7 @@ const NAV_GROUPS = [
     label: null,
     items: [
       { href: "/dashboard", icon: "dashboard", tKey: "nav.dashboard" },
+      { href: "/plan",      icon: "plan",      tKey: "nav.plan" },
       { href: "/tasks",     icon: "tasks",     tKey: "nav.tasks" },
       { href: "/files",     icon: "files",     tKey: "nav.files" },
       { href: "/printers",  icon: "printers",  tKey: "nav.printers" },
