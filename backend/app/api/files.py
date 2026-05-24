@@ -318,13 +318,35 @@ async def upload_file(
     # Extract thumbnail from .3mf ZIP
     if ".3mf" in ext:
         import io as _io
+        import re as _re
         import zipfile as _zf
         try:
             with _zf.ZipFile(_io.BytesIO(contents)) as zf:
-                for candidate in ("Metadata/plate_1.png", "Metadata/plate_1.jpg",
-                                  "Metadata/thumbnail.png", "thumbnail.png"):
-                    if candidate in zf.namelist():
+                namelist = zf.namelist()
+
+                # Priority 1: high-quality combined preview thumbnails
+                # (BambuStudio / OrcaSlicer write these for the whole job)
+                fixed_candidates = [
+                    "Metadata/thumbnail/thumbnail_400x400.png",
+                    "Metadata/thumbnail/thumbnail_300x300.png",
+                    "Metadata/thumbnail/thumbnail_600x600.png",
+                    "Metadata/thumbnail.png",
+                    "thumbnail.png",
+                ]
+
+                # Priority 2: plate thumbnails — sorted by plate number descending
+                # so we pick the highest plate the user actually added content to.
+                plate_files = sorted(
+                    [n for n in namelist if _re.match(r"Metadata/plate_\d+\.png$", n, _re.IGNORECASE)],
+                    key=lambda x: int(_re.search(r"\d+", x.split("/")[-1]).group()),
+                    reverse=True,
+                )
+
+                for candidate in fixed_candidates + plate_files:
+                    if candidate in namelist:
                         thumb = zf.read(candidate)
+                        if not thumb:
+                            continue  # skip zero-byte files
                         thumb_name = stored_name + ".thumb.png"
                         storage_svc.put(thumb_name, thumb, org.id)
                         filament_meta = filament_meta or {}

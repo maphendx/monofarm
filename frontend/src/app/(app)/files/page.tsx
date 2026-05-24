@@ -184,9 +184,9 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                 const compat = compatBadge(slots);
                 return (
                   <label key={p.id} className={["flex cursor-pointer flex-col gap-1.5 rounded-lg border p-3 transition",
-                    selectedId === p.id ? "border-cyan-500 bg-cyan-500/10" : "border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800/50"].join(" ")}>
+                    selectedId === p.id ? "border-accent bg-accent/10" : "border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800/50"].join(" ")}>
                     <div className="flex items-center gap-3">
-                      <input type="radio" name="printer" value={p.id} checked={selectedId === p.id} onChange={() => selectPrinter(p.id)} className="accent-cyan-500" />
+                      <input type="radio" name="printer" value={p.id} checked={selectedId === p.id} onChange={() => selectPrinter(p.id)} className="accent-[var(--accent)]" />
                       <span className="flex-1 truncate text-sm font-medium text-neutral-200">{p.name}</span>
                       <span className={["shrink-0 rounded px-1.5 py-0.5 text-xs",
                         p.state === "printing" ? "bg-amber-500/20 text-amber-400"
@@ -227,7 +227,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                     </div>
                     <span className="text-neutral-500">→</span>
                     <select value={slotMap[i] ?? i} onChange={e => setSlotMap(p => ({ ...p, [i]: Number(e.target.value) }))}
-                      className="rounded border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-200 outline-none focus:border-cyan-500">
+                      className="rounded border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-200 outline-none focus:border-accent">
                       {selected.loaded_filaments.length > 0
                         ? selected.loaded_filaments.map(lf => <option key={lf.slot} value={lf.slot}>Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}</option>)
                         : Array.from({ length: 4 }).map((_, s) => <option key={s} value={s}>Слот {s + 1}</option>)}
@@ -246,7 +246,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                 ["aiDetection", "AI детекція", aiDetection, setAiDetection],
               ].map(([key, label, val, setter]) => (
                 <label key={key as string} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs">
-                  <input type="checkbox" checked={val as boolean} onChange={e => (setter as (v: boolean) => void)(e.target.checked)} className="accent-cyan-500" />
+                  <input type="checkbox" checked={val as boolean} onChange={e => (setter as (v: boolean) => void)(e.target.checked)} className="accent-[var(--accent)]" />
                   <span className="text-neutral-300">{label as string}</span>
                 </label>
               ))}
@@ -266,7 +266,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           </button>
           {!result?.ok && (
             <button onClick={send} disabled={!selectedId || busy}
-              className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm text-white hover:bg-cyan-500 disabled:opacity-40">
+              className="rounded-md bg-accent px-3 py-1.5 text-sm text-white hover:bg-accent/90 disabled:opacity-40">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
@@ -305,12 +305,12 @@ function FolderNameModal({ title, initialValue, onConfirm, onClose }: {
         <form onSubmit={submit} className="px-5 py-4 space-y-3">
           <input ref={ref} type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="Назва папки" maxLength={255}
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-cyan-500" />
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-accent" />
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800">Скасувати</button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-40">
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-40">
               {busy ? "…" : "Зберегти"}
             </button>
           </div>
@@ -350,12 +350,12 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
       className={[
         "group relative flex cursor-pointer select-none flex-col items-center gap-3 rounded-xl border p-4 transition-all duration-150",
         isDragOver
-          ? "scale-105 border-cyan-400 bg-cyan-400/10 shadow-lg shadow-cyan-400/20"
+          ? "scale-105 border-accent bg-accent/10 shadow-lg shadow-accent/20"
           : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
       ].join(" ")}
     >
       <div className="relative">
-        <FolderIcon className={["h-16 w-16 transition-transform duration-150 group-hover:scale-105", isDragOver ? "text-cyan-400" : "text-cyan-500"].join(" ")} />
+        <FolderIcon className={["h-16 w-16 transition-transform duration-150 group-hover:scale-105", isDragOver ? "text-accent" : "text-accent"].join(" ")} />
         {folder.file_count > 0 && (
           <span className="absolute -bottom-1 -right-1 rounded-full bg-neutral-700 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300 leading-none min-w-[18px] text-center">
             {folder.file_count}
@@ -372,7 +372,7 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 
       {isDragOver && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl">
-          <span className="rounded-md bg-cyan-500/90 px-2 py-1 text-xs font-semibold text-white shadow">
+          <span className="rounded-md bg-accent/90 px-2 py-1 text-xs font-semibold text-white shadow">
             Перемістити →
           </span>
         </div>
@@ -453,7 +453,7 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
         isDragging
           ? "scale-95 opacity-40 border-neutral-600 bg-neutral-800"
           : highlighted
-          ? "border-cyan-500 bg-cyan-500/10 ring-2 ring-cyan-500/20"
+          ? "border-accent bg-accent/10 ring-2 ring-accent/20"
           : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
       ].join(" ")}
     >
@@ -499,7 +499,7 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
       {/* actions */}
       <div className="mt-auto flex gap-1.5 pt-1">
         <button onClick={onSend}
-          className="flex-1 rounded-lg border border-cyan-600/30 bg-cyan-600/15 py-1.5 text-xs font-medium text-cyan-400 transition hover:bg-cyan-600/25">
+          className="flex-1 rounded-lg border border-accent/30 bg-accent/15 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/25">
           Надіслати →
         </button>
         <button onClick={download} disabled={dlBusy}
@@ -706,7 +706,7 @@ export default function FilesPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center py-24 text-sm text-neutral-500">
-      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-neutral-600 border-t-cyan-400 mr-2" />
+      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-neutral-600 border-t-accent mr-2" />
       Завантаження…
     </div>
   );
@@ -762,7 +762,7 @@ export default function FilesPage() {
           <input
             type="text" placeholder="Пошук…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-48 rounded-lg border border-neutral-700 bg-neutral-800/60 py-2 pl-8 pr-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-cyan-500 transition"
+            className="w-48 rounded-lg border border-neutral-700 bg-neutral-800/60 py-2 pl-8 pr-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-accent transition"
           />
         </div>
 
@@ -773,14 +773,14 @@ export default function FilesPage() {
             {!currentFolder && (
               <button onClick={() => setShowNewFolder(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800/60 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800">
-                <FolderIcon className="h-4 w-4 text-cyan-500" />
+                <FolderIcon className="h-4 w-4 text-accent" />
                 Нова папка
               </button>
             )}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="relative flex min-w-40 items-center justify-center gap-2 overflow-hidden rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-default disabled:opacity-70"
+              className="relative flex min-w-40 items-center justify-center gap-2 overflow-hidden rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent/90 disabled:cursor-default disabled:opacity-70"
             >
               {uploading && (
                 <span className="pointer-events-none absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
@@ -868,11 +868,11 @@ export default function FilesPage() {
                 className={[
                   "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all duration-150 cursor-default select-none",
                   dragOverTarget === folder.id
-                    ? "scale-105 border-cyan-400 bg-cyan-400/10 text-cyan-400"
+                    ? "scale-105 border-accent bg-accent/10 text-accent"
                     : "border-neutral-700 text-neutral-400 hover:border-neutral-600",
                 ].join(" ")}
               >
-                <FolderIcon className="h-4 w-4 text-cyan-500" />
+                <FolderIcon className="h-4 w-4 text-accent" />
                 <span className="truncate max-w-[120px]">{folder.name}</span>
               </div>
             ))}
@@ -921,7 +921,7 @@ export default function FilesPage() {
           className={[
             "mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition-all",
             dragOverTarget === currentFolderId
-              ? "border-cyan-400 bg-cyan-400/10 text-cyan-400"
+              ? "border-accent bg-accent/10 text-accent"
               : "border-neutral-700 text-neutral-600",
           ].join(" ")}
         >
