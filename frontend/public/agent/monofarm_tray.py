@@ -959,7 +959,7 @@ function doConnect() {
   if (_formMode === 'login') {
     const email = document.getElementById('inp-email').value.trim();
     const pass  = document.getElementById('inp-pass').value;
-    if (!email || !pass) { showToast('Email і пароль обов'язкові'); return; }
+    if (!email || !pass) { showToast("Email і пароль обов’язкові"); return; }
     document.getElementById('btn-connect').disabled = true;
     document.getElementById('btn-connect').textContent = 'Входимо…';
     send({type:'login', server:s, email, password:pass, autostart:a});
