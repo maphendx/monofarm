@@ -14,7 +14,7 @@ import {
 import { StateIcon } from "@/components/StateIcon";
 import type { Printer } from "@/lib/types";
 
-const TONE_LEFT_COLOR: Record<string, string> = {
+const TONE_TOP_COLOR: Record<string, string> = {
   printing: "#3b82f6",
   ok:       "#10b981",
   warn:     "#f59e0b",
@@ -104,12 +104,12 @@ export function PrinterCard({
       onClick={() => onClick?.(printer)}
       onKeyDown={(e) => e.key === "Enter" && onClick?.(printer)}
       className={[
-        "group relative flex cursor-pointer flex-col gap-1.5 overflow-hidden rounded-md border p-3 pl-4",
-        "border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900",
-        tone === "muted" ? "opacity-50" : "",
-        "text-left transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/60",
+        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-white p-3",
+        "border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900",
+        tone === "muted" ? "opacity-60" : "",
+        "text-left transition-shadow hover:shadow-md",
       ].join(" ")}
-      style={{ borderLeftWidth: 3, borderLeftColor: TONE_LEFT_COLOR[tone] }}
+      style={{ borderTopWidth: 2, borderTopColor: TONE_TOP_COLOR[tone] }}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
