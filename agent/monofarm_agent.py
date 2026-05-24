@@ -30,7 +30,7 @@ import logging
 import sys
 from pathlib import Path
 
-AGENT_VERSION = "0.4.6"
+AGENT_VERSION = "0.4.7"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
