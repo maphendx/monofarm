@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { DashboardPet } from "@/components/DashboardPet";
-import { DaySummary } from "@/components/DaySummary";
 import { PrinterCard } from "@/components/PrinterCard";
 import { PrinterDetailModal } from "@/components/PrinterDetailModal";
 import { PrinterGroupsModal } from "@/components/PrinterGroupsModal";
@@ -169,6 +168,54 @@ function groupPrinters(
   }));
 }
 
+// ── finishing queue ───────────────────────────────────────────────────────────
+
+function fmtEta(minutes: number): string {
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return `${minutes}m`;
+}
+
+function FinishingQueue({ printers }: { printers: Printer[] }) {
+  const printing = printers
+    .filter((p) => p.state === "printing")
+    .sort((a, b) => {
+      if (a.eta_minutes == null && b.eta_minutes == null) return 0;
+      if (a.eta_minutes == null) return 1;
+      if (b.eta_minutes == null) return -1;
+      return a.eta_minutes - b.eta_minutes;
+    });
+
+  if (printing.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3">
+      <span className="shrink-0 text-[11px] font-medium text-neutral-500 uppercase tracking-wide">
+        Завершуються
+      </span>
+      <div className="mx-2 h-4 w-px bg-neutral-700 shrink-0" />
+      <div className="flex items-center gap-2">
+        {printing.map((p, i) => (
+          <div
+            key={p.id}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5"
+          >
+            <span className="text-[10px] font-bold text-neutral-600">#{i + 1}</span>
+            <span className="text-xs font-medium text-neutral-200">{p.name}</span>
+            <span className="text-xs font-semibold text-blue-400">
+              {p.eta_minutes != null ? fmtEta(p.eta_minutes) : "—"}
+            </span>
+            {p.job && (
+              <span className="max-w-[120px] truncate text-[11px] text-neutral-500">
+                {p.job}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── compact select ────────────────────────────────────────────────────────────
 
 function CompactSelect<T extends string>({
@@ -291,36 +338,23 @@ export default function DashboardPage() {
 
   const statusStats = useMemo(() => {
     let attention = 0, idle = 0, paused = 0, printing = 0, awaiting = 0, offline = 0;
-    let nextFinish: { name: string; eta: number } | null = null;
     for (const p of printers) {
       const s = p.state ?? "unknown";
       if (s === "error") attention++;
       else if (s === "idle" || s === "operational") idle++;
       else if (s === "paused") paused++;
       else if (s === "awaiting_bed_clear") awaiting++;
-      else if (s === "printing") {
-        printing++;
-        if (p.eta_minutes && (!nextFinish || p.eta_minutes < nextFinish.eta))
-          nextFinish = { name: p.name, eta: p.eta_minutes };
-      }
+      else if (s === "printing") printing++;
       if (s === "offline" || s === "unknown") offline++;
     }
-    return { attention, idle, paused, printing, awaiting, offline, nextFinish };
+    return { attention, idle, paused, printing, awaiting, offline };
   }, [printers]);
 
   return (
     <div className="space-y-4">
-      {/* ── status bar ── */}
+      {/* ── status cards ── */}
       {printers.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
-          <StatusCard
-            label="Next printer finish"
-            value={statusStats.nextFinish
-              ? `${statusStats.nextFinish.eta >= 60 ? `${Math.floor(statusStats.nextFinish.eta / 60)}h ${statusStats.nextFinish.eta % 60}m` : `${statusStats.nextFinish.eta}m`}`
-              : "—"}
-            sub={statusStats.nextFinish?.name}
-            color="#3b82f6"
-          />
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
           <StatusCard label="Requires attention" value={statusStats.attention} color="#ef4444" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
           <StatusCard label="Idle & ready" value={statusStats.idle} color="#22c55e" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
           <StatusCard label="Paused" value={statusStats.paused} color="#eab308" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
@@ -330,7 +364,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <DaySummary />
+      {/* ── finishing queue ── */}
+      {statusStats.printing > 0 && (
+        <FinishingQueue printers={printers} />
+      )}
 
       {/* ── toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
