@@ -759,6 +759,7 @@ def cloud_upload_and_print(
     except requests.RequestException as e:
         raise BambuError(f"Bambu Cloud create project failed: {e}") from e
 
+    log.info("Bambu Cloud project response: %s", data)
     project = data.get("project") or data
     project_id = project.get("project_id") or project.get("id", "")
     model_id = project.get("model_id") or project_id
@@ -790,6 +791,7 @@ def cloud_upload_and_print(
     if ams_mapping is not None:
         task_body["amsMapping"] = ams_mapping
 
+    log.info("Bambu Cloud task body: %s", task_body)
     try:
         task_resp = requests.post(
             f"{base}/v1/user-service/my/task",
@@ -797,10 +799,11 @@ def cloud_upload_and_print(
             headers=hdrs,
             timeout=CLOUD_TIMEOUT,
         )
+        body_text = task_resp.text
         task_resp.raise_for_status()
         log.info("Bambu Cloud: task created dev=%s project=%s", dev_id, project_id)
     except requests.RequestException as e:
-        raise BambuError(f"Bambu Cloud create task failed: {e}") from e
+        raise BambuError(f"Bambu Cloud create task failed: {e} — body: {body_text}") from e
 
 
 # ── FTPS upload (LAN fallback) ────────────────────────────────────────────────
