@@ -69,11 +69,29 @@ def billing_status(
     }
 
 
+@router.post("/upgrade-free")
+def upgrade_free(
+    body: dict,
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Directly set org plan without payment (dev/beta mode)."""
+    try:
+        plan = OrgPlan(body.get("plan", ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    org.plan = plan
+    db.commit()
+    return {"ok": True, "plan": plan.value}
+
+
 @router.post("/checkout")
 def create_checkout(
     body: dict,
     org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
+    db: Session = Depends(get_db),
 ) -> dict:
     try:
         plan = OrgPlan(body.get("plan", ""))
@@ -81,6 +99,15 @@ def create_checkout(
         raise HTTPException(status_code=400, detail="Invalid plan")
     if plan == OrgPlan.free:
         raise HTTPException(status_code=400, detail="Use cancel to downgrade to free")
+
+    # Billing not configured → upgrade directly (bootstrap / dev mode)
+    if not settings.LMSQ_API_KEY:
+        import datetime
+        org.plan = plan
+        org.plan_expires_at = datetime.datetime.utcnow() + datetime.timedelta(days=3650)
+        db.commit()
+        log.info("Free upgrade: org %s → %s (billing not configured)", org.id, plan.value)
+        return {"url": None, "upgraded": True, "plan": plan.value}
 
     payload = {
         "data": {

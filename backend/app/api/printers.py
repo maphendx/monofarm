@@ -681,6 +681,87 @@ async def claim_bambu_printer(
     return _to_dto(row, db)
 
 
+@router.get("/moonraker/discovered")
+async def list_moonraker_discovered(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> list[dict]:
+    """Moonraker URLs discovered on LAN via agent tunnel, not yet in DB."""
+    if not _tunnel.has_tunnel(org.id):
+        return []
+
+    existing_urls = {
+        p.moonraker_url.rstrip("/")
+        for p in db.query(Printer).filter(
+            Printer.organization_id == org.id,
+            Printer.moonraker_url.isnot(None),
+        )
+        if p.moonraker_url
+    }
+
+    try:
+        resp = await _tunnel.proxy_request(org.id, "DISCOVER_MOONRAKER", "", timeout=60.0)
+        if resp.get("error") or resp.get("status", 0) >= 400:
+            return []
+        devices = (resp.get("body") or {}).get("devices", [])
+    except Exception:
+        return []
+
+    return [
+        {
+            "url": d["url"],
+            "name": d.get("name") or d.get("hostname") or "Klipper Printer",
+        }
+        for d in devices
+        if d.get("url") and d["url"].rstrip("/") not in existing_urls
+    ]
+
+
+@router.post("/moonraker/claim", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)
+async def claim_moonraker_printer(
+    payload: dict,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> PrinterOut:
+    """Add a discovered Moonraker/Klipper printer to this org (checks plan limit)."""
+    from app.api.deps import printer_limit
+    url = (payload.get("url") or "").strip().rstrip("/")
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+
+    already = db.query(Printer).filter(
+        Printer.moonraker_url == url,
+        Printer.organization_id == org.id,
+    ).first()
+    if already:
+        raise HTTPException(status_code=409, detail="Printer already added")
+
+    active_count = db.query(Printer).filter(
+        Printer.organization_id == org.id,
+        Printer.is_active.is_(True),
+    ).count()
+    limit = printer_limit(org)
+    if active_count >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
+        )
+
+    name = (payload.get("name") or "Klipper Printer").strip()
+    row = Printer(
+        organization_id=org.id,
+        name=name,
+        kind=PrinterKind.other,
+        moonraker_url=url,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _to_dto(row, db)
+
+
 @router.post("", response_model=PrinterOut, status_code=status.HTTP_201_CREATED)
 def create_printer(
     payload: PrinterCreate,

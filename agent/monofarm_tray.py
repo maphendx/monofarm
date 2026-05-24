@@ -279,6 +279,10 @@ class App:
                     asyncio.create_task(self._run_update_check(websocket))
                 elif t == "claim_printer":
                     asyncio.create_task(self._do_claim_printer(msg.get("dev_id", ""), websocket))
+                elif t == "claim_moonraker":
+                    asyncio.create_task(self._do_claim_moonraker(msg.get("url", ""), msg.get("name", "Klipper Printer"), websocket))
+                elif t == "login":
+                    asyncio.create_task(self._do_login(msg.get("email", ""), msg.get("password", ""), msg.get("server", ""), websocket))
         finally:
             self._ws_clients.discard(websocket)
 
@@ -350,21 +354,28 @@ class App:
             await asyncio.sleep(15)
 
     async def _fetch_printers(self, server: str, token: str) -> list:
-        """Fetch claimed printers + undiscovered Bambu devices from backend."""
+        """Fetch claimed printers + undiscovered Bambu/Moonraker devices from backend."""
         headers = {"Authorization": f"Bearer {token}"}
         async with httpx.AsyncClient(timeout=8, verify=False) as client:
-            r = await client.get(f"{server}/api/printers", headers=headers)
+            r   = await client.get(f"{server}/api/printers", headers=headers)
             raw = r.json() if r.status_code == 200 else []
-            rd = await client.get(f"{server}/api/printers/bambu/discovered", headers=headers)
-            discovered = rd.json() if rd.status_code == 200 else []
+            rd  = await client.get(f"{server}/api/printers/bambu/discovered", headers=headers)
+            disc_bambu = rd.json() if rd.status_code == 200 else []
+            rm  = await client.get(f"{server}/api/printers/moonraker/discovered", headers=headers)
+            disc_moon = rm.json() if rm.status_code == 200 else []
 
         claimed = await asyncio.gather(*[self._check_local(p) for p in raw], return_exceptions=False)
-        unclaimed = [
+        unclaimed_bambu = [
             {"dev_id": d["dev_id"], "name": d["name"], "model": d.get("model", ""),
              "kind": "bambu", "claimed": False, "local_ok": False, "local_ms": None}
-            for d in discovered
+            for d in disc_bambu
         ]
-        return [{**p, "claimed": True} for p in claimed] + unclaimed
+        unclaimed_moon = [
+            {"url": d["url"], "name": d.get("name", "Klipper Printer"),
+             "kind": "moonraker", "claimed": False, "local_ok": False, "local_ms": None}
+            for d in disc_moon
+        ]
+        return [{**p, "claimed": True} for p in claimed] + unclaimed_bambu + unclaimed_moon
 
     async def _check_local(self, p: dict) -> dict:
         """Add local_ok + local_ms to a printer dict."""
@@ -405,7 +416,7 @@ class App:
                     json={"dev_id": dev_id},
                 )
             if r.status_code in (200, 201):
-                log.info("Printer %s added to monofarm", dev_id)
+                log.info("Bambu printer %s added to monofarm", dev_id)
                 printers = await self._fetch_printers(cfg["MONOFARM_SERVER"], cfg["MONOFARM_TOKEN"])
                 self._printers = printers
                 await self._broadcast({"type": "printers", "printers": printers})
@@ -415,6 +426,45 @@ class App:
                 await websocket.send(json.dumps({"type": "claim_err", "dev_id": dev_id, "error": err}))
         except Exception as e:
             log.warning("Claim error: %s", e)
+
+    async def _do_claim_moonraker(self, url: str, name: str, websocket) -> None:
+        cfg = load_config()
+        try:
+            async with httpx.AsyncClient(timeout=10, verify=False) as client:
+                r = await client.post(
+                    f"{cfg['MONOFARM_SERVER']}/api/printers/moonraker/claim",
+                    headers={"Authorization": f"Bearer {cfg['MONOFARM_TOKEN']}"},
+                    json={"url": url, "name": name},
+                )
+            if r.status_code in (200, 201):
+                log.info("Moonraker printer %s added to monofarm", url)
+                printers = await self._fetch_printers(cfg["MONOFARM_SERVER"], cfg["MONOFARM_TOKEN"])
+                self._printers = printers
+                await self._broadcast({"type": "printers", "printers": printers})
+            else:
+                err = (r.json().get("detail", "Error") if r.content else "Error")
+                log.warning("Claim moonraker failed for %s: %s", url, err)
+                await websocket.send(json.dumps({"type": "claim_err", "dev_id": url, "error": err}))
+        except Exception as e:
+            log.warning("Claim moonraker error: %s", e)
+
+    async def _do_login(self, email: str, password: str, server: str, websocket) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=10, verify=False) as client:
+                r = await client.post(
+                    f"{server}/api/auth/login",
+                    json={"email": email, "password": password},
+                )
+            if r.status_code == 200:
+                token = r.json().get("access_token", "")
+                save_config(server, token)
+                await websocket.send(json.dumps({"type": "login_ok", "token": token}))
+                await self._do_start(server, token)
+            else:
+                err = (r.json().get("detail", "Invalid credentials") if r.content else "Login failed")
+                await websocket.send(json.dumps({"type": "login_err", "error": err}))
+        except Exception as e:
+            await websocket.send(json.dumps({"type": "login_err", "error": str(e)}))
 
     # ── Agent tunnel ──────────────────────────────────────────────────────────
 
@@ -732,13 +782,33 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     <div class="sidebar-block">
       <div class="field">
         <label class="lbl" for="inp-server">Server URL</label>
-        <input class="inp" id="inp-server" type="text" placeholder="https://monofarm.app" autocomplete="off">
+        <input class="inp" id="inp-server" type="text" placeholder="https://api.monofarm.app" autocomplete="off">
       </div>
-      <div class="field">
-        <label class="lbl" for="inp-token">Token</label>
-        <div class="inp-row">
-          <input class="inp" id="inp-token" type="password" placeholder="eyJ…" autocomplete="off">
-          <button class="show-btn" onclick="toggleTok(this)">Show</button>
+      <!-- Token tab -->
+      <div id="form-token">
+        <div class="field">
+          <label class="lbl" for="inp-token">Token</label>
+          <div class="inp-row">
+            <input class="inp" id="inp-token" type="password" placeholder="eyJ…" autocomplete="off">
+            <button class="show-btn" onclick="toggleTok(this)">Show</button>
+          </div>
+        </div>
+        <div style="text-align:center;margin:-4px 0 8px">
+          <button class="show-btn" style="width:100%;font-size:10px" onclick="switchForm('login')">або увійти через email →</button>
+        </div>
+      </div>
+      <!-- Login tab -->
+      <div id="form-login" style="display:none">
+        <div class="field">
+          <label class="lbl" for="inp-email">Email</label>
+          <input class="inp" id="inp-email" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label class="lbl" for="inp-pass">Password</label>
+          <input class="inp" id="inp-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div style="text-align:center;margin:-4px 0 8px">
+          <button class="show-btn" style="width:100%;font-size:10px" onclick="switchForm('token')">← або вставити токен</button>
         </div>
       </div>
       <label class="chk-row">
@@ -749,7 +819,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
     <!-- Action buttons -->
     <div class="btn-row">
-      <button class="btn btn-connect" onclick="doConnect()">Connect</button>
+      <button class="btn btn-connect" id="btn-connect" onclick="doConnect()">Connect</button>
       <button class="btn btn-disc" onclick="doDisconnect()">Disconnect</button>
     </div>
 
@@ -812,8 +882,17 @@ function connect() {
         addLog(m.line, true);
       } else if (m.type === 'printers') {
         renderPrinters(m.printers || []);
+      } else if (m.type === 'login_ok') {
+        document.getElementById('inp-token').value = m.token || '';
+        document.getElementById('btn-connect').disabled = false;
+        switchForm('token');
+        showToast('Успішний вхід ✓');
+      } else if (m.type === 'login_err') {
+        document.getElementById('btn-connect').disabled = false;
+        document.getElementById('btn-connect').textContent = 'Увійти';
+        showToast('Помилка входу: ' + (m.error || 'невідомо'));
       } else if (m.type === 'claim_err') {
-        const btn = document.getElementById('claim-' + m.dev_id);
+        const btn = document.getElementById('claim-' + CSS.escape(m.dev_id));
         if (btn) { btn.disabled = false; btn.textContent = '+ Додати'; }
         showToast('Помилка: ' + (m.error || 'невідома'));
       } else if (m.type === 'update_status') {
@@ -866,12 +945,29 @@ function clearLog() {
 
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
+let _formMode = 'token';
+function switchForm(mode) {
+  _formMode = mode;
+  document.getElementById('form-token').style.display = mode === 'token' ? '' : 'none';
+  document.getElementById('form-login').style.display = mode === 'login' ? '' : 'none';
+  document.getElementById('btn-connect').textContent = mode === 'login' ? 'Увійти' : 'Connect';
+}
+
 function doConnect() {
   const s = document.getElementById('inp-server').value.trim();
-  const t = document.getElementById('inp-token').value.trim();
   const a = document.getElementById('inp-autostart').checked;
-  if (!t) { showToast('Token is required'); return; }
-  send({type:'connect', server:s, token:t, autostart:a});
+  if (_formMode === 'login') {
+    const email = document.getElementById('inp-email').value.trim();
+    const pass  = document.getElementById('inp-pass').value;
+    if (!email || !pass) { showToast('Email і пароль обов'язкові'); return; }
+    document.getElementById('btn-connect').disabled = true;
+    document.getElementById('btn-connect').textContent = 'Входимо…';
+    send({type:'login', server:s, email, password:pass, autostart:a});
+  } else {
+    const t = document.getElementById('inp-token').value.trim();
+    if (!t) { showToast('Token is required'); return; }
+    send({type:'connect', server:s, token:t, autostart:a});
+  }
 }
 function doDisconnect() { send({type:'disconnect'}); }
 function openDash()     { send({type:'open_dashboard'}); }
@@ -909,6 +1005,13 @@ function claimPrinter(dev_id) {
   const btn = document.getElementById('claim-' + dev_id);
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   send({type: 'claim_printer', dev_id});
+}
+
+function claimMoonraker(url, name) {
+  const id = 'moon-' + btoa(url).replace(/[^a-zA-Z0-9]/g, '');
+  const btn = document.getElementById('claim-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  send({type: 'claim_moonraker', url, name});
 }
 
 function renderPrinters(list) {
@@ -961,17 +1064,34 @@ function renderPrinters(list) {
 
   const unclaimedHtml = unclaimed.length ? `
     <div class="p-discover-hdr">Виявлено — ще не додано до ферми</div>
-    ${unclaimed.map(p => `<div class="p-card p-unclaimed">
-      <div class="p-head">
-        <div class="p-dot nok"></div>
-        <div class="p-name">${p.name || p.dev_id}</div>
-        <div class="p-badge offline">${p.model || 'Bambu'}</div>
-      </div>
-      <div class="p-foot" style="margin-top:8px">
-        <span class="p-ip">${p.dev_id}</span>
-        <button id="claim-${p.dev_id}" class="claim-btn" onclick="claimPrinter('${p.dev_id}')">+ Додати</button>
-      </div>
-    </div>`).join('')}
+    ${unclaimed.map(p => {
+      if (p.kind === 'moonraker') {
+        const moonId = 'moon-' + btoa(p.url || '').replace(/[^a-zA-Z0-9]/g, '');
+        const ip = (p.url || '').replace(/https?:\/\//, '').split(/[/?]/)[0];
+        return `<div class="p-card p-unclaimed">
+          <div class="p-head">
+            <div class="p-dot nok"></div>
+            <div class="p-name">${p.name || 'Klipper'}</div>
+            <div class="p-badge offline">Klipper</div>
+          </div>
+          <div class="p-foot" style="margin-top:8px">
+            <span class="p-ip">${ip}</span>
+            <button id="claim-${moonId}" class="claim-btn" onclick="claimMoonraker(${JSON.stringify(p.url)},${JSON.stringify(p.name||'Klipper Printer')})">+ Додати</button>
+          </div>
+        </div>`;
+      }
+      return `<div class="p-card p-unclaimed">
+        <div class="p-head">
+          <div class="p-dot nok"></div>
+          <div class="p-name">${p.name || p.dev_id}</div>
+          <div class="p-badge offline">${p.model || 'Bambu'}</div>
+        </div>
+        <div class="p-foot" style="margin-top:8px">
+          <span class="p-ip">${p.dev_id}</span>
+          <button id="claim-${p.dev_id}" class="claim-btn" onclick="claimPrinter('${p.dev_id}')">+ Додати</button>
+        </div>
+      </div>`;
+    }).join('')}
   ` : '';
 
   grid.innerHTML = claimedHtml + unclaimedHtml;

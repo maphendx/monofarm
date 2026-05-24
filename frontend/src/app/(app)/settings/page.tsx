@@ -180,12 +180,15 @@ function BillingSection() {
     inFlight.current = true;
     setUpgrading(plan);
     try {
-      const { url } = await api<{ url: string }>("/api/billing/checkout", {
+      await api("/api/billing/upgrade-free", {
         method: "POST",
         body: JSON.stringify({ plan }),
       });
-      window.location.assign(url);
+      const updated = await api<BillingStatus>("/api/billing/status");
+      setBilling(updated);
     } catch {
+      // ignore
+    } finally {
       setUpgrading(null);
       inFlight.current = false;
     }

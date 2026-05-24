@@ -6,6 +6,8 @@
 
 param(
     [string]$Token    = $env:MONOFARM_TOKEN,
+    [string]$Email    = $env:MONOFARM_EMAIL,
+    [string]$Password = $env:MONOFARM_PASSWORD,
     [string]$Server   = "https://api.monofarm.app",
     [string]$Frontend = "https://monofarm.app"
 )
@@ -23,6 +25,22 @@ Write-Host "  monofarm agent installer (Windows)"
 Write-Host "  Server:      $Server"
 Write-Host "  Install dir: $InstallDir"
 Write-Host ""
+
+# ── Auto-login: exchange email+password for token ─────────────────────────────
+
+if (-not $Token -and $Email -and $Password) {
+    Write-Host "Logging in as $Email …"
+    try {
+        $body = @{email=$Email; password=$Password} | ConvertTo-Json
+        $resp = Invoke-RestMethod -Uri "$Server/api/auth/login" -Method POST `
+                    -Body $body -ContentType "application/json" -ErrorAction Stop
+        $Token = $resp.access_token
+        Write-Host "  [OK] Logged in — token acquired"
+    } catch {
+        Write-Host "  [!!] Login failed: $_"
+        Write-Host "  You can set the token manually in $InstallDir\.env after install."
+    }
+}
 
 # ── Python check ─────────────────────────────────────────────────────────────
 
