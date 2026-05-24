@@ -255,7 +255,7 @@ async def send_to_printer(
         raise HTTPException(status_code=404, detail="Файл відсутній")
 
     with _src_ctx as src:
-        # ── Bambu path: FTPS upload + MQTT start command ──
+        # ── Bambu path: Cloud upload (Alibaba OSS) + Cloud task API ──
         if printer.kind == PrinterKind.bambu:
             if not printer.bambu_dev_id:
                 raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
@@ -277,45 +277,15 @@ async def send_to_printer(
                     ams_mapping.append(payload.slot_map.get(i, i))
             use_ams = any(v >= 0 for v in ams_mapping)
 
-            if not printer.bambu_dev_ip:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Принтер '{printer.name}': не вказано LAN IP. На A1: Settings → Network → LAN Mode Liveview.",
-                )
-            if not printer.bambu_access_code:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Принтер '{printer.name}': не вказано Access Code. На A1: Settings → Network → LAN Mode Liveview (код під QR).",
-                )
-
             try:
-                # ── FTPS upload via agent tunnel (preferred) or direct ──
-                presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=3600)
-                if _tunnel.has_tunnel(org.id):
-                    ftp_name = await _tunnel.send_bambu_upload(
-                        org.id,
-                        printer.bambu_dev_ip,
-                        printer.bambu_access_code,
-                        row.original_name,
-                        file_bytes=None if presigned else src.read_bytes(),
-                        presigned_url=presigned,
-                    )
-                else:
-                    ftp_name = await asyncio.to_thread(
-                        bambu_svc.upload_3mf,
-                        printer.bambu_dev_ip,
-                        printer.bambu_access_code,
-                        src,
-                        row.original_name,
-                    )
                 await asyncio.to_thread(
-                    bambu_svc.start_print,
-                    printer.bambu_dev_id,
+                    bambu_svc.cloud_upload_and_print,
+                    org.id,
+                    src.read_bytes(),
                     row.original_name,
+                    printer.bambu_dev_id,
                     ams_mapping,
                     use_ams,
-                    None,      # http_url
-                    ftp_name,  # ftp_filename
                 )
                 return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
             except (bambu_svc.BambuError, RuntimeError) as e:

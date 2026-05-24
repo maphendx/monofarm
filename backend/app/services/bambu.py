@@ -712,7 +712,98 @@ def start_print(
     _publish(dev_id, cmd)
 
 
-# ── FTPS upload (LAN) ────────────────────────────────────────────────────────
+# ── Cloud upload + print (no LAN required) ───────────────────────────────────
+
+
+def cloud_upload_and_print(
+    org_id: int,
+    file_bytes: bytes,
+    filename: str,
+    dev_id: str,
+    ams_mapping: list[int] | None = None,
+    use_ams: bool = True,
+) -> None:
+    """Upload .3mf to Bambu Cloud (Alibaba OSS) and start print via Cloud task API.
+
+    Flow: POST /project → PUT <oss_upload_url> → POST /task.
+    No LAN connectivity required.
+    """
+    token = _access_tokens.get(org_id)
+    if not token:
+        try:
+            from app.core.db import SessionLocal
+            from app.models.organization import Organization as _Org
+            with SessionLocal() as db:
+                org = db.get(_Org, org_id)
+                if org:
+                    login(org)
+            token = _access_tokens.get(org_id)
+        except Exception:
+            pass
+    if not token:
+        raise BambuError("Not authenticated with Bambu Cloud — check credentials")
+
+    base = _api_base(org_id)
+    hdrs = _headers(org_id)
+
+    # 1. Create project → get Alibaba OSS upload_url
+    try:
+        resp = requests.post(
+            f"{base}/v1/iot-service/api/user/project",
+            json={"name": filename},
+            headers=hdrs,
+            timeout=CLOUD_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        raise BambuError(f"Bambu Cloud create project failed: {e}") from e
+
+    project = data.get("project") or data
+    project_id = project.get("project_id") or project.get("id", "")
+    model_id = project.get("model_id") or project_id
+    upload_url = project.get("upload_url") or data.get("upload_url")
+    if not upload_url:
+        raise BambuError(f"Bambu Cloud: no upload_url in project response: {data}")
+
+    # 2. PUT file bytes to Alibaba OSS presigned URL
+    try:
+        oss = requests.put(upload_url, data=file_bytes, headers={}, timeout=300)
+        oss.raise_for_status()
+    except requests.RequestException as e:
+        raise BambuError(f"Bambu Cloud OSS upload failed: {e}") from e
+
+    # 3. Create task → Cloud pushes to printer
+    task_body: dict[str, Any] = {
+        "modelId": model_id,
+        "projectId": project_id,
+        "title": filename,
+        "deviceId": dev_id,
+        "plateIndex": 1,
+        "useAms": use_ams,
+        "bedLeveling": True,
+        "flowCali": False,
+        "vibrationCali": True,
+        "layerInspect": False,
+        "timelapse": False,
+    }
+    if ams_mapping is not None:
+        task_body["amsMapping"] = ams_mapping
+
+    try:
+        task_resp = requests.post(
+            f"{base}/v1/user-service/my/task",
+            json=task_body,
+            headers=hdrs,
+            timeout=CLOUD_TIMEOUT,
+        )
+        task_resp.raise_for_status()
+        log.info("Bambu Cloud: task created dev=%s project=%s", dev_id, project_id)
+    except requests.RequestException as e:
+        raise BambuError(f"Bambu Cloud create task failed: {e}") from e
+
+
+# ── FTPS upload (LAN fallback) ────────────────────────────────────────────────
 
 
 def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) -> str:
