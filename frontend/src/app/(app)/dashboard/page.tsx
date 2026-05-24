@@ -168,53 +168,6 @@ function groupPrinters(
   }));
 }
 
-// ── finishing queue ───────────────────────────────────────────────────────────
-
-function fmtEta(minutes: number): string {
-  if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-  return `${minutes}m`;
-}
-
-function FinishingQueue({ printers }: { printers: Printer[] }) {
-  const printing = [...printers]
-    .filter((p) => p.state === "printing")
-    .sort((a, b) => {
-      if (a.eta_minutes == null && b.eta_minutes == null) return 0;
-      if (a.eta_minutes == null) return 1;
-      if (b.eta_minutes == null) return -1;
-      return a.eta_minutes - b.eta_minutes;
-    });
-
-  if (printing.length === 0) return null;
-
-  return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-neutral-800 text-left text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-            <th className="px-4 py-2">#</th>
-            <th className="px-4 py-2">Принтер</th>
-            <th className="px-4 py-2">Файл</th>
-            <th className="px-4 py-2 text-right">Залишилось</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-800">
-          {printing.map((p, i) => (
-            <tr key={p.id} className="hover:bg-neutral-800/40">
-              <td className="px-4 py-2.5 text-xs font-bold text-neutral-600">#{i + 1}</td>
-              <td className="px-4 py-2.5 font-medium text-neutral-200">{p.name}</td>
-              <td className="max-w-[260px] truncate px-4 py-2.5 text-xs text-neutral-500">{p.job ?? "—"}</td>
-              <td className="px-4 py-2.5 text-right font-semibold text-blue-400">
-                {p.eta_minutes != null ? fmtEta(p.eta_minutes) : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // ── compact select ────────────────────────────────────────────────────────────
 
 function CompactSelect<T extends string>({
@@ -297,14 +250,25 @@ export default function DashboardPage() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return printers;
-    if (filter === "printing") return printers.filter((p) => p.state === "printing");
-    if (filter === "attention") return printers.filter((p) => p.state === "error");
-    if (filter === "idle") return printers.filter((p) => p.state === "idle" || p.state === "operational");
-    if (filter === "paused") return printers.filter((p) => p.state === "paused");
-    if (filter === "awaiting") return printers.filter((p) => p.state === "awaiting_bed_clear");
-    if (filter === "offline") return printers.filter((p) => p.state === "offline" || p.state === "unknown");
-    return printers;
+    let result: Printer[];
+    if (filter === "all") result = printers;
+    else if (filter === "printing") result = printers.filter((p) => p.state === "printing");
+    else if (filter === "attention") result = printers.filter((p) => p.state === "error");
+    else if (filter === "idle") result = printers.filter((p) => p.state === "idle" || p.state === "operational");
+    else if (filter === "paused") result = printers.filter((p) => p.state === "paused");
+    else if (filter === "awaiting") result = printers.filter((p) => p.state === "awaiting_bed_clear");
+    else if (filter === "offline") result = printers.filter((p) => p.state === "offline" || p.state === "unknown");
+    else result = printers;
+
+    if (filter === "printing") {
+      return [...result].sort((a, b) => {
+        if (a.eta_minutes == null && b.eta_minutes == null) return 0;
+        if (a.eta_minutes == null) return 1;
+        if (b.eta_minutes == null) return -1;
+        return a.eta_minutes - b.eta_minutes;
+      });
+    }
+    return result;
   }, [printers, filter]);
 
   const groups = useMemo(
@@ -361,7 +325,11 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
           <StatusCard
             label="Next printer finish"
-            value={statusStats.nextFinish ? fmtEta(statusStats.nextFinish.eta) : "—"}
+            value={statusStats.nextFinish
+              ? statusStats.nextFinish.eta >= 60
+                ? `${Math.floor(statusStats.nextFinish.eta / 60)}h ${statusStats.nextFinish.eta % 60}m`
+                : `${statusStats.nextFinish.eta}m`
+              : "—"}
             sub={statusStats.nextFinish?.name}
             color="#3b82f6"
             active={filter === "printing"}
@@ -375,8 +343,6 @@ export default function DashboardPage() {
           <StatusCard label="Offline / not connected" value={statusStats.offline} color="#6b7280" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
         </div>
       )}
-
-      {statusStats.printing > 0 && <FinishingQueue printers={printers} />}
 
       {/* ── toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
