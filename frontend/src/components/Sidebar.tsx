@@ -58,7 +58,6 @@ const NAV_GROUPS = [
       { href: "/plan",      icon: "plan",      tKey: "nav.plan" },
       { href: "/tasks",     icon: "tasks",     tKey: "nav.tasks" },
       { href: "/files",     icon: "files",     tKey: "nav.files" },
-      { href: "/printers",  icon: "printers",  tKey: "nav.printers" },
     ],
   },
   {

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { CreatePrinterModal } from "@/components/CreatePrinterModal";
 import { DashboardPet } from "@/components/DashboardPet";
 import { DaySummary } from "@/components/DaySummary";
 import { PrinterCard } from "@/components/PrinterCard";
@@ -183,7 +182,6 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
@@ -296,7 +294,7 @@ export default function DashboardPage() {
           )}
           {user.role === "admin" && (
             <button
-              onClick={() => setCreateOpen(true)}
+              onClick={() => router.push("/settings?section=printers")}
               className="rounded-md bg-neutral-900 px-2.5 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
             >
               + {t("printers.add")}
@@ -348,12 +346,6 @@ export default function DashboardPage() {
           })}
         </div>
       )}
-
-      <CreatePrinterModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(p) => { upsertPrinter(p); load(); }}
-      />
 
       <PrinterGroupsModal
         open={groupsOpen}

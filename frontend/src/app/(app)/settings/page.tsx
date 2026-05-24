@@ -1361,8 +1361,11 @@ function PrintersSection() {
 
 function defaultSection(): SectionId {
   if (typeof window === "undefined") return "organization";
-  const billing = new URLSearchParams(window.location.search).get("billing");
-  return billing ? "billing" : "organization";
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("billing")) return "billing";
+  const section = params.get("section") as SectionId | null;
+  if (section) return section;
+  return "organization";
 }
 
 export default function SettingsPage() {
