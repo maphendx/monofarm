@@ -232,14 +232,20 @@ function PrinterPhotoCard({
   onUpdated: (p: Printer) => void;
 }) {
   const cover      = printer.kind === "bambu" ? bambuCover(printer.bambu_model) : null;
+  const tone       = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
-  const isReady    = printer.state === "idle" || printer.state === "operational";
-  const isError    = printer.state === "error";
+  const pct        = printer.progress_pct ?? 0;
   const [busy, setBusy] = useState<string | null>(null);
 
-  const filaments  = printer.loaded_filaments ?? [];
-  const pct        = printer.progress_pct ?? 0;
+  const TOP: Record<string, string> = {
+    printing: "#3b82f6", ok: "#10b981", warn: "#f59e0b", bad: "#ef4444",
+    idle: "transparent", muted: "transparent",
+  };
+  const STATE_LABEL: Record<string, string> = {
+    printing: "text-blue-400", ok: "text-emerald-400", warn: "text-amber-400",
+    bad: "text-red-400", idle: "text-neutral-500", muted: "text-neutral-400",
+  };
 
   async function act(e: React.MouseEvent, action: string) {
     e.stopPropagation();
@@ -254,100 +260,93 @@ function PrinterPhotoCard({
     finally { setBusy(null); }
   }
 
-  const borderTop = isPrinting ? "#3b82f6" : isPaused ? "#f59e0b" : isError ? "#ef4444" : isReady ? "#10b981" : "#525252";
-
   return (
     <div
       onClick={onClick}
-      className="group flex cursor-pointer flex-col rounded-2xl border border-neutral-700 bg-neutral-800 overflow-hidden text-left transition hover:border-neutral-500 hover:shadow-xl select-none"
-      style={{ borderTopWidth: 3, borderTopColor: borderTop }}
+      className={[
+        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-white p-3",
+        "border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900",
+        tone === "muted" ? "opacity-60" : "",
+        "text-left transition-shadow hover:shadow-md",
+      ].join(" ")}
+      style={{ borderTopWidth: 2, borderTopColor: TOP[tone] }}
     >
-      {/* ── top bar ── */}
-      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1">
-        {/* filament color dots */}
-        {filaments.slice(0, 6).map((s, i) => (
-          <span
-            key={i}
-            className="size-3.5 rounded-sm ring-1 ring-black/20 shrink-0"
-            style={{ backgroundColor: s.color.startsWith("#") ? s.color.slice(0, 7) : s.color }}
-          />
-        ))}
-        {filaments.length > 6 && (
-          <span className="text-[10px] font-semibold text-neutral-400">+{filaments.length - 6}</span>
-        )}
-        <div className="flex-1" />
-        <button
-          onClick={(e) => { e.stopPropagation(); onClick(); }}
-          className="rounded p-0.5 text-neutral-500 opacity-0 transition hover:text-neutral-300 group-hover:opacity-100"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-      </div>
-
-      {/* ── photo + name ── */}
-      <div className="flex items-center gap-3 px-3 pb-2">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-neutral-900">
+      {/* ── header: name + photo ── */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold leading-tight">{printer.name}</div>
+          <div className="text-xs text-neutral-400">{printer.bambu_model ?? printer.kind}</div>
+        </div>
+        {/* model photo */}
+        <div className="shrink-0 h-10 w-10 flex items-center justify-center">
           {cover ? (
-            <img src={cover} alt="" className="h-14 w-14 object-contain drop-shadow" />
+            <img src={cover} alt="" className="h-10 w-10 object-contain drop-shadow" />
           ) : (
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-600">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400 dark:text-neutral-600">
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
               <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
               <rect x="6" y="18" width="12" height="4" rx="1"/>
             </svg>
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-bold text-neutral-100">{printer.name}</p>
-          <p className="text-[11px] text-neutral-500">{printer.bambu_model ?? printer.kind}</p>
-          {isError && <p className="mt-0.5 text-xs text-red-400 truncate">{printer.error_msg ?? "Помилка"}</p>}
-          {isReady && <p className="mt-0.5 text-xs text-emerald-400">Готовий</p>}
-          {isPaused && <p className="mt-0.5 text-xs text-amber-400">На паузі</p>}
-        </div>
       </div>
 
-      {/* ── ETA row (printing/paused) ── */}
-      {(isPrinting || isPaused) && printer.eta_minutes != null && (
-        <div className="flex items-baseline gap-2 px-3 pb-1.5 text-xs text-neutral-400">
-          <span>Закінчення через</span>
-          <span className="font-semibold text-neutral-200">{fmtEtaShort(printer.eta_minutes)}</span>
-          <span className="ml-auto text-neutral-500">{fmtFinish(printer.eta_minutes)}</span>
+      {/* ── state label ── */}
+      <div className={`text-[11px] font-medium ${STATE_LABEL[tone]}`}>
+        {printer.state === "printing" ? "Друкує" :
+         printer.state === "paused"   ? "На паузі" :
+         printer.state === "error"    ? (printer.error_msg ?? "Помилка") :
+         printer.state === "idle" || printer.state === "operational" ? "Готовий" :
+         printer.state === "awaiting_bed_clear" ? "Очікує стіл" : "Офлайн"}
+      </div>
+
+      {/* ── filament dots ── */}
+      {(printer.loaded_filaments?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {printer.loaded_filaments.map((s, i) => (
+            <span key={i}
+              className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/10"
+              style={{ backgroundColor: s.color.startsWith("#") ? s.color.slice(0,7) : s.color }}
+            />
+          ))}
         </div>
       )}
 
       {/* ── progress bar ── */}
       {(isPrinting || isPaused) && (
-        <div className="px-3 pb-2">
-          <div className="h-5 w-full overflow-hidden rounded-md bg-neutral-700">
+        <div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
             <div
-              className={`flex h-full items-center justify-center text-[10px] font-bold text-white transition-all ${isPrinting ? "bg-blue-500" : "bg-amber-500"}`}
-              style={{ width: `${Math.max(pct, 4)}%` }}
-            >
-              {pct >= 10 ? `${Math.round(pct)}%` : ""}
-            </div>
+              className={`h-full rounded-full transition-all ${isPrinting ? "bg-blue-500" : "bg-amber-400"}`}
+              style={{ width: `${Math.max(pct, 1)}%` }}
+            />
           </div>
-          {pct < 10 && (
-            <p className="mt-0.5 text-center text-[10px] text-neutral-500">{Math.round(pct)}%</p>
-          )}
+          <div className="mt-0.5 flex justify-between text-[10px] text-neutral-400">
+            <span>{Math.round(pct)}%</span>
+            {printer.eta_minutes != null && (
+              <span>{fmtEtaShort(printer.eta_minutes)} · {fmtFinish(printer.eta_minutes)}</span>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── action buttons ── */}
       {(isPrinting || isPaused) && (
-        <div className="flex gap-2 border-t border-neutral-700 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-          {/* Pause / Resume */}
+        <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={(e) => act(e, isPaused ? "resume" : "pause")}
             disabled={!!busy}
-            className={`flex flex-1 items-center justify-center rounded-xl border py-2.5 text-sm font-semibold transition disabled:opacity-40 ${isPaused ? "border-emerald-500 text-emerald-400 hover:bg-emerald-500/10" : "border-amber-500 text-amber-400 hover:bg-amber-500/10"}`}
+            className={`flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40
+              ${isPaused
+                ? "border-emerald-400 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                : "border-amber-400 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"}`}
           >
             {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
           </button>
-          {/* Stop */}
           <button
             onClick={(e) => act(e, "cancel")}
             disabled={!!busy}
-            className="flex flex-1 items-center justify-center rounded-xl border border-red-500 bg-red-500/10 py-2.5 text-sm font-semibold text-red-400 transition hover:bg-red-500/20 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center rounded-lg border border-red-400 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20"
           >
             {busy === "cancel" ? "…" : "⏹"}
           </button>
