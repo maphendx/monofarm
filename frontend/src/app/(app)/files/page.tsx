@@ -665,7 +665,23 @@ function FileCard({
     >
       {/* icon + name */}
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-2xl leading-none">{extIcon(file.original_name)}</span>
+        {file.has_thumbnail ? (
+          <img
+            src={`${API_URL}/api/files/${file.id}/thumbnail`}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-lg object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+              (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "");
+            }}
+          />
+        ) : null}
+        <span
+          className="mt-0.5 text-2xl leading-none"
+          style={{ display: file.has_thumbnail ? "none" : "" }}
+        >
+          {extIcon(file.original_name)}
+        </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium leading-tight" title={file.original_name}>
             {file.original_name}

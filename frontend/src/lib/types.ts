@@ -152,6 +152,7 @@ export interface GcodeFile {
   size_bytes: number;
   notes: string | null;
   filament_meta: GcodeFileMeta | null;
+  has_thumbnail: boolean;
   uploaded_at: string;
   uploaded_by_name: string | null;
 }

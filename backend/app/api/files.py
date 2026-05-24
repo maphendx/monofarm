@@ -53,6 +53,7 @@ class GcodeFileOut(BaseModel):
     size_bytes: int
     notes: str | None
     filament_meta: FilamentMeta | None
+    has_thumbnail: bool
     uploaded_at: str
     uploaded_by_name: str | None
 
@@ -86,7 +87,10 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
     if f.uploaded_by_id:
         u = db.get(User, f.uploaded_by_id)
         name = u.name if u else None
-    meta = FilamentMeta(**f.filament_meta) if f.filament_meta else None
+    raw_meta = f.filament_meta or {}
+    has_thumbnail = bool(raw_meta.get("has_thumbnail"))
+    meta_fields = {k: v for k, v in raw_meta.items() if k != "has_thumbnail"}
+    meta = FilamentMeta(**meta_fields) if meta_fields else None
     return GcodeFileOut(
         id=f.id,
         original_name=f.original_name,
@@ -94,6 +98,7 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
         size_bytes=f.size_bytes,
         notes=f.notes,
         filament_meta=meta,
+        has_thumbnail=has_thumbnail,
         uploaded_at=f.uploaded_at.isoformat(),
         uploaded_by_name=name,
     )
@@ -175,6 +180,24 @@ async def upload_file(
     except Exception:
         pass
 
+    # Extract thumbnail from .3mf ZIP
+    if ".3mf" in ext:
+        import io as _io
+        import zipfile as _zf
+        try:
+            with _zf.ZipFile(_io.BytesIO(contents)) as zf:
+                for candidate in ("Metadata/plate_1.png", "Metadata/plate_1.jpg",
+                                  "Metadata/thumbnail.png", "thumbnail.png"):
+                    if candidate in zf.namelist():
+                        thumb = zf.read(candidate)
+                        thumb_name = stored_name + ".thumb.png"
+                        storage_svc.put(thumb_name, thumb, org.id)
+                        filament_meta = filament_meta or {}
+                        filament_meta["has_thumbnail"] = True
+                        break
+        except Exception:
+            pass
+
     # If S3 mode: upload to S3 and remove the local copy we just wrote for parsing
     if storage_svc.is_s3():
         try:
@@ -207,6 +230,7 @@ def delete_file(
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
     storage_svc.delete(row.stored_name, org.id)
+    storage_svc.delete(row.stored_name + ".thumb.png", org.id)
     db.delete(row)
     db.commit()
 
@@ -230,6 +254,24 @@ def download_file(
     if not path.exists():
         raise HTTPException(status_code=404, detail="Файл відсутній на диску")
     return FileResponse(path, filename=row.original_name)
+
+
+@router.get("/{file_id}/thumbnail")
+def get_thumbnail(file_id: int, db: Session = Depends(get_db)):
+    from fastapi.responses import RedirectResponse
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id).first()
+    if not row:
+        raise HTTPException(status_code=404)
+    thumb_name = row.stored_name + ".thumb.png"
+    if storage_svc.is_s3():
+        url = storage_svc.presigned_url(thumb_name, row.organization_id)
+        if not url:
+            raise HTTPException(status_code=404)
+        return RedirectResponse(url)
+    path = GCODES_DIR / thumb_name
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="image/png")
 
 
 @router.post("/{file_id}/send/{printer_id}", response_model=SendResult)
