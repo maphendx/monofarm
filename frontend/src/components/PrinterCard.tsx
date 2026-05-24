@@ -23,6 +23,15 @@ const TONE_TOP_COLOR: Record<string, string> = {
   muted:    "transparent",
 };
 
+const TONE_CARD_CLS: Record<string, string> = {
+  bad:      "border-red-500/70 bg-red-950/50 dark:border-red-500/60 dark:bg-red-950/60",
+  ok:       "border-emerald-500/50 bg-emerald-950/30 dark:border-emerald-500/40 dark:bg-emerald-950/40",
+  warn:     "border-amber-500/40 bg-amber-950/20 dark:border-amber-500/30 dark:bg-amber-950/30",
+  printing: "border-neutral-300 bg-white dark:border-neutral-800 dark:bg-neutral-900",
+  idle:     "border-neutral-300 bg-white dark:border-neutral-800 dark:bg-neutral-900",
+  muted:    "border-neutral-300 bg-white dark:border-neutral-800 dark:bg-neutral-900",
+};
+
 const TONE_STATE: Record<string, string> = {
   printing: "text-blue-600 dark:text-blue-400",
   ok: "text-emerald-600 dark:text-emerald-400",
@@ -104,12 +113,14 @@ export function PrinterCard({
       onClick={() => onClick?.(printer)}
       onKeyDown={(e) => e.key === "Enter" && onClick?.(printer)}
       className={[
-        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-white p-3",
-        "border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900",
+        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border p-3",
+        TONE_CARD_CLS[tone] ?? "border-neutral-300 bg-white dark:border-neutral-800 dark:bg-neutral-900",
         tone === "muted" ? "opacity-60" : "",
-        "text-left transition-shadow hover:shadow-md",
+        "text-left transition-all hover:shadow-md",
+        tone === "bad" ? "shadow-[0_0_12px_2px_rgba(239,68,68,0.25)]" : "",
+        tone === "ok"  ? "shadow-[0_0_10px_1px_rgba(16,185,129,0.15)]" : "",
       ].join(" ")}
-      style={{ borderTopWidth: 2, borderTopColor: TONE_TOP_COLOR[tone] }}
+      style={{ borderTopWidth: 3, borderTopColor: TONE_TOP_COLOR[tone] }}
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
