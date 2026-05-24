@@ -23,6 +23,9 @@ interface BillingStatus {
   limits: { printers: number; users: number };
   price_usd: number;
   plans: Array<{ key: string; price_usd: number; limits: { printers: number; users: number } }>;
+  extra_slots?: number;
+  extra_price_usd?: number | null;
+  max_printers?: number | null;
 }
 
 type SectionId =
@@ -139,6 +142,8 @@ function BillingSection() {
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [extraSlots, setExtraSlots] = useState(0);
+  const [savingSlots, setSavingSlots] = useState(false);
   const inFlight = useRef(false);
 
   const billingMsg = typeof window !== "undefined"
@@ -146,8 +151,29 @@ function BillingSection() {
     : null;
 
   useEffect(() => {
-    api<BillingStatus>("/api/billing/status").then(setBilling).catch(() => { });
+    api<BillingStatus>("/api/billing/status").then((b) => {
+      setBilling(b);
+      setExtraSlots(b.extra_slots ?? 0);
+    }).catch(() => { });
   }, []);
+
+  async function saveExtraSlots() {
+    if (savingSlots) return;
+    setSavingSlots(true);
+    try {
+      await api("/api/orgs/me/extra-printer-slots", {
+        method: "POST",
+        body: JSON.stringify({ slots: extraSlots }),
+      });
+      const updated = await api<BillingStatus>("/api/billing/status");
+      setBilling(updated);
+      setExtraSlots(updated.extra_slots ?? 0);
+    } catch {
+      // ignore
+    } finally {
+      setSavingSlots(false);
+    }
+  }
 
   async function upgrade(plan: string) {
     if (inFlight.current) return;
@@ -249,6 +275,54 @@ function BillingSection() {
           );
         })}
       </div>
+
+      {/* ── Extra printer slots ── */}
+      {billing.extra_price_usd != null && (
+        <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Додаткові принтери</p>
+              <p className="text-xs text-neutral-500">
+                ${billing.extra_price_usd}/принтер/міс · база {billing.limits.printers - (billing.extra_slots ?? 0)} +{" "}
+                {billing.extra_slots ?? 0} extra
+                {billing.max_printers != null && ` · макс ${billing.max_printers}`}
+              </p>
+            </div>
+            <span className="text-sm font-semibold">
+              ${(billing.price_usd + (extraSlots * (billing.extra_price_usd ?? 0))).toFixed(0)}/міс
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
+              <button
+                onClick={() => setExtraSlots((n) => Math.max(0, n - 1))}
+                className="px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 rounded-l-lg"
+              >−</button>
+              <span className="w-8 text-center text-sm font-semibold">{extraSlots}</span>
+              <button
+                onClick={() => setExtraSlots((n) => {
+                  const base = billing.limits.printers - (billing.extra_slots ?? 0);
+                  const maxExtra = billing.max_printers != null ? billing.max_printers - base : 999;
+                  return Math.min(maxExtra, n + 1);
+                })}
+                className="px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 rounded-r-lg"
+              >+</button>
+            </div>
+            <button
+              onClick={saveExtraSlots}
+              disabled={savingSlots || extraSlots === (billing.extra_slots ?? 0)}
+              className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            >
+              {savingSlots ? "…" : "Зберегти"}
+            </button>
+            {extraSlots !== (billing.extra_slots ?? 0) && (
+              <span className="text-xs text-neutral-400">
+                {extraSlots > (billing.extra_slots ?? 0) ? "+" : ""}{extraSlots - (billing.extra_slots ?? 0)} слот{Math.abs(extraSlots - (billing.extra_slots ?? 0)) === 1 ? "" : "и"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {billing.plan !== "free" && (
         <div className="mt-4 border-t border-neutral-100 pt-4 dark:border-neutral-800">

@@ -47,18 +47,23 @@ def get_current_org(
     return org
 
 
-def _enforce_printer_limit(org: Organization, db: Session) -> None:
+def printer_limit(org: Organization) -> int:
+    """Effective printer limit = base plan limit + purchased extra slots."""
     from app.models.organization import PLAN_LIMITS
+    return PLAN_LIMITS[org.plan]["printers"] + (org.extra_printer_slots or 0)
+
+
+def _enforce_printer_limit(org: Organization, db: Session) -> None:
     from app.models.printer import Printer
-    limit = PLAN_LIMITS[org.plan]["printers"]
+    limit = printer_limit(org)
     active = (
         db.query(Printer)
         .filter(Printer.organization_id == org.id, Printer.is_active.is_(True))
         .order_by(Printer.id.asc())
         .all()
     )
-    for printer in active[limit:]:
-        printer.is_active = False
+    for p in active[limit:]:
+        p.is_active = False
 
 
 def require_roles(*roles: UserRole):

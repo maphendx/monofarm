@@ -269,3 +269,36 @@ async def bambu_verify_code(
     await bambu.init(org)
 
     return _org_settings_out(org)
+
+
+class ExtraSlotsPayload(BaseModel):
+    slots: int
+
+
+@router.post("/me/extra-printer-slots")
+def set_extra_printer_slots(
+    payload: ExtraSlotsPayload,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    """Set purchased extra printer slots (called after successful Paddle payment)."""
+    from app.models.organization import PLAN_MAX_PRINTERS, EXTRA_PRINTER_PRICE_USD, PLAN_LIMITS
+    if EXTRA_PRINTER_PRICE_USD.get(org.plan) is None:
+        raise HTTPException(status_code=400, detail="Extra printer slots not available on your plan")
+    max_printers = PLAN_MAX_PRINTERS[org.plan]
+    base = PLAN_LIMITS[org.plan]["printers"]
+    if max_printers is not None:
+        allowed_extra = max_printers - base
+        if payload.slots > allowed_extra:
+            raise HTTPException(status_code=400, detail=f"Maximum {allowed_extra} extra slots on this plan")
+    if payload.slots < 0:
+        raise HTTPException(status_code=400, detail="slots must be >= 0")
+    org.extra_printer_slots = payload.slots
+    db.commit()
+    from app.api.deps import printer_limit
+    return {
+        "extra_slots": org.extra_printer_slots,
+        "limit": printer_limit(org),
+        "plan": org.plan,
+    }

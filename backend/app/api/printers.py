@@ -312,10 +312,20 @@ def get_printer_limit(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> dict:
-    from app.models.organization import PLAN_LIMITS
-    limit = PLAN_LIMITS[org.plan]["printers"]
+    from app.api.deps import printer_limit
+    from app.models.organization import PLAN_LIMITS, PLAN_MAX_PRINTERS, EXTRA_PRINTER_PRICE_USD
+    base  = PLAN_LIMITS[org.plan]["printers"]
+    limit = printer_limit(org)
     count = db.query(Printer).filter(Printer.organization_id == org.id).count()
-    return {"count": count, "limit": limit, "plan": org.plan}
+    return {
+        "count": count,
+        "limit": limit,
+        "base": base,
+        "extra_slots": org.extra_printer_slots or 0,
+        "plan": org.plan,
+        "max": PLAN_MAX_PRINTERS[org.plan],
+        "extra_price_usd": EXTRA_PRINTER_PRICE_USD[org.plan],
+    }
 
 
 @router.get("/discover")
@@ -614,13 +624,13 @@ def create_printer(
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin)),
 ) -> PrinterOut:
-    from app.models.organization import PLAN_LIMITS
+    from app.api.deps import printer_limit
     current_count = db.query(Printer).filter(Printer.organization_id == org.id).count()
-    limit = PLAN_LIMITS[org.plan]["printers"]
+    limit = printer_limit(org)
     if current_count >= limit:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Printer limit reached for your plan ({limit}). Upgrade to add more.",
+            detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
         )
     row = Printer(
         organization_id=org.id,

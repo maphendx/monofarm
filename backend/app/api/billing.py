@@ -50,12 +50,18 @@ def billing_status(
 ) -> dict:
     printer_count = db.query(Printer).filter(Printer.organization_id == org.id).count()
     user_count = db.query(User).filter(User.organization_id == org.id, User.is_active).count()
+    from app.models.organization import PLAN_MAX_PRINTERS, EXTRA_PRINTER_PRICE_USD
+    from app.api.deps import printer_limit
+    effective_limit = printer_limit(org)
     return {
         "plan": org.plan,
         "plan_expires_at": org.plan_expires_at,
         "usage": {"printers": printer_count, "users": user_count},
-        "limits": PLAN_LIMITS[org.plan],
+        "limits": {"printers": effective_limit, "users": PLAN_LIMITS[org.plan]["users"]},
         "price_usd": PLAN_PRICE_USD[org.plan],
+        "extra_slots": org.extra_printer_slots or 0,
+        "extra_price_usd": EXTRA_PRINTER_PRICE_USD[org.plan],
+        "max_printers": PLAN_MAX_PRINTERS[org.plan],
         "plans": [
             {"key": p.value, "price_usd": PLAN_PRICE_USD[p], "limits": PLAN_LIMITS[p]}
             for p in OrgPlan

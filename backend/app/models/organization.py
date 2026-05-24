@@ -2,7 +2,7 @@ import enum
 import re
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -22,17 +22,33 @@ class OrgPlan(str, enum.Enum):
 
 
 PLAN_LIMITS: dict[OrgPlan, dict[str, int]] = {
-    OrgPlan.free:    {"printers": 2,   "users": 1},
-    OrgPlan.starter: {"printers": 5,   "users": 3},
-    OrgPlan.pro:     {"printers": 15,  "users": 10},
-    OrgPlan.farm:    {"printers": 999, "users": 999},
+    OrgPlan.free:    {"printers": 2,  "users": 1},
+    OrgPlan.starter: {"printers": 5,  "users": 3},
+    OrgPlan.pro:     {"printers": 10, "users": 10},
+    OrgPlan.farm:    {"printers": 20, "users": 999},
+}
+
+# Hard cap — max printers even with extra slots (None = unlimited)
+PLAN_MAX_PRINTERS: dict[OrgPlan, int | None] = {
+    OrgPlan.free:    2,
+    OrgPlan.starter: 5,
+    OrgPlan.pro:     30,
+    OrgPlan.farm:    None,
+}
+
+# USD per extra printer slot per month (only allowed on pro/farm)
+EXTRA_PRINTER_PRICE_USD: dict[OrgPlan, int | None] = {
+    OrgPlan.free:    None,
+    OrgPlan.starter: None,
+    OrgPlan.pro:     2,
+    OrgPlan.farm:    1,
 }
 
 PLAN_PRICE_USD: dict[OrgPlan, int] = {
     OrgPlan.free:    0,
-    OrgPlan.starter: 19,
-    OrgPlan.pro:     49,
-    OrgPlan.farm:    99,
+    OrgPlan.starter: 9,
+    OrgPlan.pro:     19,
+    OrgPlan.farm:    49,
 }
 
 
@@ -49,6 +65,7 @@ class Organization(Base):
     payment_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     payment_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extra_printer_slots: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     # Bambu Lab credentials (per-org, stored in DB)
     bambu_email: Mapped[str] = mapped_column(String(255), default="", server_default="")
