@@ -17,7 +17,7 @@ import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
-import type { FarmTask, FarmTaskStatus, PrintTask, PrintTaskStatus } from "@/lib/types";
+import type { FarmTask, FarmTaskStatus, Filament, PrintTask, PrintTaskStatus } from "@/lib/types";
 
 // ════════════════════════════════════════════════════════════════════════
 // FARM TASKS (kanban)
@@ -184,6 +184,194 @@ function FarmTaskEditModal({ task, onClose, onSaved }: { task: FarmTask | null; 
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// COMPLETE MODAL (done flow: pieces + filament + cost)
+// ════════════════════════════════════════════════════════════════════════
+
+const DEFECT_PRESETS = ["Варпінг", "Відшарування шарів", "Забій сопла", "Збій живлення", "Помилка налаштувань", "Інше"];
+
+function CompleteModal({ task, onClose, onDone }: {
+  task: PrintTask | null;
+  onClose: () => void;
+  onDone: (updated: PrintTask) => void;
+}) {
+  const [filaments, setFilaments] = useState<Filament[]>([]);
+  const [piecesOk, setPiecesOk] = useState(1);
+  const [piecesDefective, setPiecesDefective] = useState(0);
+  const [defectPreset, setDefectPreset] = useState("");
+  const [defectOther, setDefectOther] = useState("");
+  // per-slot: filament_id selection (index = slot index in filament_meta.used_g)
+  const [slotFilament, setSlotFilament] = useState<Record<number, number>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!task) return;
+    setPiecesOk(task.quantity);
+    setPiecesDefective(0);
+    setDefectPreset("");
+    setDefectOther("");
+    setSlotFilament({});
+    setError(null);
+    api<Filament[]>("/api/filaments").then(setFilaments).catch(() => {});
+  }, [task]);
+
+  if (!task) return null;
+
+  const meta = task.filament_meta;
+  const usedG: number[] = meta?.used_g ?? [];
+  const slotTypes: string[] = meta?.types ?? [];
+  const slotColors: string[] = meta?.colors ?? [];
+  const plannedQty = task.quantity || 1;
+  const actualPrinted = piecesOk + piecesDefective;
+  const scale = actualPrinted > 0 ? actualPrinted / plannedQty : 1;
+
+  // build consumptions and preview cost
+  const consumptions = usedG.map((g, i) => {
+    const filId = slotFilament[i] ?? null;
+    const actualG = Math.round(g * scale);
+    const fil = filId != null ? filaments.find(f => f.id === filId) : null;
+    const cost = fil?.cost_per_kg != null ? (actualG * fil.cost_per_kg) / 1000 : null;
+    return { slot: i, filament_id: filId, grams: actualG, cost };
+  });
+
+  const totalCost = consumptions.reduce((s, c) => s + (c.cost ?? 0), 0);
+  const costPerOk = piecesOk > 0 && totalCost > 0 ? totalCost / piecesOk : null;
+  const hasCost = totalCost > 0;
+
+  const defectReason = defectPreset === "Інше" ? defectOther.trim() || "Інше"
+    : defectPreset || null;
+
+  async function submit() {
+    if (!task) return;
+    setBusy(true); setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        status: "done",
+        pieces_ok: piecesOk,
+        pieces_defective: piecesDefective,
+      };
+      if (defectReason) body.defect_reason = defectReason;
+      const validConsumptions = consumptions.filter(c => c.filament_id != null && c.grams > 0);
+      if (validConsumptions.length > 0) {
+        body.filament_consumptions = validConsumptions.map(c => ({ filament_id: c.filament_id!, grams: c.grams }));
+      }
+      const updated = await api<PrintTask>(`/api/tasks/print/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      onDone(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Помилка");
+    } finally { setBusy(false); }
+  }
+
+  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950";
+
+  return (
+    <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title={`Завершити: ${task.title}`}
+      footer={<>
+        <button type="button" onClick={onClose} disabled={busy}
+          className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          Скасувати
+        </button>
+        <button onClick={submit} disabled={busy || piecesOk < 0}
+          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? "Зберігаю…" : "Виконано ✓"}
+        </button>
+      </>}>
+      <div className="space-y-4 text-sm">
+
+        {/* result */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-neutral-500">Результат (планувалось {plannedQty} шт.)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Добрих ✓</span>
+              <input type="number" min={0} value={piecesOk} onChange={e => setPiecesOk(Math.max(0, Number(e.target.value)))} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-neutral-500">Брак ✕</span>
+              <input type="number" min={0} value={piecesDefective} onChange={e => setPiecesDefective(Math.max(0, Number(e.target.value)))} className={inputCls} />
+            </label>
+          </div>
+        </div>
+
+        {/* defect reason */}
+        {piecesDefective > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-neutral-500">Причина браку</p>
+            <div className="flex flex-wrap gap-1.5">
+              {DEFECT_PRESETS.map(p => (
+                <button key={p} type="button" onClick={() => setDefectPreset(p)}
+                  className={["rounded-full border px-2.5 py-1 text-xs transition", defectPreset === p
+                    ? "border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
+                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400"].join(" ")}>
+                  {p}
+                </button>
+              ))}
+            </div>
+            {defectPreset === "Інше" && (
+              <input type="text" value={defectOther} onChange={e => setDefectOther(e.target.value)}
+                placeholder="Опишіть причину…" className={`mt-2 ${inputCls}`} autoFocus />
+            )}
+          </div>
+        )}
+
+        {/* filament slots */}
+        {usedG.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-neutral-500">
+              Котушки (фактично ~{actualPrinted} шт. × {Math.round(usedG.reduce((s,g)=>s+g,0) / plannedQty)}г)
+            </p>
+            <div className="space-y-2">
+              {usedG.map((g, i) => {
+                const actualG = Math.round(g * scale);
+                const color = slotColors[i];
+                const type = slotTypes[i];
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {color && <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: color }} />}
+                      <span className="truncate text-xs text-neutral-600 dark:text-neutral-400">
+                        Слот {i + 1}{type ? ` · ${type}` : ""} · {actualG}г
+                      </span>
+                    </div>
+                    <select value={slotFilament[i] ?? ""}
+                      onChange={e => setSlotFilament(prev => ({ ...prev, [i]: Number(e.target.value) }))}
+                      className="w-40 rounded border border-neutral-300 bg-white px-2 py-1 text-xs outline-none dark:border-neutral-600 dark:bg-neutral-900">
+                      <option value="">— не вказано —</option>
+                      {filaments.map(f => (
+                        <option key={f.id} value={f.id}>
+                          {f.material} {f.color}{f.brand ? ` (${f.brand})` : ""}
+                          {f.sku ? ` [${f.sku}]` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* cost preview */}
+        {hasCost && (
+          <div className="rounded-lg bg-neutral-50 px-4 py-3 dark:bg-neutral-800">
+            <p className="text-xs text-neutral-500">Собівартість матеріалів</p>
+            <p className="mt-1 text-lg font-semibold">{totalCost.toFixed(2)} грн</p>
+            {costPerOk != null && (
+              <p className="text-xs text-neutral-500">{costPerOk.toFixed(2)} грн/шт. (для {piecesOk} добрих)</p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // PRINT TASKS (list + archive)
 // ════════════════════════════════════════════════════════════════════════
 
@@ -276,6 +464,7 @@ function PrintTasksTab() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PrintTaskStatus | "all">("all");
   const [editing, setEditing] = useState<PrintTask | null>(null);
+  const [completing, setCompleting] = useState<PrintTask | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -344,46 +533,77 @@ function PrintTasksTab() {
                 <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Час</th>
                 <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Дедлайн</th>
                 <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Статус</th>
+                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Результат</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
-              {visible.map(task => (
-                <tr key={task.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-900">
-                  <td className="px-4 py-2.5 font-medium">{task.title}</td>
-                  <td className="px-3 py-2.5 text-center text-neutral-500">×{task.quantity}</td>
-                  <td className="px-3 py-2.5 text-neutral-500">
-                    {task.filament_type && (
-                      <span>{task.filament_type}</span>
-                    )}
-                    {task.filament_color && (
-                      <span className="text-neutral-400"> · {task.filament_color}</span>
-                    )}
-                    {!task.filament_type && !task.filament_color && "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-neutral-500">{fmtMinutes(task.estimated_minutes)}</td>
-                  <td className="px-3 py-2.5 text-neutral-500">{task.deadline ?? "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${PRINT_STATUS_CLS[task.status]}`}>
-                      {PRINT_STATUS_LABELS[task.status]}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex gap-1 justify-end">
-                      <button onClick={() => setEditing(task)}
-                        className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">✎</button>
-                      <button onClick={() => remove(task)}
-                        className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800">✕</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {visible.map(task => {
+                const costPerOk = task.material_cost_uah != null && task.pieces_ok
+                  ? (task.material_cost_uah / task.pieces_ok).toFixed(2)
+                  : null;
+                return (
+                  <tr key={task.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-900">
+                    <td className="px-4 py-2.5 font-medium">{task.title}</td>
+                    <td className="px-3 py-2.5 text-center text-neutral-500">×{task.quantity}</td>
+                    <td className="px-3 py-2.5 text-neutral-500">
+                      {task.filament_type && <span>{task.filament_type}</span>}
+                      {task.filament_color && <span className="text-neutral-400"> · {task.filament_color}</span>}
+                      {!task.filament_type && !task.filament_color && "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-neutral-500">{fmtMinutes(task.estimated_minutes)}</td>
+                    <td className="px-3 py-2.5 text-neutral-500">{task.deadline ?? "—"}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${PRINT_STATUS_CLS[task.status]}`}>
+                        {PRINT_STATUS_LABELS[task.status]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {task.status === "done" && task.pieces_ok != null ? (
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-emerald-600 dark:text-emerald-400">✓ {task.pieces_ok} шт.</span>
+                            {(task.pieces_defective ?? 0) > 0 && (
+                              <span className="text-red-500 dark:text-red-400" title={task.defect_reason ?? ""}>
+                                ✕ {task.pieces_defective}
+                              </span>
+                            )}
+                          </div>
+                          {task.material_cost_uah != null && (
+                            <div className="text-[10px] text-neutral-400">
+                              {task.material_cost_uah.toFixed(2)} грн
+                              {costPerOk && ` · ${costPerOk}/шт`}
+                            </div>
+                          )}
+                        </div>
+                      ) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1 justify-end">
+                        {(task.status === "queued" || task.status === "in_progress") && (
+                          <button onClick={() => setCompleting(task)}
+                            className="rounded px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            title="Завершити">
+                            ✓
+                          </button>
+                        )}
+                        <button onClick={() => setEditing(task)}
+                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">✎</button>
+                        <button onClick={() => remove(task)}
+                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800">✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <PrintTaskEditModal task={editing} onClose={() => setEditing(null)} onSaved={t => { upsert(t); setEditing(null); }} />
+      <CompleteModal task={completing} onClose={() => setCompleting(null)}
+        onDone={t => { upsert(t); setCompleting(null); }} />
     </div>
   );
 }

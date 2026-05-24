@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -35,8 +35,16 @@ class PrintTask(Base):
     file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     filament_meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # [{filament_id: int, grams: int}] — set at send time, consumed on done
+    filament_consumptions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[PrintTaskStatus] = mapped_column(Enum(PrintTaskStatus), default=PrintTaskStatus.queued)
+
+    # production outcome
+    pieces_ok: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pieces_defective: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    defect_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    material_cost_uah: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -15,6 +15,11 @@ class PrintTaskCreate(BaseModel):
     notes: str | None = None
 
 
+class FilamentConsumption(BaseModel):
+    filament_id: int
+    grams: int
+
+
 class PrintTaskUpdate(BaseModel):
     title: str | None = None
     quantity: int | None = None
@@ -24,6 +29,11 @@ class PrintTaskUpdate(BaseModel):
     deadline: date | None = None
     notes: str | None = None
     status: PrintTaskStatus | None = None
+    filament_consumptions: list[FilamentConsumption] | None = None
+    # production outcome (supplied together with status=done)
+    pieces_ok: int | None = None
+    pieces_defective: int | None = None
+    defect_reason: str | None = None
 
 
 class PrintTaskOut(BaseModel):
@@ -40,6 +50,11 @@ class PrintTaskOut(BaseModel):
     file_name: str | None = None
     file_size: int | None = None
     filament_meta: dict | None = None
+    filament_consumptions: list | None = None
+    pieces_ok: int | None = None
+    pieces_defective: int | None = None
+    defect_reason: str | None = None
+    material_cost_uah: float | None = None
 
     class Config:
         from_attributes = True

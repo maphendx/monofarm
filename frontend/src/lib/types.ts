@@ -103,15 +103,22 @@ export interface PrintTask {
   file_name: string | null;
   file_size: number | null;
   filament_meta: FilamentMeta | null;
+  filament_consumptions: { filament_id: number; grams: number }[] | null;
+  pieces_ok: number | null;
+  pieces_defective: number | null;
+  defect_reason: string | null;
+  material_cost_uah: number | null;
 }
 
 export interface Filament {
   id: number;
+  sku: string | null;
   material: string;
   color: string;
   brand: string | null;
   grams_remaining: number;
   min_grams: number;
+  cost_per_kg: number | null;
   note: string | null;
   updated_at: string;
   is_low: boolean;

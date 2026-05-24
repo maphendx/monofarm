@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -50,19 +51,105 @@ def create_task(
     return task
 
 
+class _FromLibraryPayload(BaseModel):
+    gcode_file_id: int
+    quantity: int = 1
+    title: str | None = None
+
+
+@router.post("/from-library", response_model=PrintTaskOut, status_code=status.HTTP_201_CREATED)
+def create_task_from_library(
+    payload: _FromLibraryPayload,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+    org: Organization = Depends(get_current_org),
+) -> PrintTask:
+    from app.models.gcode_file import GcodeFile
+    gfile = db.query(GcodeFile).filter(GcodeFile.id == payload.gcode_file_id, GcodeFile.organization_id == org.id).first()
+    if not gfile:
+        raise HTTPException(status_code=404, detail="File not found")
+    meta = gfile.filament_meta or {}
+    task = PrintTask(
+        title=payload.title or gfile.original_name,
+        quantity=max(1, payload.quantity),
+        file_name=gfile.original_name,
+        filament_meta=gfile.filament_meta,
+        estimated_minutes=meta.get("estimated_minutes"),
+        created_by_id=user.id,
+        organization_id=org.id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 @router.patch("/{task_id}", response_model=PrintTaskOut)
 def update_task(
     task_id: int,
     payload: PrintTaskUpdate,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+    user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> PrintTask:
     task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    for field, val in payload.model_dump(exclude_none=True).items():
+
+    consumptions = payload.filament_consumptions
+    pieces_ok = payload.pieces_ok
+    pieces_defective = payload.pieces_defective or 0
+    exclude_fields = {"filament_consumptions", "pieces_ok", "pieces_defective", "defect_reason"}
+    update_data = payload.model_dump(exclude_none=True, exclude=exclude_fields)
+    for field, val in update_data.items():
         setattr(task, field, val)
+
+    if payload.pieces_ok is not None:
+        task.pieces_ok = payload.pieces_ok
+    if payload.pieces_defective is not None:
+        task.pieces_defective = payload.pieces_defective
+    if payload.defect_reason is not None:
+        task.defect_reason = payload.defect_reason
+
+    # deduct filaments and calculate cost when task is marked done
+    if payload.status == PrintTaskStatus.done and consumptions:
+        from app.models.filament import Filament, FilamentLog
+
+        # scale consumptions by actual printed vs planned if pieces given
+        planned_qty = task.quantity or 1
+        actual_printed = (pieces_ok or 0) + pieces_defective
+        scale = actual_printed / planned_qty if actual_printed and planned_qty else 1.0
+
+        total_cost = 0.0
+        stored = []
+        for c in consumptions:
+            fil = db.query(Filament).filter(Filament.id == c.filament_id, Filament.organization_id == org.id).first()
+            if not fil:
+                continue
+            actual_grams = round(c.grams * scale)
+            fil.grams_remaining = max(0, fil.grams_remaining - actual_grams)
+            reason = f"Списання по задачі #{task_id}"
+            if pieces_defective:
+                reason += f" (з них брак: {pieces_defective} шт.)"
+            if payload.defect_reason:
+                reason += f" — {payload.defect_reason}"
+            db.add(FilamentLog(
+                organization_id=org.id,
+                filament_id=fil.id,
+                delta_grams=-actual_grams,
+                grams_after=fil.grams_remaining,
+                reason=reason,
+                task_id=task_id,
+                user_id=user.id,
+            ))
+            if fil.cost_per_kg:
+                total_cost += actual_grams * fil.cost_per_kg / 1000.0
+            stored.append({"filament_id": fil.id, "grams": actual_grams})
+
+        task.filament_consumptions = stored
+        if total_cost > 0:
+            task.material_cost_uah = round(total_cost, 2)
+
     db.commit()
     db.refresh(task)
     return task
