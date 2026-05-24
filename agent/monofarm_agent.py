@@ -555,17 +555,20 @@ async def handle_bambu_upload(ws, req: dict) -> None:
         else:
             file_bytes = base64.b64decode(data_b64)
 
-        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-        ctx.check_hostname = False
-        ctx.verify_mode    = _ssl.CERT_NONE
+        def _ftp_upload() -> None:
+            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+            ctx.check_hostname = False
+            ctx.verify_mode    = _ssl.CERT_NONE
+            ftp = ftplib.FTP_TLS(context=ctx)
+            ftp.connect(ip, 990, timeout=15)
+            ftp.login(user="bblp", passwd=access_code)
+            ftp.prot_p()
+            ftp.storbinary(f"STOR {filename}", _io.BytesIO(file_bytes))
+            ftp.quit()
 
-        ftp = ftplib.FTP_TLS(context=ctx)
-        ftp.connect(ip, 990, timeout=60)
-        ftp.login(user="bblp", passwd=access_code)
-        ftp.prot_p()
-
-        ftp.storbinary(f"STOR {filename}", _io.BytesIO(file_bytes))
-        ftp.quit()
+        # Run blocking FTP in a thread so asyncio event loop stays alive
+        # (handles WS keepalive pings during upload)
+        await asyncio.to_thread(_ftp_upload)
 
         result = {"id": req_id, "status": 200, "body": {"filename": filename}, "error": None}
     except Exception as e:

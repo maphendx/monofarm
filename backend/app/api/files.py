@@ -259,10 +259,15 @@ async def send_to_printer(
         if printer.kind == PrinterKind.bambu:
             if not printer.bambu_dev_id:
                 raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
-            if not printer.bambu_access_code or not printer.bambu_dev_ip:
+            if not printer.bambu_dev_ip:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Принтер '{printer.name}': відсутній access_code або LAN IP для FTPS",
+                    detail=f"Принтер '{printer.name}': не вказано LAN IP. Відкрийте налаштування принтера і введіть IP.",
+                )
+            if not printer.bambu_access_code:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Принтер '{printer.name}': не вказано Access Code. Це 8-значний код зі Settings → LAN на принтері.",
                 )
             is_3mf = ".3mf" in Path(row.original_name).suffixes
             if not is_3mf:

@@ -84,6 +84,10 @@ async def register(org_id: int, ws: WebSocket) -> None:
 
 async def unregister(org_id: int) -> None:
     _tunnels.pop(org_id, None)
+    # Fail any futures that were waiting for a response from this agent
+    for req_id, fut in list(_pending.items()):
+        if not fut.done():
+            fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
@@ -307,7 +311,7 @@ async def send_bambu_upload(
     filename: str,
     file_bytes: bytes | None = None,
     presigned_url: str | None = None,
-    timeout: float = 120.0,
+    timeout: float = 180.0,
 ) -> str:
     """Upload a .3mf to a Bambu printer via the agent's LAN FTPS connection.
 
