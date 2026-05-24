@@ -686,7 +686,7 @@ def start_print(
     A1 fw 1.03+ requires task_id / profile_id / project_id / bed_type.
     """
     import uuid as _uuid
-    url = http_url if http_url else f"ftp://{ftp_filename}"
+    url = http_url if http_url else f"file:///sdcard/{ftp_filename}"
     cmd: dict[str, Any] = {
         "print": {
             "command": "project_file",

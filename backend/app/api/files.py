@@ -277,38 +277,28 @@ async def send_to_printer(
                     ams_mapping.append(payload.slot_map.get(i, i))
             use_ams = any(v >= 0 for v in ams_mapping)
 
-            try:
-                # ── HTTP mode: printer downloads directly from R2 (no FTPS needed) ──
-                presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=86400)
-                if presigned:
-                    await asyncio.to_thread(
-                        bambu_svc.start_print,
-                        printer.bambu_dev_id,
-                        row.original_name,
-                        ams_mapping,
-                        use_ams,
-                        presigned,  # http_url
-                    )
-                    return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
+            if not printer.bambu_dev_ip:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Принтер '{printer.name}': не вказано LAN IP. На A1: Settings → Network → LAN Mode Liveview.",
+                )
+            if not printer.bambu_access_code:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Принтер '{printer.name}': не вказано Access Code. На A1: Settings → Network → LAN Mode Liveview (код під QR).",
+                )
 
-                # ── FTPS fallback: local disk, no S3 ──
-                if not printer.bambu_dev_ip:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Принтер '{printer.name}': не вказано LAN IP (потрібен для FTPS без S3).",
-                    )
-                if not printer.bambu_access_code:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Принтер '{printer.name}': не вказано Access Code (Settings → LAN на принтері).",
-                    )
+            try:
+                # ── FTPS upload via agent tunnel (preferred) or direct ──
+                presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=3600)
                 if _tunnel.has_tunnel(org.id):
                     ftp_name = await _tunnel.send_bambu_upload(
                         org.id,
                         printer.bambu_dev_ip,
                         printer.bambu_access_code,
                         row.original_name,
-                        file_bytes=src.read_bytes(),
+                        file_bytes=None if presigned else src.read_bytes(),
+                        presigned_url=presigned,
                     )
                 else:
                     ftp_name = await asyncio.to_thread(
@@ -324,8 +314,8 @@ async def send_to_printer(
                     row.original_name,
                     ams_mapping,
                     use_ams,
-                    None,         # http_url
-                    ftp_name,     # ftp_filename
+                    None,      # http_url
+                    ftp_name,  # ftp_filename
                 )
                 return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
             except (bambu_svc.BambuError, RuntimeError) as e:
