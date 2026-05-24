@@ -42,8 +42,23 @@ def get_current_org(
         expires = org.plan_expires_at.replace(tzinfo=None) if org.plan_expires_at.tzinfo else org.plan_expires_at
         if expires < datetime.utcnow():
             org.plan = OrgPlan.free
+            _enforce_printer_limit(org, db)
             db.commit()
     return org
+
+
+def _enforce_printer_limit(org: Organization, db: Session) -> None:
+    from app.models.organization import PLAN_LIMITS
+    from app.models.printer import Printer
+    limit = PLAN_LIMITS[org.plan]["printers"]
+    active = (
+        db.query(Printer)
+        .filter(Printer.organization_id == org.id, Printer.is_active.is_(True))
+        .order_by(Printer.id.asc())
+        .all()
+    )
+    for printer in active[limit:]:
+        printer.is_active = False
 
 
 def require_roles(*roles: UserRole):
