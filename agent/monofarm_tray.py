@@ -277,6 +277,8 @@ class App:
                     webbrowser.open(dashboard_url(load_config()["MONOFARM_SERVER"]))
                 elif t == "check_update":
                     asyncio.create_task(self._run_update_check(websocket))
+                elif t == "claim_printer":
+                    asyncio.create_task(self._do_claim_printer(msg.get("dev_id", ""), websocket))
         finally:
             self._ws_clients.discard(websocket)
 
@@ -348,19 +350,21 @@ class App:
             await asyncio.sleep(15)
 
     async def _fetch_printers(self, server: str, token: str) -> list:
-        """Fetch printer list from backend, then check local reachability."""
+        """Fetch claimed printers + undiscovered Bambu devices from backend."""
+        headers = {"Authorization": f"Bearer {token}"}
         async with httpx.AsyncClient(timeout=8, verify=False) as client:
-            r = await client.get(
-                f"{server}/api/printers",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if r.status_code != 200:
-                return []
-            raw = r.json()
+            r = await client.get(f"{server}/api/printers", headers=headers)
+            raw = r.json() if r.status_code == 200 else []
+            rd = await client.get(f"{server}/api/printers/bambu/discovered", headers=headers)
+            discovered = rd.json() if rd.status_code == 200 else []
 
-        # Run local reachability checks in parallel
-        tasks = [self._check_local(p) for p in raw]
-        return await asyncio.gather(*tasks, return_exceptions=False)
+        claimed = await asyncio.gather(*[self._check_local(p) for p in raw], return_exceptions=False)
+        unclaimed = [
+            {"dev_id": d["dev_id"], "name": d["name"], "model": d.get("model", ""),
+             "kind": "bambu", "claimed": False, "local_ok": False, "local_ms": None}
+            for d in discovered
+        ]
+        return [{**p, "claimed": True} for p in claimed] + unclaimed
 
     async def _check_local(self, p: dict) -> dict:
         """Add local_ok + local_ms to a printer dict."""
@@ -390,6 +394,27 @@ class App:
             pass
 
         return {**p, "local_ok": local_ok, "local_ms": local_ms}
+
+    async def _do_claim_printer(self, dev_id: str, websocket) -> None:
+        cfg = load_config()
+        try:
+            async with httpx.AsyncClient(timeout=10, verify=False) as client:
+                r = await client.post(
+                    f"{cfg['MONOFARM_SERVER']}/api/printers/bambu/claim",
+                    headers={"Authorization": f"Bearer {cfg['MONOFARM_TOKEN']}"},
+                    json={"dev_id": dev_id},
+                )
+            if r.status_code in (200, 201):
+                log.info("Printer %s added to monofarm", dev_id)
+                printers = await self._fetch_printers(cfg["MONOFARM_SERVER"], cfg["MONOFARM_TOKEN"])
+                self._printers = printers
+                await self._broadcast({"type": "printers", "printers": printers})
+            else:
+                err = (r.json().get("detail", "Error") if r.content else "Error")
+                log.warning("Claim failed for %s: %s", dev_id, err)
+                await websocket.send(json.dumps({"type": "claim_err", "dev_id": dev_id, "error": err}))
+        except Exception as e:
+            log.warning("Claim error: %s", e)
 
     # ── Agent tunnel ──────────────────────────────────────────────────────────
 
@@ -661,6 +686,13 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .l.warn.recent{color:#ca8a04}
 .l.err.recent{color:#f87171}
 
+/* Unclaimed / discovered printers */
+.p-discover-hdr{grid-column:1/-1;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:4px 2px 0}
+.p-unclaimed{border-color:#1a1a2e;background:var(--card2)}
+.claim-btn{background:#1e3a5f;border:1px solid #1d4ed8;color:var(--blue);border-radius:5px;padding:3px 10px;font-size:10px;font-weight:600;cursor:pointer;transition:all .15s}
+.claim-btn:hover:not(:disabled){background:#1d4ed8;color:#fff}
+.claim-btn:disabled{opacity:.4;cursor:default}
+
 /* Scrollbar */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -780,6 +812,10 @@ function connect() {
         addLog(m.line, true);
       } else if (m.type === 'printers') {
         renderPrinters(m.printers || []);
+      } else if (m.type === 'claim_err') {
+        const btn = document.getElementById('claim-' + m.dev_id);
+        if (btn) { btn.disabled = false; btn.textContent = '+ Додати'; }
+        showToast('Помилка: ' + (m.error || 'невідома'));
       } else if (m.type === 'update_status') {
         const btn = document.getElementById('btn-update');
         btn.disabled = m.checking;
@@ -869,12 +905,21 @@ function cleanJob(job) {
   return job.length > 32 ? job.slice(0, 30) + '…' : job;
 }
 
+function claimPrinter(dev_id) {
+  const btn = document.getElementById('claim-' + dev_id);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  send({type: 'claim_printer', dev_id});
+}
+
 function renderPrinters(list) {
   const grid    = document.getElementById('printers-list');
   const empty   = document.getElementById('printers-empty');
   const count   = document.getElementById('printer-count');
 
-  if (!list || !list.length) {
+  const claimed    = (list || []).filter(p => p.claimed !== false);
+  const unclaimed  = (list || []).filter(p => p.claimed === false);
+
+  if (!claimed.length && !unclaimed.length) {
     grid.style.display  = 'none';
     empty.style.display = '';
     count.textContent   = '';
@@ -883,14 +928,15 @@ function renderPrinters(list) {
   grid.style.display  = '';
   empty.style.display = 'none';
 
-  const printing = list.filter(p => p.state === 'printing').length;
-  const online   = list.filter(p => p.local_ok).length;
+  const printing = claimed.filter(p => p.state === 'printing').length;
+  const online   = claimed.filter(p => p.local_ok).length;
   const parts = [];
   if (printing) parts.push(`${printing} printing`);
-  parts.push(`${online}/${list.length} reachable`);
+  if (claimed.length) parts.push(`${online}/${claimed.length} reachable`);
+  if (unclaimed.length) parts.push(`${unclaimed.length} нових`);
   count.textContent = parts.join(' · ');
 
-  grid.innerHTML = list.map(p => {
+  const claimedHtml = claimed.map(p => {
     const isBambu  = (p.kind || '').includes('bambu');
     const ip       = p.bambu_dev_ip || (p.moonraker_url ? p.moonraker_url.replace(/https?:\/\//, '').split(/[/?]/)[0] : '');
     const state    = p.state || 'unknown';
@@ -912,6 +958,23 @@ function renderPrinters(list) {
       </div>
     </div>`;
   }).join('');
+
+  const unclaimedHtml = unclaimed.length ? `
+    <div class="p-discover-hdr">Виявлено — ще не додано до ферми</div>
+    ${unclaimed.map(p => `<div class="p-card p-unclaimed">
+      <div class="p-head">
+        <div class="p-dot nok"></div>
+        <div class="p-name">${p.name || p.dev_id}</div>
+        <div class="p-badge offline">${p.model || 'Bambu'}</div>
+      </div>
+      <div class="p-foot" style="margin-top:8px">
+        <span class="p-ip">${p.dev_id}</span>
+        <button id="claim-${p.dev_id}" class="claim-btn" onclick="claimPrinter('${p.dev_id}')">+ Додати</button>
+      </div>
+    </div>`).join('')}
+  ` : '';
+
+  grid.innerHTML = claimedHtml + unclaimedHtml;
 }
 
 connect();
