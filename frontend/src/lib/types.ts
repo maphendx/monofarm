@@ -108,6 +108,13 @@ export interface PrintTask {
   pieces_defective: number | null;
   defect_reason: string | null;
   material_cost_uah: number | null;
+  // Queue page fields
+  gcode_file_id: number | null;
+  has_thumbnail: boolean;
+  created_by_name: string | null;
+  printed_count: number;
+  assigned_printer_id: number | null;
+  assigned_printer_name: string | null;
 }
 
 export interface Filament {

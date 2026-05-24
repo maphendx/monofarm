@@ -1,241 +1,695 @@
 "use client";
 
-import {
-  DndContext,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AmountStepper } from "@/components/queue/AmountStepper";
 import { CreateTaskModal } from "@/components/plan/CreateTaskModal";
-import { PrinterDropZone } from "@/components/plan/PrinterDropZone";
-import { TaskQueueItem } from "@/components/plan/TaskQueueItem";
+import { SendModal } from "@/components/SendModal";
 import { ApiError, api } from "@/lib/api";
+import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
-import type { PlanEntry, PrintTask, Printer } from "@/lib/types";
+import type { GcodeFile, PrintTask, Printer } from "@/lib/types";
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function printerModelLabel(p: Printer): string {
+  if (p.kind === "bambu" && p.bambu_model) return `Bambu ${p.bambu_model}`;
+  if (p.kind === "snapmaker_u1") return "Snapmaker U1";
+  return "Other";
 }
+
+function taskToGcodeFile(task: PrintTask): GcodeFile {
+  return {
+    id: task.gcode_file_id ?? 0,
+    original_name: task.file_name ?? task.title,
+    stored_name: "",
+    size_bytes: task.file_size ?? 0,
+    notes: null,
+    filament_meta: task.filament_meta as GcodeFile["filament_meta"],
+    has_thumbnail: task.has_thumbnail,
+    uploaded_at: task.created_at,
+    uploaded_by_name: task.created_by_name,
+    folder_id: null,
+  };
+}
+
+function FilamentChips({ meta }: { meta: PrintTask["filament_meta"] }) {
+  if (!meta) return null;
+  const types = meta.types ?? [];
+  const colors = meta.colors ?? [];
+  const count = Math.max(types.length, colors.length);
+  if (count === 0) return null;
+
+  // deduplicate by type+color pair
+  const seen = new Set<string>();
+  const chips: { type: string; color: string }[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = types[i] ?? "";
+    const c = colors[i] ?? "";
+    const key = `${t}|${c}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      chips.push({ type: t, color: c });
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((ch, i) => (
+        <span
+          key={i}
+          className="flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300"
+        >
+          {ch.color && (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full border border-white/20"
+              style={{ background: ch.color }}
+            />
+          )}
+          {ch.type || ch.color}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MaterialCell({ meta }: { meta: PrintTask["filament_meta"] }) {
+  if (!meta) return <span className="text-neutral-500">—</span>;
+  const colors = meta.colors ?? [];
+  const usedG = meta.used_g ?? [];
+  const total = sumArray(usedG);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex">
+        {colors.slice(0, 3).map((c, i) => (
+          <span
+            key={i}
+            className="h-3 w-3 rounded-full border border-neutral-800"
+            style={{ background: c, marginLeft: i > 0 ? -4 : 0 }}
+          />
+        ))}
+      </div>
+      <span className="text-neutral-300">{total > 0 ? `${total.toFixed(1)} g` : "—"}</span>
+    </div>
+  );
+}
+
+function PrinterCell({
+  printerId,
+  printerName,
+}: {
+  printerId: number | null;
+  printerName: string | null;
+}) {
+  if (!printerId || !printerName) {
+    return <span className="text-neutral-600">—</span>;
+  }
+  return (
+    <span className="flex items-center gap-1.5 text-neutral-300">
+      <span className="text-base">🖨️</span>
+      <span className="truncate max-w-[80px]">{printerName}</span>
+    </span>
+  );
+}
+
+// ── main page ─────────────────────────────────────────────────────────────
 
 export default function PlanPage() {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
 
-  const [planDate, setPlanDate] = useState(todayStr);
   const [tasks, setTasks] = useState<PrintTask[]>([]);
-  const [entries, setEntries] = useState<PlanEntry[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [createTaskOpen, setCreateTaskOpen] = useState(false);
-  const [draggingTask, setDraggingTask] = useState<PrintTask | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  // filter / search
+  const [activeTab, setActiveTab] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
+
+  // selection
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  // modals
+  const [createOpen, setCreateOpen] = useState(false);
+  const [sendTask, setSendTask] = useState<PrintTask | null>(null);
+
+  // 1-click busy guard
+  const distributeRef = useRef(false);
+  const [distributeResult, setDistributeResult] = useState<{
+    sent: { task_id: number; printer_name: string }[];
+    skipped: { task_id: number; reason: string }[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [t, e, p] = await Promise.all([
+      const [t, p] = await Promise.all([
         api<PrintTask[]>("/api/tasks/print?status=queued"),
-        api<PlanEntry[]>(`/api/plan?plan_date=${planDate}`),
         api<Printer[]>("/api/printers"),
       ]);
       setTasks(t);
-      setEntries(e);
       setPrinters(p);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [planDate]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // How many plan entries each task has today (for the badge)
-  const assignedCountByTask = useMemo(() => {
-    const counts = new Map<number, number>();
-    for (const e of entries) {
-      counts.set(e.task_id, (counts.get(e.task_id) ?? 0) + 1);
+  // derive model tabs from printer list
+  const modelTabs = useMemo(() => {
+    const labels = new Map<string, number>();
+    for (const p of printers) {
+      const label = printerModelLabel(p);
+      labels.set(label, (labels.get(label) ?? 0) + 1);
     }
-    return counts;
-  }, [entries]);
+    return Array.from(labels.entries());
+  }, [printers]);
 
-  const entriesByPrinter = useMemo(() => {
-    const map = new Map<number, PlanEntry[]>();
-    for (const e of entries) {
-      const arr = map.get(e.printer_id) ?? [];
-      arr.push(e);
-      map.set(e.printer_id, arr);
+  // collect unique filament types for the Type filter
+  const allTypes = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of tasks) {
+      for (const ty of t.filament_meta?.types ?? []) {
+        if (ty) s.add(ty);
+      }
     }
-    return map;
-  }, [entries]);
+    return Array.from(s).sort();
+  }, [tasks]);
 
-  function handleDragStart(event: DragStartEvent) {
-    const task = event.active.data.current?.task as PrintTask | undefined;
-    setDraggingTask(task ?? null);
+  // filtered tasks
+  const visible = useMemo(() => {
+    let list = tasks;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          (t.file_name ?? "").toLowerCase().includes(q),
+      );
+    }
+    if (typeFilter) {
+      list = list.filter((t) =>
+        t.filament_meta?.types?.some((ty) => ty === typeFilter),
+      );
+    }
+    return list;
+  }, [tasks, search, typeFilter]);
+
+  // stats over visible tasks
+  const stats = useMemo(() => {
+    const jobs = visible.length;
+    const totalMin = visible.reduce((s, t) => s + (t.estimated_minutes ?? 0), 0);
+    const totalCost = visible.reduce((s, t) => s + (t.material_cost_uah ?? 0), 0);
+    const totalG = visible.reduce((s, t) => s + sumArray(t.filament_meta?.used_g), 0);
+    return { jobs, totalMin, totalCost, totalG };
+  }, [visible]);
+
+  // select-all checkbox state
+  const allChecked =
+    visible.length > 0 && visible.every((t) => selected.has(t.id));
+  const someChecked = !allChecked && visible.some((t) => selected.has(t.id));
+
+  function toggleAll() {
+    if (allChecked) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(visible.map((t) => t.id)));
+    }
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    setDraggingTask(null);
-    const { active, over } = event;
-    if (!over) return;
+  function toggleOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
-    const taskId = Number(String(active.id).replace("task-", ""));
-    const printerId = over.data.current?.printerId as number | undefined;
-    if (!printerId) return;
+  function handleTaskUpdated(updated: PrintTask) {
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  }
 
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task) return;
-
-    // Prevent duplicate assignment to same printer on same day
-    const alreadyAssigned = entries.some(
-      (e) => e.task_id === taskId && e.printer_id === printerId,
-    );
-    if (alreadyAssigned) return;
-
+  async function handleDelete(taskId: number) {
     try {
-      const entry = await api<PlanEntry>("/api/plan", {
-        method: "POST",
-        body: JSON.stringify({
-          plan_date: planDate,
-          printer_id: printerId,
-          task_id: taskId,
-        }),
+      await api(`/api/tasks/print/${taskId}`, { method: "DELETE" });
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
       });
-      setEntries((prev) => [...prev, entry]);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
     }
   }
 
-  function deleteTask(taskId: number) {
-    api(`/api/tasks/print/${taskId}`, { method: "DELETE" }).then(() => {
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      setEntries((prev) => prev.filter((e) => e.task_id !== taskId));
-    });
+  async function handle1Click() {
+    if (distributeRef.current) return;
+    distributeRef.current = true;
+    setDistributeResult(null);
+    try {
+      const taskIds = selected.size > 0 ? Array.from(selected) : undefined;
+      const res = await api<{
+        sent: { task_id: number; printer_id: number; printer_name: string }[];
+        skipped: { task_id: number; reason: string }[];
+      }>("/api/tasks/print/bulk-distribute", {
+        method: "POST",
+        body: JSON.stringify({ task_ids: taskIds ?? null }),
+      });
+      setDistributeResult(res);
+      // refresh tasks to pick up new assigned_printer fields
+      await load();
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+    } finally {
+      distributeRef.current = false;
+    }
   }
-
-  const doneCount = entries.filter((e) => e.done).length;
 
   if (loading) {
     return <div className="text-sm text-neutral-500">Завантаження…</div>;
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex gap-4" style={{ height: "calc(100vh - 5rem)" }}>
-        {/* ── Left: task queue ── */}
-        <div className="flex w-72 shrink-0 flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">Черга задач</h2>
-            {canEdit && (
-              <button
-                onClick={() => setCreateTaskOpen(true)}
-                className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
-              >
-                + Задача
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-              {error}
-            </div>
-          )}
-
-          <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-            {tasks.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-neutral-300 px-3 py-8 text-center text-xs text-neutral-400 dark:border-neutral-700">
-                Черга порожня — натисни + Задача
-              </div>
-            ) : (
-              tasks.map((task) => (
-                <TaskQueueItem
-                  key={task.id}
-                  task={task}
-                  assignedCount={assignedCountByTask.get(task.id) ?? 0}
-                  onDelete={deleteTask}
-                />
-              ))
-            )}
-          </div>
+    <div className="flex flex-col gap-4">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold">Print queue</h1>
+          <span
+            className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-neutral-600 text-[11px] text-neutral-400"
+            title="Черга друку: всі завдання зі статусом 'queued'. 1-CLICK PRINT розподіляє їх по вільних принтерах."
+          >
+            ?
+          </span>
         </div>
-
-        {/* ── Divider ── */}
-        <div className="w-px shrink-0 bg-neutral-200 dark:bg-neutral-800" />
-
-        {/* ── Right: plan board ── */}
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="font-semibold">План на день</h2>
-              <input
-                type="date"
-                value={planDate}
-                onChange={(e) => setPlanDate(e.target.value)}
-                className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950"
-              />
-            </div>
-            {entries.length > 0 && (
-              <span className="text-sm text-neutral-500">
-                ✓ {doneCount}/{entries.length}
-              </span>
-            )}
-          </div>
-
-          <div className="grid flex-1 grid-cols-2 content-start gap-3 overflow-y-auto sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {printers.map((printer) => (
-              <PrinterDropZone
-                key={printer.id}
-                printer={printer}
-                entries={entriesByPrinter.get(printer.id) ?? []}
-                planDate={planDate}
-                onEntryAdded={(e) => setEntries((prev) => [...prev, e])}
-                onEntryUpdated={(e) =>
-                  setEntries((prev) => prev.map((x) => (x.id === e.id ? e : x)))
-                }
-                onEntryRemoved={(id) =>
-                  setEntries((prev) => prev.filter((x) => x.id !== id))
-                }
-              />
-            ))}
-          </div>
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <button
+              onClick={handle1Click}
+              className="flex items-center gap-1.5 rounded-md border border-neutral-600 bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+            >
+              <span>≡</span> 1-CLICK PRINT
+            </button>
+          )}
+          {canEdit && (
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-lg font-bold text-white hover:bg-accent/90"
+            >
+              +
+            </button>
+          )}
         </div>
       </div>
 
-      <DragOverlay dropAnimation={null}>
-        {draggingTask && (
-          <div className="w-64 cursor-grabbing rounded-lg border-2 border-neutral-400 bg-white p-3 shadow-xl dark:bg-neutral-900">
-            <div className="text-sm font-medium">{draggingTask.title}</div>
-            {draggingTask.estimated_minutes && (
-              <div className="mt-1 text-xs text-neutral-500">
-                ⏱ {draggingTask.estimated_minutes} хв
-              </div>
+      {error && (
+        <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {distributeResult && (
+        <div className="rounded-md border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-300">
+          Розподілено: {distributeResult.sent.length} завдань
+          {distributeResult.skipped.length > 0 &&
+            ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map((s) => s.reason).join(", ")})`}
+        </div>
+      )}
+
+      {/* ── Model tabs ── */}
+      <div className="flex items-center gap-0 overflow-x-auto border-b border-neutral-800 pb-0">
+        {[{ key: "all", label: "All", count: tasks.length }, ...modelTabs.map(([label, count]) => ({ key: label, label, count }))].map(
+          (tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={[
+                "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-colors",
+                activeTab === tab.key
+                  ? "border-accent text-accent"
+                  : "border-transparent text-neutral-400 hover:text-neutral-200",
+              ].join(" ")}
+            >
+              {tab.label}
+              <span
+                className={[
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  activeTab === tab.key
+                    ? "bg-accent/20 text-accent"
+                    : "bg-neutral-800 text-neutral-500",
+                ].join(" ")}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ),
+        )}
+      </div>
+
+      {/* ── Stats bar ── */}
+      <div className="flex flex-wrap gap-6 rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-neutral-500">≡ Jobs:</span>
+          <span className="font-medium text-neutral-100">{stats.jobs}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-neutral-500">⏱ Print time:</span>
+          <span className="font-medium text-neutral-100">
+            {stats.totalMin >= 60
+              ? `${Math.floor(stats.totalMin / 60 / 24)}d ${Math.floor((stats.totalMin / 60) % 24)}h ${stats.totalMin % 60}m`
+              : formatDuration(stats.totalMin)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-neutral-500">$ Cost:</span>
+          <span className="font-medium text-neutral-100">
+            {stats.totalCost > 0 ? `${stats.totalCost.toFixed(2)} UAH` : "—"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-neutral-500">▲ Material:</span>
+          <span className="font-medium text-neutral-100">
+            {stats.totalG > 0
+              ? stats.totalG >= 1000
+                ? `${(stats.totalG / 1000).toFixed(2)} kg`
+                : `${stats.totalG.toFixed(1)} g`
+              : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          placeholder="Search all data…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-8 w-48 rounded-md border border-neutral-700 bg-neutral-900 px-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-accent"
+        />
+
+        {/* Type filter */}
+        <div className="relative">
+          <button
+            onClick={() => setTypeMenuOpen((v) => !v)}
+            className={[
+              "flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm",
+              typeFilter
+                ? "border-accent bg-accent/10 text-accent"
+                : "border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-neutral-200",
+            ].join(" ")}
+          >
+            ● TYPE{typeFilter ? `: ${typeFilter}` : ""}
+            <span className="text-[10px]">▾</span>
+          </button>
+          {typeMenuOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+              <button
+                onClick={() => { setTypeFilter(""); setTypeMenuOpen(false); }}
+                className="w-full px-3 py-1.5 text-left text-sm text-neutral-400 hover:bg-neutral-800"
+              >
+                Всі типи
+              </button>
+              {allTypes.map((ty) => (
+                <button
+                  key={ty}
+                  onClick={() => { setTypeFilter(ty); setTypeMenuOpen(false); }}
+                  className="w-full px-3 py-1.5 text-left text-sm text-neutral-200 hover:bg-neutral-800"
+                >
+                  {ty}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Table ── */}
+      <div className="overflow-x-auto rounded-lg border border-neutral-800">
+        <table className="w-full min-w-[1100px] text-sm">
+          <thead>
+            <tr className="border-b border-neutral-800 bg-neutral-900/80 text-xs text-neutral-500">
+              <th className="w-8 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={allChecked}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someChecked;
+                  }}
+                  onChange={toggleAll}
+                  className="accent-[var(--accent)] cursor-pointer"
+                />
+              </th>
+              <th className="w-8 px-2 py-2.5 text-left">#</th>
+              <th className="px-3 py-2.5 text-left">File</th>
+              <th className="px-3 py-2.5 text-left">Tags: printer-matching</th>
+              <th className="px-3 py-2.5 text-right">Print cost</th>
+              <th className="px-3 py-2.5 text-right">Print time</th>
+              <th className="px-3 py-2.5 text-left">Material</th>
+              <th className="px-3 py-2.5 text-right">Printed</th>
+              <th className="px-3 py-2.5 text-center">Amount</th>
+              <th className="px-3 py-2.5 text-left">User</th>
+              <th className="px-3 py-2.5 text-left">Added</th>
+              <th className="px-3 py-2.5 text-left">Printer</th>
+              <th className="w-8 px-2 py-2.5" />
+            </tr>
+          </thead>
+          <tbody>
+            {visible.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={13}
+                  className="px-3 py-12 text-center text-neutral-500"
+                >
+                  {tasks.length === 0
+                    ? "Черга порожня — натисніть + щоб додати завдання"
+                    : "Нічого не знайдено"}
+                </td>
+              </tr>
+            ) : (
+              visible.map((task, idx) => (
+                <QueueRow
+                  key={task.id}
+                  index={idx + 1}
+                  task={task}
+                  printers={printers}
+                  selected={selected.has(task.id)}
+                  onToggle={() => toggleOne(task.id)}
+                  onUpdated={handleTaskUpdated}
+                  onDelete={() => handleDelete(task.id)}
+                  onSend={() => setSendTask(task)}
+                  canEdit={canEdit}
+                />
+              ))
+            )}
+          </tbody>
+        </table>
+        <div className="border-t border-neutral-800 px-3 py-2 text-xs text-neutral-500">
+          {selected.size} of {visible.length} row(s) selected.
+        </div>
+      </div>
+
+      {/* ── Modals ── */}
+      <CreateTaskModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(t) => setTasks((prev) => [t, ...prev])}
+      />
+
+      {sendTask && sendTask.gcode_file_id && (
+        <SendModal
+          file={taskToGcodeFile(sendTask)}
+          printers={printers}
+          defaultPrinterId={sendTask.assigned_printer_id ?? undefined}
+          onClose={() => {
+            setSendTask(null);
+            load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── QueueRow ──────────────────────────────────────────────────────────────
+
+function QueueRow({
+  index,
+  task,
+  printers,
+  selected,
+  onToggle,
+  onUpdated,
+  onDelete,
+  onSend,
+  canEdit,
+}: {
+  index: number;
+  task: PrintTask;
+  printers: Printer[];
+  selected: boolean;
+  onToggle: () => void;
+  onUpdated: (t: PrintTask) => void;
+  onDelete: () => void;
+  onSend: () => void;
+  canEdit: boolean;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const thumbSrc =
+    task.has_thumbnail && task.gcode_file_id
+      ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail`
+      : null;
+
+  return (
+    <tr
+      className={[
+        "border-b border-neutral-800/60 transition-colors",
+        selected ? "bg-accent/5" : "hover:bg-neutral-800/30",
+      ].join(" ")}
+    >
+      {/* checkbox */}
+      <td className="px-3 py-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          className="accent-[var(--accent)] cursor-pointer"
+        />
+      </td>
+
+      {/* # */}
+      <td className="px-2 py-2 text-neutral-500">{index}.</td>
+
+      {/* File */}
+      <td className="max-w-[180px] px-3 py-2">
+        <div className="flex items-center gap-2">
+          {thumbSrc ? (
+            <img
+              src={thumbSrc}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded object-cover"
+            />
+          ) : (
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-neutral-800 text-neutral-500 text-xs">
+              3mf
+            </div>
+          )}
+          <span className="truncate text-accent hover:underline cursor-default">
+            {task.file_name ?? task.title}
+          </span>
+        </div>
+      </td>
+
+      {/* Tags */}
+      <td className="px-3 py-2">
+        <div className="flex items-center gap-1 flex-wrap">
+          <FilamentChips meta={task.filament_meta} />
+          <button
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-neutral-600 text-[10px] text-neutral-500 hover:border-neutral-400"
+            title="Додати тег"
+          >
+            +
+          </button>
+        </div>
+      </td>
+
+      {/* Print cost */}
+      <td className="px-3 py-2 text-right text-neutral-300">
+        {task.material_cost_uah
+          ? `${task.material_cost_uah.toFixed(2)} UAH`
+          : "—"}
+      </td>
+
+      {/* Print time */}
+      <td className="px-3 py-2 text-right text-neutral-300">
+        {formatDuration(task.estimated_minutes)}
+      </td>
+
+      {/* Material */}
+      <td className="px-3 py-2">
+        <MaterialCell meta={task.filament_meta} />
+      </td>
+
+      {/* Printed */}
+      <td className="px-3 py-2 text-right text-neutral-300">
+        {task.printed_count ?? 0}
+      </td>
+
+      {/* Amount */}
+      <td className="px-3 py-2">
+        {canEdit ? (
+          <AmountStepper
+            taskId={task.id}
+            value={task.quantity}
+            onChange={(v) => onUpdated({ ...task, quantity: v })}
+          />
+        ) : (
+          <span className="text-neutral-300">{task.quantity}</span>
+        )}
+      </td>
+
+      {/* User */}
+      <td className="px-3 py-2 text-neutral-400 max-w-[100px] truncate">
+        {task.created_by_name ?? "—"}
+      </td>
+
+      {/* Added */}
+      <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
+        {formatRelativeDate(task.created_at)}
+      </td>
+
+      {/* Printer */}
+      <td className="px-3 py-2">
+        <PrinterCell
+          printerId={task.assigned_printer_id}
+          printerName={task.assigned_printer_name}
+        />
+      </td>
+
+      {/* Actions */}
+      <td className="relative px-2 py-2">
+        <button
+          onClick={() => setMenuOpen((v) => !v)}
+          className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-neutral-700 hover:text-neutral-200"
+        >
+          ···
+        </button>
+        {menuOpen && (
+          <div
+            className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg"
+            onMouseLeave={() => setMenuOpen(false)}
+          >
+            {task.gcode_file_id && canEdit && (
+              <button
+                onClick={() => { setMenuOpen(false); onSend(); }}
+                className="w-full px-3 py-1.5 text-left text-sm text-neutral-200 hover:bg-neutral-800"
+              >
+                Надіслати на принтер
+              </button>
+            )}
+            {canEdit && (
+              <button
+                onClick={() => { setMenuOpen(false); onDelete(); }}
+                className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-neutral-800"
+              >
+                Видалити
+              </button>
             )}
           </div>
         )}
-      </DragOverlay>
-
-      <CreateTaskModal
-        open={createTaskOpen}
-        onClose={() => setCreateTaskOpen(false)}
-        onCreated={(t) => setTasks((prev) => [t, ...prev])}
-      />
-    </DndContext>
+      </td>
+    </tr>
   );
 }

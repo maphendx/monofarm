@@ -34,6 +34,9 @@ class PrintTask(Base):
     file_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
     file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gcode_file_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("gcode_files.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     filament_meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # [{filament_id: int, grams: int}] — set at send time, consumed on done
     filament_consumptions: Mapped[list | None] = mapped_column(JSONB, nullable=True)

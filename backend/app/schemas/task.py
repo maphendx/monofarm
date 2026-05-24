@@ -55,6 +55,13 @@ class PrintTaskOut(BaseModel):
     pieces_defective: int | None = None
     defect_reason: str | None = None
     material_cost_uah: float | None = None
+    # Queue page fields (computed in list_tasks)
+    gcode_file_id: int | None = None
+    has_thumbnail: bool = False
+    created_by_name: str | None = None
+    printed_count: int = 0
+    assigned_printer_id: int | None = None
+    assigned_printer_name: str | None = None
 
     class Config:
         from_attributes = True

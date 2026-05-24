@@ -1,13 +1,19 @@
+from datetime import date
 from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
+from app.models.gcode_file import GcodeFile
 from app.models.organization import Organization
+from app.models.plan import PlanEntry
+from app.models.printer import Printer
 from app.models.task import PrintTask, PrintTaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import PrintTaskCreate, PrintTaskOut, PrintTaskUpdate
@@ -23,18 +29,97 @@ MAX_FILE_BYTES = 200 * 1024 * 1024  # 200 MB
 router = APIRouter(prefix="/tasks/print", tags=["tasks"])
 
 
+def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:
+    """Return extra computed fields for PrintTaskOut."""
+    # created_by_name
+    created_by_name: str | None = None
+    if task.created_by_id:
+        u = db.get(User, task.created_by_id)
+        created_by_name = u.name if u else None
+
+    # gcode_file_id / has_thumbnail
+    gcode_file_id = task.gcode_file_id
+    has_thumbnail = False
+    if gcode_file_id:
+        gf = db.query(GcodeFile).filter(GcodeFile.id == gcode_file_id, GcodeFile.organization_id == org_id).first()
+        if gf:
+            thumb_path = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes" / (gf.stored_name + ".thumb.png")
+            has_thumbnail = thumb_path.exists()
+    elif task.file_name:
+        # fallback: find GcodeFile by original_name
+        gf = db.query(GcodeFile).filter(
+            GcodeFile.original_name == task.file_name,
+            GcodeFile.organization_id == org_id,
+        ).order_by(GcodeFile.id.desc()).first()
+        if gf:
+            gcode_file_id = gf.id
+            thumb_path = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes" / (gf.stored_name + ".thumb.png")
+            has_thumbnail = thumb_path.exists()
+
+    # printed_count — tasks with the same file_name + done in this org
+    printed_count = 0
+    if task.file_name:
+        printed_count = (
+            db.query(func.count(PrintTask.id))
+            .filter(
+                PrintTask.organization_id == org_id,
+                PrintTask.file_name == task.file_name,
+                PrintTask.status == PrintTaskStatus.done,
+                PrintTask.id != task.id,
+            )
+            .scalar()
+            or 0
+        )
+
+    # assigned_printer — first PlanEntry for today
+    today = date.today()
+    entry = (
+        db.query(PlanEntry)
+        .filter(
+            PlanEntry.task_id == task.id,
+            PlanEntry.organization_id == org_id,
+            PlanEntry.plan_date == today,
+        )
+        .first()
+    )
+    assigned_printer_id = None
+    assigned_printer_name = None
+    if entry:
+        printer = db.get(Printer, entry.printer_id)
+        assigned_printer_id = entry.printer_id
+        assigned_printer_name = printer.name if printer else None
+
+    return {
+        "gcode_file_id": gcode_file_id,
+        "has_thumbnail": has_thumbnail,
+        "created_by_name": created_by_name,
+        "printed_count": printed_count,
+        "assigned_printer_id": assigned_printer_id,
+        "assigned_printer_name": assigned_printer_name,
+    }
+
+
+def _to_out(task: PrintTask, db: Session, org_id: int) -> PrintTaskOut:
+    extra = _enrich(task, db, org_id)
+    return PrintTaskOut.model_validate({
+        **{c.name: getattr(task, c.name) for c in task.__table__.columns},
+        **extra,
+    })
+
+
 @router.get("", response_model=list[PrintTaskOut])
 def list_tasks(
     status: PrintTaskStatus | None = None,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
-) -> list[PrintTask]:
+) -> list[PrintTaskOut]:
     q = db.query(PrintTask).filter(PrintTask.organization_id == org.id)
     if status:
         q = q.filter(PrintTask.status == status)
     else:
         q = q.filter(PrintTask.status.notin_([PrintTaskStatus.cancelled]))
-    return q.order_by(PrintTask.deadline.asc().nullslast(), PrintTask.created_at).all()
+    tasks = q.order_by(PrintTask.deadline.asc().nullslast(), PrintTask.created_at).all()
+    return [_to_out(t, db, org.id) for t in tasks]
 
 
 @router.post("", response_model=PrintTaskOut, status_code=status.HTTP_201_CREATED)
@@ -43,12 +128,12 @@ def create_task(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
     org: Organization = Depends(get_current_org),
-) -> PrintTask:
+) -> PrintTaskOut:
     task = PrintTask(**payload.model_dump(), created_by_id=user.id, organization_id=org.id)
     db.add(task)
     db.commit()
     db.refresh(task)
-    return task
+    return _to_out(task, db, org.id)
 
 
 class _FromLibraryPayload(BaseModel):
@@ -63,8 +148,7 @@ def create_task_from_library(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
     org: Organization = Depends(get_current_org),
-) -> PrintTask:
-    from app.models.gcode_file import GcodeFile
+) -> PrintTaskOut:
     gfile = db.query(GcodeFile).filter(GcodeFile.id == payload.gcode_file_id, GcodeFile.organization_id == org.id).first()
     if not gfile:
         raise HTTPException(status_code=404, detail="File not found")
@@ -75,13 +159,115 @@ def create_task_from_library(
         file_name=gfile.original_name,
         filament_meta=gfile.filament_meta,
         estimated_minutes=meta.get("estimated_minutes"),
+        gcode_file_id=gfile.id,
         created_by_id=user.id,
         organization_id=org.id,
     )
     db.add(task)
     db.commit()
     db.refresh(task)
-    return task
+    return _to_out(task, db, org.id)
+
+
+class _BulkDistributePayload(BaseModel):
+    task_ids: list[int] | None = None
+
+
+class _DistributeEntry(BaseModel):
+    task_id: int
+    printer_id: int
+    printer_name: str
+
+
+class BulkDistributeResult(BaseModel):
+    sent: list[_DistributeEntry]
+    skipped: list[dict]
+
+
+@router.post("/bulk-distribute", response_model=BulkDistributeResult)
+def bulk_distribute(
+    payload: _BulkDistributePayload = Body(default=_BulkDistributePayload()),
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BulkDistributeResult:
+    """Assign queued tasks to free compatible printers and create today's PlanEntries."""
+    today = date.today()
+
+    # Get tasks to distribute
+    q = db.query(PrintTask).filter(
+        PrintTask.organization_id == org.id,
+        PrintTask.status == PrintTaskStatus.queued,
+    )
+    if payload.task_ids:
+        q = q.filter(PrintTask.id.in_(payload.task_ids))
+    tasks = q.order_by(PrintTask.deadline.asc().nullslast(), PrintTask.created_at).all()
+
+    # Get all idle printers for this org
+    all_printers = db.query(Printer).filter(
+        Printer.organization_id == org.id,
+        Printer.is_active,
+    ).all()
+
+    # Track which printer IDs are already being used in this batch
+    claimed: set[int] = set()
+
+    sent: list[_DistributeEntry] = []
+    skipped: list[dict] = []
+
+    for task in tasks:
+        if not task.gcode_file_id and not task.file_name:
+            skipped.append({"task_id": task.id, "reason": "Немає файлу"})
+            continue
+
+        # Infer file type for Bambu vs Moonraker compatibility
+        fname = task.file_name or ""
+        is_3mf = ".3mf" in fname.lower()
+
+        # Find first free compatible printer not already claimed
+        chosen: Printer | None = None
+        for p in all_printers:
+            if p.id in claimed:
+                continue
+            # Already has a plan entry for today → skip
+            existing = db.query(PlanEntry).filter(
+                PlanEntry.printer_id == p.id,
+                PlanEntry.plan_date == today,
+                PlanEntry.organization_id == org.id,
+            ).first()
+            if existing:
+                continue
+            if is_3mf and p.kind.value != "bambu":
+                continue
+            if not is_3mf and p.kind.value == "bambu":
+                continue
+            chosen = p
+            break
+
+        if not chosen:
+            skipped.append({"task_id": task.id, "reason": "Немає вільного принтера"})
+            continue
+
+        # Create PlanEntry for today
+        seq = (
+            db.query(func.count(PlanEntry.id))
+            .filter(PlanEntry.printer_id == chosen.id, PlanEntry.plan_date == today, PlanEntry.organization_id == org.id)
+            .scalar()
+            or 0
+        )
+        entry = PlanEntry(
+            organization_id=org.id,
+            plan_date=today,
+            printer_id=chosen.id,
+            task_id=task.id,
+            sequence=seq,
+        )
+        db.add(entry)
+        claimed.add(chosen.id)
+        sent.append(_DistributeEntry(task_id=task.id, printer_id=chosen.id, printer_name=chosen.name))
+
+    db.commit()
+    return BulkDistributeResult(sent=sent, skipped=skipped)
 
 
 @router.patch("/{task_id}", response_model=PrintTaskOut)
@@ -91,7 +277,7 @@ def update_task(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
-) -> PrintTask:
+) -> PrintTaskOut:
     task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -116,7 +302,6 @@ def update_task(
         from app.models.filament import Filament, FilamentLog
         from app.api.filaments import _warehouse_movement
 
-        # scale consumptions by actual printed vs planned if pieces given
         planned_qty = task.quantity or 1
         actual_printed = (pieces_ok or 0) + pieces_defective
         scale = actual_printed / planned_qty if actual_printed and planned_qty else 1.0
@@ -154,7 +339,7 @@ def update_task(
 
     db.commit()
     db.refresh(task)
-    return task
+    return _to_out(task, db, org.id)
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -201,7 +386,7 @@ async def upload_task_file(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
-) -> PrintTask:
+) -> PrintTaskOut:
     task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -245,7 +430,7 @@ async def upload_task_file(
 
     db.commit()
     db.refresh(task)
-    return task
+    return _to_out(task, db, org.id)
 
 
 @router.get("/{task_id}/file")
@@ -269,7 +454,7 @@ def delete_task_file(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
-) -> PrintTask:
+) -> PrintTaskOut:
     task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -280,4 +465,4 @@ def delete_task_file(
     task.filament_meta = None
     db.commit()
     db.refresh(task)
-    return task
+    return _to_out(task, db, org.id)
