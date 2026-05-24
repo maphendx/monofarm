@@ -18,6 +18,7 @@ from app.api.farm_tasks import router as farm_tasks_router
 from app.api.filament_colors import router as filament_colors_router
 from app.api.filaments import router as filaments_router
 from app.api.files import router as files_router
+from app.api.files import folders_router as folders_router
 from app.api.octoprint import router as octoprint_router
 from app.api.orgs import router as orgs_router
 from app.api.plan import router as plan_router
@@ -128,6 +129,7 @@ app.include_router(farm_tasks_router, prefix="/api")
 app.include_router(filaments_router, prefix="/api")
 app.include_router(filament_colors_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
+app.include_router(folders_router, prefix="/api")
 app.include_router(octoprint_router)  # no prefix — OctoPrint paths are already /api/...
 app.include_router(plan_router, prefix="/api")
 app.include_router(agent_router)      # WebSocket + status endpoint

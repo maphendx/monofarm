@@ -24,6 +24,9 @@ class GcodeFile(Base):
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Parsed slicer metadata: {types, colors, used_g, estimated_minutes, total_layers, layer_height}
     filament_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    folder_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("gcode_folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     uploaded_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

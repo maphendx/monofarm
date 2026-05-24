@@ -7,6 +7,7 @@ from app.models.plan import PlanEntry
 from app.models.filament import Filament
 from app.models.filament_color import FilamentColor
 from app.models.gcode_file import GcodeFile
+from app.models.gcode_folder import GcodeFolder
 from app.models.print_history import PrintHistory
 from app.models.api_key import ApiKey
 
@@ -25,6 +26,7 @@ __all__ = [
     "Filament",
     "FilamentColor",
     "GcodeFile",
+    "GcodeFolder",
     "PrintHistory",
     "ApiKey",
 ]

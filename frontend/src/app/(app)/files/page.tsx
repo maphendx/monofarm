@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
-import type { GcodeFile, GcodeFileMeta, Printer } from "@/lib/types";
+import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -639,84 +639,331 @@ function DeleteButton({ onDelete }: { onDelete: () => void }) {
   );
 }
 
+// ── Move-to-folder popup ──────────────────────────────────────────────────────
+
+function MovePopup({
+  file,
+  folders,
+  onMove,
+  onClose,
+}: {
+  file: GcodeFile;
+  folders: GcodeFolder[];
+  onMove: (folderId: number | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-xs rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+          <h2 className="font-semibold text-sm">Перемістити до папки</h2>
+          <p className="mt-0.5 truncate text-xs text-neutral-500">{file.original_name}</p>
+        </div>
+        <div className="max-h-64 overflow-y-auto px-3 py-3 space-y-1">
+          <button
+            onClick={() => onMove(null)}
+            className={[
+              "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800",
+              file.folder_id === null ? "font-medium text-neutral-900 dark:text-neutral-100" : "text-neutral-600 dark:text-neutral-400",
+            ].join(" ")}
+          >
+            <span className="text-base">🏠</span> Без папки
+            {file.folder_id === null && <span className="ml-auto text-xs text-neutral-400">поточна</span>}
+          </button>
+          {folders.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => onMove(f.id)}
+              className={[
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-neutral-100 dark:hover:bg-neutral-800",
+                file.folder_id === f.id ? "font-medium text-neutral-900 dark:text-neutral-100" : "text-neutral-600 dark:text-neutral-400",
+              ].join(" ")}
+            >
+              <span className="text-base">📁</span>
+              <span className="truncate">{f.name}</span>
+              {file.folder_id === f.id && <span className="ml-auto text-xs text-neutral-400">поточна</span>}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end border-t border-neutral-100 px-5 py-3 dark:border-neutral-800">
+          <button
+            onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Скасувати
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create/Rename folder modal ────────────────────────────────────────────────
+
+function FolderNameModal({
+  title,
+  initialValue,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  initialValue?: string;
+  onConfirm: (name: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initialValue ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm(trimmed);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-xs rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+          <h2 className="font-semibold text-sm">{title}</h2>
+        </div>
+        <form onSubmit={submit} className="px-5 py-4 space-y-3">
+          <input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Назва папки"
+            maxLength={255}
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:focus:border-neutral-400"
+          />
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              Скасувати
+            </button>
+            <button
+              type="submit"
+              disabled={busy || !name.trim()}
+              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              {busy ? "…" : "Зберегти"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Folder chip (sidebar item) ────────────────────────────────────────────────
+
+function FolderChip({
+  folder,
+  active,
+  canEdit,
+  onClick,
+  onRename,
+  onDelete,
+}: {
+  folder: GcodeFolder;
+  active: boolean;
+  canEdit: boolean;
+  onClick: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
+
+  return (
+    <div
+      className={[
+        "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
+        active
+          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+          : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+      ].join(" ")}
+      onClick={onClick}
+    >
+      <span className="text-base leading-none shrink-0">📁</span>
+      <span className="truncate flex-1 min-w-0">{folder.name}</span>
+      <span
+        className={[
+          "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+          active
+            ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
+            : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
+        ].join(" ")}
+      >
+        {folder.file_count}
+      </span>
+      {canEdit && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onRename}
+            className={[
+              "rounded p-0.5 text-xs transition",
+              active ? "hover:bg-white/20 text-white" : "hover:bg-neutral-200 text-neutral-400 dark:hover:bg-neutral-700",
+            ].join(" ")}
+            title="Перейменувати"
+          >
+            ✏️
+          </button>
+          {confirmDelete ? (
+            <button
+              onClick={onDelete}
+              className="animate-pulse rounded p-0.5 text-xs text-red-500 hover:text-red-600"
+              title="Підтвердити видалення"
+            >
+              ✕
+            </button>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className={[
+                "rounded p-0.5 text-xs transition",
+                active ? "hover:bg-white/20 text-white/70" : "hover:bg-neutral-200 text-neutral-400 dark:hover:bg-neutral-700",
+              ].join(" ")}
+              title="Видалити папку"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── File card ─────────────────────────────────────────────────────────────────
 
 function FileCard({
   file,
   canEdit,
   highlighted = false,
+  folders,
   onSend,
   onDelete,
+  onMove,
 }: {
   file: GcodeFile;
   canEdit: boolean;
   highlighted?: boolean;
+  folders: GcodeFolder[];
   onSend: () => void;
   onDelete: () => void;
+  onMove: (folderId: number | null) => void;
 }) {
+  const [showMovePopup, setShowMovePopup] = useState(false);
+
   return (
-    <div
-      className={[
-        "group relative flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition",
-        highlighted
-          ? "border-neutral-900 bg-neutral-50 ring-2 ring-neutral-900/20 dark:border-neutral-100 dark:bg-neutral-800 dark:ring-neutral-100/20"
-          : "border-neutral-200 bg-white hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600",
-      ].join(" ")}
-    >
-      {/* icon + name */}
-      <div className="flex items-start gap-3">
-        {file.has_thumbnail ? (
-          <img
-            src={`${API_URL}/api/files/${file.id}/thumbnail`}
-            alt=""
-            className="h-12 w-12 shrink-0 rounded-lg object-cover"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-              (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "");
-            }}
-          />
-        ) : null}
-        <span
-          className="mt-0.5 text-2xl leading-none"
-          style={{ display: file.has_thumbnail ? "none" : "" }}
-        >
-          {extIcon(file.original_name)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium leading-tight" title={file.original_name}>
-            {file.original_name}
-          </p>
-          <p className="mt-0.5 text-xs text-neutral-500">{fmtSize(file.size_bytes)}</p>
+    <>
+      <div
+        className={[
+          "group relative flex flex-col gap-3 rounded-xl border p-4 shadow-sm transition",
+          highlighted
+            ? "border-neutral-900 bg-neutral-50 ring-2 ring-neutral-900/20 dark:border-neutral-100 dark:bg-neutral-800 dark:ring-neutral-100/20"
+            : "border-neutral-200 bg-white hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600",
+        ].join(" ")}
+      >
+        {/* icon + name */}
+        <div className="flex items-start gap-3">
+          {file.has_thumbnail ? (
+            <img
+              src={`${API_URL}/api/files/${file.id}/thumbnail`}
+              alt=""
+              className="h-12 w-12 shrink-0 rounded-lg object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+                (e.currentTarget.nextElementSibling as HTMLElement | null)?.style.setProperty("display", "");
+              }}
+            />
+          ) : null}
+          <span
+            className="mt-0.5 text-2xl leading-none"
+            style={{ display: file.has_thumbnail ? "none" : "" }}
+          >
+            {extIcon(file.original_name)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium leading-tight" title={file.original_name}>
+              {file.original_name}
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-500">{fmtSize(file.size_bytes)}</p>
+          </div>
+        </div>
+
+        {/* filament swatches */}
+        {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
+
+        {/* meta */}
+        <div className="space-y-0.5 text-xs text-neutral-400">
+          <p>{fmtDate(file.uploaded_at)}</p>
+          {file.filament_meta?.estimated_minutes && (
+            <p>~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
+          )}
+          {file.uploaded_by_name && <p>{file.uploaded_by_name}</p>}
+          {file.notes && (
+            <p className="line-clamp-2 text-neutral-500 dark:text-neutral-400">{file.notes}</p>
+          )}
+        </div>
+
+        {/* actions */}
+        <div className="mt-auto flex gap-2">
+          <button
+            onClick={onSend}
+            className="flex-1 rounded-lg border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Надіслати →
+          </button>
+          <DownloadLink fileId={file.id} fileName={file.original_name} />
+          {canEdit && (
+            <button
+              onClick={() => setShowMovePopup(true)}
+              className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              title="Перемістити до папки"
+            >
+              📁
+            </button>
+          )}
+          {canEdit && <DeleteButton onDelete={onDelete} />}
         </div>
       </div>
 
-      {/* filament swatches */}
-      {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
-
-      {/* meta */}
-      <div className="space-y-0.5 text-xs text-neutral-400">
-        <p>{fmtDate(file.uploaded_at)}</p>
-        {file.filament_meta?.estimated_minutes && (
-          <p>~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
-        )}
-        {file.uploaded_by_name && <p>{file.uploaded_by_name}</p>}
-        {file.notes && (
-          <p className="line-clamp-2 text-neutral-500 dark:text-neutral-400">{file.notes}</p>
-        )}
-      </div>
-
-      {/* actions */}
-      <div className="mt-auto flex gap-2">
-        <button
-          onClick={onSend}
-          className="flex-1 rounded-lg border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-        >
-          Надіслати →
-        </button>
-        <DownloadLink fileId={file.id} fileName={file.original_name} />
-        {canEdit && <DeleteButton onDelete={onDelete} />}
-      </div>
-    </div>
+      {showMovePopup && (
+        <MovePopup
+          file={file}
+          folders={folders}
+          onMove={(folderId) => {
+            onMove(folderId);
+            setShowMovePopup(false);
+          }}
+          onClose={() => setShowMovePopup(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -730,6 +977,7 @@ export default function FilesPage() {
   const defaultPrinterId = searchParams.get("printer") ? Number(searchParams.get("printer")) : null;
 
   const [files, setFiles] = useState<GcodeFile[]>([]);
+  const [folders, setFolders] = useState<GcodeFolder[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -737,16 +985,21 @@ export default function FilesPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
   const [search, setSearch] = useState("");
+  const [activeFolderId, setActiveFolderId] = useState<number | null | "all">("all");
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<GcodeFolder | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
-      const [f, p] = await Promise.all([
+      const [f, p, fols] = await Promise.all([
         api<GcodeFile[]>("/api/files"),
         api<Printer[]>("/api/printers"),
+        api<GcodeFolder[]>("/api/folders"),
       ]);
       setFiles(f);
       setPrinters(p);
+      setFolders(fols);
     } catch {
       /* ignore */
     } finally {
@@ -774,12 +1027,20 @@ export default function FilesPage() {
     try {
       const form = new FormData();
       form.append("file", file);
+      // Upload into the currently-active folder (if any)
+      const uploadPath =
+        activeFolderId !== "all" && activeFolderId !== null
+          ? `/api/files/upload?folder_id=${activeFolderId}`
+          : "/api/files/upload";
       const saved = await uploadWithProgress<GcodeFile>(
-        "/api/files/upload",
+        uploadPath,
         form,
         (pct) => setUploadProgress(pct),
       );
       setFiles((prev) => [saved, ...prev]);
+      // Refresh folder counts
+      const updatedFolders = await api<GcodeFolder[]>("/api/folders");
+      setFolders(updatedFolders);
       setSendFile(saved);
     } catch (err) {
       setUploadError(err instanceof ApiError ? err.message : "Помилка завантаження");
@@ -793,14 +1054,76 @@ export default function FilesPage() {
     try {
       await api(`/api/files/${file.id}`, { method: "DELETE" });
       setFiles((prev) => prev.filter((f) => f.id !== file.id));
+      // Refresh folder counts
+      const updatedFolders = await api<GcodeFolder[]>("/api/folders");
+      setFolders(updatedFolders);
     } catch (e) {
       setUploadError(e instanceof ApiError ? e.message : "Не вдалося видалити файл");
     }
   }
 
-  const filtered = files.filter((f) =>
-    f.original_name.toLowerCase().includes(search.toLowerCase())
-  );
+  async function handleMove(file: GcodeFile, folderId: number | null) {
+    try {
+      const updated = await api<GcodeFile>(`/api/files/${file.id}/move`, {
+        method: "PATCH",
+        body: JSON.stringify({ folder_id: folderId }),
+      });
+      setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+      // Refresh folder counts
+      const updatedFolders = await api<GcodeFolder[]>("/api/folders");
+      setFolders(updatedFolders);
+    } catch (e) {
+      setUploadError(e instanceof ApiError ? e.message : "Не вдалося перемістити файл");
+    }
+  }
+
+  async function handleCreateFolder(name: string) {
+    const folder = await api<GcodeFolder>("/api/folders", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    setFolders((prev) => [...prev, folder].sort((a, b) => a.name.localeCompare(b.name)));
+    setShowNewFolder(false);
+    setActiveFolderId(folder.id);
+  }
+
+  async function handleRenameFolder(folder: GcodeFolder, name: string) {
+    const updated = await api<GcodeFolder>(`/api/folders/${folder.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+    setFolders((prev) =>
+      prev.map((f) => (f.id === updated.id ? updated : f)).sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setRenamingFolder(null);
+  }
+
+  async function handleDeleteFolder(folder: GcodeFolder) {
+    try {
+      await api(`/api/folders/${folder.id}`, { method: "DELETE" });
+      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      // Files move to root — reset folder_id in local state
+      setFiles((prev) =>
+        prev.map((f) => (f.folder_id === folder.id ? { ...f, folder_id: null } : f))
+      );
+      if (activeFolderId === folder.id) setActiveFolderId("all");
+    } catch (e) {
+      setUploadError(e instanceof ApiError ? e.message : "Не вдалося видалити папку");
+    }
+  }
+
+  // Filter files by active folder + search
+  const filtered = files.filter((f) => {
+    const matchesFolder =
+      activeFolderId === "all" ||
+      (activeFolderId === null ? f.folder_id === null : f.folder_id === activeFolderId);
+    const matchesSearch = f.original_name.toLowerCase().includes(search.toLowerCase());
+    return matchesFolder && matchesSearch;
+  });
+
+  const activeFolder = activeFolderId !== "all" && activeFolderId !== null
+    ? folders.find((f) => f.id === activeFolderId) ?? null
+    : null;
 
   if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
 
@@ -834,6 +1157,12 @@ export default function FilesPage() {
               <span className="text-xs text-red-600 dark:text-red-400">{uploadError}</span>
             )}
             <button
+              onClick={() => setShowNewFolder(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <span>📁</span> Нова папка
+            </button>
+            <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               className="relative flex min-w-44 items-center justify-center gap-2 overflow-hidden rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:cursor-default disabled:hover:bg-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300 dark:disabled:hover:bg-neutral-100"
@@ -864,44 +1193,145 @@ export default function FilesPage() {
         )}
       </div>
 
-      {/* search */}
-      {files.length > 0 && (
-        <div className="relative mt-4 max-w-sm">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Пошук файлів…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-400"
-          />
-        </div>
-      )}
+      {/* folder strip + content */}
+      <div className="mt-4 flex gap-6">
+        {/* ── Folder sidebar ── */}
+        <div className="w-48 shrink-0 space-y-0.5">
+          {/* All files */}
+          <div
+            className={[
+              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
+              activeFolderId === "all"
+                ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+            ].join(" ")}
+            onClick={() => setActiveFolderId("all")}
+          >
+            <span className="text-base leading-none shrink-0">🗂️</span>
+            <span className="truncate flex-1">Всі файли</span>
+            <span
+              className={[
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                activeFolderId === "all"
+                  ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
+                  : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
+              ].join(" ")}
+            >
+              {files.length}
+            </span>
+          </div>
 
-      {/* grid */}
-      {filtered.length === 0 ? (
-        <div className="mt-16 flex flex-col items-center gap-3 text-neutral-400">
-          <span className="text-5xl">📂</span>
-          <p className="text-sm">
-            {search ? "Нічого не знайдено" : "Файлів ще немає — завантажте першу нарізку"}
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filtered.map((f) => (
-            <FileCard
-              key={f.id}
-              file={f}
+          {/* Root (no folder) — only show if there are unorganised files */}
+          {files.some((f) => f.folder_id === null) && (
+            <div
+              className={[
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition select-none",
+                activeFolderId === null
+                  ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                  : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+              ].join(" ")}
+              onClick={() => setActiveFolderId(null)}
+            >
+              <span className="text-base leading-none shrink-0">🏠</span>
+              <span className="truncate flex-1">Без папки</span>
+              <span
+                className={[
+                  "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  activeFolderId === null
+                    ? "bg-white/20 text-white dark:bg-black/20 dark:text-neutral-900"
+                    : "bg-neutral-200 text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400",
+                ].join(" ")}
+              >
+                {files.filter((f) => f.folder_id === null).length}
+              </span>
+            </div>
+          )}
+
+          {folders.length > 0 && (
+            <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
+          )}
+
+          {folders.map((folder) => (
+            <FolderChip
+              key={folder.id}
+              folder={folder}
+              active={activeFolderId === folder.id}
               canEdit={canEdit}
-              highlighted={f.id === highlightId}
-              onSend={() => setSendFile(f)}
-              onDelete={() => handleDelete(f)}
+              onClick={() => setActiveFolderId(folder.id)}
+              onRename={() => setRenamingFolder(folder)}
+              onDelete={() => handleDeleteFolder(folder)}
             />
           ))}
         </div>
-      )}
+
+        {/* ── Main area ── */}
+        <div className="min-w-0 flex-1">
+          {/* breadcrumb */}
+          <div className="mb-3 flex items-center gap-1.5 text-xs text-neutral-500">
+            <span
+              className="cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-300"
+              onClick={() => setActiveFolderId("all")}
+            >
+              Файли
+            </span>
+            {activeFolder && (
+              <>
+                <span>/</span>
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">{activeFolder.name}</span>
+              </>
+            )}
+            {activeFolderId === null && (
+              <>
+                <span>/</span>
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">Без папки</span>
+              </>
+            )}
+          </div>
+
+          {/* search */}
+          {files.length > 0 && (
+            <div className="relative mb-4 max-w-sm">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                🔍
+              </span>
+              <input
+                type="text"
+                placeholder="Пошук файлів…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-neutral-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:focus:border-neutral-400"
+              />
+            </div>
+          )}
+
+          {/* grid */}
+          {filtered.length === 0 ? (
+            <div className="mt-16 flex flex-col items-center gap-3 text-neutral-400">
+              <span className="text-5xl">📂</span>
+              <p className="text-sm">
+                {search ? "Нічого не знайдено" : activeFolderId !== "all"
+                  ? "У цій папці немає файлів"
+                  : "Файлів ще немає — завантажте першу нарізку"}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filtered.map((f) => (
+                <FileCard
+                  key={f.id}
+                  file={f}
+                  canEdit={canEdit}
+                  highlighted={f.id === highlightId}
+                  folders={folders}
+                  onSend={() => setSendFile(f)}
+                  onDelete={() => handleDelete(f)}
+                  onMove={(folderId) => handleMove(f, folderId)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* send modal */}
       {sendFile && (
@@ -910,6 +1340,25 @@ export default function FilesPage() {
           printers={printers}
           onClose={() => setSendFile(null)}
           defaultPrinterId={defaultPrinterId ?? undefined}
+        />
+      )}
+
+      {/* create folder modal */}
+      {showNewFolder && (
+        <FolderNameModal
+          title="Нова папка"
+          onConfirm={handleCreateFolder}
+          onClose={() => setShowNewFolder(false)}
+        />
+      )}
+
+      {/* rename folder modal */}
+      {renamingFolder && (
+        <FolderNameModal
+          title="Перейменувати папку"
+          initialValue={renamingFolder.name}
+          onConfirm={(name) => handleRenameFolder(renamingFolder, name)}
+          onClose={() => setRenamingFolder(null)}
         />
       )}
     </>

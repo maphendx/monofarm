@@ -155,6 +155,14 @@ export interface GcodeFile {
   has_thumbnail: boolean;
   uploaded_at: string;
   uploaded_by_name: string | null;
+  folder_id: number | null;
+}
+
+export interface GcodeFolder {
+  id: number;
+  name: string;
+  file_count: number;
+  created_at: string;
 }
 
 export interface PlanEntry {

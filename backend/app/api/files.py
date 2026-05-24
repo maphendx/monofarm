@@ -10,15 +10,18 @@ import asyncio
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
+from app.models.gcode_folder import GcodeFolder
 from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
@@ -33,6 +36,7 @@ ALLOWED_EXTS = {".gcode", ".gco", ".g", ".3mf", ".bgcode"}
 MAX_FILE_BYTES = 500 * 1024 * 1024  # 500 MB
 
 router = APIRouter(prefix="/files", tags=["files"])
+folders_router = APIRouter(prefix="/folders", tags=["folders"])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -56,8 +60,30 @@ class GcodeFileOut(BaseModel):
     has_thumbnail: bool
     uploaded_at: str
     uploaded_by_name: str | None
+    folder_id: int | None
 
     model_config = {"from_attributes": True}
+
+
+class GcodeFolderOut(BaseModel):
+    id: int
+    name: str
+    file_count: int
+    created_at: str
+
+    model_config = {"from_attributes": True}
+
+
+class FolderCreate(BaseModel):
+    name: str
+
+
+class FolderRename(BaseModel):
+    name: str
+
+
+class MoveFilePayload(BaseModel):
+    folder_id: Optional[int] = None
 
 
 class SendPayload(BaseModel):
@@ -101,17 +127,115 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
         has_thumbnail=has_thumbnail,
         uploaded_at=f.uploaded_at.isoformat(),
         uploaded_by_name=name,
+        folder_id=f.folder_id,
     )
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+def _folder_to_out(folder: GcodeFolder, db: Session) -> GcodeFolderOut:
+    file_count = (
+        db.query(func.count(GcodeFile.id))
+        .filter(GcodeFile.folder_id == folder.id)
+        .scalar()
+        or 0
+    )
+    return GcodeFolderOut(
+        id=folder.id,
+        name=folder.name,
+        file_count=file_count,
+        created_at=folder.created_at.isoformat(),
+    )
+
+
+# ── Folder endpoints ──────────────────────────────────────────────────────────
+
+@folders_router.get("", response_model=list[GcodeFolderOut])
+def list_folders(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[GcodeFolderOut]:
+    folders = (
+        db.query(GcodeFolder)
+        .filter(GcodeFolder.organization_id == org.id)
+        .order_by(GcodeFolder.name)
+        .all()
+    )
+    return [_folder_to_out(f, db) for f in folders]
+
+
+@folders_router.post("", response_model=GcodeFolderOut, status_code=status.HTTP_201_CREATED)
+def create_folder(
+    payload: FolderCreate,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> GcodeFolderOut:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Назва папки не може бути порожньою")
+    if len(name) > 255:
+        raise HTTPException(status_code=400, detail="Назва папки занадто довга (макс 255 символів)")
+    folder = GcodeFolder(organization_id=org.id, name=name)
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return _folder_to_out(folder, db)
+
+
+@folders_router.patch("/{folder_id}", response_model=GcodeFolderOut)
+def rename_folder(
+    folder_id: int,
+    payload: FolderRename,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> GcodeFolderOut:
+    folder = (
+        db.query(GcodeFolder)
+        .filter(GcodeFolder.id == folder_id, GcodeFolder.organization_id == org.id)
+        .first()
+    )
+    if not folder:
+        raise HTTPException(status_code=404, detail="Папку не знайдено")
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Назва папки не може бути порожньою")
+    folder.name = name
+    db.commit()
+    db.refresh(folder)
+    return _folder_to_out(folder, db)
+
+
+@folders_router.delete("/{folder_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def delete_folder(
+    folder_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> None:
+    folder = (
+        db.query(GcodeFolder)
+        .filter(GcodeFolder.id == folder_id, GcodeFolder.organization_id == org.id)
+        .first()
+    )
+    if not folder:
+        raise HTTPException(status_code=404, detail="Папку не знайдено")
+    # Files in this folder move to root (folder_id → NULL) via ondelete SET NULL on FK
+    db.delete(folder)
+    db.commit()
+
+
+# ── File endpoints ─────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[GcodeFileOut])
 def list_files(
+    folder_id: int | None = None,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[GcodeFileOut]:
-    files = db.query(GcodeFile).filter(GcodeFile.organization_id == org.id).order_by(GcodeFile.uploaded_at.desc()).all()
+    q = db.query(GcodeFile).filter(GcodeFile.organization_id == org.id)
+    if folder_id is not None:
+        q = q.filter(GcodeFile.folder_id == folder_id)
+    files = q.order_by(GcodeFile.uploaded_at.desc()).all()
 
     # Self-heal rows whose filament_meta was written by an older parser that
     # couldn't read comma-separated `filament used [g]` / `[m]` fields.
@@ -148,6 +272,7 @@ def list_files(
 @router.post("/upload", response_model=GcodeFileOut, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile,
+    folder_id: int | None = None,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
@@ -163,6 +288,16 @@ async def upload_file(
             status_code=400,
             detail=f"Дозволені формати: {', '.join(sorted(ALLOWED_EXTS))}",
         )
+
+    # Validate folder belongs to org (if provided)
+    if folder_id is not None:
+        folder = (
+            db.query(GcodeFolder)
+            .filter(GcodeFolder.id == folder_id, GcodeFolder.organization_id == org.id)
+            .first()
+        )
+        if not folder:
+            raise HTTPException(status_code=404, detail="Папку не знайдено")
 
     contents = await file.read()
     if len(contents) > MAX_FILE_BYTES:
@@ -212,8 +347,36 @@ async def upload_file(
         size_bytes=len(contents),
         filament_meta=filament_meta,
         uploaded_by_id=user.id,
+        folder_id=folder_id,
     )
     db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _to_out(row, db)
+
+
+@router.patch("/{file_id}/move", response_model=GcodeFileOut)
+def move_file(
+    file_id: int,
+    payload: MoveFilePayload,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> GcodeFileOut:
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не знайдено")
+
+    if payload.folder_id is not None:
+        folder = (
+            db.query(GcodeFolder)
+            .filter(GcodeFolder.id == payload.folder_id, GcodeFolder.organization_id == org.id)
+            .first()
+        )
+        if not folder:
+            raise HTTPException(status_code=404, detail="Папку не знайдено")
+
+    row.folder_id = payload.folder_id
     db.commit()
     db.refresh(row)
     return _to_out(row, db)
