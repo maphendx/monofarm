@@ -44,13 +44,16 @@ class LabelDataOut(BaseModel):
 class LabelPdfRequest(BaseModel):
     filament_ids: list[int]
     template: Literal["standard", "compact", "thermal_62mm", "custom"] = "standard"
+    barcode_type: Literal["qr", "code128", "none"] = "qr"
+    label_id: str | None = None
     custom_w_mm: float | None = None
     custom_h_mm: float | None = None
     show_qr: bool = True
     show_color: bool = True
     show_brand: bool = True
     show_sku: bool = True
-    show_progress: bool = True
+    show_progress: bool = False
+    show_label_id: bool = True
 
 
 # ── QR helper ─────────────────────────────────────────────────────────────────
@@ -120,6 +123,8 @@ def generate_labels_pdf(
     try:
         pdf_bytes = _build_pdf(
             filaments, payload.template,
+            barcode_type=payload.barcode_type,
+            label_id=payload.label_id,
             custom_w_mm=payload.custom_w_mm,
             custom_h_mm=payload.custom_h_mm,
             show_qr=payload.show_qr,
@@ -127,6 +132,7 @@ def generate_labels_pdf(
             show_brand=payload.show_brand,
             show_sku=payload.show_sku,
             show_progress=payload.show_progress,
+            show_label_id=payload.show_label_id,
         )
     except ImportError:
         raise HTTPException(status_code=500, detail="reportlab not installed")
@@ -159,13 +165,16 @@ def _build_pdf(
     filaments: list[Filament],
     template: str,
     *,
+    barcode_type: str = "qr",
+    label_id: str | None = None,
     custom_w_mm: float | None = None,
     custom_h_mm: float | None = None,
     show_qr: bool = True,
     show_color: bool = True,
     show_brand: bool = True,
     show_sku: bool = True,
-    show_progress: bool = True,
+    show_progress: bool = False,
+    show_label_id: bool = True,
 ) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -175,7 +184,6 @@ def _build_pdf(
     if template == "custom":
         tmpl["w_mm"] = custom_w_mm or 85
         tmpl["h_mm"] = custom_h_mm or 54
-        # auto-compute cols/rows from A4 with 5mm margins each side
         page_w_mm, page_h_mm = 210, 297
         tmpl["cols"] = max(1, int((page_w_mm - 10) / tmpl["w_mm"]))
         tmpl["rows"] = max(1, int((page_h_mm - 10) / tmpl["h_mm"]))
@@ -192,7 +200,15 @@ def _build_pdf(
     buf = io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=A4)
 
-    fields = dict(qr=show_qr, color=show_color, brand=show_brand, sku=show_sku, progress=show_progress)
+    fields = dict(
+        qr=show_qr and barcode_type == "qr",
+        code128=barcode_type == "code128",
+        color=show_color,
+        brand=show_brand,
+        sku=show_sku,
+        progress=show_progress,
+        label_id=show_label_id,
+    )
 
     for i, f in enumerate(filaments):
         col = i % cols
@@ -201,20 +217,21 @@ def _build_pdf(
             c.showPage()
         x = margin_x + col * lw
         y = page_h - margin_y - (row + 1) * lh
-        _draw_label(c, f, x, y, lw, lh, template, mm, fields)
+        _draw_label(c, f, x, y, lw, lh, template, mm, fields, label_id=label_id)
 
     c.save()
     return buf.getvalue()
 
 
-def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | None = None) -> None:
+def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | None = None, label_id: str | None = None) -> None:
     if fields is None:
-        fields = dict(qr=True, color=True, brand=True, sku=True, progress=True)
+        fields = dict(qr=True, code128=False, color=True, brand=True, sku=True, progress=False, label_id=True)
     from reportlab.graphics.barcode import qr as rl_qr
     from reportlab.graphics.shapes import Drawing
     from reportlab.graphics import renderPDF
 
     pct = min(100, round((f.grams_remaining / GRAMS_TOTAL) * 100))
+    bar_text = label_id or f.sku or f"FL{f.id}"
 
     # border
     c.setStrokeColorRGB(0.85, 0.85, 0.85)
@@ -223,28 +240,32 @@ def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | No
 
     if template == "compact":
         sw = 5 * mm
-        if f.hex_color and fields["color"]:
+        if f.hex_color and fields.get("color"):
             r, g, b = _hex_to_rgb(f.hex_color)
             c.setFillColorRGB(r, g, b)
             c.rect(x, y, sw, h, fill=1, stroke=0)
         tx = x + sw + 1 * mm
         c.setFillColorRGB(0, 0, 0)
-        if fields["color"]:
+        if fields.get("color"):
             c.setFont("Helvetica-Bold", 5.5)
             c.drawString(tx, y + h - 5 * mm, f.color[:14])
-        if fields["brand"]:
+        if fields.get("brand"):
             c.setFont("Helvetica", 4.5)
             c.drawString(tx, y + h - 9.5 * mm, f.material)
-        if fields["progress"]:
-            c.setFont("Helvetica", 4)
-            c.drawString(tx, y + h - 13.5 * mm, f"{pct}% · {f.grams_remaining}g")
-        if fields["sku"] and f.sku:
+        if fields.get("label_id") and label_id:
+            c.setFont("Courier-Bold", 5)
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.drawString(tx, y + h - 13.5 * mm, label_id)
+        if fields.get("sku") and f.sku:
             c.setFont("Courier", 4)
             c.setFillColorRGB(0.55, 0.55, 0.55)
             c.drawString(tx, y + 2 * mm, f.sku)
         return
 
-    show_qr = fields["qr"]
+    show_qr = fields.get("qr", False)
+    show_code128 = fields.get("code128", False)
+    code128_h = min(h * 0.28, 12 * mm) if show_code128 else 0
+
     qr_size = h * (0.8 if template == "thermal_62mm" else 0.72) if show_qr else 0
     qr_x = x + 1.5 * mm
 
@@ -265,9 +286,10 @@ def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | No
     tx = x + (qr_size + 3 * mm if show_qr else 2 * mm)
     tw = w - (tx - x) - 2 * mm
     is_std = template in ("standard", "custom")
+    text_bottom = y + code128_h + 2 * mm
 
     # color swatch + name
-    if fields["color"]:
+    if fields.get("color"):
         if f.hex_color:
             r, g, b = _hex_to_rgb(f.hex_color)
             c.setFillColorRGB(r, g, b)
@@ -279,25 +301,31 @@ def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | No
         c.drawString(tx + swatch_offset, y + h - (8 if is_std else 7) * mm, f.color[:18])
 
     # brand · material
-    if fields["brand"]:
+    if fields.get("brand"):
         c.setFont("Helvetica", 6.5 if is_std else 5.5)
         c.setFillColorRGB(0.35, 0.35, 0.35)
         brand_mat = " · ".join(p for p in [f.brand, f.material] if p)
         c.drawString(tx, y + h - (14 if is_std else 13) * mm, brand_mat[:24])
 
+    # label ID (big, bold, monospace-style)
+    if fields.get("label_id") and label_id:
+        c.setFont("Courier-Bold", 11 if is_std else 9)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawString(tx, y + h - (22 if is_std else 19) * mm, label_id)
+
     # SKU
-    if fields["sku"] and f.sku:
+    if fields.get("sku") and f.sku:
         c.setFont("Courier", 6 if is_std else 5)
         c.setFillColorRGB(0.55, 0.55, 0.55)
-        c.drawString(tx, y + 7 * mm, f.sku)
+        c.drawString(tx, text_bottom + 5 * mm, f.sku)
 
     # progress bar
-    if fields["progress"]:
-        bar_y = y + 2 * mm
+    if fields.get("progress"):
+        bar_y = text_bottom + 1 * mm
         bar_w = tw
-        bar_h = 2.5 * mm
+        bar_h_sz = 2.5 * mm
         c.setFillColorRGB(0.9, 0.9, 0.9)
-        c.roundRect(tx, bar_y, bar_w, bar_h, 1 * mm, fill=1, stroke=0)
+        c.roundRect(tx, bar_y, bar_w, bar_h_sz, 1 * mm, fill=1, stroke=0)
         if pct > 0:
             if pct < 20:
                 c.setFillColorRGB(0.95, 0.5, 0.2)
@@ -305,7 +333,18 @@ def _draw_label(c, f: Filament, x, y, w, h, template: str, mm, fields: dict | No
                 c.setFillColorRGB(0.95, 0.75, 0.1)
             else:
                 c.setFillColorRGB(0.23, 0.51, 0.96)
-            c.roundRect(tx, bar_y, bar_w * pct / 100, bar_h, 1 * mm, fill=1, stroke=0)
+            c.roundRect(tx, bar_y, bar_w * pct / 100, bar_h_sz, 1 * mm, fill=1, stroke=0)
         c.setFont("Helvetica", 5.5 if is_std else 5)
         c.setFillColorRGB(0.4, 0.4, 0.4)
-        c.drawString(tx, bar_y + bar_h + 0.8 * mm, f"{pct}% · {f.grams_remaining} / {GRAMS_TOTAL}g")
+        c.drawString(tx, bar_y + bar_h_sz + 0.8 * mm, f"{pct}% · {f.grams_remaining} / {GRAMS_TOTAL}g")
+
+    # Code128 barcode at bottom
+    if show_code128:
+        try:
+            from reportlab.graphics.barcode.code128 import Code128
+            bc = Code128(bar_text, barHeight=code128_h * 0.7, barWidth=0.6, humanReadable=False)
+            bc_w = bc.width
+            bc_x = x + (w - bc_w) / 2
+            bc.drawOn(c, bc_x, y + 1 * mm)
+        except Exception:
+            pass
