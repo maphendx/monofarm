@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/Modal";
-import { API_URL, api } from "@/lib/api";
+import { API_URL, api, getToken } from "@/lib/api";
 import type { Filament } from "@/lib/types";
 import {
   DEFAULT_FIELDS,
@@ -129,7 +129,7 @@ export function LabelGeneratorModal({
     if (busy) return;
     setBusy(true); setPdfError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token = typeof window !== "undefined" ? getToken() : null;
       const body: Record<string, unknown> = {
         filament_ids: filaments.map(f => f.id),
         template,
