@@ -2,18 +2,27 @@
 
 import { useEffect } from "react";
 
+const SIZE_CLS: Record<string, string> = {
+  md:  "max-w-md",
+  lg:  "max-w-lg",
+  xl:  "max-w-xl",
+  "2xl": "max-w-2xl",
+};
+
 export function Modal({
   open,
   onClose,
   title,
   children,
   footer,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  size?: "md" | "lg" | "xl" | "2xl";
 }) {
   useEffect(() => {
     if (!open) return;
@@ -33,7 +42,7 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900"
+        className={`w-full ${SIZE_CLS[size] ?? "max-w-md"} rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900`}
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
           <h2 className="text-base font-semibold">{title}</h2>

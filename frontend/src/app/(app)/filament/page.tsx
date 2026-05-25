@@ -214,7 +214,20 @@ function FilamentCard({
   );
 }
 
-// ── FilamentFormModal ─────────────────────────────────────────────────────────
+// ── preset data ───────────────────────────────────────────────────────────────
+
+const SPOOL_PRESETS = [250, 500, 750, 1000, 1200];
+
+const PRESET_COLORS = [
+  "#ffffff","#000000","#808080","#c0c0c0","#ff0000","#cc0000",
+  "#ff4500","#ff6600","#ff8c00","#ffa500","#ffcc00","#ffff00",
+  "#adff2f","#00cc44","#008000","#00fa9a","#00ced1","#00bfff",
+  "#1e90ff","#4169e1","#0000cd","#6a0dad","#9370db","#da70d6",
+  "#ff00ff","#ff69b4","#ffb6c1","#f5deb3","#daa520","#d2691e",
+  "#a52a2a","#8b0000","#ffe4e1","#ffdab9","#b0e0e6","#e6e6fa",
+];
+
+// ── FilamentFormModal (SimplyPrint style) ─────────────────────────────────────
 
 function FilamentFormModal({
   open, initial, onClose, onSaved,
@@ -225,29 +238,41 @@ function FilamentFormModal({
   const [color, setColor] = useState("");
   const [hexColor, setHexColor] = useState("");
   const [brand, setBrand] = useState("");
-  const [grams, setGrams] = useState("0");
-  const [minGrams, setMinGrams] = useState("0");
+  const [gramsTotal, setGramsTotal] = useState(1000);
+  const [amountMode, setAmountMode] = useState<"gram" | "pct">("pct");
+  const [amountInput, setAmountInput] = useState("100");
+  const [minGrams, setMinGrams] = useState("100");
   const [costPerKg, setCostPerKg] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const gramsRemaining = amountMode === "pct"
+    ? Math.round(gramsTotal * Math.min(100, Math.max(0, parseFloat(amountInput) || 0)) / 100)
+    : Math.min(gramsTotal, Math.max(0, parseInt(amountInput) || 0));
+
+  const pct = Math.min(100, Math.round((gramsRemaining / gramsTotal) * 100));
+
   useEffect(() => {
-    if (open) {
-      setMaterial(initial?.material ?? "");
-      setColor(initial?.color ?? "");
-      setHexColor(initial?.hex_color ?? "");
-      setBrand(initial?.brand ?? "");
-      setGrams(String(initial?.grams_remaining ?? 1000));
-      setMinGrams(String(initial?.min_grams ?? 100));
-      setCostPerKg(initial?.cost_per_kg != null ? String(initial.cost_per_kg) : "");
-      setNote(initial?.note ?? "");
-      setError(null);
-    }
+    if (!open) return;
+    setMaterial(initial?.material ?? "");
+    setColor(initial?.color ?? "");
+    setHexColor(initial?.hex_color ?? "");
+    setBrand(initial?.brand ?? "");
+    const gr = initial?.grams_remaining ?? 1000;
+    const gt = SPOOL_PRESETS.includes(gr) ? gr : 1000;
+    setGramsTotal(gt);
+    setAmountMode("gram");
+    setAmountInput(String(gr));
+    setMinGrams(String(initial?.min_grams ?? 100));
+    setCostPerKg(initial?.cost_per_kg != null ? String(initial.cost_per_kg) : "");
+    setNote(initial?.note ?? "");
+    setError(null);
   }, [open, initial]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!color.trim() || !material.trim()) return;
     setBusy(true); setError(null);
     try {
       const body = {
@@ -255,7 +280,7 @@ function FilamentFormModal({
         color: color.trim(),
         hex_color: hexColor.trim() || null,
         brand: brand.trim() || null,
-        grams_remaining: parseInt(grams) || 0,
+        grams_remaining: gramsRemaining,
         min_grams: parseInt(minGrams) || 0,
         cost_per_kg: costPerKg.trim() ? parseInt(costPerKg) : null,
         note: note.trim() || null,
@@ -269,10 +294,10 @@ function FilamentFormModal({
     } finally { setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950";
+  const inp = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950";
 
   return (
-    <Modal open={open} onClose={() => { if (!busy) onClose(); }}
+    <Modal open={open} onClose={() => { if (!busy) onClose(); }} size="2xl"
       title={initial ? "Редагувати котушку" : "Нова котушка"}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
@@ -280,66 +305,164 @@ function FilamentFormModal({
           Скасувати
         </button>
         <button type="submit" form="filament-form" disabled={busy || !material.trim() || !color.trim()}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
-          {busy ? "Зберігаю…" : initial ? "Зберегти" : "Додати"}
+          className="rounded-md bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+          {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити котушку"}
         </button>
       </>}>
-      <form id="filament-form" onSubmit={submit} className="space-y-3 text-sm">
-        {hexColor && (
-          <div className="flex justify-center py-1">
-            <div className="h-16 w-16">
-              <SpoolSVG pct={Math.min(100, Math.round((parseInt(grams) || 0) / FULL_SPOOL_G * 100))} hexColor={hexColor} />
+      <form id="filament-form" onSubmit={submit}>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-0">
+
+          {/* ── LEFT COLUMN ── */}
+          <div className="space-y-3 text-sm">
+
+            {/* brand */}
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Виробник пластику</span>
+              <input type="text" autoFocus value={brand} onChange={e => setBrand(e.target.value)}
+                list="brand-presets-f" placeholder="Bambu Lab, eSun, Polymaker…" className={inp} />
+              <datalist id="brand-presets-f">{BRANDS.map(b => <option key={b} value={b} />)}</datalist>
+            </label>
+
+            {/* material + cost row */}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-neutral-500">Матеріал *</span>
+                <input type="text" required value={material} onChange={e => setMaterial(e.target.value)}
+                  list="material-presets-f" placeholder="PLA" className={inp} />
+                <datalist id="material-presets-f">{MATERIALS.map(m => <option key={m} value={m} />)}</datalist>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-neutral-500">Ціна (грн/кг)</span>
+                <input type="number" min={0} value={costPerKg} onChange={e => setCostPerKg(e.target.value)}
+                  placeholder="800" className={inp} />
+              </label>
             </div>
+
+            {/* spool size visual picker */}
+            <div>
+              <span className="mb-2 block text-xs font-medium text-neutral-500">Розмір котушки</span>
+              <div className="flex items-end gap-2">
+                {SPOOL_PRESETS.map(g => (
+                  <button key={g} type="button" onClick={() => setGramsTotal(g)}
+                    className={[
+                      "flex flex-col items-center gap-1 rounded-lg border px-1.5 py-1.5 transition",
+                      gramsTotal === g
+                        ? "border-neutral-900 bg-neutral-50 dark:border-neutral-300 dark:bg-neutral-800"
+                        : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500",
+                    ].join(" ")}>
+                    <div style={{ width: `${20 + (g / 1200) * 16}px`, height: `${20 + (g / 1200) * 16}px` }}>
+                      <SpoolSVG pct={100} hexColor={hexColor || "#9ca3af"} />
+                    </div>
+                    <span className="text-[10px] font-medium tabular-nums text-neutral-600 dark:text-neutral-400">
+                      {g >= 1000 ? `${(g / 1000).toLocaleString()}kg` : `${g}g`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* how much is left */}
+            <div>
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Скільки залишилось?</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} max={amountMode === "pct" ? 100 : gramsTotal}
+                  value={amountInput} onChange={e => setAmountInput(e.target.value)}
+                  className={`flex-1 ${inp}`}
+                />
+                <div className="flex rounded-md border border-neutral-300 dark:border-neutral-700 overflow-hidden text-xs">
+                  {(["gram", "pct"] as const).map(m => (
+                    <button key={m} type="button" onClick={() => {
+                      if (m === amountMode) return;
+                      setAmountMode(m);
+                      setAmountInput(m === "pct" ? String(pct) : String(gramsRemaining));
+                    }}
+                      className={[
+                        "px-2.5 py-1.5 font-medium transition",
+                        amountMode === m
+                          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                          : "text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800",
+                      ].join(" ")}>
+                      {m === "gram" ? "г" : "%"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-1 text-[11px] text-neutral-400">
+                {gramsRemaining} г · {pct}%
+              </p>
+            </div>
+
+            {/* low threshold */}
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Поріг «мало» (г)</span>
+              <input type="number" min={0} value={minGrams} onChange={e => setMinGrams(e.target.value)} className={inp} />
+            </label>
           </div>
-        )}
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Матеріал *</span>
-          <input type="text" required autoFocus value={material} onChange={e => setMaterial(e.target.value)}
-            list="material-presets" placeholder="PLA" className={inputCls} />
-          <datalist id="material-presets">{MATERIALS.map(m => <option key={m} value={m} />)}</datalist>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Колір *</span>
-            <input type="text" required value={color} onChange={e => setColor(e.target.value)}
-              placeholder="Чорний" className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">HEX</span>
-            <div className="flex gap-2">
-              <input type="color" value={hexColor || "#000000"} onChange={e => setHexColor(e.target.value)}
-                className="h-[38px] w-10 shrink-0 cursor-pointer rounded-md border border-neutral-300 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950" />
-              <input type="text" value={hexColor} onChange={e => setHexColor(e.target.value)}
-                placeholder="#000000" maxLength={7} className={`flex-1 font-mono ${inputCls}`} />
+
+          {/* ── RIGHT COLUMN ── */}
+          <div className="space-y-3 text-sm">
+
+            {/* color grid */}
+            <div>
+              <span className="mb-2 block text-xs font-medium text-neutral-500">Колір</span>
+              <div className="grid grid-cols-9 gap-1">
+                {PRESET_COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => setHexColor(c)}
+                    className={[
+                      "h-6 w-6 rounded transition ring-offset-1",
+                      hexColor.toLowerCase() === c.toLowerCase()
+                        ? "ring-2 ring-neutral-900 dark:ring-neutral-100"
+                        : "hover:scale-110",
+                    ].join(" ")}
+                    style={{ background: c, border: c === "#ffffff" ? "1px solid #e5e7eb" : undefined }}
+                    title={c}
+                  />
+                ))}
+              </div>
             </div>
-          </label>
+
+            {/* color name + hex */}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-neutral-500">Назва кольору *</span>
+                <input type="text" required value={color} onChange={e => setColor(e.target.value)}
+                  placeholder="Чорний" className={inp} />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-neutral-500">HEX код</span>
+                <div className="flex gap-1.5">
+                  <input type="color" value={hexColor || "#000000"} onChange={e => setHexColor(e.target.value)}
+                    className="h-[34px] w-9 shrink-0 cursor-pointer rounded border border-neutral-300 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950" />
+                  <input type="text" value={hexColor} onChange={e => setHexColor(e.target.value)}
+                    placeholder="#000000" maxLength={7} className={`flex-1 font-mono ${inp}`} />
+                </div>
+              </label>
+            </div>
+
+            {/* live spool preview */}
+            <div className="flex items-center gap-3 rounded-lg bg-neutral-50 px-3 py-2.5 dark:bg-neutral-800/50">
+              <div className="h-12 w-12 shrink-0">
+                <SpoolSVG pct={pct} hexColor={hexColor || null} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{color || "Назва кольору"}</p>
+                <p className="text-xs text-neutral-400">{[brand, material].filter(Boolean).join(" · ") || "Виробник · Матеріал"}</p>
+                <p className="mt-0.5 text-xs font-medium tabular-nums text-neutral-500">{gramsRemaining} / {gramsTotal} г</p>
+              </div>
+            </div>
+
+            {/* note */}
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-neutral-500">Нотатка</span>
+              <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+                placeholder="Опціонально…"
+                className={`${inp} resize-none`} />
+            </label>
+          </div>
         </div>
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Виробник</span>
-          <input type="text" value={brand} onChange={e => setBrand(e.target.value)}
-            list="brand-presets" placeholder="Bambu Lab, eSun…" className={inputCls} />
-          <datalist id="brand-presets">{BRANDS.map(b => <option key={b} value={b} />)}</datalist>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Залишок (г)</span>
-            <input type="number" min={0} value={grams} onChange={e => setGrams(e.target.value)} className={inputCls} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Поріг алерту (г)</span>
-            <input type="number" min={0} value={minGrams} onChange={e => setMinGrams(e.target.value)} className={inputCls} />
-          </label>
-        </div>
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Ціна за кг (грн)</span>
-          <input type="number" min={0} value={costPerKg} onChange={e => setCostPerKg(e.target.value)}
-            placeholder="напр. 800" className={inputCls} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Нотатка</span>
-          <input type="text" value={note} onChange={e => setNote(e.target.value)} className={inputCls} />
-        </label>
-        {error && <p className="text-red-600 dark:text-red-400 text-xs">{error}</p>}
+
+        {error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </form>
     </Modal>
   );
