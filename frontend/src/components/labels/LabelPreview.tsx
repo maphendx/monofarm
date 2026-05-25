@@ -171,25 +171,16 @@ export function LabelPreview({
             </>
       )}
 
-      {/* color swatch + name */}
+      {/* color name */}
       {fields.colorName && (
-        <>
-          {filament.hex_color && (
-            <rect x={tx} y={8} width={16} height={16} fill={filament.hex_color} rx={2} />
-          )}
-          <text
-            x={filament.hex_color ? tx + 22 : tx}
-            y={isStd ? 21 : 20}
-            fontSize={fsTitle} fontWeight="bold" fill="#111" fontFamily="system-ui"
-          >
-            {filament.color.slice(0, 22)}
-          </text>
-        </>
+        <text x={tx} y={isStd ? 21 : 20} fontSize={fsTitle} fontWeight="bold" fill="#111" fontFamily="system-ui">
+          {filament.color.slice(0, 22)}
+        </text>
       )}
 
       {/* brand · material */}
       {fields.brandMaterial && (
-        <text x={tx} y={fields.colorName ? (isStd ? 36 : 32) : (isStd ? 21 : 20)}
+        <text x={tx} y={fields.colorName ? (isStd ? 35 : 31) : (isStd ? 21 : 20)}
           fontSize={fsSub} fill="#555" fontFamily="system-ui">
           {[filament.brand, filament.material].filter(Boolean).join(" · ").slice(0, 28)}
         </text>
