@@ -16,6 +16,7 @@ from app.api.auth import router as auth_router
 from app.api.deps import require_roles
 from app.api.farm_tasks import router as farm_tasks_router
 from app.api.filament_colors import router as filament_colors_router
+from app.api.filament_labels import router as filament_labels_router
 from app.api.filaments import router as filaments_router
 from app.api.files import router as files_router
 from app.api.files import folders_router as folders_router
@@ -126,6 +127,7 @@ app.include_router(printer_groups_router, prefix="/api")
 app.include_router(printers_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(farm_tasks_router, prefix="/api")
+app.include_router(filament_labels_router, prefix="/api")
 app.include_router(filaments_router, prefix="/api")
 app.include_router(filament_colors_router, prefix="/api")
 app.include_router(files_router, prefix="/api")

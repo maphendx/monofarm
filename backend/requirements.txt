@@ -17,3 +17,5 @@ tzdata>=2024.2
 redis[hiredis]>=5.0
 boto3>=1.43.0
 cryptography>=42.0.0
+qrcode[pil]>=8.0
+reportlab>=4.2

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { LabelGeneratorModal } from "@/components/labels/LabelGeneratorModal";
 import { Modal } from "@/components/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -18,136 +19,196 @@ const BRANDS = ["Bambu Lab", "eSun", "Polymaker", "Polydream", "Prusament", "Cre
 // ── SVG spool ─────────────────────────────────────────────────────────────────
 
 function SpoolSVG({ pct, hexColor }: { pct: number; hexColor: string | null }) {
-  const R = 19;
-  const C = 2 * Math.PI * R;
+  const R = 22;
+  const hubR = 11;
+  const midR = (R + hubR) / 2;
+  const C = 2 * Math.PI * midR;
   const filled = (Math.max(0, Math.min(100, pct)) / 100) * C;
   const color = hexColor || "#9ca3af";
+  const strokeW = R - hubR;
 
   return (
-    <svg viewBox="0 0 60 60" className="w-full h-full" aria-hidden="true">
-      {/* spool face */}
-      <circle cx="30" cy="30" r="28" fill="#e5e7eb" className="dark:fill-neutral-700" />
+    <svg viewBox="0 0 72 72" className="w-full h-full" aria-hidden="true">
+      {/* outer flange */}
+      <circle cx="36" cy="36" r="34" fill="#e5e7eb" className="dark:fill-neutral-700" />
       {/* empty filament zone */}
-      <circle cx="30" cy="30" r={R} fill="none" stroke="#d1d5db" strokeWidth="18"
+      <circle cx="36" cy="36" r={midR} fill="none" stroke="#d1d5db" strokeWidth={strokeW}
         className="dark:stroke-neutral-600" />
-      {/* remaining filament */}
+      {/* remaining arc */}
       {pct > 0 && (
-        <circle cx="30" cy="30" r={R} fill="none" stroke={color} strokeWidth="18"
+        <circle cx="36" cy="36" r={midR} fill="none" stroke={color} strokeWidth={strokeW}
           strokeDasharray={`${filled} ${C}`}
           strokeLinecap="butt"
-          transform="rotate(-90 30 30)" />
+          transform="rotate(-90 36 36)" />
       )}
       {/* hub */}
-      <circle cx="30" cy="30" r="9" fill="#525252" className="dark:fill-neutral-400" />
+      <circle cx="36" cy="36" r={hubR} fill="#404040" className="dark:fill-neutral-500" />
+      {/* spokes */}
+      {[0, 72, 144, 216, 288].map(a => {
+        const rad = (a - 90) * Math.PI / 180;
+        return (
+          <line key={a}
+            x1={36 + hubR * Math.cos(rad)} y1={36 + hubR * Math.sin(rad)}
+            x2={36 + 34 * Math.cos(rad)}   y2={36 + 34 * Math.sin(rad)}
+            stroke="#e5e7eb" strokeWidth="1.2" strokeOpacity="0.35"
+            className="dark:stroke-neutral-700"
+          />
+        );
+      })}
       {/* center hole */}
-      <circle cx="30" cy="30" r="4.5" fill="#171717" className="dark:fill-neutral-950" />
+      <circle cx="36" cy="36" r="5" fill="#171717" className="dark:fill-neutral-950" />
     </svg>
   );
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  function copy() {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-  return (
-    <button onClick={copy}
-      className="rounded px-1.5 py-0.5 text-[10px] font-mono text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-      title="Копіювати SKU">
-      {copied ? "✓" : text}
-    </button>
-  );
-}
-
-// ── FilamentCard ──────────────────────────────────────────────────────────────
+// ── FilamentCard (SimplyPrint style) ──────────────────────────────────────────
 
 function FilamentCard({
-  f, canEdit, isAdmin, onAdjust, onEdit, onDelete,
+  f, canEdit, isAdmin, selected, onSelect,
+  onAdjust, onEdit, onDelete, onLabel,
 }: {
-  f: Filament; canEdit: boolean; isAdmin: boolean;
-  onAdjust: () => void; onEdit: () => void; onDelete: () => void;
+  f: Filament; canEdit: boolean; isAdmin: boolean; selected: boolean;
+  onSelect: () => void; onAdjust: () => void; onEdit: () => void;
+  onDelete: () => void; onLabel: () => void;
 }) {
   const pct = Math.min(100, Math.round((f.grams_remaining / FULL_SPOOL_G) * 100));
   const isLow = f.is_low;
+  const barColor = isLow ? "#f59e0b" : pct < 20 ? "#f97316" : "#3b82f6";
 
   return (
     <div className={[
-      "relative flex flex-col gap-3 rounded-xl border bg-white p-4 transition dark:bg-neutral-900",
-      isLow ? "border-amber-300 dark:border-amber-700" : "border-neutral-200 dark:border-neutral-800",
-    ].join(" ")}>
-      {/* spool visual + info */}
-      <div className="flex items-center gap-3">
-        <div className="h-14 w-14 shrink-0">
+      "group flex flex-col rounded-xl border bg-white dark:bg-neutral-900 overflow-hidden transition hover:shadow-md cursor-pointer",
+      selected
+        ? "border-blue-500 ring-2 ring-blue-500/20"
+        : isLow
+          ? "border-amber-300 dark:border-amber-700"
+          : "border-neutral-200 dark:border-neutral-800",
+    ].join(" ")} onClick={onSelect}>
+
+      {/* spool area */}
+      <div className="relative flex items-center justify-center bg-neutral-50 dark:bg-neutral-800/50 py-5 px-4">
+        <div className="h-20 w-20">
           <SpoolSVG pct={pct} hexColor={f.hex_color ?? null} />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-sm">{f.material}</p>
-          <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
-            {f.color}{f.brand ? ` · ${f.brand}` : ""}
-          </p>
-          <p className={[
-            "mt-1 text-base font-bold tabular-nums",
-            isLow ? "text-amber-600 dark:text-amber-400" : "",
-          ].join(" ")}>
-            {f.grams_remaining} г
-            {isLow && <span className="ml-2 text-[10px] font-normal">мало</span>}
-          </p>
-        </div>
-      </div>
 
-      {/* SKU */}
-      {f.sku && (
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-neutral-400">SKU</span>
-          <CopyButton text={f.sku} />
-        </div>
-      )}
-
-      {/* progress bar */}
-      <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-        <div className={[
-          "h-full rounded-full transition-all",
-          isLow ? "bg-amber-400" : pct < 20 ? "bg-orange-400" : "bg-emerald-500",
-        ].join(" ")} style={{ width: `${pct}%` }} />
-      </div>
-
-      {/* cost + note */}
-      {(f.cost_per_kg != null || f.note) && (
-        <div className="flex items-center gap-3 text-[11px] text-neutral-400">
-          {f.cost_per_kg != null && (
-            <span>{f.cost_per_kg} грн/кг · ~{((f.cost_per_kg / 1000) * f.grams_remaining).toFixed(0)} грн</span>
+        {/* selection checkbox */}
+        <div
+          className={[
+            "absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded border transition",
+            selected
+              ? "border-blue-500 bg-blue-500 text-white"
+              : "border-neutral-300 bg-white opacity-0 group-hover:opacity-100 dark:border-neutral-600 dark:bg-neutral-900",
+          ].join(" ")}
+          onClick={e => { e.stopPropagation(); onSelect(); }}
+        >
+          {selected && (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5L4 7.5L8.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           )}
-          {f.note && <span className="line-clamp-1">{f.note}</span>}
         </div>
-      )}
 
-      {/* actions */}
-      <div className="flex items-center gap-1">
-        {canEdit && (
-          <button onClick={onAdjust}
-            className="flex-1 rounded-md border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
-            ± Грами
+        {/* SKU badge */}
+        {f.sku && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(f.sku!); }}
+            title="Копіювати SKU"
+            className="absolute top-2 right-2 rounded bg-neutral-200/80 px-1.5 py-0.5 text-[10px] font-mono text-neutral-600 hover:bg-neutral-300 dark:bg-neutral-700/80 dark:text-neutral-300 dark:hover:bg-neutral-600"
+          >
+            {f.sku.slice(-4)}
           </button>
         )}
-        {canEdit && (
-          <button onClick={onEdit}
+
+        {/* low badge */}
+        {isLow && (
+          <span className="absolute bottom-2 left-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            мало
+          </span>
+        )}
+      </div>
+
+      {/* info */}
+      <div className="flex flex-col gap-2 p-3" onClick={e => e.stopPropagation()}>
+        {/* color + brand */}
+        <div>
+          <div className="flex items-center gap-1.5">
+            {f.hex_color && (
+              <span
+                className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+                style={{ background: f.hex_color }}
+              />
+            )}
+            <p className="truncate text-sm font-semibold">{f.color}</p>
+          </div>
+          <p className="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
+            {[f.brand, f.material].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+
+        {/* progress */}
+        <div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{ width: `${pct}%`, background: barColor }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
+            <span className="font-medium">{pct}% left</span>
+            <span className="tabular-nums">{f.grams_remaining} / {FULL_SPOOL_G}g</span>
+          </div>
+        </div>
+
+        {/* cost / note */}
+        {(f.cost_per_kg != null || f.note) && (
+          <p className="truncate text-[11px] text-neutral-400">
+            {f.cost_per_kg != null && `${f.cost_per_kg} грн/кг`}
+            {f.cost_per_kg != null && f.note && " · "}
+            {f.note}
+          </p>
+        )}
+
+        {/* actions */}
+        <div className="flex items-center gap-1 pt-0.5">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onAdjust(); }}
+              className="flex-1 rounded-md border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              ± Грами
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onLabel(); }}
             className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
-            title="Редагувати">
-            ✎
+            title="Лейбл"
+          >
+            🏷
           </button>
-        )}
-        {isAdmin && (
-          <button onClick={onDelete}
-            className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-400 hover:bg-neutral-50 hover:text-red-600 dark:border-neutral-700 dark:hover:bg-neutral-800"
-            title="Видалити">
-            ✕
-          </button>
-        )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              title="Редагувати"
+            >
+              ✎
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onDelete(); }}
+              className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-400 hover:bg-neutral-50 hover:text-red-600 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              title="Видалити"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -224,8 +285,6 @@ function FilamentFormModal({
         </button>
       </>}>
       <form id="filament-form" onSubmit={submit} className="space-y-3 text-sm">
-
-        {/* preview spool */}
         {hexColor && (
           <div className="flex justify-center py-1">
             <div className="h-16 w-16">
@@ -233,18 +292,12 @@ function FilamentFormModal({
             </div>
           </div>
         )}
-
-        {/* material */}
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Матеріал *</span>
           <input type="text" required autoFocus value={material} onChange={e => setMaterial(e.target.value)}
             list="material-presets" placeholder="PLA" className={inputCls} />
-          <datalist id="material-presets">
-            {MATERIALS.map(m => <option key={m} value={m} />)}
-          </datalist>
+          <datalist id="material-presets">{MATERIALS.map(m => <option key={m} value={m} />)}</datalist>
         </label>
-
-        {/* color + hex */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">Колір *</span>
@@ -254,27 +307,19 @@ function FilamentFormModal({
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">HEX</span>
             <div className="flex gap-2">
-              <input type="color" value={hexColor || "#000000"}
-                onChange={e => setHexColor(e.target.value)}
+              <input type="color" value={hexColor || "#000000"} onChange={e => setHexColor(e.target.value)}
                 className="h-[38px] w-10 shrink-0 cursor-pointer rounded-md border border-neutral-300 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950" />
               <input type="text" value={hexColor} onChange={e => setHexColor(e.target.value)}
-                placeholder="#000000" maxLength={7}
-                className={`flex-1 font-mono ${inputCls}`} />
+                placeholder="#000000" maxLength={7} className={`flex-1 font-mono ${inputCls}`} />
             </div>
           </label>
         </div>
-
-        {/* brand */}
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Виробник</span>
           <input type="text" value={brand} onChange={e => setBrand(e.target.value)}
-            list="brand-presets" placeholder="Bambu Lab, eSun, Polydream…" className={inputCls} />
-          <datalist id="brand-presets">
-            {BRANDS.map(b => <option key={b} value={b} />)}
-          </datalist>
+            list="brand-presets" placeholder="Bambu Lab, eSun…" className={inputCls} />
+          <datalist id="brand-presets">{BRANDS.map(b => <option key={b} value={b} />)}</datalist>
         </label>
-
-        {/* grams + threshold */}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-xs text-neutral-500">Залишок (г)</span>
@@ -285,20 +330,15 @@ function FilamentFormModal({
             <input type="number" min={0} value={minGrams} onChange={e => setMinGrams(e.target.value)} className={inputCls} />
           </label>
         </div>
-
-        {/* cost */}
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Ціна за кг (грн)</span>
           <input type="number" min={0} value={costPerKg} onChange={e => setCostPerKg(e.target.value)}
             placeholder="напр. 800" className={inputCls} />
         </label>
-
-        {/* note */}
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Нотатка</span>
           <input type="text" value={note} onChange={e => setNote(e.target.value)} className={inputCls} />
         </label>
-
         {error && <p className="text-red-600 dark:text-red-400 text-xs">{error}</p>}
       </form>
     </Modal>
@@ -359,7 +399,6 @@ function AdjustModal({
         </button>
       </>}>
       <form id="adjust-form" onSubmit={submit} className="space-y-3 text-sm">
-        {/* spool + current stock */}
         <div className="flex items-center gap-4 rounded-lg bg-neutral-50 px-4 py-3 dark:bg-neutral-800">
           <div className="h-12 w-12 shrink-0">
             <SpoolSVG
@@ -368,9 +407,7 @@ function AdjustModal({
             />
           </div>
           <div>
-            <div className="text-xs text-neutral-500">
-              {delta ? "Стане" : "Зараз на котушці"}
-            </div>
+            <div className="text-xs text-neutral-500">{delta ? "Стане" : "Зараз на котушці"}</div>
             <div className="mt-0.5 text-xl font-semibold tabular-nums">
               {delta ? Math.max(0, previewGrams) : filament.grams_remaining} г
               {delta && previewGrams < 0 && (
@@ -380,8 +417,6 @@ function AdjustModal({
             {filament.sku && <div className="mt-0.5 font-mono text-[10px] text-neutral-400">{filament.sku}</div>}
           </div>
         </div>
-
-        {/* direction */}
         <div className="grid grid-cols-2 gap-2">
           {(["consume", "add"] as const).map(d => (
             <button key={d} type="button" onClick={() => setDirection(d)}
@@ -395,19 +430,16 @@ function AdjustModal({
             </button>
           ))}
         </div>
-
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Грами</span>
           <input type="number" required min={1} autoFocus value={delta} onChange={e => setDelta(e.target.value)}
             placeholder="напр. 250" className={inputCls} />
         </label>
-
         <label className="block">
           <span className="mb-1 block text-xs text-neutral-500">Причина (необов'язково)</span>
           <input type="text" value={reason} onChange={e => setReason(e.target.value)}
             placeholder="Нова котушка, витрата на замовлення #12…" className={inputCls} />
         </label>
-
         {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
       </form>
     </Modal>
@@ -488,7 +520,6 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
             ))}
           </div>
         )}
-
       <Modal open={addOpen} onClose={() => { if (!busy) setAddOpen(false); }}
         title={editColor ? "Редагувати колір" : "Новий колір"}
         footer={<>
@@ -534,6 +565,8 @@ export default function FilamentPage() {
   const [editFilament, setEditFilament] = useState<Filament | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [adjustFilament, setAdjustFilament] = useState<Filament | null>(null);
+  const [labelFilaments, setLabelFilaments] = useState<Filament[] | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
@@ -554,6 +587,15 @@ export default function FilamentPage() {
     if (!confirm(`Видалити ${f.material} · ${f.color}?`)) return;
     await api(`/api/filaments/${f.id}`, { method: "DELETE" });
     setFilaments(prev => prev.filter(x => x.id !== f.id));
+    setSelected(prev => { const s = new Set(prev); s.delete(f.id); return s; });
+  }
+
+  function toggleSelect(id: number) {
+    setSelected(prev => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
   }
 
   const stats = useMemo(() => ({
@@ -582,6 +624,11 @@ export default function FilamentPage() {
     }
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [filtered]);
+
+  const selectedFilaments = useMemo(
+    () => filaments.filter(f => selected.has(f.id)),
+    [filaments, selected],
+  );
 
   if (loading) return <div className="text-sm text-neutral-500">{t("common.loading")}</div>;
 
@@ -629,7 +676,6 @@ export default function FilamentPage() {
         </div>
       ) : (
         <>
-          {/* search */}
           <input type="search" placeholder="Пошук за матеріалом, кольором, SKU…"
             value={search} onChange={e => setSearch(e.target.value)}
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
@@ -641,12 +687,19 @@ export default function FilamentPage() {
               {grouped.map(([material, spools]) => (
                 <div key={material}>
                   <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400">{material}</h2>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {spools.map(f => (
-                      <FilamentCard key={f.id} f={f} canEdit={canEdit} isAdmin={isAdmin}
+                      <FilamentCard
+                        key={f.id}
+                        f={f}
+                        canEdit={canEdit}
+                        isAdmin={isAdmin}
+                        selected={selected.has(f.id)}
+                        onSelect={() => toggleSelect(f.id)}
                         onAdjust={() => setAdjustFilament(f)}
                         onEdit={() => { setEditFilament(f); setEditOpen(true); }}
                         onDelete={() => remove(f)}
+                        onLabel={() => setLabelFilaments([f])}
                       />
                     ))}
                   </div>
@@ -661,10 +714,38 @@ export default function FilamentPage() {
         onClose={() => setEditOpen(false)} onSaved={upsert} />
       <AdjustModal filament={adjustFilament}
         onClose={() => setAdjustFilament(null)} onSaved={upsert} />
+      {labelFilaments && (
+        <LabelGeneratorModal filaments={labelFilaments} onClose={() => setLabelFilaments(null)} />
+      )}
 
       {filaments.length > 0 && (
         <div className="border-t border-neutral-200 pt-6 dark:border-neutral-800">
           <FilamentColorsSection canEdit={canEdit} />
+        </div>
+      )}
+
+      {/* bulk action bar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+            <span className="text-sm text-neutral-600 dark:text-neutral-300">
+              Виділено {selected.size}
+            </span>
+            <button
+              type="button"
+              onClick={() => setLabelFilaments(selectedFilaments)}
+              className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              🏷 Генерувати лейбли
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="rounded-md px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+              Скасувати
+            </button>
+          </div>
         </div>
       )}
     </div>
