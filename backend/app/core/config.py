@@ -74,10 +74,17 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
-        # Always include FARM_PUBLIC_URL so you never have to update CORS_ORIGINS
-        # separately when the public URL changes.
+        # Always include FARM_PUBLIC_URL.
         if self.FARM_PUBLIC_URL and self.FARM_PUBLIC_URL not in origins:
             origins.append(self.FARM_PUBLIC_URL)
+        # If FARM_PUBLIC_URL is https://api.example.com, also allow https://example.com
+        # (common pattern: backend on api.* subdomain, frontend on root domain).
+        for prefix in ("https://api.", "http://api."):
+            if self.FARM_PUBLIC_URL.startswith(prefix):
+                root = self.FARM_PUBLIC_URL.replace(prefix, prefix[:prefix.index("api.")], 1)
+                if root not in origins:
+                    origins.append(root)
+                break
         return origins
 
 
