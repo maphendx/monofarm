@@ -120,6 +120,7 @@ export interface PrintTask {
 export interface Filament {
   id: number;
   sku: string | null;
+  label_id: string | null;
   material: string;
   color: string;
   hex_color: string | null;

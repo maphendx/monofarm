@@ -20,7 +20,7 @@ const FIXED_TEMPLATES = Object.keys(LABEL_DIMS) as Exclude<LabelTemplate, "custo
 
 const FIELD_LABELS: { key: keyof LabelFields; label: string }[] = [
   { key: "barcode",       label: "Баркод" },
-  { key: "labelId",       label: "ID лейблу" },
+  { key: "labelId",       label: "ID котушки" },
   { key: "brandMaterial", label: "Матеріал" },
   { key: "colorName",     label: "Назва кольору" },
   { key: "sku",           label: "SKU котушки" },
@@ -95,7 +95,8 @@ export function LabelGeneratorModal({
   const [customWStr, setCustomWStr]     = useState("85");
   const [customHStr, setCustomHStr]     = useState("54");
   const [fields, setFields]             = useState<LabelFields>(DEFAULT_FIELDS);
-  const [labelId, setLabelId]           = useState(() => genLabelId());
+  // Use the spool's stored label_id; fall back to random only if missing
+  const [labelId, setLabelId]           = useState(() => filaments[0]?.label_id || genLabelId());
   const [busy, setBusy]                 = useState(false);
   const [printBusy, setPrintBusy]       = useState(false);
   const [pdfError, setPdfError]         = useState<string | null>(null);
@@ -181,13 +182,7 @@ export function LabelGeneratorModal({
     if (result === "ok") {
       setPrintStatus("✓ Відправлено на принтер");
     } else if (result === "not_available") {
-      // fallback: download ZPL file
-      const blob = new Blob([zpl], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `labels-${labelId || "spool"}.zpl`; a.click();
-      URL.revokeObjectURL(url);
-      setPrintStatus("⬇ Zebra Browser Print не знайдено — завантажено .zpl");
+      setPrintStatus("✗ Zebra Browser Print не знайдено. Встановіть застосунок.");
     } else {
       setPrintStatus("✗ Помилка відправки");
     }
@@ -213,7 +208,7 @@ export function LabelGeneratorModal({
           </button>
           <button type="button" onClick={printZebra} disabled={printBusy}
             className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
-            {printBusy ? "…" : "🖨 Zebra"}
+            {printBusy ? "…" : "Друкувати"}
           </button>
           <button type="button" onClick={downloadSvg}
             className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
@@ -268,7 +263,7 @@ export function LabelGeneratorModal({
             </div>
 
             <div>
-              <p className="mb-1 text-xs font-medium text-neutral-500">ID лейблу</p>
+              <p className="mb-1 text-xs font-medium text-neutral-500">ID котушки</p>
               <div className="flex items-center gap-2">
                 <input type="text" value={labelId} maxLength={4} placeholder="A12B"
                   onChange={e => setLabelId(normId(e.target.value))}

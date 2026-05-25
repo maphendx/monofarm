@@ -1,3 +1,5 @@
+import random
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -17,11 +19,18 @@ from app.schemas.filament import (
 
 router = APIRouter(prefix="/filaments", tags=["filaments"])
 
+_LABEL_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ23456789"
+
+
+def _gen_label_id() -> str:
+    return "".join(random.choices(_LABEL_CHARS, k=4))
+
 
 def _to_out(f: Filament) -> FilamentOut:
     return FilamentOut(
         id=f.id,
         sku=f.sku,
+        label_id=f.label_id,
         material=f.material,
         color=f.color,
         hex_color=f.hex_color,
@@ -69,6 +78,8 @@ def create_filament(
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> FilamentOut:
     f = Filament(**payload.model_dump(), organization_id=org.id)
+    if not f.label_id:
+        f.label_id = _gen_label_id()
     db.add(f)
     db.flush()
     f.sku = f"FL{org.id:04d}{f.id:05d}"

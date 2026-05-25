@@ -12,6 +12,7 @@ class FilamentCreate(BaseModel):
     min_grams: int = 0
     cost_per_kg: int | None = None
     note: str | None = None
+    label_id: str | None = None
 
 
 class FilamentUpdate(BaseModel):
@@ -23,6 +24,7 @@ class FilamentUpdate(BaseModel):
     min_grams: int | None = None
     cost_per_kg: int | None = None
     note: str | None = None
+    label_id: str | None = None
 
 
 class FilamentAdjust(BaseModel):
@@ -49,6 +51,7 @@ class FilamentLogOut(BaseModel):
 class FilamentOut(BaseModel):
     id: int
     sku: str | None
+    label_id: str | None
     material: str
     color: str
     hex_color: str | None
@@ -62,4 +65,5 @@ class FilamentOut(BaseModel):
 
     class Config:
         from_attributes = True
+
 

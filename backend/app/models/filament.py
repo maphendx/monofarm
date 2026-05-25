@@ -14,6 +14,7 @@ class Filament(Base):
         Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     sku: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    label_id: Mapped[str | None] = mapped_column(String(4), nullable=True, index=True)
     material: Mapped[str] = mapped_column(String(40))
     color: Mapped[str] = mapped_column(String(40))
     hex_color: Mapped[str | None] = mapped_column(String(7), nullable=True)

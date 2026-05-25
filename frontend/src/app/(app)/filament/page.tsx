@@ -76,15 +76,15 @@ function FilamentCard({
           )}
         </div>
 
-        {/* SKU badge */}
-        {f.sku && (
+        {/* Spool ID badge */}
+        {f.label_id && (
           <button
             type="button"
-            onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(f.sku!); }}
-            title="Копіювати SKU"
-            className="absolute top-2 right-2 rounded bg-neutral-200/80 px-1.5 py-0.5 text-[10px] font-mono text-neutral-600 hover:bg-neutral-300 dark:bg-neutral-700/80 dark:text-neutral-300 dark:hover:bg-neutral-600"
+            onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(f.label_id!); }}
+            title="Копіювати ID котушки"
+            className="absolute top-2 right-2 rounded bg-neutral-200/80 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-widest text-neutral-700 hover:bg-neutral-300 dark:bg-neutral-700/80 dark:text-neutral-200 dark:hover:bg-neutral-600"
           >
-            {f.sku.slice(-4)}
+            {f.label_id}
           </button>
         )}
 
@@ -699,7 +699,8 @@ export default function FilamentPage() {
       f.material.toLowerCase().includes(q) ||
       f.color.toLowerCase().includes(q) ||
       (f.brand ?? "").toLowerCase().includes(q) ||
-      (f.sku ?? "").toLowerCase().includes(q),
+      (f.sku ?? "").toLowerCase().includes(q) ||
+      (f.label_id ?? "").toLowerCase().includes(q),
     );
   }, [filaments, search]);
 
