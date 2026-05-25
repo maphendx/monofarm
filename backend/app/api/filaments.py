@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -20,96 +18,6 @@ from app.schemas.filament import (
 router = APIRouter(prefix="/filaments", tags=["filaments"])
 
 
-# ── warehouse sync helpers ────────────────────────────────────────────────────
-
-def _get_raw_warehouse(org_id: int, db: Session):
-    from app.models.warehouse import Warehouse, WarehouseType
-    wh = db.query(Warehouse).filter(
-        Warehouse.organization_id == org_id,
-        Warehouse.type == WarehouseType.raw,
-        Warehouse.is_active.is_(True),
-    ).first()
-    if not wh:
-        wh = Warehouse(organization_id=org_id, name="Сировина", type=WarehouseType.raw)
-        db.add(wh)
-        db.flush()
-    return wh
-
-
-def _get_or_create_wh_product(f: Filament, db: Session):
-    from app.models.warehouse import Product as WhProduct
-    if f.warehouse_product_id:
-        prod = db.get(WhProduct, f.warehouse_product_id)
-        if prod:
-            return prod
-    sku = f"FIL-{f.sku}" if f.sku else f"FIL-{f.id}"
-    prod = db.query(WhProduct).filter(
-        WhProduct.organization_id == f.organization_id,
-        WhProduct.sku == sku,
-    ).first()
-    if not prod:
-        parts = [p for p in [f.brand, f.material, f.color] if p]
-        name = " · ".join(parts) or f"Пластик #{f.id}"
-        prod = WhProduct(
-            organization_id=f.organization_id,
-            name=name,
-            sku=sku,
-            categories=["Пластик"],
-            unit="г",
-            cost_price=Decimal(str(f.cost_per_kg)) / 1000 if f.cost_per_kg else None,
-        )
-        db.add(prod)
-        db.flush()
-    f.warehouse_product_id = prod.id
-    return prod
-
-
-def _warehouse_movement(
-    f: Filament, delta_grams: int, reason: str | None, user_id: int | None, db: Session
-) -> None:
-    """Sync a filament gram change to the warehouse as a movement."""
-    from app.models.warehouse import WarehouseMovement, MovementType
-    from app.api.warehouse import _apply_movement
-
-    prod = _get_or_create_wh_product(f, db)
-    wh = _get_raw_warehouse(f.organization_id, db)
-    cost_per_g = Decimal(str(f.cost_per_kg)) / 1000 if f.cost_per_kg else None
-    qty = Decimal(str(abs(delta_grams)))
-
-    if delta_grams > 0:
-        mv = WarehouseMovement(
-            organization_id=f.organization_id,
-            type=MovementType.PURCHASE_IN,
-            product_id=prod.id,
-            warehouse_to_id=wh.id,
-            quantity=qty,
-            unit="г",
-            unit_cost=cost_per_g,
-            total_cost=(qty * cost_per_g) if cost_per_g else None,
-            reason=reason or "Нова котушка",
-            created_by_id=user_id,
-        )
-    else:
-        mv = WarehouseMovement(
-            organization_id=f.organization_id,
-            type=MovementType.PRODUCTION_OUT,
-            product_id=prod.id,
-            warehouse_from_id=wh.id,
-            quantity=qty,
-            unit="г",
-            unit_cost=cost_per_g,
-            total_cost=(qty * cost_per_g) if cost_per_g else None,
-            reason=reason or "Списання пластику",
-            created_by_id=user_id,
-        )
-
-    db.add(mv)
-    db.flush()
-    _apply_movement(mv, db)
-
-
-# ── output helper ─────────────────────────────────────────────────────────────
-
 def _to_out(f: Filament) -> FilamentOut:
     return FilamentOut(
         id=f.id,
@@ -124,7 +32,6 @@ def _to_out(f: Filament) -> FilamentOut:
         note=f.note,
         updated_at=f.updated_at,
         is_low=f.grams_remaining <= f.min_grams,
-        warehouse_product_id=f.warehouse_product_id,
     )
 
 
@@ -165,11 +72,6 @@ def create_filament(
     db.add(f)
     db.flush()
     f.sku = f"FL{org.id:04d}{f.id:05d}"
-    # sync to warehouse
-    if f.grams_remaining > 0:
-        _warehouse_movement(f, f.grams_remaining, "Нова котушка", user.id, db)
-    else:
-        _get_or_create_wh_product(f, db)  # still create the product
     db.commit()
     db.refresh(f)
     return _to_out(f)
@@ -188,15 +90,6 @@ def update_filament(
         raise HTTPException(status_code=404, detail="Filament not found")
     for field, val in payload.model_dump(exclude_none=True).items():
         setattr(f, field, val)
-    # keep warehouse product name/cost in sync
-    if f.warehouse_product_id:
-        from app.models.warehouse import Product as WhProduct
-        prod = db.get(WhProduct, f.warehouse_product_id)
-        if prod:
-            parts = [p for p in [f.brand, f.material, f.color] if p]
-            prod.name = " · ".join(parts) or prod.name
-            if f.cost_per_kg:
-                prod.cost_price = Decimal(str(f.cost_per_kg)) / 1000
     db.commit()
     db.refresh(f)
     return _to_out(f)
@@ -218,7 +111,6 @@ def adjust_stock(
         raise HTTPException(status_code=400, detail="Залишок не може бути від'ємним")
     f.grams_remaining = new_value
     _write_log(db, f, payload.delta_grams, payload.reason, user.id, payload.task_id)
-    _warehouse_movement(f, payload.delta_grams, payload.reason, user.id, db)
     db.commit()
     db.refresh(f)
     return _to_out(f)

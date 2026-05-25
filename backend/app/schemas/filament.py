@@ -59,7 +59,7 @@ class FilamentOut(BaseModel):
     note: str | None
     updated_at: datetime
     is_low: bool
-    warehouse_product_id: int | None = None
 
     class Config:
         from_attributes = True
+
