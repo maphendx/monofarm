@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0026"
-down_revision: Union[str, None] = "0025"
+down_revision: Union[str, None] = "0025_print_task_gcode_file_link"
 branch_labels = None
 depends_on = None
 
