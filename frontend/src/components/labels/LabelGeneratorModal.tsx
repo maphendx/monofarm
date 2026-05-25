@@ -154,9 +154,13 @@ export function LabelGeneratorModal({
       }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "filament-labels.pdf"; a.click();
-      URL.revokeObjectURL(url);
+      const win = window.open(url, "_blank");
+      if (!win) {
+        // popup blocked — fall back to download
+        const a = document.createElement("a");
+        a.href = url; a.download = "filament-labels.pdf"; a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (e) {
       setPdfError(e instanceof Error ? e.message : "PDF error");
     } finally { setBusy(false); }
@@ -216,7 +220,7 @@ export function LabelGeneratorModal({
           </button>
           <button type="button" onClick={downloadPdf} disabled={busy}
             className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
-            {busy ? "Генерую…" : "↓ PDF"}
+            {busy ? "Генерую…" : "Друкувати PDF"}
           </button>
         </>
       }
