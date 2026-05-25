@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import JsBarcode from "jsbarcode";
 import type { Filament } from "@/lib/types";
 
 export type LabelTemplate = "standard" | "compact" | "thermal_62mm" | "custom";
@@ -23,7 +22,7 @@ export interface LabelFields {
 }
 
 export const DEFAULT_FIELDS: LabelFields = {
-  barcode: true, colorName: true, brandMaterial: true, sku: true, progress: false, labelId: true,
+  barcode: true, colorName: false, brandMaterial: true, sku: true, progress: false, labelId: true,
 };
 
 const FULL_G = 1000;
@@ -39,16 +38,27 @@ function useCode128DataUrl(text: string | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!text) { setUrl(null); return; }
-    try {
-      const canvas = document.createElement("canvas");
-      JsBarcode(canvas, text, {
-        format: "CODE128", displayValue: false,
-        margin: 4, width: 1.8, height: 36, background: "#ffffff",
-      });
-      setUrl(canvas.toDataURL("image/png"));
-    } catch {
-      setUrl(null);
-    }
+    let cancelled = false;
+    import("jsbarcode").then(mod => {
+      if (cancelled) return;
+      try {
+        const JsBarcode = (mod as { default: Function }).default ?? mod;
+        const canvas = document.createElement("canvas");
+        (JsBarcode as Function)(canvas, text, {
+          format: "CODE128",
+          displayValue: false,
+          margin: 8,
+          width: 3,
+          height: 72,
+          background: "#ffffff",
+          lineColor: "#000000",
+        });
+        if (!cancelled) setUrl(canvas.toDataURL("image/png"));
+      } catch {
+        if (!cancelled) setUrl(null);
+      }
+    }).catch(() => { if (!cancelled) setUrl(null); });
+    return () => { cancelled = true; };
   }, [text]);
   return url;
 }
@@ -73,7 +83,7 @@ export function LabelPreview({
   fields?: LabelFields;
 }) {
   const pct = Math.min(100, Math.round((filament.grams_remaining / FULL_G) * 100));
-  const barcodeText = labelId || filament.sku || String(filament.id);
+  const barcodeText = (labelId && labelId.length > 0) ? labelId : (filament.sku ?? String(filament.id));
   const code128Url = useCode128DataUrl(barcodeType === "code128" ? barcodeText : null);
 
   let w: number, h: number;
@@ -88,14 +98,11 @@ export function LabelPreview({
     h = LABEL_DIMS[template].h;
   }
 
+  // ── compact ──────────────────────────────────────────────────────────────────
   if (template === "compact" || (template === "custom" && h < 100)) {
     return (
-      <svg
-        id="label-preview-svg"
-        width={w} height={h}
-        viewBox={`0 0 ${w} ${h}`}
-        style={{ border: "1px solid #e5e7eb", borderRadius: 4, background: "#fff", display: "block" }}
-      >
+      <svg id="label-preview-svg" width={w} height={h} viewBox={`0 0 ${w} ${h}`}
+        style={{ border: "1px solid #e5e7eb", borderRadius: 4, background: "#fff", display: "block" }}>
         {filament.hex_color && fields.colorName && (
           <rect x={0} y={0} width={22} height={h} fill={filament.hex_color} />
         )}
@@ -110,7 +117,7 @@ export function LabelPreview({
           </text>
         )}
         {fields.labelId && labelId && (
-          <text x={27} y={Math.min(52, h * 0.7)} fontSize={9} fill="#374151" fontFamily="monospace" fontWeight="bold">
+          <text x={27} y={Math.min(52, h * 0.7)} fontSize={9} fill="#111" fontFamily="monospace" fontWeight="bold">
             {labelId}
           </text>
         )}
@@ -123,76 +130,90 @@ export function LabelPreview({
     );
   }
 
+  // ── standard / thermal / custom (larger) ────────────────────────────────────
   const showBarcode = fields.barcode && barcodeType !== "none";
-  const barcodeH = h * (template === "thermal_62mm" ? 0.78 : 0.70);
-
-  // For Code128, barcode is shown at the bottom spanning full width
   const code128Mode = barcodeType === "code128";
-  const code128AreaH = code128Mode && showBarcode ? Math.min(50, h * 0.28) : 0;
 
-  const qrSize = !code128Mode && showBarcode ? barcodeH : 0;
-  const qrX = 10;
+  // Code128 strip at the bottom
+  const code128AreaH = code128Mode && showBarcode ? Math.min(60, h * 0.32) : 0;
+
+  // QR on the left side
+  const qrSize = !code128Mode && showBarcode ? h * (template === "thermal_62mm" ? 0.78 : 0.70) : 0;
+  const qrX = 8;
   const qrY = showBarcode && !code128Mode ? (h - qrSize) / 2 : 0;
-  const tx = !code128Mode && showBarcode ? qrX + qrSize + 10 : 10;
-  const tw = w - tx - 10;
+
+  // Text column starts after QR (or at left edge)
+  const tx = !code128Mode && showBarcode ? qrX + qrSize + 8 : 10;
+  const tw = w - tx - 8;
 
   const isStd = template === "standard" || (template === "custom" && h >= 180);
-  const fsTitle = isStd ? 14 : 11;
-  const fsSub   = isStd ? 10 : 9;
-  const fsSmall = isStd ? 8 : 7;
+  const fsTitle = isStd ? 13 : 10;
+  const fsSub   = isStd ? 9 : 8;
+  const fsSmall = isStd ? 7.5 : 6.5;
 
-  const textAreaH = h - code128AreaH - 4;
+  // Bottom boundary for text (above code128 strip)
+  const textBottom = h - code128AreaH - 4;
 
   return (
-    <svg
-      id="label-preview-svg"
-      width={w} height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      style={{ border: "1px solid #e5e7eb", borderRadius: 4, background: "#fff", display: "block" }}
-    >
+    <svg id="label-preview-svg" width={w} height={h} viewBox={`0 0 ${w} ${h}`}
+      style={{ border: "1px solid #e5e7eb", borderRadius: 4, background: "#fff", display: "block" }}>
+
+      {/* border */}
+      <rect x={0.5} y={0.5} width={w - 1} height={h - 1} fill="none" stroke="#e5e7eb" strokeWidth={1} rx={2} />
+
       {/* QR code */}
       {!code128Mode && showBarcode && (
         qrBase64
           ? <image href={qrBase64} x={qrX} y={qrY} width={qrSize} height={qrSize} />
           : <>
-              <rect x={qrX} y={qrY} width={qrSize} height={qrSize} fill="#f3f4f6" rx={4} />
-              <text x={qrX + qrSize / 2} y={qrY + qrSize / 2 + 4} fontSize={9} fill="#9ca3af" textAnchor="middle" fontFamily="system-ui">QR</text>
+              <rect x={qrX} y={qrY} width={qrSize} height={qrSize} fill="#f3f4f6" rx={3} />
+              <text x={qrX + qrSize / 2} y={qrY + qrSize / 2 + 4} fontSize={8} fill="#9ca3af" textAnchor="middle" fontFamily="system-ui">QR</text>
             </>
       )}
 
-      {/* color swatch */}
-      {fields.colorName && filament.hex_color && (
-        <rect x={tx} y={9} width={18} height={18} fill={filament.hex_color} rx={3} />
-      )}
-
-      {/* color name */}
+      {/* color swatch + name */}
       {fields.colorName && (
-        <text
-          x={filament.hex_color ? tx + 24 : tx}
-          y={isStd ? 23 : 21}
-          fontSize={fsTitle} fontWeight="bold" fill="#111" fontFamily="system-ui"
-        >
-          {filament.color.slice(0, 20)}
-        </text>
+        <>
+          {filament.hex_color && (
+            <rect x={tx} y={8} width={16} height={16} fill={filament.hex_color} rx={2} />
+          )}
+          <text
+            x={filament.hex_color ? tx + 22 : tx}
+            y={isStd ? 21 : 20}
+            fontSize={fsTitle} fontWeight="bold" fill="#111" fontFamily="system-ui"
+          >
+            {filament.color.slice(0, 22)}
+          </text>
+        </>
       )}
 
       {/* brand · material */}
       {fields.brandMaterial && (
-        <text x={tx} y={isStd ? 38 : 34} fontSize={fsSub} fill="#555" fontFamily="system-ui">
-          {[filament.brand, filament.material].filter(Boolean).join(" · ").slice(0, 26)}
+        <text x={tx} y={fields.colorName ? (isStd ? 36 : 32) : (isStd ? 21 : 20)}
+          fontSize={fsSub} fill="#555" fontFamily="system-ui">
+          {[filament.brand, filament.material].filter(Boolean).join(" · ").slice(0, 28)}
         </text>
       )}
 
-      {/* label ID */}
-      {fields.labelId && labelId && (
-        <text x={tx} y={isStd ? 56 : 48} fontSize={isStd ? 13 : 11} fontWeight="bold" fill="#111" fontFamily="monospace" letterSpacing="3">
+      {/* label ID — big, prominent */}
+      {fields.labelId && labelId && labelId.length > 0 && (
+        <text
+          x={tx}
+          y={(() => {
+            let base = 8;
+            if (fields.colorName) base += isStd ? 30 : 24;
+            if (fields.brandMaterial) base += isStd ? 20 : 16;
+            return base + (isStd ? 20 : 16);
+          })()}
+          fontSize={isStd ? 22 : 16} fontWeight="bold" fill="#111" fontFamily="monospace" letterSpacing="4"
+        >
           {labelId}
         </text>
       )}
 
       {/* SKU */}
       {fields.sku && filament.sku && (
-        <text x={tx} y={textAreaH - 14} fontSize={fsSmall} fill="#9ca3af" fontFamily="monospace">
+        <text x={tx} y={textBottom - 8} fontSize={fsSmall} fill="#9ca3af" fontFamily="monospace">
           {filament.sku}
         </text>
       )}
@@ -200,19 +221,20 @@ export function LabelPreview({
       {/* progress bar */}
       {fields.progress && (
         <>
-          <rect x={tx} y={textAreaH - 10} width={tw} height={7} fill="#e5e7eb" rx={3} />
-          {pct > 0 && <rect x={tx} y={textAreaH - 10} width={(tw * pct) / 100} height={7} fill={fillColor(pct)} rx={3} />}
-          <text x={w - 10} y={textAreaH - 13} fontSize={fsSmall} fill="#6b7280" textAnchor="end" fontFamily="system-ui">
+          <rect x={tx} y={textBottom - 6} width={tw} height={6} fill="#e5e7eb" rx={3} />
+          {pct > 0 && <rect x={tx} y={textBottom - 6} width={tw * pct / 100} height={6} fill={fillColor(pct)} rx={3} />}
+          <text x={tx + tw} y={textBottom - 10} fontSize={fsSmall} fill="#6b7280" textAnchor="end" fontFamily="system-ui">
             {pct}% · {filament.grams_remaining}/{FULL_G}g
           </text>
         </>
       )}
 
-      {/* Code128 barcode at bottom */}
+      {/* Code128 strip at bottom */}
       {code128Mode && showBarcode && (
         code128Url
-          ? <image href={code128Url} x={10} y={h - code128AreaH - 2} width={w - 20} height={code128AreaH} preserveAspectRatio="none" />
-          : <rect x={10} y={h - code128AreaH - 2} width={w - 20} height={code128AreaH} fill="#f3f4f6" rx={3} />
+          ? <image href={code128Url} x={10} y={h - code128AreaH} width={w - 20} height={code128AreaH - 2}
+              preserveAspectRatio="xMidYMid meet" />
+          : <rect x={10} y={h - code128AreaH} width={w - 20} height={code128AreaH - 2} fill="#f3f4f6" rx={2} />
       )}
     </svg>
   );
