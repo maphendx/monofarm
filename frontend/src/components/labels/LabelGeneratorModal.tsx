@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/Modal";
-import { api } from "@/lib/api";
+import { API_URL, api } from "@/lib/api";
 import type { Filament } from "@/lib/types";
 import {
   DEFAULT_FIELDS,
@@ -143,7 +143,7 @@ export function LabelGeneratorModal({
         show_label_id: fields.labelId,
       };
       if (template === "custom") { body.custom_w_mm = customW; body.custom_h_mm = customH; }
-      const resp = await fetch("/api/filaments/labels/pdf", {
+      const resp = await fetch(`${API_URL}/api/filaments/labels/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),
