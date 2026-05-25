@@ -5,11 +5,27 @@ import { useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { api } from "@/lib/api";
 import type { Filament } from "@/lib/types";
-import { LABEL_DIMS, LabelPreview, type LabelTemplate } from "./LabelPreview";
+import {
+  DEFAULT_FIELDS,
+  LABEL_DIMS,
+  LabelPreview,
+  type LabelFields,
+  type LabelTemplate,
+} from "./LabelPreview";
 
 interface LabelData {
   qr_code_base64: string | null;
 }
+
+const FIXED_TEMPLATES = Object.keys(LABEL_DIMS) as Exclude<LabelTemplate, "custom">[];
+
+const FIELD_LABELS: { key: keyof LabelFields; label: string }[] = [
+  { key: "qr",            label: "QR-код" },
+  { key: "colorName",     label: "Назва кольору" },
+  { key: "brandMaterial", label: "Виробник · Матеріал" },
+  { key: "sku",           label: "SKU" },
+  { key: "progress",      label: "Залишок %" },
+];
 
 export function LabelGeneratorModal({
   filaments,
@@ -19,6 +35,9 @@ export function LabelGeneratorModal({
   onClose: () => void;
 }) {
   const [template, setTemplate] = useState<LabelTemplate>("standard");
+  const [customW, setCustomW] = useState(85);
+  const [customH, setCustomH] = useState(54);
+  const [fields, setFields] = useState<LabelFields>(DEFAULT_FIELDS);
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
 
@@ -32,18 +51,35 @@ export function LabelGeneratorModal({
       .catch(() => {});
   }, [preview?.id]);
 
+  function toggleField(key: keyof LabelFields) {
+    setFields(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
   async function downloadPdf() {
     if (busy) return;
     setBusy(true);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const body: Record<string, unknown> = {
+        filament_ids: filaments.map(f => f.id),
+        template,
+        show_qr: fields.qr,
+        show_color: fields.colorName,
+        show_brand: fields.brandMaterial,
+        show_sku: fields.sku,
+        show_progress: fields.progress,
+      };
+      if (template === "custom") {
+        body.custom_w_mm = customW;
+        body.custom_h_mm = customH;
+      }
       const resp = await fetch("/api/filaments/labels/pdf", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ filament_ids: filaments.map(f => f.id), template }),
+        body: JSON.stringify(body),
       });
       if (!resp.ok) throw new Error("PDF error");
       const blob = await resp.blob();
@@ -70,37 +106,25 @@ export function LabelGeneratorModal({
     URL.revokeObjectURL(url);
   }
 
+  const inputCls = "w-16 rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm tabular-nums outline-none focus:border-neutral-600 dark:border-neutral-700 dark:bg-neutral-950";
+
   return (
     <Modal
       open={true}
       onClose={onClose}
-      title={
-        filaments.length > 1
-          ? `Лейбли (${filaments.length} котушок)`
-          : `Лейбл — ${preview?.color}`
-      }
+      title={filaments.length > 1 ? `Лейбли (${filaments.length} котушок)` : `Лейбл — ${preview?.color}`}
       footer={
         <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
+          <button type="button" onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
             Закрити
           </button>
-          <button
-            type="button"
-            onClick={downloadSvg}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
+          <button type="button" onClick={downloadSvg}
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
             ↓ SVG
           </button>
-          <button
-            type="button"
-            onClick={downloadPdf}
-            disabled={busy}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-          >
+          <button type="button" onClick={downloadPdf} disabled={busy}
+            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
             {busy ? "Генерую…" : "↓ PDF"}
           </button>
         </>
@@ -110,12 +134,9 @@ export function LabelGeneratorModal({
         {/* template selector */}
         <div>
           <p className="mb-2 text-xs font-medium text-neutral-500">Шаблон</p>
-          <div className="grid grid-cols-3 gap-2">
-            {(Object.keys(LABEL_DIMS) as LabelTemplate[]).map(t => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTemplate(t)}
+          <div className="grid grid-cols-4 gap-2">
+            {FIXED_TEMPLATES.map(t => (
+              <button key={t} type="button" onClick={() => setTemplate(t)}
                 className={[
                   "rounded-lg border py-2 text-xs font-medium transition",
                   template === t
@@ -126,15 +147,72 @@ export function LabelGeneratorModal({
                 {LABEL_DIMS[t].label}
               </button>
             ))}
+            <button type="button" onClick={() => setTemplate("custom")}
+              className={[
+                "rounded-lg border py-2 text-xs font-medium transition",
+                template === "custom"
+                  ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
+                  : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800",
+              ].join(" ")}
+            >
+              Свій розмір
+            </button>
           </div>
         </div>
+
+        {/* custom dimensions */}
+        {template === "custom" && (
+          <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800/50">
+            <span className="text-xs text-neutral-500">Розмір (мм)</span>
+            <label className="flex items-center gap-1">
+              <span className="text-xs text-neutral-400">Ш</span>
+              <input type="number" min={20} max={300} value={customW}
+                onChange={e => setCustomW(Math.max(20, parseInt(e.target.value) || 85))}
+                className={inputCls} />
+            </label>
+            <span className="text-neutral-300">×</span>
+            <label className="flex items-center gap-1">
+              <span className="text-xs text-neutral-400">В</span>
+              <input type="number" min={15} max={200} value={customH}
+                onChange={e => setCustomH(Math.max(15, parseInt(e.target.value) || 54))}
+                className={inputCls} />
+            </label>
+          </div>
+        )}
+
+        {/* field toggles (visible for custom; collapsible hint for fixed) */}
+        {template === "custom" && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-neutral-500">Вміст лейблу</p>
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4">
+              {FIELD_LABELS.map(({ key, label }) => (
+                <label key={key} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={fields[key]}
+                    onChange={() => toggleField(key)}
+                    className="h-3.5 w-3.5 rounded border-neutral-300 accent-neutral-900 dark:accent-neutral-100"
+                  />
+                  <span className="text-xs text-neutral-700 dark:text-neutral-300">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* preview */}
         {preview && (
           <div>
             <p className="mb-2 text-xs font-medium text-neutral-500">Превью</p>
             <div className="flex justify-center overflow-auto rounded-lg bg-neutral-50 p-4 dark:bg-neutral-800">
-              <LabelPreview filament={preview} template={template} qrBase64={qr} />
+              <LabelPreview
+                filament={preview}
+                template={template}
+                qrBase64={qr}
+                customWmm={customW}
+                customHmm={customH}
+                fields={fields}
+              />
             </div>
             {filaments.length > 1 && (
               <p className="mt-1.5 text-center text-xs text-neutral-400">
