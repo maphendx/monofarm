@@ -134,8 +134,10 @@ def generate_labels_pdf(
             show_progress=payload.show_progress,
             show_label_id=payload.show_label_id,
         )
-    except ImportError:
-        raise HTTPException(status_code=500, detail="reportlab not installed")
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"reportlab not installed: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {e}")
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),

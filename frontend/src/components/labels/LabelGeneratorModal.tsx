@@ -48,6 +48,7 @@ export function LabelGeneratorModal({
   const [fields, setFields] = useState<LabelFields>(DEFAULT_FIELDS);
   const [labelId, setLabelId] = useState(() => genLabelId());
   const [busy, setBusy] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
 
   const preview = filaments[0];
@@ -71,6 +72,7 @@ export function LabelGeneratorModal({
   async function downloadPdf() {
     if (busy) return;
     setBusy(true);
+    setPdfError(null);
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       const body: Record<string, unknown> = {
@@ -97,7 +99,10 @@ export function LabelGeneratorModal({
         },
         body: JSON.stringify(body),
       });
-      if (!resp.ok) throw new Error("PDF error");
+      if (!resp.ok) {
+        const detail = await resp.json().then((d: { detail?: string }) => d.detail).catch(() => resp.statusText);
+        throw new Error(detail || "PDF error");
+      }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -105,6 +110,8 @@ export function LabelGeneratorModal({
       a.download = "filament-labels.pdf";
       a.click();
       URL.revokeObjectURL(url);
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : "PDF error");
     } finally {
       setBusy(false);
     }
@@ -132,6 +139,9 @@ export function LabelGeneratorModal({
       size="xl"
       footer={
         <>
+          {pdfError && (
+            <span className="mr-auto text-xs text-red-500 truncate max-w-xs">{pdfError}</span>
+          )}
           <button type="button" onClick={onClose}
             className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
             Закрити
