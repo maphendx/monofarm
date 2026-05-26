@@ -584,7 +584,7 @@ export default function DashboardPage() {
           {user.role === "admin" && (
             <button
               onClick={() => router.push("/settings?section=printers")}
-              className="rounded-md bg-[var(--accent)] px-2.5 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]   "
+              className="btn btn-primary btn-sm"
             >
               + {t("printers.add")}
             </button>

@@ -269,11 +269,11 @@ function FilamentFormModal({
       title={initial ? "Редагувати котушку" : "Нова котушка"}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          className="btn btn-ghost disabled:opacity-50">
           Скасувати
         </button>
         <button type="submit" form="filament-form" disabled={busy || !material.trim() || !color.trim()}
-          className="rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+          className="btn btn-primary disabled:opacity-50">
           {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити котушку"}
         </button>
       </>}>
@@ -474,18 +474,18 @@ function AdjustModal({
 
   const previewGrams = filament.grams_remaining + (direction === "add" ? 1 : -1) * (parseInt(delta) || 0);
   const previewPct = Math.min(100, Math.round((Math.max(0, previewGrams) / FULL_SPOOL_G) * 100));
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={!!filament} onClose={() => { if (!busy) onClose(); }}
       title={`${filament.material} · ${filament.color}`}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          className="btn btn-ghost disabled:opacity-50">
           Скасувати
         </button>
         <button type="submit" form="adjust-form" disabled={busy || !delta}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+          className="btn btn-primary disabled:opacity-50">
           {busy ? "Зберігаю…" : "Застосувати"}
         </button>
       </>}>
@@ -576,7 +576,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
     setColors(prev => prev.filter(x => x.id !== c.id));
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <div>
@@ -612,9 +612,9 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
         title={editColor ? "Редагувати колір" : "Новий колір"}
         footer={<>
           <button type="button" onClick={() => setAddOpen(false)} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
+            className="btn btn-ghost disabled:opacity-50">Скасувати</button>
           <button type="submit" form="color-form" disabled={busy || !name.trim()}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
         </>}>
@@ -735,7 +735,7 @@ export default function FilamentPage() {
         </div>
         {canEdit && (
           <button onClick={() => { setEditFilament(null); setEditOpen(true); }}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
+            className="btn btn-primary">
             + Котушка
           </button>
         )}
@@ -823,14 +823,14 @@ export default function FilamentPage() {
             <button
               type="button"
               onClick={() => setLabelFilaments(selectedFilaments)}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--accent-hi)]  "
+              className="btn btn-primary btn-sm"
             >
               🏷 Генерувати лейбли
             </button>
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="rounded-md px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
+              className="btn btn-ghost"
             >
               Скасувати
             </button>

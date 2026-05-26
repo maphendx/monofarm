@@ -127,8 +127,7 @@ export function StartPrintModal({
 
         {/* footer */}
         <div className="border-t border-[var(--border)] px-5 py-3 ">
-          <button onClick={onClose}
-            className="w-full rounded-md py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
+          <button onClick={onClose} className="btn btn-ghost w-full">
             Скасувати
           </button>
         </div>

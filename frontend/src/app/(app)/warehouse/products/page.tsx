@@ -238,11 +238,11 @@ function ProductModal({
         {/* Footer */}
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] px-6 py-4 ">
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+            className="btn btn-ghost">
             Скасувати
           </button>
           <button type="submit" form="product-form" disabled={busy || !name.trim() || !sku.trim()}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Зберігаю…" : isEdit ? "Змінити" : "Додати"}
           </button>
         </div>
@@ -558,11 +558,11 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                       </div>
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => setAddOp(false)}
-                          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
+                          className="btn btn-ghost">
                           Скасувати
                         </button>
                         <button type="submit" disabled={oBusy || !oName.trim()}
-                          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+                          className="btn btn-primary disabled:opacity-50">
                           {oBusy ? "Зберігаю…" : "Додати"}
                         </button>
                       </div>
@@ -622,7 +622,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
         {/* Footer */}
         <div className="flex shrink-0 items-center justify-end border-t border-[var(--border)] px-6 py-4 ">
           <button onClick={onClose}
-            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]  ">
+            className="btn btn-primary">
             Закрити
           </button>
         </div>
@@ -818,7 +818,7 @@ export default function ProductsPage() {
             <span className="text-sm text-[var(--text-faint)]">{filtered.length} позицій</span>
           </div>
           <button onClick={() => setEditProduct("create")}
-            className="h-9 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:bg-[var(--accent-hi)]   ">
+            className="btn btn-primary">
             + Номенклатура
           </button>
         </div>

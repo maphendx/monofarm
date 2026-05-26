@@ -406,25 +406,23 @@ export function SendModal({
 
         {/* footer */}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
-          <button onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          <button onClick={onClose} className="btn btn-ghost">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!result?.ok && mode === "print" && (
             <button onClick={sendPrint} disabled={!selectedId || busy}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-40  ">
+              className="btn btn-primary disabled:opacity-40">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
           {!result?.ok && mode === "save" && (
-            <button onClick={onClose}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
+            <button onClick={onClose} className="btn btn-primary">
               Готово
             </button>
           )}
           {!result?.ok && mode === "queue" && (
             <button onClick={addToQueue} disabled={busy}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-40  ">
+              className="btn btn-primary disabled:opacity-40">
               {busy ? "Додаю…" : "Додати в чергу"}
             </button>
           )}

@@ -95,18 +95,18 @@ function CreateMovementModal({
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={open} onClose={onClose} title="Новий рух товару"
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          className="btn btn-ghost">
           Скасувати
         </button>
         <button type="submit" form="movement-form"
           disabled={busy || !productId || parseFloat(quantity) <= 0}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+          className="btn btn-primary disabled:opacity-50">
           {busy ? "Зберігаю…" : "Зафіксувати"}
         </button>
       </>}
@@ -241,7 +241,7 @@ export default function MovementsPage() {
         <div className="flex gap-2">
           <button onClick={load} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]  ">↻</button>
           <button onClick={() => setCreateOpen(true)}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
+            className="btn btn-primary btn-sm">
             + Рух
           </button>
         </div>

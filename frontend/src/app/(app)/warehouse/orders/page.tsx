@@ -112,18 +112,18 @@ function CreateOrderModal({ open, onClose, onCreated }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={open} onClose={onClose} title="Нове замовлення"
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+            className="btn btn-ghost">
             Скасувати
           </button>
           <button type="submit" form="order-form" disabled={busy || validLines.length === 0}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Зберігаю…" : `Створити · ₴${total.toLocaleString("uk-UA")}`}
           </button>
         </>
@@ -273,18 +273,18 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={open} onClose={onClose} title={`Редагувати ${order?.order_number ?? ""}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+            className="btn btn-ghost">
             Скасувати
           </button>
           <button type="submit" form="edit-order-form" disabled={busy}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
         </>
@@ -389,14 +389,14 @@ function ReserveModal({ open, onClose, order, onReserved }: {
     } finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={open} onClose={onClose} title={`Резервувати — ${order?.order_number ?? ""}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+            className="btn btn-ghost">
             Скасувати
           </button>
           <button type="submit" form="reserve-form" disabled={busy || !warehouseId}
@@ -494,7 +494,7 @@ export default function OrdersPage() {
           ))}
         </div>
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
+          className="btn btn-primary btn-sm">
           + Замовлення
         </button>
       </div>

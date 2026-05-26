@@ -213,9 +213,9 @@ export function PrinterCard({
 
       {/* Progress bar */}
       {showProgress && (
-        <div className="h-[3px] overflow-hidden rounded-full bg-[var(--surface-hi)]">
+        <div className="progress">
           <div
-            className="h-full rounded-full bg-[var(--state-print)] transition-[width] duration-1000 ease-linear"
+            className="progress-fill transition-[width] duration-1000 ease-linear"
             style={{ width: `${printer.progress_pct}%` }}
           />
         </div>

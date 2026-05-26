@@ -63,7 +63,7 @@ export function TelegramLinkModal({
             <div className="flex items-center gap-2">
               <button
                 onClick={copy}
-                className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  "
+                className="btn btn-primary"
               >
                 {copied ? "Скопійовано ✓" : "Скопіювати"}
               </button>

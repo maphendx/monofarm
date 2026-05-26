@@ -74,7 +74,7 @@ function printerToForm(p: Printer): PrinterForm {
 }
 
 function inputCls() {
-  return "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  return "input";
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -154,9 +154,9 @@ function AddPrinterWizard({ open, onClose, onDone }: {
     }
   }
 
-  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
-  const primaryBtn = "rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   ";
-  const ghostBtn = "rounded-md px-4 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
+  const inp = "input";
+  const primaryBtn = "btn btn-primary disabled:opacity-50";
+  const ghostBtn = "btn btn-ghost";
 
   return (
     <Modal open={open} onClose={() => { if (!busy && !syncing) onClose(); }} title="Додати принтер">
@@ -345,7 +345,7 @@ function PrinterModal({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
+            className="btn btn-ghost"
           >
             Скасувати
           </button>
@@ -353,7 +353,7 @@ function PrinterModal({
             type="submit"
             form="printer-form"
             disabled={busy || !form.name.trim()}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50   "
+            className="btn btn-primary disabled:opacity-50"
           >
             {busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}
           </button>
@@ -581,7 +581,7 @@ export default function PrintersPage() {
           {isAdmin && (
             <button
               onClick={() => setWizardOpen(true)}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]   "
+              className="btn btn-primary"
             >
               + Додати принтер
             </button>
@@ -605,7 +605,7 @@ export default function PrintersPage() {
                 <button
                   onClick={() => claimDevice(d.dev_id)}
                   disabled={claiming === d.dev_id}
-                  className="rounded-md bg-[var(--accent)] px-3 py-1 text-xs font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  "
+                  className="btn btn-primary btn-sm disabled:opacity-50"
                 >
                   {claiming === d.dev_id ? "…" : "Додати"}
                 </button>

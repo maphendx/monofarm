@@ -97,11 +97,11 @@ function UserFormModal({
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+            className="btn btn-ghost disabled:opacity-50">
             Скасувати
           </button>
           <button type="submit" form="user-form" disabled={busy}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити"}
           </button>
         </>
@@ -113,14 +113,14 @@ function UserFormModal({
           <input type="email" required disabled={!!initial} value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
             placeholder="user@example.com"
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] disabled:opacity-60  " />
+            className="input disabled:opacity-60" />
         </label>
         <label className="block">
           <span className="mb-1 block">Імʼя</span>
           <input type="text" value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             placeholder="Іван"
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
+            className="input" />
         </label>
         <label className="block">
           <span className="mb-1 block">
@@ -129,13 +129,13 @@ function UserFormModal({
           <input type="password" required={!initial} minLength={6} value={form.password}
             onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             placeholder="мін. 6 символів"
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
+            className="input" />
         </label>
         <label className="block">
           <span className="mb-1 block">Роль</span>
           <select value={form.role}
             onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
+            className="input">
             {(Object.keys(ROLE_LABEL) as UserRole[]).map(r => (
               <option key={r} value={r}>{ROLE_LABEL[r]}</option>
             ))}
@@ -203,7 +203,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">{t("users.title")}</h1>
         <button onClick={() => { setEditing(null); setModalOpen(true); }}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
+          className="btn btn-primary">
           + {t("users.addUser")}
         </button>
       </div>

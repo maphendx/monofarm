@@ -206,20 +206,18 @@ export function LabelGeneratorModal({
               {pdfError ?? printStatus}
             </span>
           )}
-          <button type="button" onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          <button type="button" onClick={onClose} className="btn btn-ghost">
             Закрити
           </button>
           <button type="button" onClick={printZebra} disabled={printBusy}
-            className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-50   ">
+            className="btn btn-secondary disabled:opacity-50">
             {printBusy ? "…" : "Друкувати"}
           </button>
-          <button type="button" onClick={downloadSvg}
-            className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-hi)]   ">
+          <button type="button" onClick={downloadSvg} className="btn btn-secondary">
             ↓ SVG
           </button>
           <button type="button" onClick={downloadPdf} disabled={busy}
-            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
+            className="btn btn-primary disabled:opacity-50">
             {busy ? "Генерую…" : "Друкувати PDF"}
           </button>
         </>
@@ -274,7 +272,7 @@ export function LabelGeneratorModal({
                   className={`${inputCls} w-20 font-mono text-base tracking-widest`} />
                 <button type="button" onClick={() => setLabelId(genLabelId())}
                   title="Новий ID"
-                  className="rounded-md border border-[var(--border-strong)] px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+                  className="btn btn-secondary btn-sm">
                   ↻
                 </button>
               </div>

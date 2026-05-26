@@ -112,7 +112,7 @@ function KanbanColumn({
               onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(""); setAdding(false); } }}
               placeholder="Назва завдання…" className="w-full bg-transparent text-sm outline-none" />
             <div className="mt-2 flex gap-2">
-              <button onClick={commit} className="rounded bg-[var(--accent)] px-2 py-1 text-xs text-white hover:bg-[var(--accent-hi)]  ">Додати</button>
+              <button onClick={commit} className="btn btn-primary btn-sm">Додати</button>
               <button onClick={() => { setDraft(""); setAdding(false); }} className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Скасувати</button>
             </div>
           </div>
@@ -154,24 +154,24 @@ function FarmTaskEditModal({ task, onClose, onSaved }: { task: FarmTask | null; 
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання"
       footer={<>
-        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
-        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost disabled:opacity-50">Скасувати</button>
+        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="btn btn-primary disabled:opacity-50">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-farm-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
+            className="input" /></label>
         <label className="block"><span className="mb-1 block">Опис</span>
           <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)}
-            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
+            className="input" /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Дедлайн</span>
             <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
+              className="input" /></label>
           <label className="block"><span className="mb-1 block">Статус</span>
             <select value={status} onChange={e => setStatus(e.target.value as FarmTaskStatus)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
+              className="input">
               <option value="todo">До виконання</option>
               <option value="in_progress">В процесі</option>
               <option value="done">Виконано</option>
@@ -265,13 +265,13 @@ function CompleteModal({ task, onClose, onDone }: {
     } finally { setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const inputCls = "input";
 
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title={`Завершити: ${task.title}`}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+          className="btn btn-ghost disabled:opacity-50">
           Скасувати
         </button>
         <button onClick={submit} disabled={busy || piecesOk < 0}
@@ -427,21 +427,21 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання друку"
       footer={<>
-        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
-        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost disabled:opacity-50">Скасувати</button>
+        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="btn btn-primary disabled:opacity-50">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-print-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
+            className="input" /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Кількість</span>
             <input type="number" min={1} value={qty} onChange={e => setQty(Number(e.target.value))}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
+              className="input" /></label>
           <label className="block"><span className="mb-1 block">Статус</span>
             <select value={status} onChange={e => setStatus(e.target.value as PrintTaskStatus)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
+              className="input">
               {(Object.keys(PRINT_STATUS_LABELS) as PrintTaskStatus[]).map(s => (
                 <option key={s} value={s}>{PRINT_STATUS_LABELS[s]}</option>
               ))}
@@ -449,10 +449,10 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
         </div>
         <label className="block"><span className="mb-1 block">Дедлайн</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
+            className="input" /></label>
         <label className="block"><span className="mb-1 block">Примітки</span>
           <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
+            className="input" /></label>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
       </form>
     </Modal>
