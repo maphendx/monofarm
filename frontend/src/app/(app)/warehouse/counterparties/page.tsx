@@ -10,8 +10,8 @@ type CounterpartyType = "supplier" | "customer" | "both";
 
 const TYPE_META: Record<CounterpartyType, { label: string; cls: string }> = {
   supplier: { label: "Постачальник", cls: "bg-violet-500/15 text-violet-700 dark:text-violet-400" },
-  customer: { label: "Клієнт",       cls: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400" },
-  both:     { label: "Обидва",       cls: "bg-neutral-500/15 text-neutral-700 dark:text-neutral-400" },
+  customer: { label: "Клієнт",       cls: "bg-cyan-500/15 text-[var(--accent)] " },
+  both:     { label: "Обидва",       cls: "bg-neutral-500/15 text-[var(--text)] " },
 };
 
 type Counterparty = {
@@ -109,7 +109,7 @@ function CounterpartyModal({
     }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal
@@ -119,11 +119,11 @@ function CounterpartyModal({
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="cp-form" disabled={busy || !form.name.trim()}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : editing ? "Зберегти" : "Створити"}
           </button>
         </>
@@ -132,7 +132,7 @@ function CounterpartyModal({
       <form id="cp-form" onSubmit={submit} className="space-y-3 text-sm">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Тип *</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Тип *</span>
             <select value={form.type} onChange={(e) => set("type", e.target.value)} className={inputCls}>
               <option value="customer">Клієнт</option>
               <option value="supplier">Постачальник</option>
@@ -140,7 +140,7 @@ function CounterpartyModal({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Назва *</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Назва *</span>
             <input value={form.name} onChange={(e) => set("name", e.target.value)}
               placeholder="ТОВ «Компанія»" className={inputCls} />
           </label>
@@ -148,12 +148,12 @@ function CounterpartyModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Email</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Email</span>
             <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)}
               placeholder="info@company.ua" className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Телефон</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Телефон</span>
             <input value={form.phone} onChange={(e) => set("phone", e.target.value)}
               placeholder="+380 67 …" className={inputCls} />
           </label>
@@ -161,19 +161,19 @@ function CounterpartyModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">ЄДРПОУ / ІПН</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">ЄДРПОУ / ІПН</span>
             <input value={form.tax_number} onChange={(e) => set("tax_number", e.target.value)}
               placeholder="12345678" className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Адреса</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Адреса</span>
             <input value={form.address} onChange={(e) => set("address", e.target.value)}
               placeholder="м. Київ, вул. …" className={inputCls} />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Нотатка</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
           <input value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inputCls} />
         </label>
 
@@ -217,36 +217,36 @@ function BalanceModal({
     }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal open={open} onClose={onClose} title={`Оплата — ${cp?.name ?? ""}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="balance-form" disabled={busy || !delta}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Записати"}
           </button>
         </>
       }
     >
       <form id="balance-form" onSubmit={submit} className="space-y-3 text-sm">
-        <p className="text-neutral-500 dark:text-neutral-400">
+        <p className="text-[var(--text-muted)] ">
           Поточний баланс: <span className={`font-medium ${parseFloat(cp?.balance ?? "0") > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
             {parseFloat(cp?.balance ?? "0").toLocaleString("uk-UA")} ₴
           </span>
         </p>
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Сума оплати ₴ (позитивна = клієнт оплатив нам)</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Сума оплати ₴ (позитивна = клієнт оплатив нам)</span>
           <input type="number" step="0.01" value={delta} onChange={(e) => setDelta(e.target.value)}
             placeholder="1000.00" className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Коментар</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Коментар</span>
           <input value={note} onChange={(e) => setNote(e.target.value)}
             placeholder="Оплата рахунку №123" className={inputCls} />
         </label>
@@ -266,7 +266,7 @@ const TYPE_FILTER_LABELS: Record<string, string> = {
 
 function fmtBalance(v: string) {
   const n = parseFloat(v);
-  if (n === 0) return <span className="text-neutral-400">0 ₴</span>;
+  if (n === 0) return <span className="text-[var(--text-faint)]">0 ₴</span>;
   return (
     <span className={n > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}>
       {n > 0 ? "+" : ""}{n.toLocaleString("uk-UA")} ₴
@@ -307,7 +307,7 @@ export default function CounterpartiesPage() {
     return true;
   });
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <div className="space-y-4">
@@ -320,7 +320,7 @@ export default function CounterpartiesPage() {
             placeholder="Пошук…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400   "
           />
           <div className="flex gap-1">
             {TYPE_FILTERS.map((f) => (
@@ -328,8 +328,8 @@ export default function CounterpartiesPage() {
                 className={[
                   "rounded-md px-2.5 py-1.5 text-xs transition-colors",
                   typeFilter === f
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "border border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-800 dark:text-neutral-400",
+                    ? "bg-[var(--surface)] text-white  "
+                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
                 ].join(" ")}>
                 {TYPE_FILTER_LABELS[f]}
               </button>
@@ -337,15 +337,15 @@ export default function CounterpartiesPage() {
           </div>
         </div>
         <button onClick={() => { setEditing(null); setCreateOpen(true); }}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
           + Контрагент
         </button>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
             <tr>
               <th className="px-4 py-3 font-medium">Назва</th>
               <th className="px-4 py-3 font-medium">Тип</th>
@@ -357,30 +357,30 @@ export default function CounterpartiesPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-neutral-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">
                   {search || typeFilter !== "Всі" ? "Нічого не знайдено" : "Контрагентів ще немає"}
                 </td>
               </tr>
             ) : filtered.map((c) => {
               const meta = TYPE_META[c.type];
               return (
-                <tr key={c.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                <tr key={c.id} className="hover:bg-[var(--surface-hi)] ">
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
                       {meta.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">{c.email ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-400">{c.phone ?? "—"}</td>
-                  <td className="px-4 py-3 text-neutral-400 font-mono text-xs">{c.tax_number ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{c.email ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--text-faint)]">{c.phone ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--text-faint)] font-mono text-xs">{c.tax_number ?? "—"}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-medium">
                     {fmtBalance(c.balance)}
                   </td>
-                  <td className="max-w-[180px] px-4 py-3 truncate text-xs text-neutral-400">
+                  <td className="max-w-[180px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
                     {c.notes ?? "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -388,13 +388,13 @@ export default function CounterpartiesPage() {
                       <button
                         onClick={() => { setBalanceCp(c); }}
                         title="Записати оплату"
-                        className="rounded p-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-emerald-600 dark:hover:bg-neutral-800 dark:hover:text-emerald-400">
+                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-emerald-600  dark:hover:text-emerald-400">
                         ₴
                       </button>
                       <button
                         onClick={() => { setEditing(c); setCreateOpen(true); }}
                         title="Редагувати"
-                        className="rounded p-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">
+                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">
                         ✎
                       </button>
                     </div>

@@ -54,7 +54,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
     return (
       <button
         onClick={toggle}
-        className="flex size-[18px] shrink-0 items-center justify-center text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+        className="flex size-[18px] shrink-0 items-center justify-center text-[var(--text-muted)] transition hover:text-[var(--text-hi)]  "
         aria-label={theme === "dark" ? "Світла тема" : "Темна тема"}
         title={theme === "dark" ? "Світла тема" : "Темна тема"}
       >
@@ -66,7 +66,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   return (
     <button
       onClick={toggle}
-      className="rounded-md border border-neutral-200 p-1.5 text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+      className="rounded-md border border-[var(--border)] p-1.5 text-[var(--text)] transition hover:bg-[var(--surface-hi)]   "
       aria-label={theme === "dark" ? "Світла тема" : "Темна тема"}
       title={theme === "dark" ? "Світла тема" : "Темна тема"}
     >

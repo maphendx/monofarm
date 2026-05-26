@@ -74,13 +74,13 @@ function CategoryModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl  ">
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 ">
           <h2 className="font-semibold">{isEdit ? "Редагувати категорію" : "Нова категорія"}</h2>
           <button onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] ">
             ×
           </button>
         </div>
@@ -88,16 +88,16 @@ function CategoryModal({
         <form onSubmit={save} className="px-5 py-4 space-y-4">
           {/* Name */}
           <div>
-            <label className="mb-1.5 block text-sm text-neutral-600 dark:text-neutral-400">Назва</label>
+            <label className="mb-1.5 block text-sm text-[var(--text-muted)] ">Назва</label>
             <input
               required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400   "
             />
           </div>
 
           {/* Color */}
           <div>
-            <label className="mb-1.5 block text-sm text-neutral-600 dark:text-neutral-400">Колір</label>
+            <label className="mb-1.5 block text-sm text-[var(--text-muted)] ">Колір</label>
             <div className="flex flex-wrap gap-2">
               {COLORS.map((c) => (
                 <button
@@ -105,13 +105,13 @@ function CategoryModal({
                   onClick={() => setColor(c)}
                   className={[
                     "size-7 rounded-full border-2 transition-transform hover:scale-110",
-                    color === c ? "border-neutral-900 dark:border-neutral-100 scale-110" : "border-transparent",
+                    color === c ? "border-neutral-900  scale-110" : "border-transparent",
                   ].join(" ")}
                   style={{ background: c }}
                 />
               ))}
               {/* Custom hex */}
-              <label className="flex size-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-[10px] text-neutral-400 hover:border-neutral-500 dark:border-neutral-700" title="Свій колір">
+              <label className="flex size-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)] hover:border-neutral-500 " title="Свій колір">
                 <input type="color" value={color ?? "#e5e7eb"} onChange={(e) => setColor(e.target.value)} className="sr-only" />
                 +
               </label>
@@ -131,11 +131,11 @@ function CategoryModal({
 
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} disabled={busy}
-              className="rounded-md px-3 py-2 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+              className="rounded-md px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
               Скасувати
             </button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+              className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
               {busy ? "Зберігаю…" : isEdit ? "Зберегти" : "Додати"}
             </button>
           </div>
@@ -178,7 +178,7 @@ export default function CategoriesPage() {
     }
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <div className="space-y-4">
@@ -187,13 +187,13 @@ export default function CategoriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Категорії товарів</h1>
-          <p className="mt-0.5 text-sm text-neutral-500">
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">
             {categories.length} {categories.length === 1 ? "категорія" : "категорій"} · використовуються для фільтрації номенклатури
           </p>
         </div>
         <button
           onClick={() => setModal("create")}
-          className="h-9 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+          className="h-9 rounded-lg bg-[var(--surface)] px-4 text-sm font-medium text-white hover:bg-neutral-700  "
         >
           + Категорія
         </button>
@@ -201,20 +201,20 @@ export default function CategoriesPage() {
 
       {/* List */}
       {categories.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-300 py-16 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500">Категорій ще немає</p>
-          <p className="mt-1 text-xs text-neutral-400">Додай першу, щоб групувати номенклатуру</p>
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center ">
+          <p className="text-sm text-[var(--text-muted)]">Категорій ще немає</p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">Додай першу, щоб групувати номенклатуру</p>
           <button
             onClick={() => setModal("create")}
-            className="mt-4 rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+            className="mt-4 rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  "
           >
             Додати категорію
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+            <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
               <tr>
                 <th className="px-5 py-3 font-medium">Назва</th>
                 <th className="px-4 py-3 font-medium">Колір</th>
@@ -222,9 +222,9 @@ export default function CategoriesPage() {
                 <th className="w-20 px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
               {categories.map((cat) => (
-                <tr key={cat.id} className="group hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40">
+                <tr key={cat.id} className="group hover:bg-[var(--surface-hi)]/80 ">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2.5">
                       <ColorDot color={cat.color} />
@@ -237,16 +237,16 @@ export default function CategoriesPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <code className="text-xs text-neutral-400">{cat.color ?? "—"}</code>
+                    <code className="text-xs text-[var(--text-faint)]">{cat.color ?? "—"}</code>
                   </td>
-                  <td className="px-4 py-3 text-right text-xs text-neutral-400">
+                  <td className="px-4 py-3 text-right text-xs text-[var(--text-faint)]">
                     {new Date(cat.created_at).toLocaleDateString("uk-UA")}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setModal(cat)}
-                        className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"
+                        className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] "
                         title="Редагувати"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -257,7 +257,7 @@ export default function CategoriesPage() {
                       <button
                         onClick={() => deleteCategory(cat.id)}
                         disabled={deleting === cat.id}
-                        className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30"
+                        className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30"
                         title="Видалити"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

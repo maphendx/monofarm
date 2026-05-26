@@ -35,10 +35,10 @@ type Movement = {
 const TYPE_META: Record<string, { label: string; cls: string }> = {
   PRODUCTION_IN:  { label: "Виробництво +", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
   PRODUCTION_OUT: { label: "Сировина −",    cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
-  SALE_OUT:       { label: "Продаж",        cls: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" },
+  SALE_OUT:       { label: "Продаж",        cls: "bg-cyan-500/15 text-[var(--accent)] " },
   PURCHASE_IN:    { label: "Закупка",       cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
   DEFECT:         { label: "Брак",          cls: "bg-red-500/15 text-red-600 dark:text-red-400" },
-  ADJUSTMENT:     { label: "Коригування",   cls: "bg-neutral-500/15 text-neutral-600 dark:text-neutral-400" },
+  ADJUSTMENT:     { label: "Коригування",   cls: "bg-neutral-500/15 text-[var(--text-muted)] " },
   TRANSFER:       { label: "Переміщення",   cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
 };
 
@@ -46,10 +46,10 @@ const TYPE_META: Record<string, { label: string; cls: string }> = {
 
 function KpiCard({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="text-xs text-neutral-500">{label}</p>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+      <p className="text-xs text-[var(--text-muted)]">{label}</p>
       <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-xs text-neutral-400">{sub}</p>
+      <p className="mt-0.5 text-xs text-[var(--text-faint)]">{sub}</p>
     </div>
   );
 }
@@ -57,7 +57,7 @@ function KpiCard({ label, value, sub }: { label: string; value: string; sub: str
 function ProgressBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.round(value));
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
       <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
@@ -101,7 +101,7 @@ export default function WarehouseDashboard() {
     return avail < 10 && s.warehouse_name === "Готова продукція";
   });
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <div className="space-y-6">
@@ -135,10 +135,10 @@ export default function WarehouseDashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
 
         {/* Active batches */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <h2 className="mb-3 text-sm font-medium">Активні партії</h2>
           {activeBatches.length === 0 ? (
-            <p className="text-sm text-neutral-400">Немає активних партій</p>
+            <p className="text-sm text-[var(--text-faint)]">Немає активних партій</p>
           ) : (
             <div className="space-y-4">
               {activeBatches.map((b) => {
@@ -148,11 +148,11 @@ export default function WarehouseDashboard() {
                     <div className="mb-1 flex items-center justify-between text-sm">
                       <span className="font-medium">{b.product_name}</span>
                       {b.due_date && (
-                        <span className="text-xs text-neutral-400">до {new Date(b.due_date).toLocaleDateString("uk-UA")}</span>
+                        <span className="text-xs text-[var(--text-faint)]">до {new Date(b.due_date).toLocaleDateString("uk-UA")}</span>
                       )}
                     </div>
                     <ProgressBar value={pct} />
-                    <p className="mt-1 text-xs text-neutral-400">
+                    <p className="mt-1 text-xs text-[var(--text-faint)]">
                       {b.printed_qty} / {b.target_qty} шт · {pct.toFixed(0)}%
                     </p>
                   </div>
@@ -163,26 +163,26 @@ export default function WarehouseDashboard() {
         </div>
 
         {/* Recent movements */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <h2 className="mb-3 text-sm font-medium">Останні рухи</h2>
           {movements.length === 0 ? (
-            <p className="text-sm text-neutral-400">Немає рухів</p>
+            <p className="text-sm text-[var(--text-faint)]">Немає рухів</p>
           ) : (
             <div className="space-y-2">
               {movements.map((m) => {
-                const meta = TYPE_META[m.type] ?? { label: m.type, cls: "bg-neutral-100 text-neutral-600" };
+                const meta = TYPE_META[m.type] ?? { label: m.type, cls: "bg-[var(--surface-hi)] text-[var(--text-muted)]" };
                 return (
                   <div key={m.id} className="flex items-center gap-3 text-sm">
                     <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
                       {meta.label}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-neutral-700 dark:text-neutral-300">
+                    <span className="min-w-0 flex-1 truncate text-[var(--text)] ">
                       {m.product_name}
                     </span>
-                    <span className="shrink-0 font-mono text-xs tabular-nums text-neutral-500">
+                    <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--text-muted)]">
                       {parseFloat(m.quantity) > 0 ? "+" : ""}{parseFloat(m.quantity).toFixed(0)}
                     </span>
-                    <span className="shrink-0 text-xs text-neutral-400">{fmtDate(m.created_at)}</span>
+                    <span className="shrink-0 text-xs text-[var(--text-faint)]">{fmtDate(m.created_at)}</span>
                   </div>
                 );
               })}

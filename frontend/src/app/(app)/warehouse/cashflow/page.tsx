@@ -97,7 +97,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
   const incomeCategories: TxCategory[]  = ["order_payment", "refund", "other"];
   const expenseCategories: TxCategory[] = ["supplier_payment", "salary", "utility", "refund", "other"];
   const categories = type === "income" ? incomeCategories : expenseCategories;
@@ -107,11 +107,11 @@ function CreateTxModal({ open, onClose, onCreated }: {
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="cash-form" disabled={busy || !amount}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Додати"}
           </button>
         </>
@@ -120,14 +120,14 @@ function CreateTxModal({ open, onClose, onCreated }: {
       <form id="cash-form" onSubmit={submit} className="space-y-3 text-sm">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Тип</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Тип</span>
             <select value={type} onChange={(e) => setType(e.target.value as TxType)} className={inputCls}>
               <option value="income">Дохід</option>
               <option value="expense">Витрата</option>
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Категорія</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Категорія</span>
             <select value={category} onChange={(e) => setCategory(e.target.value as TxCategory)} className={inputCls}>
               {categories.map((c) => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
@@ -138,19 +138,19 @@ function CreateTxModal({ open, onClose, onCreated }: {
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Сума ₴ *</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Сума ₴ *</span>
             <input type="number" min={0.01} step="0.01" value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="1000.00" className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Дата</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Дата</span>
             <input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} className={inputCls} />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Контрагент</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Контрагент</span>
           <select value={cpId} onChange={(e) => setCpId(e.target.value)} className={inputCls}>
             <option value="">— без контрагента —</option>
             {counterparties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -158,7 +158,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Опис</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Опис</span>
           <input value={description} onChange={(e) => setDescription(e.target.value)}
             placeholder="Оплата рахунку №…" className={inputCls} />
         </label>
@@ -229,20 +229,20 @@ export default function CashFlowPage() {
 
       {/* KPI */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <p className="text-xs text-neutral-500">Доходи</p>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+          <p className="text-xs text-[var(--text-muted)]">Доходи</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
             {fmt(summary?.total_income ?? 0)} ₴
           </p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <p className="text-xs text-neutral-500">Витрати</p>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+          <p className="text-xs text-[var(--text-muted)]">Витрати</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
             {fmt(summary?.total_expense ?? 0)} ₴
           </p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <p className="text-xs text-neutral-500">Баланс</p>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+          <p className="text-xs text-[var(--text-muted)]">Баланс</p>
           <p className={`mt-1 text-2xl font-bold tabular-nums ${net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
             {net >= 0 ? "+" : ""}{fmt(net)} ₴
           </p>
@@ -259,8 +259,8 @@ export default function CashFlowPage() {
                 className={[
                   "rounded-md px-2.5 py-1.5 text-xs transition-colors",
                   typeFilter === f
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "border border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-800 dark:text-neutral-400",
+                    ? "bg-[var(--surface)] text-white  "
+                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
                 ].join(" ")}>
                 {f === "all" ? "Всі" : f === "income" ? "Доходи" : "Витрати"}
               </button>
@@ -269,22 +269,22 @@ export default function CashFlowPage() {
           {/* Date range */}
           <div className="flex items-center gap-1">
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200" />
-            <span className="text-neutral-400">—</span>
+              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs   " />
+            <span className="text-[var(--text-faint)]">—</span>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200" />
+              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs   " />
           </div>
         </div>
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
           + Транзакція
         </button>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
             <tr>
               <th className="px-4 py-3 font-medium">Дата</th>
               <th className="px-4 py-3 font-medium">Тип</th>
@@ -296,31 +296,31 @@ export default function CashFlowPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-neutral-400">Завантаження…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">Завантаження…</td></tr>
             ) : transactions.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-neutral-400">Транзакцій немає</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">Транзакцій немає</td></tr>
             ) : transactions.map((tx) => {
               const meta = TYPE_META[tx.type];
               return (
-                <tr key={tx.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                  <td className="px-4 py-3 text-neutral-500 tabular-nums">
+                <tr key={tx.id} className="hover:bg-[var(--surface-hi)] ">
+                  <td className="px-4 py-3 text-[var(--text-muted)] tabular-nums">
                     {new Date(tx.transaction_date).toLocaleDateString("uk-UA")}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium ${meta.cls}`}>{meta.label}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-neutral-600 dark:text-neutral-300">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)] ">
                     {CATEGORY_LABELS[tx.category]}
                   </td>
-                  <td className="px-4 py-3 text-neutral-600 dark:text-neutral-300">
-                    {tx.counterparty_name ?? <span className="text-neutral-400">—</span>}
+                  <td className="px-4 py-3 text-[var(--text-muted)] ">
+                    {tx.counterparty_name ?? <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
-                    {tx.order_number ?? <span className="text-neutral-400">—</span>}
+                    {tx.order_number ?? <span className="text-[var(--text-faint)]">—</span>}
                   </td>
-                  <td className="max-w-[200px] px-4 py-3 truncate text-xs text-neutral-400">
+                  <td className="max-w-[200px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
                     {tx.description ?? "—"}
                   </td>
                   <td className={`px-4 py-3 text-right font-medium tabular-nums ${meta.cls}`}>
@@ -330,7 +330,7 @@ export default function CashFlowPage() {
                     <button
                       onClick={() => deleteTx(tx.id)}
                       disabled={deleting === tx.id}
-                      className="rounded p-1 text-xs text-neutral-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30 dark:hover:text-red-400">
+                      className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30 dark:hover:text-red-400">
                       {deleting === tx.id ? "…" : "✕"}
                     </button>
                   </td>
@@ -343,15 +343,15 @@ export default function CashFlowPage() {
 
       {/* By category breakdown */}
       {summary && summary.by_category.length > 0 && (
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-          <h3 className="mb-3 text-sm font-medium text-neutral-700 dark:text-neutral-300">За категоріями</h3>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+          <h3 className="mb-3 text-sm font-medium text-[var(--text)] ">За категоріями</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {summary.by_category.map((row) => {
               const isIncome = row.type === "income";
               return (
                 <div key={`${row.type}-${row.category}`}
-                  className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 dark:bg-neutral-800">
-                  <span className="text-xs text-neutral-600 dark:text-neutral-300">
+                  className="flex items-center justify-between rounded-lg bg-[var(--bg)] px-3 py-2 ">
+                  <span className="text-xs text-[var(--text-muted)] ">
                     {CATEGORY_LABELS[row.category as TxCategory] ?? row.category}
                   </span>
                   <span className={`text-sm font-medium tabular-nums ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>

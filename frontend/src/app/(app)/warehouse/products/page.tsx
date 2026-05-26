@@ -61,7 +61,7 @@ function fmtMin(min: number) {
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-4">
-      <span className="w-36 shrink-0 pt-2 text-right text-sm text-neutral-500 dark:text-neutral-400">
+      <span className="w-36 shrink-0 pt-2 text-right text-sm text-[var(--text-muted)] ">
         {label}
       </span>
       <div className="flex-1 min-w-0">{children}</div>
@@ -69,9 +69,9 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-const INPUT = "w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-500";
+const INPUT = "w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400    dark:focus:border-neutral-500";
 const SEC   = "flex flex-col gap-3.5 px-6 py-4";
-const HR    = "border-neutral-100 dark:border-neutral-800";
+const HR    = "border-[var(--border)] ";
 
 // ── CategoryInput ─────────────────────────────────────────────────────────────
 
@@ -89,12 +89,12 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
   }
 
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 focus-within:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-950 dark:focus-within:border-neutral-500">
+    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-neutral-400   dark:focus-within:border-neutral-500">
       {value.map((t) => (
-        <span key={t} className="flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
+        <span key={t} className="flex items-center gap-1 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
           {t}
           <button type="button" onClick={() => onChange(value.filter((x) => x !== t))}
-            className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">×</button>
+            className="text-[var(--text-faint)] hover:text-[var(--text)] ">×</button>
         </span>
       ))}
       <input
@@ -152,15 +152,15 @@ function ProductModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl  ">
 
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
-          <h2 className="font-semibold text-neutral-900 dark:text-neutral-100">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4 ">
+          <h2 className="font-semibold text-[var(--text-hi)] ">
             {isEdit ? "Редагувати номенклатуру" : "Нова номенклатура"}
           </h2>
           <button onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">
+            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">
             ×
           </button>
         </div>
@@ -192,14 +192,14 @@ function ProductModal({
                 <input type="number" step="0.01" min="0" value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   className={`${INPUT} pr-6`} />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400">₴</span>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-faint)]">₴</span>
               </div>
             </FormRow>
             {isEdit && product!.full_cost && (
               <FormRow label="Собівартість">
-                <div className="flex items-center gap-2 py-2 text-sm text-neutral-500">
+                <div className="flex items-center gap-2 py-2 text-sm text-[var(--text-muted)]">
                   <span className="tabular-nums">{parseFloat(product!.full_cost).toFixed(2)} ₴</span>
-                  <span className="text-xs text-neutral-400">(розраховується зі специфікації)</span>
+                  <span className="text-xs text-[var(--text-faint)]">(розраховується зі специфікації)</span>
                 </div>
               </FormRow>
             )}
@@ -236,13 +236,13 @@ function ProductModal({
         </form>
 
         {/* Footer */}
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 px-6 py-4 dark:border-neutral-800">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] px-6 py-4 ">
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="product-form" disabled={busy || !name.trim() || !sku.trim()}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : isEdit ? "Змінити" : "Додати"}
           </button>
         </div>
@@ -371,16 +371,16 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl  ">
 
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-6 py-4 dark:border-neutral-800">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4 ">
           <div>
-            <h2 className="font-semibold text-neutral-900 dark:text-neutral-100">Специфікація</h2>
-            <p className="mt-0.5 text-xs text-neutral-500">{product.name} · {product.sku}</p>
+            <h2 className="font-semibold text-[var(--text-hi)] ">Специфікація</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{product.name} · {product.sku}</p>
           </div>
           <button onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">
+            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">
             ×
           </button>
         </div>
@@ -388,26 +388,26 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="px-6 py-10 text-center text-sm text-neutral-400">Завантаження…</div>
+            <div className="px-6 py-10 text-center text-sm text-[var(--text-faint)]">Завантаження…</div>
           ) : !spec ? null : (
-            <div className="space-y-0 divide-y divide-neutral-100 dark:divide-neutral-800">
+            <div className="space-y-0 divide-y divide-[var(--border)] dark:divide-neutral-800">
 
               {/* ── Materials ── */}
               <div className="px-6 py-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Матеріали</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Матеріали</p>
                   <button onClick={() => setAddComp((v) => !v)}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
                     <span className="text-base leading-none">+</span> Додати
                   </button>
                 </div>
 
                 {spec.components.length === 0 && !addComp ? (
-                  <p className="text-sm text-neutral-400">Матеріалів ще немає</p>
+                  <p className="text-sm text-[var(--text-faint)]">Матеріалів ще немає</p>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+                  <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
                     <table className="w-full text-sm">
-                      <thead className="bg-neutral-50 text-xs text-neutral-400 dark:bg-neutral-900/60">
+                      <thead className="bg-[var(--bg)] text-xs text-[var(--text-faint)] ">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium">Матеріал</th>
                           <th className="px-3 py-2.5 text-right font-medium">К-сть</th>
@@ -417,17 +417,17 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                           <th className="w-8 px-2 py-2.5" />
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                      <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
                         {spec.components.map((c) => (
                           <tr key={c.id} className="group">
                             <td className="px-4 py-2.5">{c.name}</td>
                             <td className="px-3 py-2.5 text-right tabular-nums">{parseFloat(c.quantity).toFixed(3)}</td>
-                            <td className="px-3 py-2.5 text-right text-neutral-500">{c.unit}</td>
-                            <td className="px-3 py-2.5 text-right tabular-nums text-neutral-500">{c.unit_price ? parseFloat(c.unit_price).toFixed(4) : "—"}</td>
-                            <td className="px-3 py-2.5 text-right text-neutral-400">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
+                            <td className="px-3 py-2.5 text-right text-[var(--text-muted)]">{c.unit}</td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-[var(--text-muted)]">{c.unit_price ? parseFloat(c.unit_price).toFixed(4) : "—"}</td>
+                            <td className="px-3 py-2.5 text-right text-[var(--text-faint)]">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
                             <td className="px-2 py-2.5">
                               <button onClick={() => deleteComponent(c.id)}
-                                className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
+                                className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
                                 −
                               </button>
                             </td>
@@ -436,29 +436,29 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
 
                         {/* Add component form row */}
                         {addComp && (
-                          <tr className="bg-neutral-50 dark:bg-neutral-900/40">
+                          <tr className="bg-[var(--bg)] ">
                             <td className="px-4 py-2">
                               <input autoFocus value={cName} onChange={(e) => setCName(e.target.value)}
                                 placeholder="Назва матеріалу"
-                                className="w-full rounded border border-neutral-200 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                                className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-400  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.001" min="0" value={cQty} onChange={(e) => setCQty(e.target.value)}
                                 placeholder="0"
-                                className="w-20 rounded border border-neutral-200 bg-white px-2 py-1 text-right text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                                className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
                             </td>
                             <td className="px-3 py-2">
                               <input value={cUnit} onChange={(e) => setCUnit(e.target.value)}
-                                className="w-12 rounded border border-neutral-200 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                                className="w-12 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-400  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.0001" min="0" value={cPrice} onChange={(e) => setCPrice(e.target.value)}
                                 placeholder="—"
-                                className="w-24 rounded border border-neutral-200 bg-white px-2 py-1 text-right text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                                className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.1" min="0" max="100" value={cWaste} onChange={(e) => setCWaste(e.target.value)}
-                                className="w-16 rounded border border-neutral-200 bg-white px-2 py-1 text-right text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                                className="w-16 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
                             </td>
                             <td className="px-2 py-2">
                               <form onSubmit={submitComponent} className="flex gap-1">
@@ -479,9 +479,9 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
               {/* ── Operations ── */}
               <div className="px-6 py-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Операції</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Операції</p>
                   <button onClick={() => setAddOp((v) => !v)}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
                     <span className="text-base leading-none">+</span> Додати
                   </button>
                 </div>
@@ -489,15 +489,15 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                 <div className="space-y-2">
                   {spec.operations.map((op) => (
                     <div key={op.id}
-                      className="group flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-3.5 dark:border-neutral-800 dark:bg-neutral-900">
+                      className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5  ">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800">
+                          <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-xs text-[var(--text-muted)] ">
                             {OP_TYPE_LABELS[op.type] ?? op.type}
                           </span>
                           <span className="font-medium text-sm">{op.name}</span>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-neutral-400">
+                        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[var(--text-faint)]">
                           {op.print_time_min && <span>⏱ {fmtMin(parseFloat(op.print_time_min))}</span>}
                           {op.labor_minutes  && <span>👷 {op.labor_minutes} хв</span>}
                           {op.explicit_cost  && <span>₴ {parseFloat(op.explicit_cost).toFixed(2)}</span>}
@@ -505,64 +505,64 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                         </div>
                       </div>
                       <button onClick={() => deleteOperation(op.id)}
-                        className="opacity-0 group-hover:opacity-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
+                        className="opacity-0 group-hover:opacity-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
                         −
                       </button>
                     </div>
                   ))}
 
                   {spec.operations.length === 0 && !addOp && (
-                    <p className="text-sm text-neutral-400">Операцій ще немає</p>
+                    <p className="text-sm text-[var(--text-faint)]">Операцій ще немає</p>
                   )}
 
                   {/* Add operation form */}
                   {addOp && (
                     <form onSubmit={submitOperation}
-                      className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 space-y-3 dark:border-neutral-800 dark:bg-neutral-900/60">
+                      className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 space-y-3  ">
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="mb-1 block text-xs text-neutral-500">Тип</label>
+                          <label className="mb-1 block text-xs text-[var(--text-muted)]">Тип</label>
                           <select value={oType} onChange={(e) => {
                             const t = e.target.value as typeof oType;
                             setOType(t);
                             setOName(OP_TYPE_LABELS[t] ?? "");
-                          }} className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900">
+                          }} className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm  ">
                             <option value="print">Друк</option>
                             <option value="manual">Ручна</option>
                             <option value="postprocess">Постобробка</option>
                           </select>
                         </div>
                         <div>
-                          <label className="mb-1 block text-xs text-neutral-500">Назва</label>
+                          <label className="mb-1 block text-xs text-[var(--text-muted)]">Назва</label>
                           <input required value={oName} onChange={(e) => setOName(e.target.value)}
-                            className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
                         </div>
                         {oType === "print" ? (
                           <div>
-                            <label className="mb-1 block text-xs text-neutral-500">Час друку (хв)</label>
+                            <label className="mb-1 block text-xs text-[var(--text-muted)]">Час друку (хв)</label>
                             <input type="number" step="0.1" min="0" value={oMin} onChange={(e) => setOMin(e.target.value)}
-                              className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
                           </div>
                         ) : (
                           <div>
-                            <label className="mb-1 block text-xs text-neutral-500">Трудозатрати (хв)</label>
+                            <label className="mb-1 block text-xs text-[var(--text-muted)]">Трудозатрати (хв)</label>
                             <input type="number" step="0.1" min="0" value={oLabMin} onChange={(e) => setOLabMin(e.target.value)}
-                              className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
                           </div>
                         )}
                         <div>
-                          <label className="mb-1 block text-xs text-neutral-500">Додаткові витрати ₴</label>
+                          <label className="mb-1 block text-xs text-[var(--text-muted)]">Додаткові витрати ₴</label>
                           <input type="number" step="0.01" min="0" value={oExp} onChange={(e) => setOExp(e.target.value)}
-                            className="w-full rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
                         </div>
                       </div>
                       <div className="flex justify-end gap-2">
                         <button type="button" onClick={() => setAddOp(false)}
-                          className="rounded-md px-3 py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+                          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
                           Скасувати
                         </button>
                         <button type="submit" disabled={oBusy || !oName.trim()}
-                          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+                          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
                           {oBusy ? "Зберігаю…" : "Додати"}
                         </button>
                       </div>
@@ -574,9 +574,9 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
               {/* ── Cost ── */}
               <div className="px-6 py-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Собівартість</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Собівартість</p>
                   <button onClick={computeCost} disabled={costBusy}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 disabled:opacity-50 dark:hover:bg-neutral-800">
+                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50 ">
                     ↻ {costBusy ? "Рахую…" : "Розрахувати"}
                   </button>
                 </div>
@@ -589,14 +589,14 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                       { label: "Праця",        value: cost.labor_cost },
                       { label: "Інше",         value: cost.other_cost },
                     ].map((row) => (
-                      <div key={row.label} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
-                        <p className="text-xs text-neutral-400">{row.label}</p>
+                      <div key={row.label} className="rounded-lg border border-[var(--border)] p-3 ">
+                        <p className="text-xs text-[var(--text-faint)]">{row.label}</p>
                         <p className="mt-0.5 font-mono text-sm font-medium tabular-nums">
                           {parseFloat(row.value).toFixed(2)} ₴
                         </p>
                       </div>
                     ))}
-                    <div className="col-span-2 sm:col-span-4 flex items-center justify-between rounded-lg border border-neutral-900 bg-neutral-900 px-4 py-3 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900">
+                    <div className="col-span-2 sm:col-span-4 flex items-center justify-between rounded-lg border border-neutral-900 bg-[var(--surface)] px-4 py-3 text-white   ">
                       <span className="text-sm font-medium">Загалом / шт</span>
                       <span className="font-mono text-lg font-bold tabular-nums">
                         {totalCost?.toFixed(2)} ₴
@@ -609,7 +609,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-neutral-400">
+                  <p className="text-sm text-[var(--text-faint)]">
                     Натисни «↻ Розрахувати» щоб побачити розбивку собівартості
                   </p>
                 )}
@@ -620,9 +620,9 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
         </div>
 
         {/* Footer */}
-        <div className="flex shrink-0 items-center justify-end border-t border-neutral-100 px-6 py-4 dark:border-neutral-800">
+        <div className="flex shrink-0 items-center justify-end border-t border-[var(--border)] px-6 py-4 ">
           <button onClick={onClose}
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  ">
             Закрити
           </button>
         </div>
@@ -634,7 +634,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 
 function SortIndicator({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
-  if (col !== sortKey) return <span className="ml-1 text-neutral-300 dark:text-neutral-700">↕</span>;
+  if (col !== sortKey) return <span className="ml-1 text-[var(--text-muted)] ">↕</span>;
   return <span className="ml-1 text-cyan-500">{sortDir === "asc" ? "↑" : "↓"}</span>;
 }
 
@@ -644,7 +644,7 @@ function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
 }) {
   return (
     <th onClick={() => onSort(col)}
-      className={`cursor-pointer select-none px-4 py-3 font-medium hover:text-neutral-800 dark:hover:text-neutral-200 ${className}`}>
+      className={`cursor-pointer select-none px-4 py-3 font-medium hover:text-neutral-800  ${className}`}>
       {children}<SortIndicator col={col} sortKey={sortKey} sortDir={sortDir} />
     </th>
   );
@@ -773,7 +773,7 @@ export default function ProductsPage() {
     });
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <>
@@ -783,13 +783,13 @@ export default function ProductsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400"
+              <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]"
                 width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
               <input type="search" placeholder="Назва або артикул…"
                 value={search} onChange={(e) => setSearch(e.target.value)}
-                className="h-9 rounded-lg border border-neutral-200 bg-white pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200" />
+                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400   " />
             </div>
             <div className="flex flex-wrap gap-1">
               {allCategories.map((c) => {
@@ -801,12 +801,12 @@ export default function ProductsPage() {
                     onClick={() => setCategory(c)}
                     className={color ? [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors",
-                      active ? "ring-2 ring-offset-1 ring-neutral-900 dark:ring-neutral-100" : "opacity-70 hover:opacity-100",
+                      active ? "ring-2 ring-offset-1 ring-neutral-900 " : "opacity-70 hover:opacity-100",
                     ].join(" ") : [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
                       active
-                        ? "bg-neutral-900 text-white border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 dark:border-neutral-100"
-                        : "border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500",
+                        ? "bg-[var(--surface)] text-white border-neutral-900   "
+                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400   dark:hover:border-neutral-500",
                     ].join(" ")}
                     style={color ? { background: color, color: "#111" } : undefined}
                   >
@@ -815,10 +815,10 @@ export default function ProductsPage() {
                 );
               })}
             </div>
-            <span className="text-sm text-neutral-400">{filtered.length} позицій</span>
+            <span className="text-sm text-[var(--text-faint)]">{filtered.length} позицій</span>
           </div>
           <button onClick={() => setEditProduct("create")}
-            className="h-9 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200">
+            className="h-9 rounded-lg bg-[var(--surface)] px-4 text-sm font-medium text-white hover:bg-neutral-700   ">
             + Номенклатура
           </button>
         </div>
@@ -841,14 +841,14 @@ export default function ProductsPage() {
         )}
 
         {/* Table */}
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-sm">
-              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+              <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input type="checkbox" checked={allPageSelected} onChange={toggleAll}
-                      className="rounded border-neutral-300 dark:border-neutral-700" />
+                      className="rounded border-[var(--border-strong)] " />
                   </th>
                   <Th col="name"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>
                   <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>
@@ -861,9 +861,9 @@ export default function ProductsPage() {
                   <th className="w-20 px-3 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+              <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-neutral-400">
+                  <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
                     {search || category !== "Всі" ? "Нічого не знайдено" : "Номенклатури ще немає"}
                   </td></tr>
                 ) : paginated.map((p) => {
@@ -872,18 +872,18 @@ export default function ProductsPage() {
                   const isOut  = avail === 0 && stock.some((s) => s.product_id === p.id);
                   return (
                     <tr key={p.id}
-                      className={selected.has(p.id) ? "bg-cyan-50/50 dark:bg-cyan-950/10" : "hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40"}>
+                      className={selected.has(p.id) ? "bg-[var(--accent-soft)]/50 " : "hover:bg-[var(--surface-hi)]/80 "}>
                       <td className="px-4 py-3">
                         <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
-                          className="rounded border-neutral-300 dark:border-neutral-700" />
+                          className="rounded border-[var(--border-strong)] " />
                       </td>
                       <td className="px-4 py-3">
                         <button onClick={() => setEditProduct(p)}
-                          className="text-left font-medium text-neutral-900 hover:text-cyan-600 dark:text-neutral-100 dark:hover:text-cyan-400">
+                          className="text-left font-medium text-[var(--text-hi)] hover:text-cyan-600  dark:hover:text-cyan-400">
                           {p.name}
                         </button>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-neutral-500">{p.sku}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {p.categories.map((c) => {
@@ -894,7 +894,7 @@ export default function ProductsPage() {
                                 onClick={() => setCategory(c)}
                                 className={color
                                   ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
-                                  : "cursor-pointer rounded-full bg-neutral-100 px-2 py-0.5 text-xs hover:bg-neutral-200 dark:bg-neutral-800 transition-opacity"}
+                                  : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)]  transition-opacity"}
                                 style={color ? { background: color, color: "#111" } : undefined}
                               >
                                 {c}
@@ -903,16 +903,16 @@ export default function ProductsPage() {
                           })}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-neutral-500">{p.unit}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
                       <td className="px-4 py-3 text-right">
                         <span className={[
                           "font-mono text-sm tabular-nums",
                           isOut ? "font-semibold text-red-600 dark:text-red-400"
                             : avail < 5 ? "text-amber-600 dark:text-amber-400"
-                            : "text-neutral-700 dark:text-neutral-300",
+                            : "text-[var(--text)] ",
                         ].join(" ")}>{Math.round(avail)}</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-neutral-500">{fmtPrice(p.full_cost)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
                       <td className="px-4 py-3 text-right text-sm">
                         {margin !== null ? (
@@ -928,7 +928,7 @@ export default function ProductsPage() {
                         <div className="flex items-center gap-1 justify-end">
                           {/* Edit product */}
                           <button onClick={() => setEditProduct(p)} title="Редагувати"
-                            className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-300">
+                            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  ">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -936,7 +936,7 @@ export default function ProductsPage() {
                           </button>
                           {/* Spec */}
                           <button onClick={() => setSpecProduct(p)} title="Специфікація"
-                            className="flex size-7 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-300">
+                            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  ">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
                             </svg>
@@ -952,35 +952,35 @@ export default function ProductsPage() {
 
           {/* Pagination */}
           {sorted.length > 0 && (
-            <div className="flex items-center justify-between border-t border-neutral-100 px-4 py-3 dark:border-neutral-800">
-              <div className="flex items-center gap-2 text-sm text-neutral-500">
+            <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 ">
+              <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <span>Рядків:</span>
                 {PAGE_SIZES.map((s) => (
                   <button key={s} onClick={() => setPageSize(s)}
                     className={["rounded px-2 py-0.5 text-sm",
-                      pageSize === s ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                        : "hover:bg-neutral-100 dark:hover:bg-neutral-800"].join(" ")}>
+                      pageSize === s ? "bg-[var(--surface)] text-white  "
+                        : "hover:bg-[var(--surface-hi)] "].join(" ")}>
                     {s}
                   </button>
                 ))}
               </div>
               <div className="flex items-center gap-1">
-                <span className="mr-2 text-sm text-neutral-400">
+                <span className="mr-2 text-sm text-[var(--text-faint)]">
                   {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} з {sorted.length}
                 </span>
                 <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                  className="flex size-7 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30 dark:hover:bg-neutral-800">‹</button>
+                  className="flex size-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-30 ">‹</button>
                 {totalPages <= 7 && Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                   <button key={p} onClick={() => setPage(p)}
                     className={["flex size-7 items-center justify-center rounded-md text-sm",
-                      page === p ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                        : "text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"].join(" ")}>
+                      page === p ? "bg-[var(--surface)] text-white  "
+                        : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "].join(" ")}>
                     {p}
                   </button>
                 ))}
-                {totalPages > 7 && <span className="px-1 text-sm text-neutral-400">{page} / {totalPages}</span>}
+                {totalPages > 7 && <span className="px-1 text-sm text-[var(--text-faint)]">{page} / {totalPages}</span>}
                 <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="flex size-7 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 disabled:opacity-30 dark:hover:bg-neutral-800">›</button>
+                  className="flex size-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-30 ">›</button>
               </div>
             </div>
           )}

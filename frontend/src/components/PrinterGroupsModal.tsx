@@ -138,12 +138,12 @@ export function PrinterGroupsModal({
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Назва нової групи…"
             maxLength={120}
-            className="flex-1 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-300"
+            className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-300"
           />
           <button
             type="submit"
             disabled={creating || !newName.trim()}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40   "
           >
             {creating ? "…" : "+ Додати"}
           </button>
@@ -155,13 +155,13 @@ export function PrinterGroupsModal({
 
         {/* list */}
         {loading ? (
-          <p className="text-neutral-500">Завантаження…</p>
+          <p className="text-[var(--text-muted)]">Завантаження…</p>
         ) : groups.length === 0 ? (
-          <p className="rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-neutral-500 dark:border-neutral-700">
+          <p className="rounded-md border border-dashed border-[var(--border-strong)] px-4 py-6 text-center text-[var(--text-muted)] ">
             Груп поки немає. Додайте першу!
           </p>
         ) : (
-          <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          <ul className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {groups.map((g, i) => (
               <li key={g.id} className="flex items-center gap-2 py-2">
                 {/* reorder arrows */}
@@ -170,7 +170,7 @@ export function PrinterGroupsModal({
                     type="button"
                     onClick={() => moveGroup(i, -1)}
                     disabled={i === 0}
-                    className="px-1 py-0 text-neutral-400 hover:text-neutral-700 disabled:opacity-20 dark:hover:text-neutral-200"
+                    className="px-1 py-0 text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 "
                     title="Вище"
                   >
                     ▲
@@ -179,7 +179,7 @@ export function PrinterGroupsModal({
                     type="button"
                     onClick={() => moveGroup(i, 1)}
                     disabled={i === groups.length - 1}
-                    className="px-1 py-0 text-neutral-400 hover:text-neutral-700 disabled:opacity-20 dark:hover:text-neutral-200"
+                    className="px-1 py-0 text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 "
                     title="Нижче"
                   >
                     ▼
@@ -200,7 +200,7 @@ export function PrinterGroupsModal({
                           if (e.key === "Enter") saveEdit(g.id);
                           if (e.key === "Escape") cancelEdit();
                         }}
-                        className="flex-1 rounded border border-neutral-300 bg-white px-2 py-0.5 text-sm outline-none focus:border-neutral-900 dark:border-neutral-600 dark:bg-neutral-900"
+                        className="flex-1 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-0.5 text-sm outline-none focus:border-neutral-900  "
                       />
                       <button
                         type="button"
@@ -212,7 +212,7 @@ export function PrinterGroupsModal({
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        className="rounded px-2 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        className="rounded px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
                       >
                         ✕
                       </button>
@@ -229,7 +229,7 @@ export function PrinterGroupsModal({
                 </div>
 
                 {/* printer count badge */}
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
                   {g.printer_count}
                 </span>
 

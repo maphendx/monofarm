@@ -58,7 +58,7 @@ function FilamentChips({ meta }: { meta: PrintTask["filament_meta"] }) {
       {chips.map((ch, i) => (
         <span
           key={i}
-          className="flex items-center gap-1 rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[10px] text-neutral-300"
+          className="flex items-center gap-1 rounded-full border border-[var(--border-strong)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]"
         >
           {ch.color && (
             <span
@@ -74,7 +74,7 @@ function FilamentChips({ meta }: { meta: PrintTask["filament_meta"] }) {
 }
 
 function MaterialCell({ meta }: { meta: PrintTask["filament_meta"] }) {
-  if (!meta) return <span className="text-neutral-500">—</span>;
+  if (!meta) return <span className="text-[var(--text-muted)]">—</span>;
   const colors = meta.colors ?? [];
   const usedG = meta.used_g ?? [];
   const total = sumArray(usedG);
@@ -85,12 +85,12 @@ function MaterialCell({ meta }: { meta: PrintTask["filament_meta"] }) {
         {colors.slice(0, 3).map((c, i) => (
           <span
             key={i}
-            className="h-3 w-3 rounded-full border border-neutral-800"
+            className="h-3 w-3 rounded-full border border-[var(--border)]"
             style={{ background: c, marginLeft: i > 0 ? -4 : 0 }}
           />
         ))}
       </div>
-      <span className="text-neutral-300">{total > 0 ? `${total.toFixed(1)} g` : "—"}</span>
+      <span className="text-[var(--text-muted)]">{total > 0 ? `${total.toFixed(1)} g` : "—"}</span>
     </div>
   );
 }
@@ -103,10 +103,10 @@ function PrinterCell({
   printerName: string | null;
 }) {
   if (!printerId || !printerName) {
-    return <span className="text-neutral-600">—</span>;
+    return <span className="text-[var(--text-muted)]">—</span>;
   }
   return (
-    <span className="flex items-center gap-1.5 text-neutral-300">
+    <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
       <span className="text-base">🖨️</span>
       <span className="truncate max-w-[80px]">{printerName}</span>
     </span>
@@ -276,7 +276,7 @@ export default function PlanPage() {
   }
 
   if (loading) {
-    return <div className="text-sm text-neutral-500">Завантаження…</div>;
+    return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
   }
 
   return (
@@ -286,7 +286,7 @@ export default function PlanPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">Print queue</h1>
           <span
-            className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-neutral-600 text-[11px] text-neutral-400"
+            className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-[var(--border-strong)] text-[11px] text-[var(--text-faint)]"
             title="Черга друку: всі завдання зі статусом 'queued'. 1-CLICK PRINT розподіляє їх по вільних принтерах."
           >
             ?
@@ -296,7 +296,7 @@ export default function PlanPage() {
           {canEdit && (
             <button
               onClick={handle1Click}
-              className="flex items-center gap-1.5 rounded-md border border-neutral-600 bg-neutral-800 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-700"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-2)]"
             >
               <span>≡</span> 1-CLICK PRINT
             </button>
@@ -327,7 +327,7 @@ export default function PlanPage() {
       )}
 
       {/* ── Model tabs ── */}
-      <div className="flex items-center gap-0 overflow-x-auto border-b border-neutral-800 pb-0">
+      <div className="flex items-center gap-0 overflow-x-auto border-b border-[var(--border)] pb-0">
         {[{ key: "all", label: "All", count: tasks.length }, ...modelTabs.map(([label, count]) => ({ key: label, label, count }))].map(
           (tab) => (
             <button
@@ -337,7 +337,7 @@ export default function PlanPage() {
                 "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2 text-sm transition-colors",
                 activeTab === tab.key
                   ? "border-accent text-accent"
-                  : "border-transparent text-neutral-400 hover:text-neutral-200",
+                  : "border-transparent text-[var(--text-faint)] hover:text-[var(--text)]",
               ].join(" ")}
             >
               {tab.label}
@@ -346,7 +346,7 @@ export default function PlanPage() {
                   "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
                   activeTab === tab.key
                     ? "bg-accent/20 text-accent"
-                    : "bg-neutral-800 text-neutral-500",
+                    : "bg-[var(--surface-2)] text-[var(--text-muted)]",
                 ].join(" ")}
               >
                 {tab.count}
@@ -357,28 +357,28 @@ export default function PlanPage() {
       </div>
 
       {/* ── Stats bar ── */}
-      <div className="flex flex-wrap gap-6 rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-sm">
+      <div className="flex flex-wrap gap-6 rounded-lg border border-[var(--border)] bg-[var(--surface)]/60 px-4 py-3 text-sm">
         <div className="flex items-center gap-2">
-          <span className="text-neutral-500">≡ Jobs:</span>
-          <span className="font-medium text-neutral-100">{stats.jobs}</span>
+          <span className="text-[var(--text-muted)]">≡ Jobs:</span>
+          <span className="font-medium text-[var(--text-hi)]">{stats.jobs}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-neutral-500">⏱ Print time:</span>
-          <span className="font-medium text-neutral-100">
+          <span className="text-[var(--text-muted)]">⏱ Print time:</span>
+          <span className="font-medium text-[var(--text-hi)]">
             {stats.totalMin >= 60
               ? `${Math.floor(stats.totalMin / 60 / 24)}d ${Math.floor((stats.totalMin / 60) % 24)}h ${stats.totalMin % 60}m`
               : formatDuration(stats.totalMin)}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-neutral-500">$ Cost:</span>
-          <span className="font-medium text-neutral-100">
+          <span className="text-[var(--text-muted)]">$ Cost:</span>
+          <span className="font-medium text-[var(--text-hi)]">
             {stats.totalCost > 0 ? `${stats.totalCost.toFixed(2)} UAH` : "—"}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-neutral-500">▲ Material:</span>
-          <span className="font-medium text-neutral-100">
+          <span className="text-[var(--text-muted)]">▲ Material:</span>
+          <span className="font-medium text-[var(--text-hi)]">
             {stats.totalG > 0
               ? stats.totalG >= 1000
                 ? `${(stats.totalG / 1000).toFixed(2)} kg`
@@ -395,7 +395,7 @@ export default function PlanPage() {
           placeholder="Search all data…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-8 w-48 rounded-md border border-neutral-700 bg-neutral-900 px-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-accent"
+          className="h-8 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] placeholder-[var(--text-dim)] outline-none focus:border-accent"
         />
 
         {/* Type filter */}
@@ -406,17 +406,17 @@ export default function PlanPage() {
               "flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm",
               typeFilter
                 ? "border-accent bg-accent/10 text-accent"
-                : "border-neutral-700 bg-neutral-900 text-neutral-400 hover:text-neutral-200",
+                : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-faint)] hover:text-[var(--text)]",
             ].join(" ")}
           >
             ● TYPE{typeFilter ? `: ${typeFilter}` : ""}
             <span className="text-[10px]">▾</span>
           </button>
           {typeMenuOpen && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-20 mt-1 w-36 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] py-1 shadow-lg">
               <button
                 onClick={() => { setTypeFilter(""); setTypeMenuOpen(false); }}
-                className="w-full px-3 py-1.5 text-left text-sm text-neutral-400 hover:bg-neutral-800"
+                className="w-full px-3 py-1.5 text-left text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
               >
                 Всі типи
               </button>
@@ -424,7 +424,7 @@ export default function PlanPage() {
                 <button
                   key={ty}
                   onClick={() => { setTypeFilter(ty); setTypeMenuOpen(false); }}
-                  className="w-full px-3 py-1.5 text-left text-sm text-neutral-200 hover:bg-neutral-800"
+                  className="w-full px-3 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-hi)]"
                 >
                   {ty}
                 </button>
@@ -435,10 +435,10 @@ export default function PlanPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="overflow-x-auto rounded-lg border border-neutral-800">
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
-            <tr className="border-b border-neutral-800 bg-neutral-900/80 text-xs text-neutral-500">
+            <tr className="border-b border-[var(--border)] bg-[var(--surface)]/80 text-xs text-[var(--text-muted)]">
               <th className="w-8 px-3 py-2.5">
                 <input
                   type="checkbox"
@@ -469,7 +469,7 @@ export default function PlanPage() {
               <tr>
                 <td
                   colSpan={13}
-                  className="px-3 py-12 text-center text-neutral-500"
+                  className="px-3 py-12 text-center text-[var(--text-muted)]"
                 >
                   {tasks.length === 0
                     ? "Черга порожня — натисніть + щоб додати завдання"
@@ -494,7 +494,7 @@ export default function PlanPage() {
             )}
           </tbody>
         </table>
-        <div className="border-t border-neutral-800 px-3 py-2 text-xs text-neutral-500">
+        <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
           {selected.size} of {visible.length} row(s) selected.
         </div>
       </div>
@@ -555,8 +555,8 @@ function QueueRow({
   return (
     <tr
       className={[
-        "border-b border-neutral-800/60 transition-colors",
-        selected ? "bg-accent/5" : "hover:bg-neutral-800/30",
+        "border-b border-[var(--border)]/60 transition-colors",
+        selected ? "bg-accent/5" : "hover:bg-[var(--surface-hi)]/30",
       ].join(" ")}
     >
       {/* checkbox */}
@@ -570,7 +570,7 @@ function QueueRow({
       </td>
 
       {/* # */}
-      <td className="px-2 py-2 text-neutral-500">{index}.</td>
+      <td className="px-2 py-2 text-[var(--text-muted)]">{index}.</td>
 
       {/* File */}
       <td className="max-w-[180px] px-3 py-2">
@@ -582,7 +582,7 @@ function QueueRow({
               className="h-8 w-8 shrink-0 rounded object-cover"
             />
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-neutral-800 text-neutral-500 text-xs">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-2)] text-[var(--text-muted)] text-xs">
               3mf
             </div>
           )}
@@ -597,7 +597,7 @@ function QueueRow({
         <div className="flex items-center gap-1 flex-wrap">
           <FilamentChips meta={task.filament_meta} />
           <button
-            className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-neutral-600 text-[10px] text-neutral-500 hover:border-neutral-400"
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-muted)] hover:border-neutral-400"
             title="Додати тег"
           >
             +
@@ -606,14 +606,14 @@ function QueueRow({
       </td>
 
       {/* Print cost */}
-      <td className="px-3 py-2 text-right text-neutral-300">
+      <td className="px-3 py-2 text-right text-[var(--text-muted)]">
         {task.material_cost_uah
           ? `${task.material_cost_uah.toFixed(2)} UAH`
           : "—"}
       </td>
 
       {/* Print time */}
-      <td className="px-3 py-2 text-right text-neutral-300">
+      <td className="px-3 py-2 text-right text-[var(--text-muted)]">
         {formatDuration(task.estimated_minutes)}
       </td>
 
@@ -623,7 +623,7 @@ function QueueRow({
       </td>
 
       {/* Printed */}
-      <td className="px-3 py-2 text-right text-neutral-300">
+      <td className="px-3 py-2 text-right text-[var(--text-muted)]">
         {task.printed_count ?? 0}
       </td>
 
@@ -636,17 +636,17 @@ function QueueRow({
             onChange={(v) => onUpdated({ ...task, quantity: v })}
           />
         ) : (
-          <span className="text-neutral-300">{task.quantity}</span>
+          <span className="text-[var(--text-muted)]">{task.quantity}</span>
         )}
       </td>
 
       {/* User */}
-      <td className="px-3 py-2 text-neutral-400 max-w-[100px] truncate">
+      <td className="px-3 py-2 text-[var(--text-faint)] max-w-[100px] truncate">
         {task.created_by_name ?? "—"}
       </td>
 
       {/* Added */}
-      <td className="px-3 py-2 text-neutral-400 whitespace-nowrap">
+      <td className="px-3 py-2 text-[var(--text-faint)] whitespace-nowrap">
         {formatRelativeDate(task.created_at)}
       </td>
 
@@ -662,19 +662,19 @@ function QueueRow({
       <td className="relative px-2 py-2">
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-neutral-700 hover:text-neutral-200"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
         >
           ···
         </button>
         {menuOpen && (
           <div
-            className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-neutral-700 bg-neutral-900 py-1 shadow-lg"
+            className="absolute right-0 top-full z-20 mt-1 w-40 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] py-1 shadow-lg"
             onMouseLeave={() => setMenuOpen(false)}
           >
             {task.gcode_file_id && canEdit && (
               <button
                 onClick={() => { setMenuOpen(false); onSend(); }}
-                className="w-full px-3 py-1.5 text-left text-sm text-neutral-200 hover:bg-neutral-800"
+                className="w-full px-3 py-1.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-hi)]"
               >
                 Надіслати на принтер
               </button>
@@ -682,7 +682,7 @@ function QueueRow({
             {canEdit && (
               <button
                 onClick={() => { setMenuOpen(false); onDelete(); }}
-                className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-neutral-800"
+                className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-[var(--surface-hi)]"
               >
                 Видалити
               </button>

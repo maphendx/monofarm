@@ -64,21 +64,21 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl  ">
         <h2 className="mb-4 font-semibold">Новий склад</h2>
         <form onSubmit={submit} className="space-y-3 text-sm">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Назва</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Назва</span>
             <input
               required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   "
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Тип</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Тип</span>
             <select
               value={type} onChange={(e) => setType(e.target.value as WarehouseType)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2   "
             >
               {(Object.keys(TYPE_META) as WarehouseType[]).map((t) => (
                 <option key={t} value={t}>{TYPE_META[t].label}</option>
@@ -86,21 +86,21 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Місце</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Місце</span>
             <input
               value={loc} onChange={(e) => setLoc(e.target.value)}
               placeholder="Полиця A, Офіс, …"
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none   "
             />
           </label>
           {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} disabled={busy}
-              className="rounded-md px-3 py-1.5 text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+              className="rounded-md px-3 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
               Скасувати
             </button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-white hover:bg-neutral-700 disabled:opacity-50  ">
               {busy ? "Зберігаю…" : "Додати"}
             </button>
           </div>
@@ -134,7 +134,7 @@ export default function WarehousesPage() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <div className="text-sm text-neutral-500">Завантаження…</div>;
+    return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
   }
 
   const active   = warehouses.filter((w) => w.is_active);
@@ -145,11 +145,11 @@ export default function WarehousesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Склади</h1>
-          <p className="mt-0.5 text-sm text-neutral-500">{active.length} активних</p>
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">{active.length} активних</p>
         </div>
         <button
           onClick={() => setAddOpen(true)}
-          className="rounded-lg bg-neutral-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className="rounded-lg bg-[var(--surface)] px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700   "
         >
           + Склад
         </button>
@@ -157,19 +157,19 @@ export default function WarehousesPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {active.map((w) => {
-          const meta  = TYPE_META[w.type] ?? { label: w.type, cls: "bg-neutral-100 text-neutral-600" };
+          const meta  = TYPE_META[w.type] ?? { label: w.type, cls: "bg-[var(--surface-hi)] text-[var(--text-muted)]" };
           const stats = buildStats(w.id, stock);
           return (
             <div
               key={w.id}
-              className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900"
+              className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  "
             >
               {/* Header */}
               <div className="mb-4 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{w.name}</p>
                   {w.location && (
-                    <p className="mt-0.5 text-xs text-neutral-400">{w.location}</p>
+                    <p className="mt-0.5 text-xs text-[var(--text-faint)]">{w.location}</p>
                   )}
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.cls}`}>
@@ -178,17 +178,17 @@ export default function WarehousesPage() {
               </div>
 
               {/* Divider */}
-              <div className="mb-4 h-px bg-neutral-100 dark:bg-neutral-800" />
+              <div className="mb-4 h-px bg-[var(--surface-hi)] " />
 
               {/* Stats */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <p className="text-lg font-bold tabular-nums">{stats.sku_count}</p>
-                  <p className="mt-0.5 text-xs text-neutral-400">SKU</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-faint)]">SKU</p>
                 </div>
                 <div>
                   <p className="text-lg font-bold tabular-nums">{Math.round(stats.total_units)}</p>
-                  <p className="mt-0.5 text-xs text-neutral-400">одиниць</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-faint)]">одиниць</p>
                 </div>
                 <div>
                   <p className={[
@@ -197,7 +197,7 @@ export default function WarehousesPage() {
                   ].join(" ")}>
                     {stats.zero_stock}
                   </p>
-                  <p className="mt-0.5 text-xs text-neutral-400">нульових</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-faint)]">нульових</p>
                 </div>
               </div>
             </div>
@@ -207,17 +207,17 @@ export default function WarehousesPage() {
 
       {inactive.length > 0 && (
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">
             Неактивні
           </p>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {inactive.map((w) => {
-              const meta = TYPE_META[w.type] ?? { label: w.type, cls: "bg-neutral-100 text-neutral-600" };
+              const meta = TYPE_META[w.type] ?? { label: w.type, cls: "bg-[var(--surface-hi)] text-[var(--text-muted)]" };
               return (
                 <div key={w.id}
-                  className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 opacity-60 dark:border-neutral-800 dark:bg-neutral-900/50">
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 opacity-60  ">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium text-neutral-500">{w.name}</p>
+                    <p className="truncate text-sm font-medium text-[var(--text-muted)]">{w.name}</p>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${meta.cls}`}>{meta.label}</span>
                   </div>
                 </div>
@@ -228,11 +228,11 @@ export default function WarehousesPage() {
       )}
 
       {warehouses.length === 0 && (
-        <div className="rounded-xl border border-dashed border-neutral-300 py-16 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500">Складів ще немає</p>
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center ">
+          <p className="text-sm text-[var(--text-muted)]">Складів ще немає</p>
           <button
             onClick={() => setAddOpen(true)}
-            className="mt-3 rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+            className="mt-3 rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  "
           >
             Додати перший склад
           </button>

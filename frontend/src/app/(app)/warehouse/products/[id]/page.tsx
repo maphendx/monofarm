@@ -51,7 +51,7 @@ function fmt(v: string | number | null) {
 
 function CostBar({ pct, cls }: { pct: number; cls: string }) {
   return (
-    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
       <div className={`h-full rounded-full ${cls}`} style={{ width: `${Math.min(100, pct)}%` }} />
     </div>
   );
@@ -97,7 +97,7 @@ export default function ProductDetailPage() {
     } finally { setCostBusy(false); }
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
   if (!product) return <div className="text-sm text-red-500">Товар не знайдено</div>;
 
   const TABS: { id: Tab; label: string }[] = [
@@ -126,41 +126,41 @@ export default function ProductDetailPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2 text-sm text-neutral-500">
-        <Link href="/warehouse/products" className="hover:text-neutral-700 dark:hover:text-neutral-300">Номенклатура</Link>
+      <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+        <Link href="/warehouse/products" className="hover:text-[var(--text)] ">Номенклатура</Link>
         <span>/</span>
-        <span className="text-neutral-900 dark:text-neutral-100">{product.name}</span>
+        <span className="text-[var(--text-hi)] ">{product.name}</span>
       </div>
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold">{product.name}</h2>
-          <div className="mt-1 flex items-center gap-3 text-sm text-neutral-500">
+          <div className="mt-1 flex items-center gap-3 text-sm text-[var(--text-muted)]">
             <span className="font-mono">{product.sku}</span>
             {product.categories.map((c) => (
-              <span key={c} className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{c}</span>
+              <span key={c} className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">{c}</span>
             ))}
           </div>
         </div>
         <div className="flex gap-2">
           <button onClick={computeCost} disabled={!spec || costBusy}
-            className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-800">
+            className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50  ">
             {costBusy ? "Рахую…" : "↻ Собівартість"}
           </button>
-          <button className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          <button className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
             + Партія
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0.5 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="flex gap-0.5 border-b border-[var(--border)] ">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={["relative px-3 py-2 text-sm transition-colors",
               tab === t.id
-                ? "text-neutral-900 dark:text-neutral-100 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-cyan-500"
-                : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300",
+                ? "text-[var(--text-hi)]  after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-cyan-500"
+                : "text-[var(--text-muted)] hover:text-[var(--text)] ",
             ].join(" ")}>
             {t.label}
           </button>
@@ -178,9 +178,9 @@ export default function ProductDetailPage() {
             { label: "Специфікацій",    value: spec ? "1" : "0" },
             { label: "Версія",          value: spec ? `v${spec.version} · ${spec.is_default ? "активна" : ""}` : "—" },
           ].map((k) => (
-            <div key={k.label} className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-              <p className="text-xs text-neutral-500">{k.label}</p>
-              <p className={`mt-1 text-xl font-bold tabular-nums ${"highlight" in k && k.highlight ? "text-cyan-600 dark:text-cyan-400" : ""}`}>
+            <div key={k.label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+              <p className="text-xs text-[var(--text-muted)]">{k.label}</p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${"highlight" in k && k.highlight ? "text-[var(--accent)] " : ""}`}>
                 {k.value}
               </p>
             </div>
@@ -191,7 +191,7 @@ export default function ProductDetailPage() {
       {/* Specification */}
       {tab === "specification" && (
         !spec ? (
-          <div className="rounded-xl border border-dashed border-neutral-300 px-4 py-12 text-center text-sm text-neutral-400 dark:border-neutral-700">
+          <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-faint)] ">
             Специфікацію ще не додано. Натисни «+ Специфікацію».
           </div>
         ) : (
@@ -200,7 +200,7 @@ export default function ProductDetailPage() {
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                 v{spec.version} · {spec.name}
               </span>
-              <button className="rounded-md border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-400">
+              <button className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
                 + Нова версія
               </button>
             </div>
@@ -210,12 +210,12 @@ export default function ProductDetailPage() {
                 {/* Materials */}
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Матеріали</span>
-                    <div className="flex-1 border-t border-neutral-100 dark:border-neutral-800" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Матеріали</span>
+                    <div className="flex-1 border-t border-[var(--border)] " />
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+                  <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
                     <table className="w-full text-sm">
-                      <thead className="bg-neutral-50 text-xs text-neutral-400 dark:bg-neutral-950">
+                      <thead className="bg-[var(--bg)] text-xs text-[var(--text-faint)] ">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium">Матеріал</th>
                           <th className="px-4 py-2.5 text-right font-medium">К-сть</th>
@@ -224,19 +224,19 @@ export default function ProductDetailPage() {
                           <th className="px-4 py-2.5 text-right font-medium">Вартість</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                      <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
                         {spec.components.length === 0 ? (
-                          <tr><td colSpan={5} className="px-4 py-4 text-center text-xs text-neutral-400">Немає компонентів</td></tr>
+                          <tr><td colSpan={5} className="px-4 py-4 text-center text-xs text-[var(--text-faint)]">Немає компонентів</td></tr>
                         ) : (
                           spec.components.map((c) => {
                             const waste    = 1 + parseFloat(c.waste_pct) / 100;
                             const lineCost = c.unit_price ? parseFloat(c.quantity) * parseFloat(c.unit_price) * waste : null;
                             return (
                               <tr key={c.id}>
-                                <td className="px-4 py-3"><span className="mr-1.5 text-neutral-400">🧵</span>{c.name}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-neutral-500">{parseFloat(c.quantity).toFixed(2)} {c.unit}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-neutral-400">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-neutral-400">{c.unit_price ? `₴${fmt(c.unit_price)}` : "—"}</td>
+                                <td className="px-4 py-3"><span className="mr-1.5 text-[var(--text-faint)]">🧵</span>{c.name}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-[var(--text-muted)]">{parseFloat(c.quantity).toFixed(2)} {c.unit}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-[var(--text-faint)]">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-[var(--text-faint)]">{c.unit_price ? `₴${fmt(c.unit_price)}` : "—"}</td>
                                 <td className="px-4 py-3 text-right tabular-nums font-medium">{lineCost != null ? `₴${lineCost.toFixed(4)}` : "—"}</td>
                               </tr>
                             );
@@ -250,12 +250,12 @@ export default function ProductDetailPage() {
                 {/* Operations */}
                 <div>
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-neutral-400">Операції</span>
-                    <div className="flex-1 border-t border-neutral-100 dark:border-neutral-800" />
+                    <span className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Операції</span>
+                    <div className="flex-1 border-t border-[var(--border)] " />
                   </div>
                   <div className="space-y-2">
                     {spec.operations.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-4 text-center text-xs text-neutral-400 dark:border-neutral-800">
+                      <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-4 text-center text-xs text-[var(--text-faint)] ">
                         Немає операцій
                       </div>
                     ) : (
@@ -268,27 +268,27 @@ export default function ProductDetailPage() {
                         const opTotal = elCost + labCost + (op.explicit_cost ? parseFloat(op.explicit_cost) : 0);
 
                         return (
-                          <div key={op.id} className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+                          <div key={op.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
                             <div className="mb-2 flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <span className="text-neutral-400">{op.sort_order + 1}.</span>
+                                <span className="text-[var(--text-faint)]">{op.sort_order + 1}.</span>
                                 <span className="text-lg">{OP_ICONS[op.type] ?? "⚙"}</span>
                                 <span className="font-medium">{op.name}</span>
                               </div>
                               <span className="text-sm font-semibold tabular-nums">₴{opTotal.toFixed(4)}</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-neutral-500 sm:grid-cols-3">
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-[var(--text-muted)] sm:grid-cols-3">
                               {pMin > 0 && <span>⏱ {fmtMin(pMin)}</span>}
                               {op.type === "print" && kwh > 0 && (
-                                <span>⚡ {kwh.toFixed(3)} кВт·год = <span className="text-neutral-700 dark:text-neutral-300">₴{elCost.toFixed(4)}</span></span>
+                                <span>⚡ {kwh.toFixed(3)} кВт·год = <span className="text-[var(--text)] ">₴{elCost.toFixed(4)}</span></span>
                               )}
                               {op.labor_minutes && (
-                                <span>👷 {op.labor_minutes} хв = <span className="text-neutral-700 dark:text-neutral-300">₴{labCost.toFixed(4)}</span></span>
+                                <span>👷 {op.labor_minutes} хв = <span className="text-[var(--text)] ">₴{labCost.toFixed(4)}</span></span>
                               )}
                               {op.explicit_cost && (
                                 <span>🏷 ₴{fmt(op.explicit_cost)}</span>
                               )}
-                              {op.notes && <span className="italic text-neutral-400">{op.notes}</span>}
+                              {op.notes && <span className="italic text-[var(--text-faint)]">{op.notes}</span>}
                             </div>
                           </div>
                         );
@@ -300,12 +300,12 @@ export default function ProductDetailPage() {
 
               {/* Cost sidebar */}
               <div>
-                <div className="sticky top-6 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="sticky top-6 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
                   <p className="mb-4 text-sm font-medium">Собівартість / шт</p>
 
                   {!costData ? (
                     <button onClick={computeCost} disabled={costBusy}
-                      className="w-full rounded-md border border-neutral-200 py-2 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-400">
+                      className="w-full rounded-md border border-[var(--border)] py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50  ">
                       {costBusy ? "Рахую…" : "↻ Розрахувати"}
                     </button>
                   ) : (
@@ -321,10 +321,10 @@ export default function ProductDetailPage() {
                         return (
                           <div key={row.label} className="mb-3">
                             <div className="mb-1 flex justify-between text-xs">
-                              <span className="text-neutral-500">{row.label}</span>
-                              <span className="tabular-nums font-medium text-neutral-700 dark:text-neutral-300">
+                              <span className="text-[var(--text-muted)]">{row.label}</span>
+                              <span className="tabular-nums font-medium text-[var(--text)] ">
                                 ₴{row.value.toFixed(4)}
-                                <span className="ml-1.5 text-neutral-400">{pct.toFixed(0)}%</span>
+                                <span className="ml-1.5 text-[var(--text-faint)]">{pct.toFixed(0)}%</span>
                               </span>
                             </div>
                             <CostBar pct={pct} cls={row.cls} />
@@ -332,20 +332,20 @@ export default function ProductDetailPage() {
                         );
                       })}
 
-                      <div className="mt-4 border-t border-neutral-100 pt-4 dark:border-neutral-800">
+                      <div className="mt-4 border-t border-[var(--border)] pt-4 ">
                         <div className="flex justify-between">
-                          <span className="text-sm text-neutral-500">Собівартість/шт</span>
+                          <span className="text-sm text-[var(--text-muted)]">Собівартість/шт</span>
                           <span className="text-base font-bold tabular-nums">₴{fmt(costData.total)}</span>
                         </div>
                         {salePrice && (
                           <>
                             <div className="mt-2 flex justify-between text-sm">
-                              <span className="text-neutral-500">Ціна продажу</span>
+                              <span className="text-[var(--text-muted)]">Ціна продажу</span>
                               <span className="tabular-nums">₴{salePrice.toFixed(2)}</span>
                             </div>
                             {margin != null && (
                               <div className="mt-2 flex items-center justify-between">
-                                <span className="text-sm text-neutral-500">Маржа</span>
+                                <span className="text-sm text-[var(--text-muted)]">Маржа</span>
                                 <span className={`text-sm font-semibold ${margin >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                                   {margin.toFixed(1)}% {margin >= 50 ? "🟢" : "🟡"}
                                 </span>
@@ -356,16 +356,16 @@ export default function ProductDetailPage() {
                       </div>
 
                       {parseFloat(costData.print_time_min) > 0 && (
-                        <div className="mt-3 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                        <div className="mt-3 border-t border-[var(--border)] pt-3 ">
                           <div className="flex justify-between text-sm">
-                            <span className="text-neutral-500">Час друку</span>
+                            <span className="text-[var(--text-muted)]">Час друку</span>
                             <span className="tabular-nums">{fmtMin(parseFloat(costData.print_time_min))}</span>
                           </div>
                         </div>
                       )}
 
                       <button onClick={computeCost} disabled={costBusy}
-                        className="mt-4 w-full rounded-md border border-neutral-200 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:hover:bg-neutral-800">
+                        className="mt-4 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50  ">
                         {costBusy ? "Рахую…" : "↻ Оновити"}
                       </button>
                     </>
@@ -378,7 +378,7 @@ export default function ProductDetailPage() {
       )}
 
       {tab === "history" && (
-        <div className="rounded-xl border border-dashed border-neutral-300 px-4 py-12 text-center text-sm text-neutral-400 dark:border-neutral-700">
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-faint)] ">
           Тут буде зв'язок з print_history для цього товару
         </div>
       )}

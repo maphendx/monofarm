@@ -23,7 +23,7 @@ const CONN_BADGE: Record<ConnectionType, string> = {
   octoprint:        "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
   prusalink:        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
   makerbase:        "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-  manual:           "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+  manual:           "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
 };
 
 const _cloudIcon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>;
@@ -57,7 +57,7 @@ function BrandBadge({ brand }: { brand: PrinterBrand }) {
 
 function Back({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button onClick={onClick} className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100">
+    <button onClick={onClick} className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-hi)] ">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M19 12H5M12 5l-7 7 7 7"/>
       </svg>
@@ -73,7 +73,7 @@ function StepNumber({ n, done }: { n: number; done?: boolean }) {
     <div className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
       done
         ? "bg-emerald-500 text-white"
-        : "border-2 border-neutral-300 text-neutral-500 dark:border-neutral-600"
+        : "border-2 border-[var(--border-strong)] text-[var(--text-muted)] "
     }`}>
       {done
         ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
@@ -86,7 +86,7 @@ function StepNumber({ n, done }: { n: number; done?: boolean }) {
 
 function CodeBlock({ code }: { code: string }) {
   return (
-    <pre className="mt-2 overflow-x-auto rounded-lg border border-neutral-200 bg-neutral-950 px-4 py-3 text-xs leading-relaxed text-emerald-400 dark:border-neutral-700">
+    <pre className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs leading-relaxed text-emerald-400 ">
       {code}
     </pre>
   );
@@ -148,28 +148,28 @@ export default function SetupPage() {
       {/* page header */}
       <div>
         <h1 className="text-xl font-bold">Гід підключення принтера</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
           Оберіть бренд і модель — отримаєш покрокову інструкцію підключення до monofarm
         </p>
       </div>
 
       {/* breadcrumb */}
       {step !== "brands" && (
-        <div className="flex items-center gap-2 text-sm text-neutral-400">
-          <button onClick={reset} className="hover:text-neutral-700 dark:hover:text-neutral-200">Бренди</button>
+        <div className="flex items-center gap-2 text-sm text-[var(--text-faint)]">
+          <button onClick={reset} className="hover:text-[var(--text)] ">Бренди</button>
           {brand && (
             <>
               <span>/</span>
               {step === "guide"
-                ? <button onClick={() => brand.models.length > 1 && setStep("models")} className="hover:text-neutral-700 dark:hover:text-neutral-200">{brand.name}</button>
-                : <span className="text-neutral-700 dark:text-neutral-200">{brand.name}</span>
+                ? <button onClick={() => brand.models.length > 1 && setStep("models")} className="hover:text-[var(--text)] ">{brand.name}</button>
+                : <span className="text-[var(--text)] ">{brand.name}</span>
               }
             </>
           )}
           {model && step === "guide" && (
             <>
               <span>/</span>
-              <span className="text-neutral-700 dark:text-neutral-200">{model.name}</span>
+              <span className="text-[var(--text)] ">{model.name}</span>
             </>
           )}
         </div>
@@ -180,7 +180,7 @@ export default function SetupPage() {
         <div className="space-y-6">
           {/* search */}
           <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
             <input
@@ -188,14 +188,14 @@ export default function SetupPage() {
               placeholder="Пошук бренду або моделі…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-2.5 pl-10 pr-4 text-sm outline-none focus:border-neutral-400  "
             />
           </div>
 
           {filteredBrands ? (
             /* search results */
             filteredBrands.length === 0 ? (
-              <p className="text-sm text-neutral-500">Нічого не знайдено</p>
+              <p className="text-sm text-[var(--text-muted)]">Нічого не знайдено</p>
             ) : (
               <div className="grid grid-cols-1 gap-2">
                 {filteredBrands.map((b) => (
@@ -206,7 +206,7 @@ export default function SetupPage() {
           ) : (
             <>
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">Популярні бренди</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">Популярні бренди</p>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {POPULAR_BRANDS.map((b) => (
                     <BrandCard key={b.id} brand={b} onClick={() => selectBrand(b)} />
@@ -215,7 +215,7 @@ export default function SetupPage() {
               </div>
 
               <div>
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-400">Інші бренди</p>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">Інші бренди</p>
                 <div className="grid grid-cols-1 gap-1.5">
                   {(showAll ? OTHER_BRANDS : OTHER_BRANDS.slice(0, 4)).map((b) => (
                     <BrandRow key={b.id} brand={b} onClick={() => selectBrand(b)} />
@@ -224,7 +224,7 @@ export default function SetupPage() {
                 {!showAll && OTHER_BRANDS.length > 4 && (
                   <button
                     onClick={() => setShowAll(true)}
-                    className="mt-2 text-sm text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                    className="mt-2 text-sm text-[var(--text-faint)] hover:text-[var(--text)] "
                   >
                     Показати всі ({OTHER_BRANDS.length}) →
                   </button>
@@ -243,7 +243,7 @@ export default function SetupPage() {
             <BrandBadge brand={brand} />
             <div>
               <h2 className="font-semibold">{brand.name}</h2>
-              <p className="text-xs text-neutral-500">Оберіть модель</p>
+              <p className="text-xs text-[var(--text-muted)]">Оберіть модель</p>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -251,11 +251,11 @@ export default function SetupPage() {
               <button
                 key={m.id}
                 onClick={() => selectModel(m)}
-                className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left transition hover:border-neutral-400 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600"
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600"
               >
                 <div>
                   <span className="text-sm font-medium">{m.name}</span>
-                  {m.note && <span className="ml-2 text-xs text-neutral-400">{m.note}</span>}
+                  {m.note && <span className="ml-2 text-xs text-[var(--text-faint)]">{m.note}</span>}
                 </div>
                 <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CONN_BADGE[m.connection]}`}>
                   {CONN_ICON[m.connection]}
@@ -273,13 +273,13 @@ export default function SetupPage() {
           <Back onClick={() => brand.models.length > 1 ? setStep("models") : reset()} label={brand.models.length > 1 ? brand.name : "Всі бренди"} />
 
           {/* guide header */}
-          <div className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <BrandBadge brand={brand} />
                 <div>
                   <h2 className="font-bold">{brand.name} {model.name}</h2>
-                  <p className="text-xs text-neutral-500">{guide.title}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{guide.title}</p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1.5">
@@ -287,7 +287,7 @@ export default function SetupPage() {
                   {CONN_ICON[model.connection]}
                   {guide.badge}
                 </span>
-                <span className="text-xs text-neutral-400">~{guide.estimatedTime}</span>
+                <span className="text-xs text-[var(--text-faint)]">~{guide.estimatedTime}</span>
               </div>
             </div>
 
@@ -298,7 +298,7 @@ export default function SetupPage() {
             )}
 
             {model.connection === "manual" && (
-              <div className="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-400">
+              <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs text-[var(--text-muted)]   ">
                 <strong>{brand.name} {model.name}</strong> не має API для автоматичного відстеження. Принтер можна додати для ручного керування — оператор оновлює статус вручну.
               </div>
             )}
@@ -312,7 +312,7 @@ export default function SetupPage() {
           {/* steps */}
           <div className="space-y-3">
             {guideSteps.map((s, i) => (
-              <div key={i} className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+              <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
                 <div className="flex gap-4">
                   <StepNumber n={i + 1} />
                   <div className="min-w-0 flex-1 space-y-2">
@@ -323,7 +323,7 @@ export default function SetupPage() {
                         {s.warning}
                       </div>
                     )}
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400">{s.content}</p>
+                    <p className="text-sm text-[var(--text-muted)] ">{s.content}</p>
                     {s.code && <CodeBlock code={s.code} />}
                     {s.link && (
                       <a
@@ -343,9 +343,9 @@ export default function SetupPage() {
           </div>
 
           {/* CTA */}
-          <div className="rounded-2xl border border-neutral-900 bg-neutral-900 p-5 dark:border-neutral-100 dark:bg-neutral-100">
-            <p className="text-sm font-semibold text-white dark:text-neutral-900">Готовий до підключення?</p>
-            <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-600">
+          <div className="rounded-2xl border border-neutral-900 bg-[var(--surface)] p-5  ">
+            <p className="text-sm font-semibold text-white ">Готовий до підключення?</p>
+            <p className="mt-0.5 text-xs text-[var(--text-faint)] ">
               {model.connection === "cloud"
                 ? "Перейди в Налаштування щоб підключити Bambu Cloud."
                 : model.connection === "manual"
@@ -354,15 +354,15 @@ export default function SetupPage() {
             </p>
             <div className="mt-3 flex gap-2">
               {model.connection === "cloud" ? (
-                <Link href="/settings" className="rounded-md bg-white px-4 py-2 text-xs font-medium text-neutral-900 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800">
+                <Link href="/settings" className="rounded-md bg-[var(--bg-elevated)] px-4 py-2 text-xs font-medium text-[var(--text-hi)] hover:bg-[var(--surface-hi)]   ">
                   Відкрити Налаштування →
                 </Link>
               ) : (
-                <Link href="/printers" className="rounded-md bg-white px-4 py-2 text-xs font-medium text-neutral-900 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800">
+                <Link href="/printers" className="rounded-md bg-[var(--bg-elevated)] px-4 py-2 text-xs font-medium text-[var(--text-hi)] hover:bg-[var(--surface-hi)]   ">
                   Перейти до Принтерів →
                 </Link>
               )}
-              <button onClick={reset} className="rounded-md px-4 py-2 text-xs text-neutral-400 hover:bg-neutral-800 dark:hover:bg-neutral-200">
+              <button onClick={reset} className="rounded-md px-4 py-2 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] ">
                 Інший принтер
               </button>
             </div>
@@ -380,7 +380,7 @@ function BrandCard({ brand, onClick }: { brand: PrinterBrand; onClick: () => voi
   return (
     <button
       onClick={onClick}
-      className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 text-left transition hover:border-neutral-400 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600"
+      className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600"
     >
       <div className="flex items-center gap-3">
         <BrandBadge brand={brand} />
@@ -394,7 +394,7 @@ function BrandCard({ brand, onClick }: { brand: PrinterBrand; onClick: () => voi
           </span>
         ))}
       </div>
-      <p className="text-xs text-neutral-400">{brand.models.length} {brand.models.length === 1 ? "модель" : "моделей"}</p>
+      <p className="text-xs text-[var(--text-faint)]">{brand.models.length} {brand.models.length === 1 ? "модель" : "моделей"}</p>
     </button>
   );
 }
@@ -404,7 +404,7 @@ function BrandRow({ brand, onClick }: { brand: PrinterBrand; onClick: () => void
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left transition hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600"
+      className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-neutral-400   dark:hover:border-neutral-600"
     >
       <BrandBadge brand={brand} />
       <div className="flex-1 min-w-0">
@@ -417,7 +417,7 @@ function BrandRow({ brand, onClick }: { brand: PrinterBrand; onClick: () => void
           ))}
         </div>
       </div>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-neutral-400">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]">
         <path d="M9 18l6-6-6-6"/>
       </svg>
     </button>

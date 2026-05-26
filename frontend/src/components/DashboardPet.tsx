@@ -325,7 +325,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
             type="button"
             onClick={hide}
             title="Приховати"
-            className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-neutral-800/75 text-[9px] text-neutral-400 opacity-0 transition-opacity hover:bg-neutral-700 hover:text-white group-hover:opacity-100"
+            className="absolute -right-2 -top-2 flex size-4 items-center justify-center rounded-full bg-[var(--surface-2)]/75 text-[9px] text-[var(--text-faint)] opacity-0 transition-opacity hover:bg-neutral-700 hover:text-[var(--text-hi)] group-hover:opacity-100"
           >
             ×
           </button>

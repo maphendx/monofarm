@@ -22,7 +22,7 @@ const KIND_OPTIONS: { value: PrinterKind; label: string; desc: string }[] = [
 const KIND_BADGE: Record<string, string> = {
   bambu:        "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
   snapmaker_u1: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  other:        "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+  other:        "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
 };
 
 const STATE_DOT: Record<string, string> = {
@@ -31,8 +31,8 @@ const STATE_DOT: Record<string, string> = {
   idle:        "bg-neutral-400",
   paused:      "bg-amber-400",
   error:       "bg-red-500",
-  offline:     "bg-neutral-300 dark:bg-neutral-600",
-  unknown:     "bg-neutral-300 dark:bg-neutral-600",
+  offline:     "bg-neutral-300 ",
+  unknown:     "bg-neutral-300 ",
 };
 
 interface PrinterForm {
@@ -50,14 +50,14 @@ function printerToForm(p: Printer): PrinterForm {
   return { name: p.name, kind: p.kind, moonraker_url: p.moonraker_url ?? "", bambu_dev_id: p.bambu_dev_id ?? "", bambu_access_code: "", bambu_dev_ip: p.bambu_dev_ip ?? "", bambu_model: p.bambu_model ?? "", is_active: p.is_active };
 }
 
-const inp = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100";
-const primaryBtn = "rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300";
-const ghostBtn = "rounded-md px-4 py-2 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
+const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
+const primaryBtn = "rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   ";
+const ghostBtn = "rounded-md px-4 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm">{label}{hint && <span className="ml-1 text-neutral-400">{hint}</span>}</span>
+      <span className="mb-1 block text-sm">{label}{hint && <span className="ml-1 text-[var(--text-faint)]">{hint}</span>}</span>
       {children}
     </label>
   );
@@ -65,16 +65,16 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function WizardTypeCard({ icon, title, desc, badge, onClick }: { icon: React.ReactNode; title: string; desc: string; badge?: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="group flex w-full items-center gap-4 rounded-xl border border-neutral-200 bg-white px-5 py-4 text-left transition hover:border-neutral-400 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-600">
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-neutral-100 bg-neutral-50 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-400">{icon}</div>
+    <button onClick={onClick} className="group flex w-full items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600">
+      <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-muted)]   ">{icon}</div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{title}</span>
           {badge && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{badge}</span>}
         </div>
-        <p className="mt-0.5 text-xs text-neutral-500">{desc}</p>
+        <p className="mt-0.5 text-xs text-[var(--text-muted)]">{desc}</p>
       </div>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-neutral-400"><path d="M9 18l6-6-6-6"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]"><path d="M9 18l6-6-6-6"/></svg>
     </button>
   );
 }
@@ -120,7 +120,7 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
       <div className="space-y-4">
         {step === "choose" && (
           <div className="space-y-2">
-            <p className="mb-3 text-xs text-neutral-500">Оберіть тип підключення</p>
+            <p className="mb-3 text-xs text-[var(--text-muted)]">Оберіть тип підключення</p>
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>} title="Bambu Lab" desc="P1S, A1, X1C — синхронізація через Bambu Cloud акаунт" badge="Авто-імпорт" onClick={() => setStep("bambu")} />
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h10M7 11h6"/></svg>} title="Klipper / Moonraker" desc="Snapmaker, Voron, Rat Rig та будь-який Klipper принтер" onClick={() => setStep("moonraker")} />
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>} title="Ручне відстеження" desc="Будь-який принтер — оператор оновлює стан вручну" onClick={() => setStep("manual")} />
@@ -140,16 +140,16 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
         )}
         {step === "moonraker" && (
           <form onSubmit={(e) => { e.preventDefault(); createPrinter({ name: name.trim(), kind: "snapmaker_u1", moonraker_url: url.trim() }); }} className="space-y-3">
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Snapmaker J1s" className={inp} /></label>
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Moonraker URL</span><input type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.100:7125" className={inp} /><span className="mt-1 block text-[11px] text-neutral-400">Знайди у Mainsail → Settings → адреса сервера</span></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Snapmaker J1s" className={inp} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Moonraker URL</span><input type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.100:7125" className={inp} /><span className="mt-1 block text-[11px] text-[var(--text-faint)]">Знайди у Mainsail → Settings → адреса сервера</span></label>
             {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
             <div className="flex gap-2"><button type="submit" disabled={busy || !name || !url} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button><button type="button" onClick={back} className={ghostBtn}>Назад</button></div>
           </form>
         )}
         {step === "manual" && (
           <form onSubmit={(e) => { e.preventDefault(); createPrinter({ name: name.trim(), kind: "other" }); }} className="space-y-3">
-            <div className="rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-3 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/40">Оператор вручну вказує стан принтера — що друкується, прогрес, статус.</div>
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-400">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ender-3 #1" className={inp} /></label>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs text-[var(--text-muted)]  ">Оператор вручну вказує стан принтера — що друкується, прогрес, статус.</div>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ender-3 #1" className={inp} /></label>
             {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
             <div className="flex gap-2"><button type="submit" disabled={busy || !name} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button><button type="button" onClick={back} className={ghostBtn}>Назад</button></div>
           </form>
@@ -198,7 +198,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }} title={isEdit ? "Редагувати принтер" : "Додати принтер"}
-      footer={<><button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">Скасувати</button><button type="submit" form="printer-form" disabled={busy || !form.name.trim()} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">{busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}</button></>}
+      footer={<><button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button><button type="submit" form="printer-form" disabled={busy || !form.name.trim()} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50   ">{busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}</button></>}
     >
       <form id="printer-form" onSubmit={submit} className="space-y-4">
         <Field label="Назва"><input type="text" required autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="U1-01" className={inp} /></Field>
@@ -206,9 +206,9 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           <span className="mb-2 block text-sm">Тип</span>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {KIND_OPTIONS.map((opt) => (
-              <button key={opt.value} type="button" onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition " + (form.kind === opt.value ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900" : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500")}>
+              <button key={opt.value} type="button" onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition " + (form.kind === opt.value ? "border-neutral-900 bg-[var(--surface)] text-white   " : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500")}>
                 <p className="text-sm font-medium">{opt.label}</p>
-                <p className={`mt-0.5 text-xs leading-tight ${form.kind === opt.value ? "opacity-70" : "text-neutral-500"}`}>{opt.desc}</p>
+                <p className={`mt-0.5 text-xs leading-tight ${form.kind === opt.value ? "opacity-70" : "text-[var(--text-muted)]"}`}>{opt.desc}</p>
               </button>
             ))}
           </div>
@@ -295,12 +295,12 @@ export function PrintersManager() {
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Принтери</h2>
         <div className="flex items-center gap-2">
-          <button onClick={() => load(true)} disabled={syncing || loading} className="flex items-center gap-1.5 rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800">
+          <button onClick={() => load(true)} disabled={syncing || loading} className="flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
             <svg className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             {syncing ? "Синхронізація…" : "Синх"}
           </button>
           {isAdmin && (
-            <button onClick={() => setWizardOpen(true)} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300">
+            <button onClick={() => setWizardOpen(true)} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700   ">
               + Додати принтер
             </button>
           )}
@@ -312,9 +312,9 @@ export function PrintersManager() {
           <p className="mb-3 text-sm font-medium text-blue-800 dark:text-blue-300">Виявлено нові Bambu пристрої ({discovered.length})</p>
           <div className="flex flex-wrap gap-2">
             {discovered.map((d) => (
-              <div key={d.dev_id} className="flex items-center gap-3 rounded-lg border border-blue-200 bg-white px-3 py-2 dark:border-blue-800 dark:bg-neutral-900">
-                <div><p className="text-sm font-medium">{d.name}</p><p className="text-xs text-neutral-400">{d.model || d.dev_id}</p></div>
-                <button onClick={() => claimDevice(d.dev_id)} disabled={claiming === d.dev_id} className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">{claiming === d.dev_id ? "…" : "Додати"}</button>
+              <div key={d.dev_id} className="flex items-center gap-3 rounded-lg border border-blue-200 bg-[var(--bg-elevated)] px-3 py-2 dark:border-blue-800 ">
+                <div><p className="text-sm font-medium">{d.name}</p><p className="text-xs text-[var(--text-faint)]">{d.model || d.dev_id}</p></div>
+                <button onClick={() => claimDevice(d.dev_id)} disabled={claiming === d.dev_id} className="rounded-md bg-[var(--surface)] px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50  ">{claiming === d.dev_id ? "…" : "Додати"}</button>
               </div>
             ))}
           </div>
@@ -322,47 +322,47 @@ export function PrintersManager() {
       )}
 
       {loading ? (
-        <p className="text-sm text-neutral-500">Завантаження…</p>
+        <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>
       ) : printers.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-300 p-10 text-center dark:border-neutral-700">
-          <p className="text-sm text-neutral-500">Принтерів ще немає</p>
-          {isAdmin && <button onClick={() => setWizardOpen(true)} className="mt-3 text-sm text-neutral-900 underline dark:text-neutral-100">Додати перший принтер</button>}
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-10 text-center ">
+          <p className="text-sm text-[var(--text-muted)]">Принтерів ще немає</p>
+          {isAdmin && <button onClick={() => setWizardOpen(true)} className="mt-3 text-sm text-[var(--text-hi)] underline ">Додати перший принтер</button>}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-4 py-3 text-left font-medium text-neutral-500">Назва</th>
-                <th className="px-4 py-3 text-left font-medium text-neutral-500">Тип</th>
-                <th className="px-4 py-3 text-left font-medium text-neutral-500">Стан</th>
-                <th className="hidden px-4 py-3 text-left font-medium text-neutral-500 md:table-cell">Підключення</th>
-                <th className="hidden px-4 py-3 text-left font-medium text-neutral-500 lg:table-cell">Група</th>
-                {isAdmin && <th className="px-4 py-3 text-right font-medium text-neutral-500">Дії</th>}
+              <tr className="border-b border-[var(--border)] bg-[var(--bg)]  ">
+                <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Назва</th>
+                <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Тип</th>
+                <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Стан</th>
+                <th className="hidden px-4 py-3 text-left font-medium text-[var(--text-muted)] md:table-cell">Підключення</th>
+                <th className="hidden px-4 py-3 text-left font-medium text-[var(--text-muted)] lg:table-cell">Група</th>
+                {isAdmin && <th className="px-4 py-3 text-right font-medium text-[var(--text-muted)]">Дії</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
               {printers.map((p) => {
                 const dot = STATE_DOT[p.state ?? "unknown"] ?? STATE_DOT.unknown;
                 return (
-                  <tr key={p.id} className="bg-white hover:bg-neutral-50 dark:bg-neutral-950 dark:hover:bg-neutral-900">
+                  <tr key={p.id} className="bg-[var(--bg-elevated)] hover:bg-[var(--surface-hi)]  ">
                     <td className="px-4 py-3 font-medium"><Link href={`/printers/${p.id}`} className="hover:underline">{p.name}</Link></td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${KIND_BADGE[p.kind] ?? KIND_BADGE.other}`}>{kindLabel(p.kind)}</span></td>
-                    <td className="px-4 py-3"><span className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} /><span className="text-neutral-600 dark:text-neutral-400">{stateLabel(p.state)}</span></span></td>
-                    <td className="hidden px-4 py-3 text-neutral-500 md:table-cell"><span className="block max-w-[240px] truncate font-mono text-xs">{connectionInfo(p)}</span></td>
-                    <td className="hidden px-4 py-3 text-neutral-500 lg:table-cell">{p.group_name ?? <span className="text-neutral-300 dark:text-neutral-600">—</span>}</td>
+                    <td className="px-4 py-3"><span className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} /><span className="text-[var(--text-muted)] ">{stateLabel(p.state)}</span></span></td>
+                    <td className="hidden px-4 py-3 text-[var(--text-muted)] md:table-cell"><span className="block max-w-[240px] truncate font-mono text-xs">{connectionInfo(p)}</span></td>
+                    <td className="hidden px-4 py-3 text-[var(--text-muted)] lg:table-cell">{p.group_name ?? <span className="text-[var(--text-muted)] ">—</span>}</td>
                     {isAdmin && (
                       <td className="px-4 py-3 text-right">
                         {confirmDeleteId === p.id ? (
                           <div className="flex items-center justify-end gap-2">
-                            <span className="text-xs text-neutral-500">Видалити?</span>
+                            <span className="text-xs text-[var(--text-muted)]">Видалити?</span>
                             <button onClick={() => handleDelete(p.id)} disabled={deleteId === p.id} className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20">{deleteId === p.id ? "…" : "Так"}</button>
-                            <button onClick={() => setConfirmDeleteId(null)} className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">Ні</button>
+                            <button onClick={() => setConfirmDeleteId(null)} className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Ні</button>
                           </div>
                         ) : (
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => { setEditing(p); setModalOpen(true); }} className="rounded p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200" title="Редагувати"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
-                            <button onClick={() => setConfirmDeleteId(p.id)} className="rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400" title="Видалити"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            <button onClick={() => { setEditing(p); setModalOpen(true); }} className="rounded p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  " title="Редагувати"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
+                            <button onClick={() => setConfirmDeleteId(p.id)} className="rounded p-1.5 text-[var(--text-faint)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400" title="Видалити"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                           </div>
                         )}
                       </td>

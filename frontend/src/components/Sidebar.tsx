@@ -95,34 +95,41 @@ export function Sidebar({ user }: { user: User }) {
   const linkCls = (href: string) => [
     "flex h-9 items-center gap-3 overflow-hidden rounded-lg px-2.5 text-sm transition-colors",
     pathname === href || pathname.startsWith(href + "/")
-      ? "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-400"
-      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
+      ? "bg-[var(--accent-soft)] text-[var(--accent)]  "
+      : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]   ",
   ].join(" ");
 
   return (
-    <aside className="group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-neutral-200 bg-white transition-[width] duration-200 ease-out w-14 hover:w-[220px] dark:border-neutral-800 dark:bg-[#161614]">
+    <aside className="group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[var(--border)] bg-[var(--bg-elevated)] transition-[width] duration-200 ease-out w-14 hover:w-[220px]  ">
 
       {/* Brand */}
       <div className="flex h-14 shrink-0 items-center gap-3 overflow-hidden px-4">
-        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" className="shrink-0" aria-hidden="true">
-          <polygon points="16,2 25,14 7,14" fill="#0891b2"/>
-          <rect x="4"   y="17" width="24" height="4"   rx="2"    fill="#0891b2"/>
-          <rect x="7.5" y="23" width="17" height="3.2" rx="1.6"  fill="#0891b2" opacity="0.6"/>
-          <rect x="12"  y="28" width="8"  height="2.5" rx="1.25" fill="#0891b2" opacity="0.3"/>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden="true">
+          <g stroke="var(--accent)" strokeWidth="1.6" opacity="0.5" strokeLinecap="round">
+            <circle cx="5"  cy="5"  r="1.6"/>
+            <circle cx="12" cy="5"  r="1.6"/>
+            <circle cx="19" cy="5"  r="1.6"/>
+            <circle cx="5"  cy="12" r="1.6"/>
+            <circle cx="19" cy="12" r="1.6"/>
+            <circle cx="5"  cy="19" r="1.6"/>
+            <circle cx="12" cy="19" r="1.6"/>
+            <circle cx="19" cy="19" r="1.6"/>
+          </g>
+          <circle cx="12" cy="12" r="2.6" fill="var(--accent)"/>
         </svg>
         <span className="whitespace-nowrap font-mono text-sm font-semibold tracking-[0.06em] uppercase opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-          MONO<span className="text-cyan-600 dark:text-cyan-400">FARM</span>
+          MONO<span className="text-[var(--accent)] ">FARM</span>
         </span>
       </div>
 
-      <div className="mx-3 h-px bg-neutral-100 dark:bg-neutral-800" />
+      <div className="mx-3 h-px bg-[var(--surface-hi)] " />
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col overflow-hidden px-2 py-3">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? "mt-1" : ""}>
             {group.label && (
-              <p className="mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-neutral-400 dark:text-neutral-600 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+              <p className="mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)]  opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
                 {group.label}
               </p>
             )}
@@ -145,7 +152,7 @@ export function Sidebar({ user }: { user: User }) {
         ))}
       </nav>
 
-      <div className="mx-3 h-px bg-neutral-100 dark:bg-neutral-800" />
+      <div className="mx-3 h-px bg-[var(--surface-hi)] " />
 
       {/* Footer */}
       <div className="flex flex-col gap-0.5 overflow-hidden px-2 py-3">
@@ -161,27 +168,27 @@ export function Sidebar({ user }: { user: User }) {
 
         {/* User row + theme toggle */}
         <div ref={menuRef} className="relative">
-          <div className="flex h-9 items-center overflow-hidden rounded-lg px-2.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+          <div className="flex h-9 items-center overflow-hidden rounded-lg px-2.5 hover:bg-[var(--surface-hi)]  transition-colors">
             <button
               onClick={() => setUserMenuOpen((v) => !v)}
               title={user.name || user.email}
               className="flex min-w-0 flex-1 items-center gap-3"
             >
-              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-neutral-200 text-[9px] font-bold text-neutral-700 dark:bg-neutral-700 dark:text-neutral-300">
+              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[9px] font-bold text-[var(--text)]  ">
                 {initials(user)}
               </div>
               <div className="flex min-w-0 flex-col items-start opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                <span className="w-full truncate text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                <span className="w-full truncate text-xs font-medium text-[var(--text)] ">
                   {user.name || user.email}
                 </span>
-                <span className="text-xs text-neutral-400">{user.role}</span>
+                <span className="text-xs text-[var(--text-faint)]">{user.role}</span>
               </div>
             </button>
             <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
               <button
                 onClick={() => setLocale(locale === "uk" ? "en" : "uk")}
                 title="Switch language"
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+                className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  "
               >
                 {locale === "uk" ? "EN" : "UA"}
               </button>
@@ -190,14 +197,14 @@ export function Sidebar({ user }: { user: User }) {
           </div>
 
           {userMenuOpen && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 rounded-xl border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
-              <div className="border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
-                <p className="truncate text-xs font-medium text-neutral-700 dark:text-neutral-300">{user.name || user.email}</p>
-                <p className="truncate text-xs text-neutral-400">{user.email}</p>
+            <div className="absolute bottom-full left-2 right-2 mb-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-lg  ">
+              <div className="border-b border-[var(--border)] px-3 py-2 ">
+                <p className="truncate text-xs font-medium text-[var(--text)] ">{user.name || user.email}</p>
+                <p className="truncate text-xs text-[var(--text-faint)]">{user.email}</p>
               </div>
               <button
                 onClick={logout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-neutral-50 dark:text-red-400 dark:hover:bg-neutral-800"
+                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-[var(--surface-hi)] dark:text-red-400 "
               >
                 <Icon d={ICONS.logout} className="size-3.5" />
                 {t("auth.logout")}

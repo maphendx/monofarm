@@ -55,10 +55,10 @@ function fmtDate(iso: string) {
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-      <p className="text-sm text-neutral-500">{label}</p>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
+      <p className="text-sm text-[var(--text-muted)]">{label}</p>
       <p className="mt-1 text-2xl font-semibold">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-neutral-400">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-[var(--text-faint)]">{sub}</p>}
     </div>
   );
 }
@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
   }, [days]);
 
   if (loading) {
-    return <p className="text-sm text-neutral-500">{t("common.loading")}</p>;
+    return <p className="text-sm text-[var(--text-muted)]">{t("common.loading")}</p>;
   }
 
   const maxDone = Math.max(...daily.map((d) => d.done), 1);
@@ -138,7 +138,7 @@ export default function AnalyticsPage() {
       )}
 
       {/* Daily chart */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-medium">{t("analytics.completedByDay")}</h2>
           <div className="flex gap-1">
@@ -149,8 +149,8 @@ export default function AnalyticsPage() {
                 className={
                   "rounded px-2.5 py-1 text-xs transition " +
                   (days === d
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800")
+                    ? "bg-[var(--surface)] text-white  "
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ")
                 }
               >
                 {d}д
@@ -180,10 +180,10 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Printer stats */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <h2 className="mb-4 font-medium">{t("analytics.topPrinters")}</h2>
           {printers.length === 0 ? (
-            <p className="text-sm text-neutral-400">{t("analytics.noData")}</p>
+            <p className="text-sm text-[var(--text-faint)]">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-3">
               {printers.slice(0, 10).map((p) => {
@@ -192,18 +192,18 @@ export default function AnalyticsPage() {
                   <div key={p.id}>
                     <div className="mb-1 flex items-center justify-between text-sm">
                       <span className="truncate font-medium">{p.name}</span>
-                      <span className="ml-2 shrink-0 text-neutral-500">
+                      <span className="ml-2 shrink-0 text-[var(--text-muted)]">
                         {p.done_entries}/{p.total_entries}
                         {p.estimated_minutes_done > 0 && (
-                          <span className="ml-2 text-xs text-neutral-400">
+                          <span className="ml-2 text-xs text-[var(--text-faint)]">
                             {fmtHours(p.estimated_minutes_done)}
                           </span>
                         )}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
-                        className="h-full rounded-full bg-neutral-900 dark:bg-neutral-100 transition-all"
+                        className="h-full rounded-full bg-[var(--surface)]  transition-all"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -215,10 +215,10 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Filament usage */}
-        <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <h2 className="mb-4 font-medium">{t("analytics.filamentByMaterial")}</h2>
           {!filament || filament.by_material.length === 0 ? (
-            <p className="text-sm text-neutral-400">{t("analytics.noData")}</p>
+            <p className="text-sm text-[var(--text-faint)]">{t("analytics.noData")}</p>
           ) : (
             <div className="space-y-3">
               {filament.by_material.map((row) => {
@@ -235,13 +235,13 @@ export default function AnalyticsPage() {
                         />
                         {row.material}
                       </span>
-                      <span className="text-neutral-500">
+                      <span className="text-[var(--text-muted)]">
                         {row.grams >= 1000
                           ? `${(row.grams / 1000).toFixed(2)} кг`
                           : `${row.grams} г`}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{ width: `${pct}%`, background: color }}
@@ -257,7 +257,7 @@ export default function AnalyticsPage() {
 
       {/* Task status breakdown */}
       {summary && (
-        <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <h2 className="mb-4 font-medium">Завдання друку — розподіл</h2>
           <div className="flex flex-wrap gap-4">
             {[
@@ -270,7 +270,7 @@ export default function AnalyticsPage() {
               return (
                 <div key={key} className="flex items-center gap-2">
                   <span className={`h-3 w-3 rounded-full ${color}`} />
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">{label}:</span>
+                  <span className="text-sm text-[var(--text-muted)] ">{label}:</span>
                   <span className="text-sm font-semibold">{count}</span>
                 </div>
               );

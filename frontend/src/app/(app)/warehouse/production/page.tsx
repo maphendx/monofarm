@@ -18,7 +18,7 @@ type Product = { id: number; name: string; sku: string };
 type Spec    = { id: number; name: string; version: number; is_default: boolean };
 
 const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
-  { status: "draft",  label: "Заплановано", accent: "border-neutral-300 dark:border-neutral-700" },
+  { status: "draft",  label: "Заплановано", accent: "border-[var(--border-strong)] " },
   { status: "active", label: "Друкується",  accent: "border-blue-400 dark:border-blue-600" },
   { status: "done",   label: "Готово",      accent: "border-emerald-400 dark:border-emerald-600" },
 ];
@@ -72,24 +72,24 @@ function CreateBatchModal({
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal open={open} onClose={onClose} title="Нова виробнича партія"
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
           Скасувати
         </button>
         <button type="submit" form="batch-form" disabled={busy || !productId || parseInt(targetQty) < 1}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Створити"}
         </button>
       </>}
     >
       <form id="batch-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Товар</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Товар</span>
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>
             <option value="">— обери товар —</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
@@ -98,7 +98,7 @@ function CreateBatchModal({
 
         {specs.length > 0 && (
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Специфікація</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Специфікація</span>
             <select value={specId} onChange={(e) => setSpecId(e.target.value)} className={inputCls}>
               {specs.map((s) => <option key={s.id} value={s.id}>v{s.version} · {s.name}</option>)}
             </select>
@@ -107,17 +107,17 @@ function CreateBatchModal({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Кількість (шт)</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Кількість (шт)</span>
             <input type="number" required min={1} value={targetQty} onChange={(e) => setTargetQty(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Дедлайн</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Нотатка</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
@@ -131,7 +131,7 @@ function CreateBatchModal({
 
 function ProgressBar({ value }: { value: number }) {
   return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+    <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
       <div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.min(100, value)}%` }} />
     </div>
   );
@@ -152,7 +152,7 @@ function BatchCard({ batch, onStatusChange }: {
   }
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
       <div className="mb-1 flex items-start justify-between gap-2">
         <span className="font-medium leading-tight">{batch.product_name}</span>
         {batch.status === "active" && (
@@ -166,24 +166,24 @@ function BatchCard({ batch, onStatusChange }: {
       {batch.status !== "draft" ? (
         <>
           <ProgressBar value={pct} />
-          <p className="mt-1.5 text-xs text-neutral-500">
+          <p className="mt-1.5 text-xs text-[var(--text-muted)]">
             {batch.printed_qty}/{batch.target_qty} надруковано · {pct.toFixed(0)}%
             {defects > 0 && <span className="ml-1.5 text-red-400">{defects} брак</span>}
           </p>
         </>
       ) : (
-        <p className="text-xs text-neutral-400">Ціль: {batch.target_qty} шт</p>
+        <p className="text-xs text-[var(--text-faint)]">Ціль: {batch.target_qty} шт</p>
       )}
 
-      {batch.notes && <p className="mt-1.5 text-xs text-neutral-400 italic truncate">{batch.notes}</p>}
+      {batch.notes && <p className="mt-1.5 text-xs text-[var(--text-faint)] italic truncate">{batch.notes}</p>}
 
-      <div className="mt-2 flex gap-3 text-xs text-neutral-400">
+      <div className="mt-2 flex gap-3 text-xs text-[var(--text-faint)]">
         {batch.due_date && <span>📅 {new Date(batch.due_date).toLocaleDateString("uk-UA")}</span>}
       </div>
 
       {batch.status === "draft" && (
         <button disabled={busy} onClick={() => move("active")}
-          className="mt-3 w-full rounded-md border border-neutral-200 py-1.5 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800">
+          className="mt-3 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50   ">
           → Запустити
         </button>
       )}
@@ -216,7 +216,7 @@ export default function ProductionPage() {
     setBatches((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus } : b));
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   const byStatus = (s: BatchStatus) => batches.filter((b) => b.status === s);
 
@@ -224,7 +224,7 @@ export default function ProductionPage() {
     <div className="space-y-4">
       <div className="flex justify-end">
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
           + Партія
         </button>
       </div>
@@ -236,13 +236,13 @@ export default function ProductionPage() {
             <div key={col.status}>
               <div className={`mb-3 flex items-center gap-2 border-l-2 pl-2 ${col.accent}`}>
                 <span className="text-sm font-medium">{col.label}</span>
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
                   {items.length}
                 </span>
               </div>
               <div className="space-y-3">
                 {items.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center text-xs text-neutral-400 dark:border-neutral-800">
+                  <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center text-xs text-[var(--text-faint)] ">
                     Порожньо
                   </div>
                 ) : (

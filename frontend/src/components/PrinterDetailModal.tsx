@@ -125,7 +125,7 @@ function MoonrakerUrlEditor({
   return (
     <div className="space-y-1">
       <label className="block">
-        <span className="mb-1 block text-xs text-neutral-500">
+        <span className="mb-1 block text-xs text-[var(--text-muted)]">
           Moonraker / Mainsail URL
         </span>
         <input
@@ -133,7 +133,7 @@ function MoonrakerUrlEditor({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="http://192.168.31.210"
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950"
+          className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs outline-none focus:border-neutral-900  "
         />
       </label>
       <div className="flex justify-end gap-2 text-xs">
@@ -141,7 +141,7 @@ function MoonrakerUrlEditor({
         <button
           onClick={save}
           disabled={busy || (url.trim() === (printer.moonraker_url ?? ""))}
-          className="rounded bg-neutral-900 px-2 py-1 text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded bg-[var(--surface)] px-2 py-1 text-white hover:bg-neutral-700 disabled:opacity-50  "
         >
           {busy ? "…" : "Зберегти URL"}
         </button>
@@ -183,12 +183,12 @@ function GroupPicker({
 
   return (
     <div>
-      <span className="mb-1 block text-xs text-neutral-500">Група</span>
+      <span className="mb-1 block text-xs text-[var(--text-muted)]">Група</span>
       <select
         value={printer.group_id ?? ""}
         disabled={busy}
         onChange={(e) => assignGroup(e.target.value ? Number(e.target.value) : null)}
-        className="w-full rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm outline-none dark:border-neutral-700 dark:bg-neutral-950 disabled:opacity-50"
+        className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none   disabled:opacity-50"
       >
         <option value="">— Без групи —</option>
         {groups.map((g) => (
@@ -281,11 +281,11 @@ export function PrinterDetailModal({
       title={printer.name}
     >
       <div className="space-y-4 text-sm">
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-500">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[var(--text-muted)]">
           <span>{kindLabel(printer.kind)}</span>
           <span>{stateLabel(printer.state)}</span>
           {printer.group_name && (
-            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
+            <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]  ">
               {printer.group_name}
             </span>
           )}
@@ -318,7 +318,7 @@ export function PrinterDetailModal({
                 onClick={() => {
                   navigator.clipboard.writeText(printer.moonraker_url!);
                 }}
-                className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+                className="text-[var(--text-muted)] hover:text-[var(--text-hi)] "
                 title="Скопіювати URL"
               >
                 ⧉ копіювати
@@ -333,14 +333,14 @@ export function PrinterDetailModal({
               printer.extruder_temp != null ||
               printer.bed_temp != null ||
               printer.current_filament_meta) && (
-              <div className="space-y-2 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+              <div className="space-y-2 rounded-md border border-[var(--border)] px-3 py-2 text-xs ">
                 {printer.progress_pct != null && printer.state === "printing" && (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-neutral-500">Прогрес</span>
+                      <span className="text-[var(--text-muted)]">Прогрес</span>
                       <span className="font-medium">{printer.progress_pct}%</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
                         className="h-full rounded-full bg-emerald-500"
                         style={{ width: `${printer.progress_pct}%` }}
@@ -348,7 +348,7 @@ export function PrinterDetailModal({
                     </div>
                   </>
                 )}
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-neutral-600 dark:text-neutral-400">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-[var(--text-muted)] ">
                   {printer.extruder_temp != null && (
                     <span>
                       Сопло: {Math.round(printer.extruder_temp)}°
@@ -366,7 +366,7 @@ export function PrinterDetailModal({
                 </div>
                 {printer.current_filament_meta && (
                   <div>
-                    <div className="mb-1 text-neutral-500">Завантажений пластик</div>
+                    <div className="mb-1 text-[var(--text-muted)]">Завантажений пластик</div>
                     <FilamentSwatches
                       meta={printer.current_filament_meta}
                       size={14}
@@ -389,7 +389,7 @@ export function PrinterDetailModal({
               <form onSubmit={takeJob} className="space-y-3">
                 <h3 className="font-medium">Зайняти принтер</h3>
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">
+                  <span className="mb-1 block text-xs text-[var(--text-muted)]">
                     Що друкуємо
                   </span>
                   <input
@@ -398,12 +398,12 @@ export function PrinterDetailModal({
                     value={job}
                     onChange={(e) => setJob(e.target.value)}
                     placeholder="Деталь / задача"
-                    className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
                     autoFocus
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs text-neutral-500">
+                  <span className="mb-1 block text-xs text-[var(--text-muted)]">
                     Скільки часу залишилось (хв)
                   </span>
                   <input
@@ -412,7 +412,7 @@ export function PrinterDetailModal({
                     value={eta}
                     onChange={(e) => setEta(e.target.value)}
                     placeholder="напр. 240"
-                    className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
                   />
                 </label>
                 <button
@@ -425,11 +425,11 @@ export function PrinterDetailModal({
               </form>
             ) : (
               <div className="space-y-3">
-                <div className="rounded-md bg-neutral-100 px-3 py-2 dark:bg-neutral-800">
-                  <div className="text-xs text-neutral-500">Поточний друк</div>
+                <div className="rounded-md bg-[var(--surface-hi)] px-3 py-2 ">
+                  <div className="text-xs text-[var(--text-muted)]">Поточний друк</div>
                   <div className="font-medium">{printer.job}</div>
                   {printer.eta_minutes != null && printer.eta_minutes > 0 && (
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-[var(--text-muted)]">
                       Залишилось ≈ {printer.eta_minutes} хв
                     </div>
                   )}
@@ -438,22 +438,22 @@ export function PrinterDetailModal({
                   type="button"
                   onClick={release}
                   disabled={busy}
-                  className="w-full rounded-md bg-neutral-900 px-3 py-2 font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                  className="w-full rounded-md bg-[var(--surface)] px-3 py-2 font-medium text-white hover:bg-neutral-700 disabled:opacity-50   "
                 >
                   {busy ? "Зберігаю…" : "Звільнити (друк завершено)"}
                 </button>
               </div>
             )}
 
-            <div className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
-              <span className="mb-1 block text-xs text-neutral-500">
+            <div className="border-t border-[var(--border)] pt-3 ">
+              <span className="mb-1 block text-xs text-[var(--text-muted)]">
                 Або встановити стан вручну
               </span>
               <select
                 value={status}
                 onChange={(e) => setManualStatus(e.target.value)}
                 disabled={busy}
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  "
               >
                 {MANUAL_STATUSES.map((s) => (
                   <option key={s.value} value={s.value}>
@@ -470,7 +470,7 @@ export function PrinterDetailModal({
         )}
 
         {isManual && user.role === "admin" && onDeleted && (
-          <div className="border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <div className="border-t border-[var(--border)] pt-3 ">
             <button
               type="button"
               onClick={async () => {

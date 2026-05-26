@@ -42,13 +42,13 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${SIZE_CLS[size] ?? "max-w-md"} rounded-2xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-800 dark:bg-neutral-900`}
+        className={`w-full ${SIZE_CLS[size] ?? "max-w-md"} rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl  `}
       >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded p-1 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
             aria-label="Close"
           >
             ✕
@@ -56,7 +56,7 @@ export function Modal({
         </div>
         <div className="px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3 dark:border-neutral-800">
+          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
             {footer}
           </div>
         )}

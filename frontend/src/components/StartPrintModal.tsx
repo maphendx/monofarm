@@ -49,35 +49,35 @@ export function StartPrintModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex w-full max-w-md flex-col rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+      <div className="flex w-full max-w-md flex-col rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl  "
         style={{ maxHeight: "80vh" }}>
 
         {/* header */}
-        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+        <div className="border-b border-[var(--border)] px-5 py-4 ">
           <h2 className="font-semibold">▶ Почати друк</h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
             Вибери файл для <strong>{printer.name}</strong>
           </p>
         </div>
 
         {/* search */}
-        <div className="border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
+        <div className="border-b border-[var(--border)] px-4 py-3 ">
           <input
             type="text"
             placeholder="Пошук файлів…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
-            className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:focus:border-neutral-500"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm outline-none focus:border-neutral-400   dark:focus:border-neutral-500"
           />
         </div>
 
         {/* file list */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {loading ? (
-            <p className="py-8 text-center text-sm text-neutral-400">Завантаження…</p>
+            <p className="py-8 text-center text-sm text-[var(--text-faint)]">Завантаження…</p>
           ) : filtered.length === 0 ? (
-            <p className="py-8 text-center text-sm text-neutral-400">
+            <p className="py-8 text-center text-sm text-[var(--text-faint)]">
               {files.length === 0 ? "Файлів ще немає" : "Нічого не знайдено"}
             </p>
           ) : (
@@ -86,16 +86,16 @@ export function StartPrintModal({
                 <button
                   key={f.id}
                   onClick={() => setSelected(f)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-[var(--surface-hi)] "
                 >
                   {/* extension badge */}
-                  <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-mono font-medium text-neutral-500 dark:bg-neutral-800">
+                  <span className="shrink-0 rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-mono font-medium text-[var(--text-muted)] ">
                     {f.original_name.split(".").pop()?.toUpperCase() ?? "?"}
                   </span>
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{f.original_name}</p>
-                    <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                    <div className="flex items-center gap-2 text-[11px] text-[var(--text-faint)]">
                       <span>{fmtSize(f.size_bytes)}</span>
                       {f.filament_meta?.estimated_minutes && (
                         <span>
@@ -116,7 +116,7 @@ export function StartPrintModal({
                   </div>
 
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                    strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-neutral-300">
+                    strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-muted)]">
                     <path d="M9 18l6-6-6-6"/>
                   </svg>
                 </button>
@@ -126,9 +126,9 @@ export function StartPrintModal({
         </div>
 
         {/* footer */}
-        <div className="border-t border-neutral-100 px-5 py-3 dark:border-neutral-800">
+        <div className="border-t border-[var(--border)] px-5 py-3 ">
           <button onClick={onClose}
-            className="w-full rounded-md py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+            className="w-full rounded-md py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">
             Скасувати
           </button>
         </div>

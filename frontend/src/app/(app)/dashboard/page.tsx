@@ -42,14 +42,14 @@ function StatusCard({
         "relative overflow-hidden rounded-xl border px-4 py-3 transition-colors",
         onClick ? "cursor-pointer" : "",
         active
-          ? "border-neutral-600 bg-neutral-800"
-          : "border-neutral-800 bg-neutral-900 hover:border-neutral-700 hover:bg-neutral-800/60",
+          ? "border-neutral-600 bg-[var(--surface-2)]"
+          : "border-[var(--border)] bg-[var(--surface)] hover:border-neutral-700 hover:bg-[var(--surface-hi)]/60",
       ].join(" ")}
     >
       <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-xl" style={{ background: color }} />
-      <p className="text-[11px] font-medium text-neutral-400">{label}</p>
+      <p className="text-[11px] font-medium text-[var(--text-faint)]">{label}</p>
       <p className="mt-0.5 text-lg font-semibold leading-tight text-neutral-100">{value}</p>
-      {sub && <p className="truncate text-[11px] text-neutral-500">{sub}</p>}
+      {sub && <p className="truncate text-[11px] text-[var(--text-muted)]">{sub}</p>}
     </div>
   );
 }
@@ -102,7 +102,7 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
       <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
       <StatBadge count={stats.action}   label={t("dashboard.action")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
       <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" />
-      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-neutral-100 text-neutral-500 dark:bg-neutral-500/20 dark:text-neutral-400" />
+      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-[var(--surface-hi)] text-[var(--text-muted)]  " />
     </div>
   );
 }
@@ -244,7 +244,7 @@ function PrinterPhotoCard({
   };
   const STATE_LABEL: Record<string, string> = {
     printing: "text-blue-400", ok: "text-emerald-400", warn: "text-amber-400",
-    bad: "text-red-400", idle: "text-neutral-500", muted: "text-neutral-400",
+    bad: "text-red-400", idle: "text-[var(--text-muted)]", muted: "text-[var(--text-faint)]",
   };
 
   async function act(e: React.MouseEvent, action: string) {
@@ -264,8 +264,8 @@ function PrinterPhotoCard({
     <div
       onClick={onClick}
       className={[
-        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-white p-3",
-        "border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900",
+        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-[var(--bg-elevated)] p-3",
+        "border-[var(--border-strong)]  ",
         tone === "muted" ? "opacity-60" : "",
         "text-left transition-shadow hover:shadow-md",
       ].join(" ")}
@@ -275,14 +275,14 @@ function PrinterPhotoCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-semibold leading-tight">{printer.name}</div>
-          <div className="text-xs text-neutral-400">{printer.bambu_model ?? printer.kind}</div>
+          <div className="text-xs text-[var(--text-faint)]">{printer.bambu_model ?? printer.kind}</div>
         </div>
         {/* model photo */}
         <div className="shrink-0 h-10 w-10 flex items-center justify-center">
           {cover ? (
             <img src={cover} alt="" className="h-10 w-10 object-contain drop-shadow" />
           ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-neutral-400 dark:text-neutral-600">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)] ">
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
               <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
               <rect x="6" y="18" width="12" height="4" rx="1"/>
@@ -315,13 +315,13 @@ function PrinterPhotoCard({
       {/* ── progress bar ── */}
       {(isPrinting || isPaused) && (
         <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
             <div
               className={`h-full rounded-full transition-all ${isPrinting ? "bg-blue-500" : "bg-amber-400"}`}
               style={{ width: `${Math.max(pct, 1)}%` }}
             />
           </div>
-          <div className="mt-0.5 flex justify-between text-[10px] text-neutral-400">
+          <div className="mt-0.5 flex justify-between text-[10px] text-[var(--text-faint)]">
             <span>{Math.round(pct)}%</span>
             {printer.eta_minutes != null && (
               <span>{fmtEtaShort(printer.eta_minutes)} · {fmtFinish(printer.eta_minutes)}</span>
@@ -371,7 +371,7 @@ function CompactSelect<T extends string>({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as T)}
-      className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-700 outline-none hover:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+      className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--text)] outline-none hover:border-neutral-400   "
     >
       {options.map((o) => (
         <option key={o.id} value={o.id}>{o.label}</option>
@@ -536,7 +536,7 @@ export default function DashboardPage() {
       {/* ── toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-[var(--text-faint)]">
             {filtered.length !== counts.all
               ? `${filtered.length} з ${counts.all}`
               : counts.all}
@@ -544,38 +544,38 @@ export default function DashboardPage() {
           <CompactSelect value={groupBy} onChange={setGroupBy} options={GROUP_OPTS} />
         </div>
 
-        <div className="flex items-center gap-2 text-sm text-neutral-500">
+        <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           {refreshedAt && (
             <span className="text-xs">{refreshedAt.toLocaleTimeString("uk-UA")}</span>
           )}
           <button
             onClick={load}
-            className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs transition hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs transition hover:bg-[var(--surface-hi)]  "
           >
             ↻ {t("common.update")}
           </button>
           {(user.role === "admin" || user.role === "operator") && (
             <button
               onClick={() => setGroupsOpen(true)}
-              className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800"
+              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]   "
               title={t("dashboard.manageGroups")}
             >
               {t("printers.groups")}
             </button>
           )}
           {/* view toggle */}
-          <div className="flex rounded-md border border-neutral-800 overflow-hidden">
+          <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
             <button
               onClick={() => setView("cards")}
               title="Картки"
-              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:bg-neutral-800"}`}
+              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-neutral-700 text-neutral-100" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </button>
             <button
               onClick={() => setView("photos")}
               title="Фото"
-              className={`px-2.5 py-1.5 text-xs transition border-l border-neutral-800 ${view === "photos" ? "bg-neutral-700 text-neutral-100" : "text-neutral-500 hover:bg-neutral-800"}`}
+              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "photos" ? "bg-neutral-700 text-neutral-100" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
             </button>
@@ -584,7 +584,7 @@ export default function DashboardPage() {
           {user.role === "admin" && (
             <button
               onClick={() => router.push("/settings?section=printers")}
-              className="rounded-md bg-neutral-900 px-2.5 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              className="rounded-md bg-[var(--surface)] px-2.5 py-1.5 text-xs text-white hover:bg-neutral-700   "
             >
               + {t("printers.add")}
             </button>
@@ -600,9 +600,9 @@ export default function DashboardPage() {
 
       {/* ── content ── */}
       {loading && printers.length === 0 ? (
-        <div className="text-sm text-neutral-500">{t("common.loading")}</div>
+        <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-neutral-300 px-4 py-12 text-center text-sm text-neutral-500 dark:border-neutral-700">
+        <div className="rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-muted)] ">
           {t("dashboard.noPrinters")}
         </div>
       ) : view === "photos" ? (
@@ -625,10 +625,10 @@ export default function DashboardPage() {
               <section key={g.key}>
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-sm font-semibold">{g.label}</span>
-                  <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                  <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
                     {g.items.length}
                   </span>
-                  <div className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+                  <div className="h-px flex-1 bg-[var(--surface-hi)] " />
                   <GroupStatsBadges stats={stats} />
                 </div>
                 <div className={GRID}>

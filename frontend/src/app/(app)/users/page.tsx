@@ -97,11 +97,11 @@ function UserFormModal({
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="user-form" disabled={busy}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити"}
           </button>
         </>
@@ -113,29 +113,29 @@ function UserFormModal({
           <input type="email" required disabled={!!initial} value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
             placeholder="user@example.com"
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950" />
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900 disabled:opacity-60  " />
         </label>
         <label className="block">
           <span className="mb-1 block">Імʼя</span>
           <input type="text" value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             placeholder="Іван"
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
         </label>
         <label className="block">
           <span className="mb-1 block">
-            Пароль {initial && <span className="text-neutral-400">(залиш порожнім — не міняти)</span>}
+            Пароль {initial && <span className="text-[var(--text-faint)]">(залиш порожнім — не міняти)</span>}
           </span>
           <input type="password" required={!initial} minLength={6} value={form.password}
             onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             placeholder="мін. 6 символів"
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
         </label>
         <label className="block">
           <span className="mb-1 block">Роль</span>
           <select value={form.role}
             onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950">
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
             {(Object.keys(ROLE_LABEL) as UserRole[]).map(r => (
               <option key={r} value={r}>{ROLE_LABEL[r]}</option>
             ))}
@@ -196,21 +196,21 @@ export default function UsersPage() {
     upsert(updated);
   }
 
-  if (loading) return <div className="text-sm text-neutral-500">{t("common.loading")}</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">{t("users.title")}</h1>
         <button onClick={() => { setEditing(null); setModalOpen(true); }}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
           + {t("users.addUser")}
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)] ">
             <tr>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Імʼя</th>
@@ -220,14 +220,14 @@ export default function UsersPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {users.map(u => (
               <tr key={u.id} className={u.is_active ? "" : "opacity-50"}>
                 <td className="px-4 py-3 font-medium">
                   {u.email}
-                  {u.id === me.id && <span className="ml-1.5 text-xs text-neutral-400">(ти)</span>}
+                  {u.id === me.id && <span className="ml-1.5 text-xs text-[var(--text-faint)]">(ти)</span>}
                 </td>
-                <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{u.name || "—"}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)] ">{u.name || "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded px-1.5 py-0.5 text-xs ${ROLE_COLOR[u.role]}`}>
                     {ROLE_LABEL[u.role]}
@@ -237,7 +237,7 @@ export default function UsersPage() {
                   {u.is_active ? (
                     <span className="text-emerald-600 dark:text-emerald-400">● Активний</span>
                   ) : (
-                    <span className="text-neutral-400">○ Деактивований</span>
+                    <span className="text-[var(--text-faint)]">○ Деактивований</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-xs">
@@ -252,7 +252,7 @@ export default function UsersPage() {
                   ) : (
                     <button
                       onClick={() => setTgLinkUser(u)}
-                      className="text-neutral-500 hover:text-neutral-900 hover:underline dark:hover:text-neutral-100"
+                      className="text-[var(--text-muted)] hover:text-[var(--text-hi)] hover:underline "
                     >
                       Привʼязати
                     </button>
@@ -261,17 +261,17 @@ export default function UsersPage() {
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
                     <button onClick={() => { setEditing(u); setModalOpen(true); }}
-                      className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"
+                      className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] "
                       title="Редагувати">✎</button>
                     {u.id !== me.id && (
                       <>
                         <button onClick={() => toggleActive(u)}
-                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] "
                           title={u.is_active ? "Деактивувати" : "Активувати"}>
                           {u.is_active ? "⏸" : "▶"}
                         </button>
                         <button onClick={() => remove(u)}
-                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800"
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 "
                           title="Видалити">✕</button>
                       </>
                     )}

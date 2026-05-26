@@ -45,16 +45,16 @@ function FilamentCard({
 
   return (
     <div className={[
-      "group flex flex-col rounded-xl border bg-white dark:bg-neutral-900 overflow-hidden transition hover:shadow-md cursor-pointer",
+      "group flex flex-col rounded-xl border bg-[var(--bg-elevated)]  overflow-hidden transition hover:shadow-md cursor-pointer",
       selected
         ? "border-blue-500 ring-2 ring-blue-500/20"
         : isLow
           ? "border-amber-300 dark:border-amber-700"
-          : "border-neutral-200 dark:border-neutral-800",
+          : "border-[var(--border)] ",
     ].join(" ")} onClick={onSelect}>
 
       {/* spool area */}
-      <div className="relative flex items-center justify-center bg-neutral-50 dark:bg-neutral-800/50 py-5 px-4">
+      <div className="relative flex items-center justify-center bg-[var(--bg)]  py-5 px-4">
         <div className="h-20 w-20">
           <SpoolSVG hexColor={f.hex_color ?? null} />
         </div>
@@ -65,7 +65,7 @@ function FilamentCard({
             "absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded border transition",
             selected
               ? "border-blue-500 bg-blue-500 text-white"
-              : "border-neutral-300 bg-white opacity-0 group-hover:opacity-100 dark:border-neutral-600 dark:bg-neutral-900",
+              : "border-[var(--border-strong)] bg-[var(--bg-elevated)] opacity-0 group-hover:opacity-100  ",
           ].join(" ")}
           onClick={e => { e.stopPropagation(); onSelect(); }}
         >
@@ -82,7 +82,7 @@ function FilamentCard({
             type="button"
             onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(f.label_id!); }}
             title="Копіювати ID котушки"
-            className="absolute top-2 right-2 rounded bg-neutral-200/80 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-widest text-neutral-700 hover:bg-neutral-300 dark:bg-neutral-700/80 dark:text-neutral-200 dark:hover:bg-neutral-600"
+            className="absolute top-2 right-2 rounded bg-[var(--surface-hi)]/80 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-widest text-[var(--text)] hover:bg-[var(--surface-hi)]   "
           >
             {f.label_id}
           </button>
@@ -109,20 +109,20 @@ function FilamentCard({
             )}
             <p className="truncate text-sm font-semibold">{f.color}</p>
           </div>
-          <p className="mt-0.5 truncate text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)] ">
             {[f.brand, f.material].filter(Boolean).join(" · ")}
           </p>
         </div>
 
         {/* progress */}
         <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
             <div
               className="h-full rounded-full transition-all"
               style={{ width: `${pct}%`, background: barColor }}
             />
           </div>
-          <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
+          <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
             <span className="font-medium">{pct}% left</span>
             <span className="tabular-nums">{f.grams_remaining} / {FULL_SPOOL_G}g</span>
           </div>
@@ -130,7 +130,7 @@ function FilamentCard({
 
         {/* cost / note */}
         {(f.cost_per_kg != null || f.note) && (
-          <p className="truncate text-[11px] text-neutral-400">
+          <p className="truncate text-[11px] text-[var(--text-faint)]">
             {f.cost_per_kg != null && `${f.cost_per_kg} грн/кг`}
             {f.cost_per_kg != null && f.note && " · "}
             {f.note}
@@ -143,7 +143,7 @@ function FilamentCard({
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onAdjust(); }}
-              className="flex-1 rounded-md border border-neutral-200 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="flex-1 rounded-md border border-[var(--border)] py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)]   "
             >
               ± Грами
             </button>
@@ -151,7 +151,7 @@ function FilamentCard({
           <button
             type="button"
             onClick={e => { e.stopPropagation(); onLabel(); }}
-            className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
             title="Лейбл"
           >
             🏷
@@ -160,7 +160,7 @@ function FilamentCard({
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onEdit(); }}
-              className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
               title="Редагувати"
             >
               ✎
@@ -170,7 +170,7 @@ function FilamentCard({
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onDelete(); }}
-              className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-400 hover:bg-neutral-50 hover:text-red-600 dark:border-neutral-700 dark:hover:bg-neutral-800"
+              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600  "
               title="Видалити"
             >
               ✕
@@ -262,18 +262,18 @@ function FilamentFormModal({
     } finally { setBusy(false); }
   }
 
-  const inp = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950";
+  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-500  ";
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }} size="2xl"
       title={initial ? "Редагувати котушку" : "Нова котушка"}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
           Скасувати
         </button>
         <button type="submit" form="filament-form" disabled={busy || !material.trim() || !color.trim()}
-          className="rounded-md bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50  ">
           {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити котушку"}
         </button>
       </>}>
@@ -285,7 +285,7 @@ function FilamentFormModal({
 
             {/* brand */}
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">Виробник пластику</span>
+              <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Виробник пластику</span>
               <input type="text" autoFocus value={brand} onChange={e => setBrand(e.target.value)}
                 list="brand-presets-f" placeholder="Bambu Lab, eSun, Polymaker…" className={inp} />
               <datalist id="brand-presets-f">{BRANDS.map(b => <option key={b} value={b} />)}</datalist>
@@ -294,13 +294,13 @@ function FilamentFormModal({
             {/* material + cost row */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">Матеріал *</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Матеріал *</span>
                 <input type="text" required value={material} onChange={e => setMaterial(e.target.value)}
                   list="material-presets-f" placeholder="PLA" className={inp} />
                 <datalist id="material-presets-f">{MATERIALS.map(m => <option key={m} value={m} />)}</datalist>
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">Ціна (грн/кг)</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Ціна (грн/кг)</span>
                 <input type="number" min={0} value={costPerKg} onChange={e => setCostPerKg(e.target.value)}
                   placeholder="800" className={inp} />
               </label>
@@ -308,20 +308,20 @@ function FilamentFormModal({
 
             {/* spool size visual picker */}
             <div>
-              <span className="mb-2 block text-xs font-medium text-neutral-500">Розмір котушки</span>
+              <span className="mb-2 block text-xs font-medium text-[var(--text-muted)]">Розмір котушки</span>
               <div className="flex items-end gap-2">
                 {SPOOL_PRESETS.map(g => (
                   <button key={g} type="button" onClick={() => setGramsTotal(g)}
                     className={[
                       "flex flex-col items-center gap-1 rounded-lg border px-1.5 py-1.5 transition",
                       gramsTotal === g
-                        ? "border-neutral-900 bg-neutral-50 dark:border-neutral-300 dark:bg-neutral-800"
-                        : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500",
+                        ? "border-neutral-900 bg-[var(--bg)]  "
+                        : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500",
                     ].join(" ")}>
                     <div style={{ width: `${20 + (g / 1200) * 16}px`, height: `${20 + (g / 1200) * 16}px` }}>
                       <SpoolSVG hexColor={hexColor || "#9ca3af"} />
                     </div>
-                    <span className="text-[10px] font-medium tabular-nums text-neutral-600 dark:text-neutral-400">
+                    <span className="text-[10px] font-medium tabular-nums text-[var(--text-muted)] ">
                       {g >= 1000 ? `${(g / 1000).toLocaleString()}kg` : `${g}g`}
                     </span>
                   </button>
@@ -331,14 +331,14 @@ function FilamentFormModal({
 
             {/* how much is left */}
             <div>
-              <span className="mb-1 block text-xs font-medium text-neutral-500">Скільки залишилось?</span>
+              <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Скільки залишилось?</span>
               <div className="flex items-center gap-2">
                 <input
                   type="number" min={0} max={amountMode === "pct" ? 100 : gramsTotal}
                   value={amountInput} onChange={e => setAmountInput(e.target.value)}
                   className={`flex-1 ${inp}`}
                 />
-                <div className="flex rounded-md border border-neutral-300 dark:border-neutral-700 overflow-hidden text-xs">
+                <div className="flex rounded-md border border-[var(--border-strong)]  overflow-hidden text-xs">
                   {(["gram", "pct"] as const).map(m => (
                     <button key={m} type="button" onClick={() => {
                       if (m === amountMode) return;
@@ -348,22 +348,22 @@ function FilamentFormModal({
                       className={[
                         "px-2.5 py-1.5 font-medium transition",
                         amountMode === m
-                          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                          : "text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800",
+                          ? "bg-[var(--surface)] text-white  "
+                          : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ",
                       ].join(" ")}>
                       {m === "gram" ? "г" : "%"}
                     </button>
                   ))}
                 </div>
               </div>
-              <p className="mt-1 text-[11px] text-neutral-400">
+              <p className="mt-1 text-[11px] text-[var(--text-faint)]">
                 {gramsRemaining} г · {pct}%
               </p>
             </div>
 
             {/* low threshold */}
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">Поріг «мало» (г)</span>
+              <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Поріг «мало» (г)</span>
               <input type="number" min={0} value={minGrams} onChange={e => setMinGrams(e.target.value)} className={inp} />
             </label>
           </div>
@@ -373,14 +373,14 @@ function FilamentFormModal({
 
             {/* color grid */}
             <div>
-              <span className="mb-2 block text-xs font-medium text-neutral-500">Колір</span>
+              <span className="mb-2 block text-xs font-medium text-[var(--text-muted)]">Колір</span>
               <div className="grid grid-cols-9 gap-1">
                 {PRESET_COLORS.map(c => (
                   <button key={c} type="button" onClick={() => setHexColor(c)}
                     className={[
                       "h-6 w-6 rounded transition ring-offset-1",
                       hexColor.toLowerCase() === c.toLowerCase()
-                        ? "ring-2 ring-neutral-900 dark:ring-neutral-100"
+                        ? "ring-2 ring-neutral-900 "
                         : "hover:scale-110",
                     ].join(" ")}
                     style={{ background: c, border: c === "#ffffff" ? "1px solid #e5e7eb" : undefined }}
@@ -393,15 +393,15 @@ function FilamentFormModal({
             {/* color name + hex */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">Назва кольору *</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Назва кольору *</span>
                 <input type="text" required value={color} onChange={e => setColor(e.target.value)}
                   placeholder="Чорний" className={inp} />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-neutral-500">HEX код</span>
+                <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">HEX код</span>
                 <div className="flex gap-1.5">
                   <input type="color" value={hexColor || "#000000"} onChange={e => setHexColor(e.target.value)}
-                    className="h-[34px] w-9 shrink-0 cursor-pointer rounded border border-neutral-300 bg-white p-0.5 dark:border-neutral-700 dark:bg-neutral-950" />
+                    className="h-[34px] w-9 shrink-0 cursor-pointer rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-0.5  " />
                   <input type="text" value={hexColor} onChange={e => setHexColor(e.target.value)}
                     placeholder="#000000" maxLength={7} className={`flex-1 font-mono ${inp}`} />
                 </div>
@@ -409,20 +409,20 @@ function FilamentFormModal({
             </div>
 
             {/* live spool preview */}
-            <div className="flex items-center gap-3 rounded-lg bg-neutral-50 px-3 py-2.5 dark:bg-neutral-800/50">
+            <div className="flex items-center gap-3 rounded-lg bg-[var(--bg)] px-3 py-2.5 ">
               <div className="h-12 w-12 shrink-0">
                 <SpoolSVG hexColor={hexColor || null} />
               </div>
               <div>
                 <p className="text-sm font-medium">{color || "Назва кольору"}</p>
-                <p className="text-xs text-neutral-400">{[brand, material].filter(Boolean).join(" · ") || "Виробник · Матеріал"}</p>
-                <p className="mt-0.5 text-xs font-medium tabular-nums text-neutral-500">{gramsRemaining} / {gramsTotal} г</p>
+                <p className="text-xs text-[var(--text-faint)]">{[brand, material].filter(Boolean).join(" · ") || "Виробник · Матеріал"}</p>
+                <p className="mt-0.5 text-xs font-medium tabular-nums text-[var(--text-muted)]">{gramsRemaining} / {gramsTotal} г</p>
               </div>
             </div>
 
             {/* note */}
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">Нотатка</span>
+              <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Нотатка</span>
               <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
                 placeholder="Опціонально…"
                 className={`${inp} resize-none`} />
@@ -474,35 +474,35 @@ function AdjustModal({
 
   const previewGrams = filament.grams_remaining + (direction === "add" ? 1 : -1) * (parseInt(delta) || 0);
   const previewPct = Math.min(100, Math.round((Math.max(0, previewGrams) / FULL_SPOOL_G) * 100));
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
 
   return (
     <Modal open={!!filament} onClose={() => { if (!busy) onClose(); }}
       title={`${filament.material} · ${filament.color}`}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
           Скасувати
         </button>
         <button type="submit" form="adjust-form" disabled={busy || !delta}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Застосувати"}
         </button>
       </>}>
       <form id="adjust-form" onSubmit={submit} className="space-y-3 text-sm">
-        <div className="flex items-center gap-4 rounded-lg bg-neutral-50 px-4 py-3 dark:bg-neutral-800">
+        <div className="flex items-center gap-4 rounded-lg bg-[var(--bg)] px-4 py-3 ">
           <div className="h-12 w-12 shrink-0">
             <SpoolSVG hexColor={filament.hex_color ?? null} />
           </div>
           <div>
-            <div className="text-xs text-neutral-500">{delta ? "Стане" : "Зараз на котушці"}</div>
+            <div className="text-xs text-[var(--text-muted)]">{delta ? "Стане" : "Зараз на котушці"}</div>
             <div className="mt-0.5 text-xl font-semibold tabular-nums">
               {delta ? Math.max(0, previewGrams) : filament.grams_remaining} г
               {delta && previewGrams < 0 && (
                 <span className="ml-2 text-sm font-normal text-red-500">не вистачає!</span>
               )}
             </div>
-            {filament.sku && <div className="mt-0.5 font-mono text-[10px] text-neutral-400">{filament.sku}</div>}
+            {filament.sku && <div className="mt-0.5 font-mono text-[10px] text-[var(--text-faint)]">{filament.sku}</div>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -512,19 +512,19 @@ function AdjustModal({
                 ? d === "consume"
                   ? "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
                   : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800",
+                : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
               ].join(" ")}>
               {d === "consume" ? "− Списати" : "+ Надійшло"}
             </button>
           ))}
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Грами</span>
+          <span className="mb-1 block text-xs text-[var(--text-muted)]">Грами</span>
           <input type="number" required min={1} autoFocus value={delta} onChange={e => setDelta(e.target.value)}
             placeholder="напр. 250" className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-neutral-500">Причина (необов'язково)</span>
+          <span className="mb-1 block text-xs text-[var(--text-muted)]">Причина (необов'язково)</span>
           <input type="text" value={reason} onChange={e => setReason(e.target.value)}
             placeholder="Нова котушка, витрата на замовлення #12…" className={inputCls} />
         </label>
@@ -576,32 +576,32 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
     setColors(prev => prev.filter(x => x.id !== c.id));
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Каталог кольорів</h2>
+        <h2 className="text-sm font-medium text-[var(--text)] ">Каталог кольорів</h2>
         {canEdit && (
           <button onClick={openAdd}
-            className="rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800">
+            className="rounded-md border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ">
             + Колір
           </button>
         )}
       </div>
-      {loading ? <p className="text-xs text-neutral-400">Завантаження…</p>
-        : colors.length === 0 ? <p className="text-xs text-neutral-400">Каталог порожній</p>
+      {loading ? <p className="text-xs text-[var(--text-faint)]">Завантаження…</p>
+        : colors.length === 0 ? <p className="text-xs text-[var(--text-faint)]">Каталог порожній</p>
         : (
           <div className="flex flex-wrap gap-1.5">
             {colors.map(c => (
               <div key={c.id}
-                className="group flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1 dark:border-neutral-800 dark:bg-neutral-900">
+                className="group flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1  ">
                 <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: c.hex_color }} />
                 <span className="text-xs">{c.name}</span>
                 {canEdit && (
                   <div className="ml-0.5 hidden gap-0.5 group-hover:flex">
-                    <button onClick={() => openEdit(c)} className="text-[10px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200">✎</button>
-                    <button onClick={() => remove(c)} className="text-[10px] text-neutral-400 hover:text-red-600">✕</button>
+                    <button onClick={() => openEdit(c)} className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] ">✎</button>
+                    <button onClick={() => remove(c)} className="text-[10px] text-[var(--text-faint)] hover:text-red-600">✕</button>
                   </div>
                 )}
               </div>
@@ -612,25 +612,25 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
         title={editColor ? "Редагувати колір" : "Новий колір"}
         footer={<>
           <button type="button" onClick={() => setAddOpen(false)} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">Скасувати</button>
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
           <button type="submit" form="color-form" disabled={busy || !name.trim()}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
         </>}>
         <form id="color-form" onSubmit={save} className="space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Назва</span>
+            <span className="mb-1 block text-xs text-[var(--text-muted)]">Назва</span>
             <input type="text" required autoFocus value={name} onChange={e => setName(e.target.value)}
               placeholder="Чорний, Galaxy Black…" className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs text-neutral-500">Колір</span>
+            <span className="mb-1 block text-xs text-[var(--text-muted)]">Колір</span>
             <div className="flex items-center gap-3">
               <input type="color" value={hex} onChange={e => setHex(e.target.value)}
-                className="h-10 w-14 cursor-pointer rounded-md border border-neutral-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-950" />
+                className="h-10 w-14 cursor-pointer rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1  " />
               <input type="text" value={hex} onChange={e => setHex(e.target.value)}
-                pattern="^#[0-9a-fA-F]{6}$" className="w-28 rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" />
+                pattern="^#[0-9a-fA-F]{6}$" className="w-28 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900  " />
             </div>
           </label>
           {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
@@ -719,7 +719,7 @@ export default function FilamentPage() {
     [filaments, selected],
   );
 
-  if (loading) return <div className="text-sm text-neutral-500">{t("common.loading")}</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>;
 
   return (
     <div className="space-y-6">
@@ -735,7 +735,7 @@ export default function FilamentPage() {
         </div>
         {canEdit && (
           <button onClick={() => { setEditFilament(null); setEditOpen(true); }}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
             + Котушка
           </button>
         )}
@@ -749,8 +749,8 @@ export default function FilamentPage() {
             { label: "Всього грам", value: `${stats.totalGrams.toLocaleString()} г` },
             { label: "Мало залишку", value: stats.low, warn: stats.low > 0 },
           ].map(({ label, value, warn }) => (
-            <div key={label} className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="text-xs text-neutral-500">{label}</div>
+            <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3  ">
+              <div className="text-xs text-[var(--text-muted)]">{label}</div>
               <div className={["mt-0.5 text-xl font-semibold tabular-nums", warn ? "text-amber-600 dark:text-amber-400" : ""].join(" ")}>
                 {value}
               </div>
@@ -760,22 +760,22 @@ export default function FilamentPage() {
       )}
 
       {filaments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-300 px-4 py-16 text-center text-sm text-neutral-400 dark:border-neutral-700">
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-16 text-center text-sm text-[var(--text-faint)] ">
           Немає котушок — натисни + Котушка
         </div>
       ) : (
         <>
           <input type="search" placeholder="Пошук за матеріалом, кольором, SKU…"
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-900" />
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400  " />
 
           {grouped.length === 0 ? (
-            <p className="text-sm text-neutral-400">Нічого не знайдено</p>
+            <p className="text-sm text-[var(--text-faint)]">Нічого не знайдено</p>
           ) : (
             <div className="space-y-6">
               {grouped.map(([material, spools]) => (
                 <div key={material}>
-                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-neutral-400">{material}</h2>
+                  <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">{material}</h2>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {spools.map(f => (
                       <FilamentCard
@@ -808,7 +808,7 @@ export default function FilamentPage() {
       )}
 
       {filaments.length > 0 && (
-        <div className="border-t border-neutral-200 pt-6 dark:border-neutral-800">
+        <div className="border-t border-[var(--border)] pt-6 ">
           <FilamentColorsSection canEdit={canEdit} />
         </div>
       )}
@@ -816,21 +816,21 @@ export default function FilamentPage() {
       {/* bulk action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-            <span className="text-sm text-neutral-600 dark:text-neutral-300">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2.5 shadow-xl  ">
+            <span className="text-sm text-[var(--text-muted)] ">
               Виділено {selected.size}
             </span>
             <button
               type="button"
               onClick={() => setLabelFilaments(selectedFilaments)}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700  "
             >
               🏷 Генерувати лейбли
             </button>
             <button
               type="button"
               onClick={() => setSelected(new Set())}
-              className="rounded-md px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="rounded-md px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
             >
               Скасувати
             </button>

@@ -44,7 +44,7 @@ export default function StockPage() {
 
   const lowCount = stock.filter((s) => parseFloat(s.available) < 10).length;
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <div className="space-y-4">
@@ -54,8 +54,8 @@ export default function StockPage() {
             <button key={w} onClick={() => setWhFilter(w)}
               className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
                 whFilter === w
-                  ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  : "border border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-800 dark:text-neutral-400",
+                  ? "bg-[var(--surface)] text-white  "
+                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
               ].join(" ")}>
               {w}
             </button>
@@ -69,14 +69,14 @@ export default function StockPage() {
             ⚠ Мало залишків ({lowCount})
           </button>
         )}
-        <button onClick={load} className="ml-auto rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800">
+        <button onClick={load} className="ml-auto rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]  ">
           ↻ Оновити
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
             <tr>
               <th className="px-4 py-3 font-medium">Товар</th>
               <th className="px-4 py-3 font-medium">Склад</th>
@@ -86,15 +86,15 @@ export default function StockPage() {
               <th className="px-4 py-3 font-medium text-right">Оновлено</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-neutral-400">Немає записів</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає записів</td></tr>
             ) : (
               filtered.map((s) => {
                 const avail = parseFloat(s.available);
                 const isLow = avail < 10;
                 return (
-                  <tr key={s.id} className={isLow ? "bg-amber-50/40 dark:bg-amber-950/10" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/50"}>
+                  <tr key={s.id} className={isLow ? "bg-amber-50/40 dark:bg-amber-950/10" : "hover:bg-[var(--surface-hi)] "}>
                     <td className="px-4 py-3 font-medium">
                       {s.product_name}
                       {isLow && <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">⚠</span>}
@@ -105,7 +105,7 @@ export default function StockPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">{parseFloat(s.quantity).toFixed(0)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-neutral-400">
+                    <td className="px-4 py-3 text-right tabular-nums text-[var(--text-faint)]">
                       {parseFloat(s.reserved_qty) > 0 ? parseFloat(s.reserved_qty).toFixed(0) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
@@ -113,7 +113,7 @@ export default function StockPage() {
                         {avail.toFixed(0)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-neutral-400">
+                    <td className="px-4 py-3 text-right text-xs text-[var(--text-faint)]">
                       {new Date(s.updated_at).toLocaleDateString("uk-UA")}
                     </td>
                   </tr>

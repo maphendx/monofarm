@@ -49,21 +49,21 @@ export function TelegramLinkModal({
       title={`Telegram-лінк для ${user?.email ?? ""}`}
     >
       <div className="space-y-3 text-sm">
-        {busy && <div className="text-neutral-500">Генерую…</div>}
+        {busy && <div className="text-[var(--text-muted)]">Генерую…</div>}
         {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
         {link && link.deep_link && (
           <>
-            <p className="text-neutral-600 dark:text-neutral-400">
+            <p className="text-[var(--text-muted)] ">
               Надішли це посилання користувачу. Він відкриє його в Telegram, натисне
               <b> Start</b> — і його чат привʼяжеться до акаунта.
             </p>
-            <div className="rounded-md border border-neutral-300 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-950">
+            <div className="rounded-md border border-[var(--border-strong)] bg-[var(--bg)] p-3  ">
               <div className="break-all text-xs">{link.deep_link}</div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={copy}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900"
+                className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  "
               >
                 {copied ? "Скопійовано ✓" : "Скопіювати"}
               </button>
@@ -71,12 +71,12 @@ export function TelegramLinkModal({
                 href={link.deep_link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-md border border-neutral-200 px-3 py-1.5 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hi)]  "
               >
                 Відкрити у Telegram
               </a>
             </div>
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-[var(--text-faint)]">
               Дійсне 24 години. Можеш згенерувати нове в будь-який момент.
             </p>
           </>

@@ -82,7 +82,7 @@ export function CreatePrinterModal({
               onClose();
             }}
             disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
           >
             Скасувати
           </button>
@@ -90,7 +90,7 @@ export function CreatePrinterModal({
             type="submit"
             form="create-printer-form"
             disabled={busy || !name.trim()}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50   "
           >
             {busy ? "Додаю…" : "Додати"}
           </button>
@@ -106,7 +106,7 @@ export function CreatePrinterModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="U1-01"
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
             autoFocus
           />
         </label>
@@ -115,7 +115,7 @@ export function CreatePrinterModal({
           <select
             value={kind}
             onChange={(e) => setKind(e.target.value as PrinterKind)}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
           >
             {KINDS.map((k) => (
               <option key={k.value} value={k.value}>
@@ -128,47 +128,47 @@ export function CreatePrinterModal({
           <label className="block">
             <span className="mb-1 block text-sm">
               Moonraker / Mainsail URL{" "}
-              <span className="text-neutral-400">(опційно, для U1)</span>
+              <span className="text-[var(--text-faint)]">(опційно, для U1)</span>
             </span>
             <input
               type="url"
               value={moonrakerUrl}
               onChange={(e) => setMoonrakerUrl(e.target.value)}
               placeholder="http://192.168.31.210"
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
             />
           </label>
         )}
         {kind === "bambu" && (
           <>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <p className="text-xs text-[var(--text-muted)] ">
               Bambu-принтери автоматично імпортуються з Bambu Cloud акаунту.
               Заповнюйте вручну, лише якщо потрібно додати принтер окремо.
             </p>
             <label className="block">
               <span className="mb-1 block text-sm">
                 Serial / Dev ID{" "}
-                <span className="text-neutral-400">(опційно)</span>
+                <span className="text-[var(--text-faint)]">(опційно)</span>
               </span>
               <input
                 type="text"
                 value={bambuDevId}
                 onChange={(e) => setBambuDevId(e.target.value)}
                 placeholder="01P09C321100123"
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-sm">
                 Access Code{" "}
-                <span className="text-neutral-400">(опційно)</span>
+                <span className="text-[var(--text-faint)]">(опційно)</span>
               </span>
               <input
                 type="text"
                 value={bambuAccessCode}
                 onChange={(e) => setBambuAccessCode(e.target.value)}
                 placeholder="12345678"
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
               />
             </label>
           </>

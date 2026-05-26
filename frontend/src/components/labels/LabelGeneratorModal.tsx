@@ -193,7 +193,7 @@ export function LabelGeneratorModal({
     setPrintBusy(false);
   }
 
-  const inputCls = "rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-400";
+  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-500   dark:focus:border-neutral-400";
 
   return (
     <Modal open={true} onClose={onClose}
@@ -202,24 +202,24 @@ export function LabelGeneratorModal({
       footer={
         <>
           {(pdfError || printStatus) && (
-            <span className={`mr-auto text-xs truncate max-w-xs ${pdfError ? "text-red-500" : "text-neutral-500"}`}>
+            <span className={`mr-auto text-xs truncate max-w-xs ${pdfError ? "text-red-500" : "text-[var(--text-muted)]"}`}>
               {pdfError ?? printStatus}
             </span>
           )}
           <button type="button" onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Закрити
           </button>
           <button type="button" onClick={printZebra} disabled={printBusy}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-50   ">
             {printBusy ? "…" : "Друкувати"}
           </button>
           <button type="button" onClick={downloadSvg}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-hi)]   ">
             ↓ SVG
           </button>
           <button type="button" onClick={downloadPdf} disabled={busy}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Генерую…" : "Друкувати PDF"}
           </button>
         </>
@@ -230,35 +230,35 @@ export function LabelGeneratorModal({
         {/* template + barcode row */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="mb-2 text-xs font-medium text-neutral-500">Шаблон</p>
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Шаблон</p>
             <div className="grid grid-cols-2 gap-1.5">
               {FIXED_TEMPLATES.map(t => (
                 <button key={t} type="button" onClick={() => setTemplate(t)}
                   className={["rounded-lg border py-1.5 text-xs font-medium transition",
                     template === t
-                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800",
+                      ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                      : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                   ].join(" ")}>{LABEL_DIMS[t].label}</button>
               ))}
               <button type="button" onClick={() => setTemplate("custom")}
                 className={["col-span-2 rounded-lg border py-1.5 text-xs font-medium transition",
                   template === "custom"
-                    ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800",
+                    ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                 ].join(" ")}>Свій розмір</button>
             </div>
           </div>
 
           <div className="space-y-3">
             <div>
-              <p className="mb-2 text-xs font-medium text-neutral-500">Тип баркоду</p>
+              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Тип баркоду</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {(["code128", "qr", "none"] as BarcodeType[]).map(bt => (
                   <button key={bt} type="button" onClick={() => setBarcodeType(bt)}
                     className={["rounded-lg border py-1.5 text-xs font-medium transition",
                       barcodeType === bt
-                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-neutral-100 dark:bg-neutral-100 dark:text-neutral-900"
-                        : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800",
+                        ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                        : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                     ].join(" ")}>
                     {bt === "qr" ? "QR" : bt === "code128" ? "Code128" : "Немає"}
                   </button>
@@ -267,14 +267,14 @@ export function LabelGeneratorModal({
             </div>
 
             <div>
-              <p className="mb-1 text-xs font-medium text-neutral-500">ID котушки</p>
+              <p className="mb-1 text-xs font-medium text-[var(--text-muted)]">ID котушки</p>
               <div className="flex items-center gap-2">
                 <input type="text" value={labelId} maxLength={4} placeholder="A12B"
                   onChange={e => setLabelId(normId(e.target.value))}
                   className={`${inputCls} w-20 font-mono text-base tracking-widest`} />
                 <button type="button" onClick={() => setLabelId(genLabelId())}
                   title="Новий ID"
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                  className="rounded-md border border-[var(--border-strong)] px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
                   ↻
                 </button>
               </div>
@@ -284,24 +284,24 @@ export function LabelGeneratorModal({
 
         {/* custom dimensions — free-text inputs, validated on use */}
         {template === "custom" && (
-          <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-neutral-700 dark:bg-neutral-800/50">
-            <span className="text-xs text-neutral-500">Розмір (мм)</span>
+          <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5  ">
+            <span className="text-xs text-[var(--text-muted)]">Розмір (мм)</span>
             <label className="flex items-center gap-1.5">
-              <span className="text-xs text-neutral-400">Ш</span>
+              <span className="text-xs text-[var(--text-faint)]">Ш</span>
               <input type="text" inputMode="numeric" value={customWStr}
                 onChange={e => setCustomWStr(e.target.value.replace(/[^0-9]/g, ""))}
                 onBlur={() => setCustomWStr(String(Math.max(20, Math.min(300, parseInt(customWStr) || 85))))}
                 className={`${inputCls} w-16 tabular-nums`} />
             </label>
-            <span className="text-neutral-300 dark:text-neutral-600">×</span>
+            <span className="text-[var(--text-muted)] ">×</span>
             <label className="flex items-center gap-1.5">
-              <span className="text-xs text-neutral-400">В</span>
+              <span className="text-xs text-[var(--text-faint)]">В</span>
               <input type="text" inputMode="numeric" value={customHStr}
                 onChange={e => setCustomHStr(e.target.value.replace(/[^0-9]/g, ""))}
                 onBlur={() => setCustomHStr(String(Math.max(15, Math.min(200, parseInt(customHStr) || 54))))}
                 className={`${inputCls} w-16 tabular-nums`} />
             </label>
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-[var(--text-faint)]">
               → {customW}×{customH} мм
             </span>
           </div>
@@ -309,13 +309,13 @@ export function LabelGeneratorModal({
 
         {/* field toggles */}
         <div>
-          <p className="mb-2 text-xs font-medium text-neutral-500">Вміст лейблу</p>
+          <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Вміст лейблу</p>
           <div className="grid grid-cols-3 gap-y-1.5 gap-x-4">
             {FIELD_LABELS.map(({ key, label }) => (
               <label key={key} className="flex cursor-pointer items-center gap-2">
                 <input type="checkbox" checked={fields[key]} onChange={() => toggleField(key)}
-                  className="h-3.5 w-3.5 rounded border-neutral-300 accent-neutral-900 dark:accent-neutral-100" />
-                <span className="text-xs text-neutral-700 dark:text-neutral-300">{label}</span>
+                  className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-neutral-900 dark:accent-neutral-100" />
+                <span className="text-xs text-[var(--text)] ">{label}</span>
               </label>
             ))}
           </div>
@@ -324,8 +324,8 @@ export function LabelGeneratorModal({
         {/* preview */}
         {preview && (
           <div>
-            <p className="mb-2 text-xs font-medium text-neutral-500">Превью</p>
-            <div className="flex justify-center overflow-auto rounded-lg bg-neutral-100 p-4 dark:bg-neutral-800">
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Превью</p>
+            <div className="flex justify-center overflow-auto rounded-lg bg-[var(--surface-hi)] p-4 ">
               <LabelPreview
                 filament={preview}
                 template={template}
@@ -338,7 +338,7 @@ export function LabelGeneratorModal({
               />
             </div>
             {filaments.length > 1 && (
-              <p className="mt-1.5 text-center text-xs text-neutral-400">
+              <p className="mt-1.5 text-center text-xs text-[var(--text-faint)]">
                 Показано першу котушку · всього {filaments.length} лейблів у PDF
               </p>
             )}

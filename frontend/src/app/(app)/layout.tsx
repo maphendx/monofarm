@@ -36,7 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!ready || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">
+      <div className="flex min-h-screen items-center justify-center text-sm text-[var(--text-muted)]">
         {t("common.loading")}
       </div>
     );

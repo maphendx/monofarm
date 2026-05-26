@@ -24,7 +24,7 @@ import type { FarmTask, FarmTaskStatus, Filament, PrintTask, PrintTaskStatus } f
 // ════════════════════════════════════════════════════════════════════════
 
 const COLUMNS: { id: FarmTaskStatus; label: string; color: string }[] = [
-  { id: "todo", label: "До виконання", color: "border-neutral-300 dark:border-neutral-700" },
+  { id: "todo", label: "До виконання", color: "border-[var(--border-strong)] " },
   { id: "in_progress", label: "В процесі", color: "border-amber-400 dark:border-amber-600" },
   { id: "done", label: "Виконано", color: "border-emerald-400 dark:border-emerald-600" },
 ];
@@ -48,24 +48,24 @@ function FarmTaskCard({
     <div
       ref={setNodeRef} style={style} {...listeners} {...attributes}
       className={[
-        "group relative cursor-grab rounded-lg border bg-white p-3 shadow-sm active:cursor-grabbing dark:bg-neutral-900",
+        "group relative cursor-grab rounded-lg border bg-[var(--bg-elevated)] p-3 shadow-sm active:cursor-grabbing ",
         dragging
           ? "opacity-50 ring-2 ring-neutral-400"
-          : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600",
+          : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-600",
       ].join(" ")}
     >
       <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="rounded p-0.5 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">✎</button>
+          className="rounded p-0.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">✎</button>
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="rounded p-0.5 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800">✕</button>
+          className="rounded p-0.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 ">✕</button>
       </div>
       <p className="pr-10 text-sm font-medium leading-snug">{task.title}</p>
-      {task.description && <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{task.description}</p>}
+      {task.description && <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{task.description}</p>}
       {task.deadline && (
         <div className={`mt-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${
           overdue ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                  : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>
+                  : "bg-[var(--surface-hi)] text-[var(--text-muted)]  "}`}>
           {overdue ? "⚠️" : "🗓"} {task.deadline}
         </div>
       )}
@@ -95,11 +95,11 @@ function KanbanColumn({
     <div className="flex min-w-56 flex-1 flex-col">
       <div className={`mb-3 flex items-center justify-between border-b-2 pb-2 ${col.color}`}>
         <span className="text-sm font-semibold">{col.label}</span>
-        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">{tasks.length}</span>
+        <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">{tasks.length}</span>
       </div>
       <div ref={setNodeRef}
         className={["flex flex-1 flex-col gap-2 rounded-xl p-2 transition-colors",
-          isOver ? "bg-neutral-100 dark:bg-neutral-800/60" : "bg-neutral-50 dark:bg-neutral-900/40"].join(" ")}
+          isOver ? "bg-[var(--surface-hi)] " : "bg-[var(--bg)] "].join(" ")}
         style={{ minHeight: 120 }}
       >
         {tasks.map((task) => (
@@ -107,18 +107,18 @@ function KanbanColumn({
             onDelete={() => onDelete(task)} dragging={draggingId === task.id} />
         ))}
         {adding ? (
-          <div className="rounded-lg border border-neutral-300 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
+          <div className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-2  ">
             <input ref={inputRef} type="text" value={draft} onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(""); setAdding(false); } }}
               placeholder="Назва завдання…" className="w-full bg-transparent text-sm outline-none" />
             <div className="mt-2 flex gap-2">
-              <button onClick={commit} className="rounded bg-neutral-900 px-2 py-1 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">Додати</button>
-              <button onClick={() => { setDraft(""); setAdding(false); }} className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800">Скасувати</button>
+              <button onClick={commit} className="rounded bg-[var(--surface)] px-2 py-1 text-xs text-white hover:bg-neutral-700  ">Додати</button>
+              <button onClick={() => { setDraft(""); setAdding(false); }} className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Скасувати</button>
             </div>
           </div>
         ) : (
           <button onClick={startAdding}
-            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-neutral-400 hover:bg-neutral-200 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300">
+            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  ">
             <span className="text-base leading-none">+</span> Додати картку
           </button>
         )}
@@ -154,24 +154,24 @@ function FarmTaskEditModal({ task, onClose, onSaved }: { task: FarmTask | null; 
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання"
       footer={<>
-        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">Скасувати</button>
-        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
+        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-farm-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" /></label>
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
         <label className="block"><span className="mb-1 block">Опис</span>
           <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)}
-            className="w-full resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" /></label>
+            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Дедлайн</span>
             <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950" /></label>
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
           <label className="block"><span className="mb-1 block">Статус</span>
             <select value={status} onChange={e => setStatus(e.target.value as FarmTaskStatus)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950">
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
               <option value="todo">До виконання</option>
               <option value="in_progress">В процесі</option>
               <option value="done">Виконано</option>
@@ -265,13 +265,13 @@ function CompleteModal({ task, onClose, onDone }: {
     } finally { setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
 
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title={`Завершити: ${task.title}`}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}
-          className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+          className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
           Скасувати
         </button>
         <button onClick={submit} disabled={busy || piecesOk < 0}
@@ -283,14 +283,14 @@ function CompleteModal({ task, onClose, onDone }: {
 
         {/* result */}
         <div>
-          <p className="mb-2 text-xs font-medium text-neutral-500">Результат (планувалось {plannedQty} шт.)</p>
+          <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Результат (планувалось {plannedQty} шт.)</p>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-xs text-neutral-500">Добрих ✓</span>
+              <span className="mb-1 block text-xs text-[var(--text-muted)]">Добрих ✓</span>
               <input type="number" min={0} value={piecesOk} onChange={e => setPiecesOk(Math.max(0, Number(e.target.value)))} className={inputCls} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs text-neutral-500">Брак ✕</span>
+              <span className="mb-1 block text-xs text-[var(--text-muted)]">Брак ✕</span>
               <input type="number" min={0} value={piecesDefective} onChange={e => setPiecesDefective(Math.max(0, Number(e.target.value)))} className={inputCls} />
             </label>
           </div>
@@ -299,13 +299,13 @@ function CompleteModal({ task, onClose, onDone }: {
         {/* defect reason */}
         {piecesDefective > 0 && (
           <div>
-            <p className="mb-2 text-xs font-medium text-neutral-500">Причина браку</p>
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Причина браку</p>
             <div className="flex flex-wrap gap-1.5">
               {DEFECT_PRESETS.map(p => (
                 <button key={p} type="button" onClick={() => setDefectPreset(p)}
                   className={["rounded-full border px-2.5 py-1 text-xs transition", defectPreset === p
                     ? "border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
-                    : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-400"].join(" ")}>
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "].join(" ")}>
                   {p}
                 </button>
               ))}
@@ -320,7 +320,7 @@ function CompleteModal({ task, onClose, onDone }: {
         {/* filament slots */}
         {usedG.length > 0 && (
           <div>
-            <p className="mb-2 text-xs font-medium text-neutral-500">
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
               Котушки (фактично ~{actualPrinted} шт. × {Math.round(usedG.reduce((s,g)=>s+g,0) / plannedQty)}г)
             </p>
             <div className="space-y-2">
@@ -332,13 +332,13 @@ function CompleteModal({ task, onClose, onDone }: {
                   <div key={i} className="flex items-center gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
                       {color && <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: color }} />}
-                      <span className="truncate text-xs text-neutral-600 dark:text-neutral-400">
+                      <span className="truncate text-xs text-[var(--text-muted)] ">
                         Слот {i + 1}{type ? ` · ${type}` : ""} · {actualG}г
                       </span>
                     </div>
                     <select value={slotFilament[i] ?? ""}
                       onChange={e => setSlotFilament(prev => ({ ...prev, [i]: Number(e.target.value) }))}
-                      className="w-40 rounded border border-neutral-300 bg-white px-2 py-1 text-xs outline-none dark:border-neutral-600 dark:bg-neutral-900">
+                      className="w-40 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-xs outline-none  ">
                       <option value="">— не вказано —</option>
                       {filaments.map(f => (
                         <option key={f.id} value={f.id}>
@@ -356,11 +356,11 @@ function CompleteModal({ task, onClose, onDone }: {
 
         {/* cost preview */}
         {hasCost && (
-          <div className="rounded-lg bg-neutral-50 px-4 py-3 dark:bg-neutral-800">
-            <p className="text-xs text-neutral-500">Собівартість матеріалів</p>
+          <div className="rounded-lg bg-[var(--bg)] px-4 py-3 ">
+            <p className="text-xs text-[var(--text-muted)]">Собівартість матеріалів</p>
             <p className="mt-1 text-lg font-semibold">{totalCost.toFixed(2)} грн</p>
             {costPerOk != null && (
-              <p className="text-xs text-neutral-500">{costPerOk.toFixed(2)} грн/шт. (для {piecesOk} добрих)</p>
+              <p className="text-xs text-[var(--text-muted)]">{costPerOk.toFixed(2)} грн/шт. (для {piecesOk} добрих)</p>
             )}
           </div>
         )}
@@ -383,7 +383,7 @@ const PRINT_STATUS_LABELS: Record<PrintTaskStatus, string> = {
 };
 
 const PRINT_STATUS_CLS: Record<PrintTaskStatus, string> = {
-  queued: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+  queued: "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
   in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
   cancelled: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
@@ -427,21 +427,21 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання друку"
       footer={<>
-        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">Скасувати</button>
-        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
+        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-print-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950" /></label>
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Кількість</span>
             <input type="number" min={1} value={qty} onChange={e => setQty(Number(e.target.value))}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950" /></label>
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
           <label className="block"><span className="mb-1 block">Статус</span>
             <select value={status} onChange={e => setStatus(e.target.value as PrintTaskStatus)}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950">
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  ">
               {(Object.keys(PRINT_STATUS_LABELS) as PrintTaskStatus[]).map(s => (
                 <option key={s} value={s}>{PRINT_STATUS_LABELS[s]}</option>
               ))}
@@ -449,10 +449,10 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
         </div>
         <label className="block"><span className="mb-1 block">Дедлайн</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950" /></label>
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
         <label className="block"><span className="mb-1 block">Примітки</span>
           <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-            className="w-full resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 outline-none dark:border-neutral-700 dark:bg-neutral-950" /></label>
+            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none  " /></label>
         {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
       </form>
     </Modal>
@@ -499,7 +499,7 @@ function PrintTasksTab() {
 
   const counts = tasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
 
-  if (loading) return <p className="text-sm text-neutral-500">Завантаження…</p>;
+  if (loading) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
 
   return (
     <div className="space-y-4">
@@ -509,8 +509,8 @@ function PrintTasksTab() {
           <button key={opt.value} onClick={() => setFilter(opt.value)}
             className={["rounded-full px-3 py-1 text-sm transition",
               filter === opt.value
-                ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700",
+                ? "bg-[var(--surface)] text-white  "
+                : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
             ].join(" ")}>
             {opt.label}
             {opt.value !== "all" && counts[opt.value] != null && (
@@ -521,38 +521,38 @@ function PrintTasksTab() {
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-8 text-center text-sm text-neutral-400">Немає завдань</p>
+        <p className="py-8 text-center text-sm text-[var(--text-faint)]">Немає завдань</p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+        <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
-                <th className="px-4 py-2.5 text-left font-medium text-neutral-500">Назва</th>
-                <th className="px-3 py-2.5 text-center font-medium text-neutral-500">Кіл.</th>
-                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Матеріал</th>
-                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Час</th>
-                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Дедлайн</th>
-                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Статус</th>
-                <th className="px-3 py-2.5 text-left font-medium text-neutral-500">Результат</th>
+              <tr className="border-b border-[var(--border)] bg-[var(--bg)]  ">
+                <th className="px-4 py-2.5 text-left font-medium text-[var(--text-muted)]">Назва</th>
+                <th className="px-3 py-2.5 text-center font-medium text-[var(--text-muted)]">Кіл.</th>
+                <th className="px-3 py-2.5 text-left font-medium text-[var(--text-muted)]">Матеріал</th>
+                <th className="px-3 py-2.5 text-left font-medium text-[var(--text-muted)]">Час</th>
+                <th className="px-3 py-2.5 text-left font-medium text-[var(--text-muted)]">Дедлайн</th>
+                <th className="px-3 py-2.5 text-left font-medium text-[var(--text-muted)]">Статус</th>
+                <th className="px-3 py-2.5 text-left font-medium text-[var(--text-muted)]">Результат</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100 bg-white dark:divide-neutral-800 dark:bg-neutral-950">
+            <tbody className="divide-y divide-[var(--border)] bg-[var(--bg-elevated)] ">
               {visible.map(task => {
                 const costPerOk = task.material_cost_uah != null && task.pieces_ok
                   ? (task.material_cost_uah / task.pieces_ok).toFixed(2)
                   : null;
                 return (
-                  <tr key={task.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-900">
+                  <tr key={task.id} className="hover:bg-[var(--surface-hi)] ">
                     <td className="px-4 py-2.5 font-medium">{task.title}</td>
-                    <td className="px-3 py-2.5 text-center text-neutral-500">×{task.quantity}</td>
-                    <td className="px-3 py-2.5 text-neutral-500">
+                    <td className="px-3 py-2.5 text-center text-[var(--text-muted)]">×{task.quantity}</td>
+                    <td className="px-3 py-2.5 text-[var(--text-muted)]">
                       {task.filament_type && <span>{task.filament_type}</span>}
-                      {task.filament_color && <span className="text-neutral-400"> · {task.filament_color}</span>}
+                      {task.filament_color && <span className="text-[var(--text-faint)]"> · {task.filament_color}</span>}
                       {!task.filament_type && !task.filament_color && "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-neutral-500">{fmtMinutes(task.estimated_minutes)}</td>
-                    <td className="px-3 py-2.5 text-neutral-500">{task.deadline ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-[var(--text-muted)]">{fmtMinutes(task.estimated_minutes)}</td>
+                    <td className="px-3 py-2.5 text-[var(--text-muted)]">{task.deadline ?? "—"}</td>
                     <td className="px-3 py-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-xs ${PRINT_STATUS_CLS[task.status]}`}>
                         {PRINT_STATUS_LABELS[task.status]}
@@ -570,7 +570,7 @@ function PrintTasksTab() {
                             )}
                           </div>
                           {task.material_cost_uah != null && (
-                            <div className="text-[10px] text-neutral-400">
+                            <div className="text-[10px] text-[var(--text-faint)]">
                               {task.material_cost_uah.toFixed(2)} грн
                               {costPerOk && ` · ${costPerOk}/шт`}
                             </div>
@@ -588,9 +588,9 @@ function PrintTasksTab() {
                           </button>
                         )}
                         <button onClick={() => setEditing(task)}
-                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">✎</button>
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">✎</button>
                         <button onClick={() => remove(task)}
-                          className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800">✕</button>
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 ">✕</button>
                       </div>
                     </td>
                   </tr>
@@ -673,13 +673,13 @@ export default function TasksPage() {
   return (
     <div className="flex flex-col gap-4">
       {/* tab switcher */}
-      <div className="flex items-center gap-1 border-b border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center gap-1 border-b border-[var(--border)] ">
         {([["farm", t("tasks.farmTasks")], ["print", t("tasks.printTasks")]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={["px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px",
               tab === id
-                ? "border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100"
-                : "border-transparent text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300",
+                ? "border-neutral-900 text-[var(--text-hi)]  "
+                : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)] ",
             ].join(" ")}>
             {label}
           </button>
@@ -687,7 +687,7 @@ export default function TasksPage() {
       </div>
 
       {tab === "farm" && (
-        loadingFarm ? <div className="text-sm text-neutral-500">{t("common.loading")}</div> : (
+        loadingFarm ? <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div> : (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex gap-4 overflow-x-auto pb-4 items-start">
               {COLUMNS.map(col => {
@@ -701,9 +701,9 @@ export default function TasksPage() {
             </div>
             <DragOverlay dropAnimation={null}>
               {draggingTask && (
-                <div className="w-72 cursor-grabbing rounded-lg border-2 border-neutral-400 bg-white p-3 shadow-xl dark:bg-neutral-900">
+                <div className="w-72 cursor-grabbing rounded-lg border-2 border-neutral-400 bg-[var(--bg-elevated)] p-3 shadow-xl ">
                   <p className="text-sm font-medium">{draggingTask.title}</p>
-                  {draggingTask.description && <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{draggingTask.description}</p>}
+                  {draggingTask.description && <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{draggingTask.description}</p>}
                 </div>
               )}
             </DragOverlay>

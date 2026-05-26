@@ -47,7 +47,7 @@ export function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
 }
 
 export function compatBadge(slots: ReturnType<typeof checkSlots>) {
-  if (slots.length === 0) return { label: "немає даних", cls: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800" };
+  if (slots.length === 0) return { label: "немає даних", cls: "bg-[var(--surface-hi)] text-[var(--text-muted)] " };
   const missing = slots.filter((s) => s.match === "missing").length;
   const mismatch = slots.filter((s) => s.match === "type_mismatch").length;
   if (missing === 0 && mismatch === 0) return { label: "сумісний ✓", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" };
@@ -66,7 +66,7 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
         const grams = meta.used_g?.[i];
         return (
           <div key={i} title={`Слот ${i + 1}`}
-            className="flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+            className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]   ">
             {color && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: color }} />}
             <span>Слот {i + 1}{type ? ` · ${type}` : ""}{grams != null ? ` · ${grams}г` : ""}</span>
           </div>
@@ -182,22 +182,22 @@ export function SendModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl  ">
         {/* header */}
-        <div className="border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+        <div className="border-b border-[var(--border)] px-5 py-4 ">
           <h2 className="font-semibold">Файл завантажено</h2>
-          <p className="mt-0.5 truncate text-xs text-neutral-500">{file.original_name}</p>
+          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{file.original_name}</p>
         </div>
 
         {/* mode tabs */}
-        <div className="flex border-b border-neutral-100 dark:border-neutral-800">
+        <div className="flex border-b border-[var(--border)] ">
           {MODES.map((m) => (
             <button key={m.key} onClick={() => switchMode(m.key)}
               className={[
                 "flex-1 py-2 text-xs font-medium transition",
                 mode === m.key
-                  ? "border-b-2 border-neutral-900 text-neutral-900 dark:border-neutral-100 dark:text-neutral-100"
-                  : "text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300",
+                  ? "border-b-2 border-neutral-900 text-[var(--text-hi)]  "
+                  : "text-[var(--text-muted)] hover:text-[var(--text)] ",
               ].join(" ")}>
               {m.label}
             </button>
@@ -206,10 +206,10 @@ export function SendModal({
 
         {/* filament meta row */}
         {file.filament_meta && (
-          <div className="border-b border-neutral-100 px-5 pb-4 pt-3 dark:border-neutral-800">
+          <div className="border-b border-[var(--border)] px-5 pb-4 pt-3 ">
             <SlotSwatches meta={file.filament_meta} />
             {file.filament_meta.estimated_minutes && (
-              <p className="mt-1.5 text-xs text-neutral-400">
+              <p className="mt-1.5 text-xs text-[var(--text-faint)]">
                 ~{fmtMinutes(file.filament_meta.estimated_minutes)}
                 {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
               </p>
@@ -222,7 +222,7 @@ export function SendModal({
 
           {/* ── save mode ── */}
           {mode === "save" && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">
+            <p className="text-sm text-[var(--text-muted)] ">
               Файл вже збережено в бібліотеці. Ви можете надіслати його на принтер пізніше.
             </p>
           )}
@@ -231,19 +231,19 @@ export function SendModal({
           {mode === "queue" && !result && (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <label className="text-sm text-neutral-700 dark:text-neutral-300">Кількість</label>
+                <label className="text-sm text-[var(--text)] ">Кількість</label>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-neutral-300 text-sm hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800">
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[var(--border-strong)] text-sm hover:bg-[var(--surface-hi)]  ">
                     −
                   </button>
                   <span className="w-8 text-center text-sm font-medium">{quantity}</span>
                   <button onClick={() => setQuantity((q) => q + 1)}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-neutral-300 text-sm hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800">
+                    className="flex h-7 w-7 items-center justify-center rounded border border-[var(--border-strong)] text-sm hover:bg-[var(--surface-hi)]  ">
                     +
                   </button>
                 </div>
-                <span className="text-xs text-neutral-400">шт.</span>
+                <span className="text-xs text-[var(--text-faint)]">шт.</span>
               </div>
             </div>
           )}
@@ -252,7 +252,7 @@ export function SendModal({
           {mode === "print" && !result && (
             <>
               {sendablePrinters.length === 0 ? (
-                <p className="text-sm text-neutral-500">Немає доступних принтерів</p>
+                <p className="text-sm text-[var(--text-muted)]">Немає доступних принтерів</p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
                   {sendablePrinters.map((p) => {
@@ -262,8 +262,8 @@ export function SendModal({
                       <label key={p.id} className={[
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
                         selectedId === p.id
-                          ? "border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800"
-                          : "border-neutral-200 hover:border-neutral-400 dark:border-neutral-700 dark:hover:border-neutral-500",
+                          ? "border-neutral-900 bg-[var(--bg)]  "
+                          : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500",
                       ].join(" ")}>
                         <div className="flex items-center gap-3">
                           <input type="radio" name="printer" value={p.id}
@@ -276,7 +276,7 @@ export function SendModal({
                             "shrink-0 rounded px-1.5 py-0.5 text-xs",
                             p.state === "printing" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                               : p.state === "idle" || p.state === "operational" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800",
+                              : "bg-[var(--surface-hi)] text-[var(--text-muted)] ",
                           ].join(" ")}>{p.state ?? "—"}</span>
                         </div>
                         {slots.length > 0 && (
@@ -299,7 +299,7 @@ export function SendModal({
                         {slots.length === 0 && p.loaded_filaments.length > 0 && (
                           <div className="ml-6 flex flex-wrap gap-1">
                             {p.loaded_filaments.map((lf) => (
-                              <div key={lf.slot} className="flex items-center gap-1 rounded-full border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:border-neutral-700">
+                              <div key={lf.slot} className="flex items-center gap-1 rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] ">
                                 <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} />
                                 {lf.type}
                               </div>
@@ -313,8 +313,8 @@ export function SendModal({
               )}
 
               {selectedPrinter && usedSlots.length > 0 && (
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/50">
-                  <p className="mb-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">Ремаппінг слотів</p>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3  ">
+                  <p className="mb-2 text-xs font-medium text-[var(--text-muted)] ">Ремаппінг слотів</p>
                   <div className="space-y-2">
                     {usedSlots.map((i) => {
                       const fileColor = file.filament_meta?.colors?.[i] ?? null;
@@ -324,12 +324,12 @@ export function SendModal({
                         <div key={i} className="flex items-center gap-2 text-xs">
                           <div className="flex min-w-0 flex-1 items-center gap-1.5">
                             {fileColor && <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
-                            <span className="truncate text-neutral-700 dark:text-neutral-300">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
+                            <span className="truncate text-[var(--text)] ">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
                           </div>
-                          <span className="text-neutral-400">→</span>
+                          <span className="text-[var(--text-faint)]">→</span>
                           <select value={currentPrinterSlot}
                             onChange={(e) => setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))}
-                            className="rounded border border-neutral-300 bg-white px-1.5 py-0.5 text-xs outline-none focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900">
+                            className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-neutral-500  ">
                             {selectedPrinter.loaded_filaments.length > 0
                               ? selectedPrinter.loaded_filaments.map((lf) => (
                                   <option key={lf.slot} value={lf.slot}>
@@ -354,8 +354,8 @@ export function SendModal({
               )}
 
               {selectedPrinter && isMoonraker && (
-                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/50">
-                  <p className="mb-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">Опції друку</p>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3  ">
+                  <p className="mb-2 text-xs font-medium text-[var(--text-muted)] ">Опції друку</p>
                   <div className="space-y-1.5">
                     {[
                       [autoBedLeveling, setAutoBedLeveling, "Автокалібрування столу"] as const,
@@ -364,13 +364,13 @@ export function SendModal({
                     ].map(([checked, setter, label]) => (
                       <label key={label} className="flex cursor-pointer items-center gap-2 text-xs">
                         <input type="checkbox" checked={checked} onChange={(e) => setter(e.target.checked)} className="accent-neutral-900 dark:accent-white" />
-                        <span className="text-neutral-700 dark:text-neutral-300">{label}</span>
+                        <span className="text-[var(--text)] ">{label}</span>
                       </label>
                     ))}
                   </div>
                   {usedSlots.length > 0 && (
                     <>
-                      <p className="mt-3 mb-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">Калібрувати філамент у слоті</p>
+                      <p className="mt-3 mb-1.5 text-xs font-medium text-[var(--text-muted)] ">Калібрувати філамент у слоті</p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {usedSlots.map((i) => {
                           const fileColor = file.filament_meta?.colors?.[i] ?? null;
@@ -381,7 +381,7 @@ export function SendModal({
                                 setCalibrateSlots((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
                               }} className="accent-neutral-900 dark:accent-white" />
                               {fileColor && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
-                              <span className="truncate text-neutral-700 dark:text-neutral-300">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
+                              <span className="truncate text-[var(--text)] ">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
                             </label>
                           );
                         })}
@@ -405,26 +405,26 @@ export function SendModal({
         </div>
 
         {/* footer */}
-        <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3 dark:border-neutral-800">
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
           <button onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!result?.ok && mode === "print" && (
             <button onClick={sendPrint} disabled={!selectedId || busy}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900">
+              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40  ">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
           {!result?.ok && mode === "save" && (
             <button onClick={onClose}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
               Готово
             </button>
           )}
           {!result?.ok && mode === "queue" && (
             <button onClick={addToQueue} disabled={busy}
-              className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900">
+              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40  ">
               {busy ? "Додаю…" : "Додати в чергу"}
             </button>
           )}

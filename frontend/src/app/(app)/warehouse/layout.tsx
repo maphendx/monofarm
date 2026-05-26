@@ -64,8 +64,8 @@ function NavLink({ href, label, exact }: { href: string; label: string; exact?: 
       className={[
         "flex items-center rounded-md px-3 py-1.5 text-sm transition-colors",
         active
-          ? "bg-cyan-500/10 font-medium text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-400"
-          : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-neutral-100",
+          ? "bg-cyan-500/10 font-medium text-[var(--accent)]  "
+          : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]  dark:hover:bg-white/5 ",
       ].join(" ")}
     >
       {label}
@@ -95,7 +95,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
     >
 
       {/* ── Mobile: horizontal scrolling nav ─────────────────────────────── */}
-      <div className="shrink-0 border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-[#161614] md:hidden">
+      <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-elevated)]   md:hidden">
         <div className="flex gap-0.5 overflow-x-auto px-3 py-2">
           {ALL_ITEMS.map((item) => (
             <NavLink key={item.href} {...item} />
@@ -104,11 +104,11 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* ── Desktop: vertical sub-nav ─────────────────────────────────────── */}
-      <nav className="hidden w-44 shrink-0 flex-col overflow-y-auto border-r border-neutral-200 bg-white px-3 pb-6 pt-3 dark:border-neutral-800 dark:bg-[#161614] md:flex">
+      <nav className="hidden w-44 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-[var(--bg-elevated)] px-3 pb-6 pt-3   md:flex">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? "mt-6" : ""}>
             {group.label && (
-              <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-neutral-400/60 select-none dark:text-neutral-600">
+              <p className="mb-1.5 px-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[var(--text-faint)]/60 select-none ">
                 {group.label}
               </p>
             )}

@@ -13,7 +13,7 @@ const STATUS_META: Record<OrderStatus, { label: string; cls: string }> = {
   confirmed:     { label: "Зарезервовано", cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
   in_production: { label: "Виробництво", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
   ready:         { label: "Готово",      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  shipped:       { label: "Відправлено", cls: "bg-neutral-500/15 text-neutral-500 dark:text-neutral-400" },
+  shipped:       { label: "Відправлено", cls: "bg-neutral-500/15 text-[var(--text-muted)] " },
   cancelled:     { label: "Скасовано",   cls: "bg-red-500/15 text-red-600 dark:text-red-400" },
 };
 
@@ -112,18 +112,18 @@ function CreateOrderModal({ open, onClose, onCreated }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal open={open} onClose={onClose} title="Нове замовлення"
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="order-form" disabled={busy || validLines.length === 0}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : `Створити · ₴${total.toLocaleString("uk-UA")}`}
           </button>
         </>
@@ -132,7 +132,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
       <form id="order-form" onSubmit={submit} className="space-y-3 text-sm">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Контрагент</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Контрагент</span>
             <select value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)} className={inputCls}>
               <option value="">— без контрагента —</option>
               {counterparties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -140,14 +140,14 @@ function CreateOrderModal({ open, onClose, onCreated }: {
           </label>
           {!counterpartyId && (
             <label className="block">
-              <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Клієнт (вільний текст)</span>
+              <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (вільний текст)</span>
               <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Ім'я або компанія" className={inputCls} />
             </label>
           )}
           {counterpartyId && (
             <label className="block">
-              <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Джерело</span>
+              <span className="mb-1 block text-[var(--text-muted)] ">Джерело</span>
               <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
                 {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
@@ -158,14 +158,14 @@ function CreateOrderModal({ open, onClose, onCreated }: {
         <div className="grid grid-cols-2 gap-3">
           {!counterpartyId && (
             <label className="block">
-              <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Джерело</span>
+              <span className="mb-1 block text-[var(--text-muted)] ">Джерело</span>
               <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
                 {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </label>
           )}
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Дедлайн</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
           </label>
         </div>
@@ -173,10 +173,10 @@ function CreateOrderModal({ open, onClose, onCreated }: {
         {/* Line items */}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-neutral-600 dark:text-neutral-400">Позиції</span>
+            <span className="text-[var(--text-muted)] ">Позиції</span>
             <button type="button"
               onClick={() => setLines((prev) => [...prev, { product_id: "", quantity: "1", unit_price: "" }])}
-              className="text-xs text-cyan-600 hover:text-cyan-500 dark:text-cyan-400">
+              className="text-xs text-[var(--accent)] hover:text-cyan-500 ">
               + Позиція
             </button>
           </div>
@@ -184,19 +184,19 @@ function CreateOrderModal({ open, onClose, onCreated }: {
             {lines.map((line, idx) => (
               <div key={idx} className="flex gap-2">
                 <select value={line.product_id} onChange={(e) => setLine(idx, "product_id", e.target.value)}
-                  className="flex-1 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100">
+                  className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm   ">
                   <option value="">— товар —</option>
                   {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <input type="number" min={1} value={line.quantity} onChange={(e) => setLine(idx, "quantity", e.target.value)}
                   placeholder="К-сть" title="Кількість"
-                  className="w-16 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100" />
+                  className="w-16 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm   " />
                 <input type="number" min={0} step="0.01" value={line.unit_price} onChange={(e) => setLine(idx, "unit_price", e.target.value)}
                   placeholder="Ціна" title="Ціна"
-                  className="w-20 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100" />
+                  className="w-20 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm   " />
                 {lines.length > 1 && (
                   <button type="button" onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-neutral-300 hover:text-red-500 dark:text-neutral-700">✕</button>
+                    className="text-[var(--text-muted)] hover:text-red-500 ">✕</button>
                 )}
               </div>
             ))}
@@ -204,7 +204,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Нотатка</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
@@ -273,18 +273,18 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal open={open} onClose={onClose} title={`Редагувати ${order?.order_number ?? ""}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="edit-order-form" disabled={busy}
-            className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
         </>
@@ -293,7 +293,7 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
       <form id="edit-order-form" onSubmit={submit} className="space-y-3 text-sm">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Контрагент</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Контрагент</span>
             <select value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)} className={inputCls}>
               <option value="">— без контрагента —</option>
               {counterparties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -301,14 +301,14 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
           </label>
           {!counterpartyId && (
             <label className="block">
-              <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Клієнт (текст)</span>
+              <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (текст)</span>
               <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="Ім'я або компанія" className={inputCls} />
             </label>
           )}
           {counterpartyId && (
             <label className="block">
-              <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Статус</span>
+              <span className="mb-1 block text-[var(--text-muted)] ">Статус</span>
               <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)} className={inputCls}>
                 {EDITABLE_STATUSES.map((s) => (
                   <option key={s} value={s}>{STATUS_META[s].label}</option>
@@ -320,7 +320,7 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
 
         {!counterpartyId && (
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Статус</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Статус</span>
             <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)} className={inputCls}>
               {EDITABLE_STATUSES.map((s) => (
                 <option key={s} value={s}>{STATUS_META[s].label}</option>
@@ -331,18 +331,18 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Дедлайн</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Оплачено ₴</span>
+            <span className="mb-1 block text-[var(--text-muted)] ">Оплачено ₴</span>
             <input type="number" min={0} step="0.01" value={paidAmount}
               onChange={(e) => setPaidAmount(e.target.value)} className={inputCls} />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Нотатка</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
@@ -389,14 +389,14 @@ function ReserveModal({ open, onClose, order, onReserved }: {
     } finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
 
   return (
     <Modal open={open} onClose={onClose} title={`Резервувати — ${order?.order_number ?? ""}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
             Скасувати
           </button>
           <button type="submit" form="reserve-form" disabled={busy || !warehouseId}
@@ -407,11 +407,11 @@ function ReserveModal({ open, onClose, order, onReserved }: {
       }
     >
       <form id="reserve-form" onSubmit={submit} className="space-y-3 text-sm">
-        <p className="text-neutral-500 dark:text-neutral-400">
+        <p className="text-[var(--text-muted)] ">
           Оберіть склад, з якого зарезервувати товари для цього замовлення.
         </p>
         <label className="block">
-          <span className="mb-1 block text-neutral-600 dark:text-neutral-400">Склад</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Склад</span>
           <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)} className={inputCls}>
             <option value="">— оберіть склад —</option>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -475,7 +475,7 @@ export default function OrdersPage() {
 
   const filtered = filter === "Всі" ? orders : orders.filter((o) => o.status === filter);
 
-  if (loading) return <div className="text-sm text-neutral-500">Завантаження…</div>;
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
     <div className="space-y-4">
@@ -486,22 +486,22 @@ export default function OrdersPage() {
               className={[
                 "rounded-md px-2.5 py-1.5 text-xs transition-colors",
                 filter === f
-                  ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  : "border border-neutral-200 text-neutral-600 hover:border-neutral-400 dark:border-neutral-800 dark:text-neutral-400",
+                  ? "bg-[var(--surface)] text-white  "
+                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
               ].join(" ")}>
               {STATUS_FILTER_LABELS[f]}
             </button>
           ))}
         </div>
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs text-white hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
           + Замовлення
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
             <tr>
               <th className="px-4 py-3 font-medium">Номер</th>
               <th className="px-4 py-3 font-medium">Клієнт</th>
@@ -514,31 +514,31 @@ export default function OrdersPage() {
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-neutral-400">Немає замовлень</td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає замовлень</td></tr>
             ) : filtered.map((o) => {
               const meta = STATUS_META[o.status];
               const isBusy = actionBusy === o.id;
               const outstanding = parseFloat(o.outstanding);
               return (
-                <tr key={o.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                <tr key={o.id} className="hover:bg-[var(--surface-hi)] ">
                   <td className="px-4 py-3 font-mono text-xs font-medium">{o.order_number}</td>
                   <td className="px-4 py-3">
-                    {o.counterparty_name ?? o.customer_name ?? <span className="text-neutral-400">—</span>}
+                    {o.counterparty_name ?? o.customer_name ?? <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">
+                    <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
                       {SOURCE_LABELS[o.source] ?? o.source}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-600 dark:text-neutral-300">
+                  <td className="px-4 py-3 text-[var(--text-muted)] ">
                     {o.items.map((it) => `${it.product_name} ×${it.quantity}`).join(", ") || "—"}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
                   </td>
-                  <td className="px-4 py-3 text-neutral-500">
+                  <td className="px-4 py-3 text-[var(--text-muted)]">
                     {o.due_date ? new Date(o.due_date).toLocaleDateString("uk-UA") : "—"}
                   </td>
                   <td className="px-4 py-3 text-right font-medium tabular-nums">
@@ -547,7 +547,7 @@ export default function OrdersPage() {
                   <td className="px-4 py-3 text-right tabular-nums">
                     {outstanding > 0
                       ? <span className="text-red-600 dark:text-red-400">{outstanding.toLocaleString("uk-UA")} ₴</span>
-                      : <span className="text-neutral-400">—</span>}
+                      : <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
@@ -573,7 +573,7 @@ export default function OrdersPage() {
                         <button
                           onClick={() => setEditOrder(o)}
                           title="Редагувати"
-                          className="rounded p-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800">
+                          className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">
                           ✎
                         </button>
                       )}
@@ -582,7 +582,7 @@ export default function OrdersPage() {
                           onClick={() => cancelOrder(o)}
                           disabled={isBusy}
                           title="Скасувати"
-                          className="rounded p-1 text-xs text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 dark:hover:text-red-400">
+                          className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 dark:hover:text-red-400">
                           ✕
                         </button>
                       )}

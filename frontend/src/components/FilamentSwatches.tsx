@@ -36,7 +36,7 @@ export function FilamentSwatches({
       {swatches.map((s, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] dark:border-neutral-700 dark:bg-neutral-900"
+          className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px]  "
           title={`${s.type ?? ""}${s.grams ? ` · ${s.grams} г` : ""}`}
         >
           <span
@@ -48,7 +48,7 @@ export function FilamentSwatches({
             }}
           />
           {showLabel && (
-            <span className="text-neutral-600 dark:text-neutral-400">
+            <span className="text-[var(--text-muted)] ">
               {s.type ?? ""}
               {s.grams ? ` ${s.grams}г` : ""}
             </span>

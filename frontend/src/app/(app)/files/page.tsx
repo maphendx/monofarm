@@ -75,7 +75,7 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
     <div className="flex flex-wrap gap-1">
       {indices.map(i => (
         <span key={i} title={`Слот ${i + 1}${types[i] ? `: ${types[i]}` : ""}`}
-          className="flex items-center gap-1 rounded-full border border-white/10 bg-white/8 px-1.5 py-0.5 text-[10px] text-neutral-300">
+          className="flex items-center gap-1 rounded-full border border-white/10 bg-[var(--bg-elevated)]/8 px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
           {colors[i] && <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" style={{ background: colors[i] }} />}
           {types[i] ?? `S${i + 1}`}
         </span>
@@ -96,7 +96,7 @@ function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
   });
 }
 function compatBadge(slots: ReturnType<typeof checkSlots>) {
-  if (!slots.length) return { label: "немає даних", cls: "bg-neutral-700 text-neutral-400" };
+  if (!slots.length) return { label: "немає даних", cls: "bg-[var(--surface-2)] text-[var(--text-faint)]" };
   const missing = slots.filter(s => s.match === "missing").length;
   const mismatch = slots.filter(s => s.match === "type_mismatch").length;
   if (!missing && !mismatch) return { label: "✓ сумісний", cls: "bg-emerald-500/20 text-emerald-400" };
@@ -155,18 +155,18 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
-        <div className="border-b border-neutral-800 px-5 py-4">
+      <div className="w-full max-w-sm rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
+        <div className="border-b border-[var(--border)] px-5 py-4">
           <h2 className="font-semibold text-neutral-100">Надіслати на принтер</h2>
-          <p className="mt-0.5 truncate text-xs text-neutral-500">{file.original_name}</p>
+          <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{file.original_name}</p>
         </div>
 
         {file.filament_meta && (
-          <div className="border-b border-neutral-800 px-5 pb-4 pt-3">
-            <p className="mb-1.5 text-xs font-medium text-neutral-500">Потрібні матеріали</p>
+          <div className="border-b border-[var(--border)] px-5 pb-4 pt-3">
+            <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Потрібні матеріали</p>
             <SlotSwatches meta={file.filament_meta} />
             {file.filament_meta.estimated_minutes && (
-              <p className="mt-1.5 text-xs text-neutral-500">
+              <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                 ~{fmtMinutes(file.filament_meta.estimated_minutes)}
                 {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
               </p>
@@ -176,7 +176,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
 
         <div className="space-y-3 px-5 py-4">
           {sendable.length === 0 ? (
-            <p className="text-sm text-neutral-500">Немає доступних принтерів</p>
+            <p className="text-sm text-[var(--text-muted)]">Немає доступних принтерів</p>
           ) : (
             <div className="grid gap-2 max-h-64 overflow-y-auto pr-1">
               {sendable.map(p => {
@@ -184,14 +184,14 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                 const compat = compatBadge(slots);
                 return (
                   <label key={p.id} className={["flex cursor-pointer flex-col gap-1.5 rounded-lg border p-3 transition",
-                    selectedId === p.id ? "border-accent bg-accent/10" : "border-neutral-700 hover:border-neutral-600 hover:bg-neutral-800/50"].join(" ")}>
+                    selectedId === p.id ? "border-accent bg-accent/10" : "border-[var(--border-strong)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]/50"].join(" ")}>
                     <div className="flex items-center gap-3">
                       <input type="radio" name="printer" value={p.id} checked={selectedId === p.id} onChange={() => selectPrinter(p.id)} className="accent-[var(--accent)]" />
-                      <span className="flex-1 truncate text-sm font-medium text-neutral-200">{p.name}</span>
+                      <span className="flex-1 truncate text-sm font-medium text-[var(--text)]">{p.name}</span>
                       <span className={["shrink-0 rounded px-1.5 py-0.5 text-xs",
                         p.state === "printing" ? "bg-amber-500/20 text-amber-400"
                           : p.state === "idle" || p.state === "operational" ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-neutral-700 text-neutral-400"].join(" ")}>
+                          : "bg-[var(--surface-2)] text-[var(--text-faint)]"].join(" ")}>
                         {p.state ?? "—"}
                       </span>
                     </div>
@@ -216,18 +216,18 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           )}
 
           {selected && usedSlots.length > 0 && !result && (
-            <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-3">
-              <p className="mb-2 text-xs font-medium text-neutral-400">Ремаппінг слотів</p>
+            <div className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 p-3">
+              <p className="mb-2 text-xs font-medium text-[var(--text-faint)]">Ремаппінг слотів</p>
               <div className="space-y-2">
                 {usedSlots.map(i => (
                   <div key={i} className="flex items-center gap-2 text-xs">
                     <div className="flex flex-1 items-center gap-1.5">
                       {file.filament_meta?.colors?.[i] && <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: file.filament_meta.colors[i] }} />}
-                      <span className="truncate text-neutral-300">Слот {i + 1}{file.filament_meta?.types?.[i] ? ` · ${file.filament_meta.types[i]}` : ""}</span>
+                      <span className="truncate text-[var(--text-muted)]">Слот {i + 1}{file.filament_meta?.types?.[i] ? ` · ${file.filament_meta.types[i]}` : ""}</span>
                     </div>
-                    <span className="text-neutral-500">→</span>
+                    <span className="text-[var(--text-muted)]">→</span>
                     <select value={slotMap[i] ?? i} onChange={e => setSlotMap(p => ({ ...p, [i]: Number(e.target.value) }))}
-                      className="rounded border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-200 outline-none focus:border-accent">
+                      className="rounded border border-[var(--border-strong)] bg-[var(--surface)] px-1.5 py-0.5 text-xs text-[var(--text)] outline-none focus:border-accent">
                       {selected.loaded_filaments.length > 0
                         ? selected.loaded_filaments.map(lf => <option key={lf.slot} value={lf.slot}>Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}</option>)
                         : Array.from({ length: 4 }).map((_, s) => <option key={s} value={s}>Слот {s + 1}</option>)}
@@ -239,15 +239,15 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           )}
 
           {selected && isMoonraker && !result && (
-            <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-3">
-              <p className="mb-2 text-xs font-medium text-neutral-400">Опції друку</p>
+            <div className="rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 p-3">
+              <p className="mb-2 text-xs font-medium text-[var(--text-faint)]">Опції друку</p>
               {[["autoBedLeveling", "Автокалібрування столу", autoBedLeveling, setAutoBedLeveling],
                 ["timelapse", "Таймлапс", timelapse, setTimelapse],
                 ["aiDetection", "AI детекція", aiDetection, setAiDetection],
               ].map(([key, label, val, setter]) => (
                 <label key={key as string} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs">
                   <input type="checkbox" checked={val as boolean} onChange={e => (setter as (v: boolean) => void)(e.target.checked)} className="accent-[var(--accent)]" />
-                  <span className="text-neutral-300">{label as string}</span>
+                  <span className="text-[var(--text-muted)]">{label as string}</span>
                 </label>
               ))}
             </div>
@@ -260,8 +260,8 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-neutral-800 px-5 py-3">
-          <button onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800">
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
+          <button onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!result?.ok && (
@@ -298,17 +298,17 @@ function FolderNameModal({ title, initialValue, onConfirm, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-xs rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
-        <div className="border-b border-neutral-800 px-5 py-4">
+      <div className="w-full max-w-xs rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
+        <div className="border-b border-[var(--border)] px-5 py-4">
           <h2 className="font-semibold text-sm text-neutral-100">{title}</h2>
         </div>
         <form onSubmit={submit} className="px-5 py-4 space-y-3">
           <input ref={ref} type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="Назва папки" maxLength={255}
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-accent" />
+            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-accent" />
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800">Скасувати</button>
+            <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">Скасувати</button>
             <button type="submit" disabled={busy || !name.trim()}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-40">
               {busy ? "…" : "Зберегти"}
@@ -351,13 +351,13 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
         "group relative flex cursor-pointer select-none flex-col items-center gap-3 rounded-xl border p-4 transition-all duration-150",
         isDragOver
           ? "scale-105 border-accent bg-accent/10 shadow-lg shadow-accent/20"
-          : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
+          : "border-[var(--border-strong)]/60 bg-[var(--surface-2)]/50 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
       ].join(" ")}
     >
       <div className="relative">
         <FolderIcon className={["h-16 w-16 transition-transform duration-150 group-hover:scale-105", isDragOver ? "text-accent" : "text-accent"].join(" ")} />
         {folder.file_count > 0 && (
-          <span className="absolute -bottom-1 -right-1 rounded-full bg-neutral-700 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-300 leading-none min-w-[18px] text-center">
+          <span className="absolute -bottom-1 -right-1 rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-muted)] leading-none min-w-[18px] text-center">
             {folder.file_count}
           </span>
         )}
@@ -365,7 +365,7 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 
       <div className="w-full text-center">
         <p className="truncate text-sm font-medium text-neutral-100" title={folder.name}>{folder.name}</p>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-[var(--text-muted)]">
           {folder.file_count} {folder.file_count === 1 ? "файл" : folder.file_count < 5 ? "файли" : "файлів"}
         </p>
       </div>
@@ -382,12 +382,12 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
         <div ref={menuRef} className="absolute right-2 top-2 z-10" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => { setMenuOpen(v => !v); setConfirmDel(false); }}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 opacity-0 transition hover:bg-neutral-700 hover:text-neutral-200 group-hover:opacity-100 text-sm"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] opacity-0 transition hover:bg-[var(--surface-2)] hover:text-[var(--text)] group-hover:opacity-100 text-sm"
           >⋮</button>
           {menuOpen && (
-            <div className="absolute right-0 top-7 w-40 rounded-lg border border-neutral-700 bg-neutral-800 py-1 shadow-xl text-sm">
+            <div className="absolute right-0 top-7 w-40 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] py-1 shadow-xl text-sm">
               <button onClick={() => { setMenuOpen(false); onRename(); }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-neutral-300 hover:bg-neutral-700">
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--text-muted)] hover:bg-[var(--surface-2)]">
                 <span>✏️</span> Перейменувати
               </button>
               {confirmDel ? (
@@ -451,14 +451,14 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
         "group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150",
         canEdit ? "cursor-grab active:cursor-grabbing" : "",
         isDragging
-          ? "scale-95 opacity-40 border-neutral-600 bg-neutral-800"
+          ? "scale-95 opacity-40 border-[var(--border-strong)] bg-[var(--surface-2)]"
           : highlighted
           ? "border-accent bg-accent/10 ring-2 ring-accent/20"
-          : "border-neutral-700/60 bg-neutral-800/50 hover:border-neutral-600 hover:bg-neutral-800",
+          : "border-[var(--border-strong)]/60 bg-[var(--surface-2)]/50 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
       ].join(" ")}
     >
       {/* thumbnail */}
-      <div className="relative h-24 w-full overflow-hidden rounded-lg bg-neutral-900/80 flex items-center justify-center">
+      <div className="relative h-24 w-full overflow-hidden rounded-lg bg-[var(--surface)]/80 flex items-center justify-center">
         {file.has_thumbnail ? (
           <img
             src={`${API_URL}/api/files/${file.id}/thumbnail`} alt=""
@@ -473,18 +473,18 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
         <span className={["text-3xl items-center justify-center", file.has_thumbnail ? "hidden" : "flex"].join(" ")}>
           {ext === "3mf" ? "📦" : "📄"}
         </span>
-        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-neutral-300">
+        <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
           {fmtSize(file.size_bytes)}
         </span>
         {canEdit && !isDragging && (
-          <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity select-none">
+          <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-[var(--text-faint)] opacity-0 group-hover:opacity-100 transition-opacity select-none">
             ⠿ drag
           </span>
         )}
       </div>
 
       {/* name */}
-      <p className="truncate text-xs font-medium text-neutral-200 leading-tight" title={file.original_name}>
+      <p className="truncate text-xs font-medium text-[var(--text)] leading-tight" title={file.original_name}>
         {file.original_name}
       </p>
 
@@ -493,7 +493,7 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
 
       {/* time estimate */}
       {file.filament_meta?.estimated_minutes && (
-        <p className="text-[10px] text-neutral-500">~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
+        <p className="text-[10px] text-[var(--text-muted)]">~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
       )}
 
       {/* actions */}
@@ -503,7 +503,7 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
           Надіслати →
         </button>
         <button onClick={download} disabled={dlBusy}
-          className="rounded-lg border border-neutral-700 px-2 py-1.5 text-xs text-neutral-400 transition hover:bg-neutral-700 disabled:opacity-40"
+          className="rounded-lg border border-[var(--border-strong)] px-2 py-1.5 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-2)] disabled:opacity-40"
           title="Завантажити">
           {dlBusy ? "…" : "↓"}
         </button>
@@ -513,7 +513,7 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
               className="animate-pulse rounded-lg bg-red-600 px-2 py-1.5 text-xs font-medium text-white">✕</button>
           ) : (
             <button onClick={() => setConfirmDel(true)}
-              className="rounded-lg border border-neutral-700 px-2 py-1.5 text-xs text-neutral-500 transition hover:border-red-500/40 hover:bg-red-900/20 hover:text-red-400">✕</button>
+              className="rounded-lg border border-[var(--border-strong)] px-2 py-1.5 text-xs text-[var(--text-muted)] transition hover:border-red-500/40 hover:bg-red-900/20 hover:text-red-400">✕</button>
           )
         )}
       </div>
@@ -538,7 +538,7 @@ function RootDropZone({ isDragOver, onDragOver, onDragLeave, onDrop }: {
         "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 px-4 text-sm transition-all duration-150",
         isDragOver
           ? "border-orange-400 bg-orange-400/10 text-orange-400 scale-[1.02]"
-          : "border-neutral-700 text-neutral-600 hover:border-neutral-600 hover:text-neutral-500",
+          : "border-[var(--border-strong)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-neutral-500",
       ].join(" ")}
     >
       <span>🏠</span>
@@ -705,8 +705,8 @@ export default function FilesPage() {
   const targetPrinter = defaultPrinterId ? printers.find(p => p.id === defaultPrinterId) : null;
 
   if (loading) return (
-    <div className="flex items-center justify-center py-24 text-sm text-neutral-500">
-      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-neutral-600 border-t-accent mr-2" />
+    <div className="flex items-center justify-center py-24 text-sm text-[var(--text-muted)]">
+      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-accent mr-2" />
       Завантаження…
     </div>
   );
@@ -734,22 +734,22 @@ export default function FilesPage() {
           {currentFolder ? (
             <>
               <button onClick={() => setCurrentFolderId(null)}
-                className="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-neutral-200 transition">
+                className="flex items-center gap-1.5 text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 12H5M12 5l-7 7 7 7"/>
                 </svg>
                 Файли
               </button>
-              <span className="text-neutral-600">/</span>
+              <span className="text-[var(--text-muted)]">/</span>
               <span className="text-sm font-semibold text-neutral-100">{currentFolder.name}</span>
-              <span className="rounded-full bg-neutral-700 px-1.5 py-0.5 text-[10px] text-neutral-400">
+              <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
                 {currentFolder.file_count}
               </span>
             </>
           ) : (
             <div>
               <h1 className="text-lg font-bold text-neutral-100">Файли</h1>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 {files.length} файлів · {folders.length} папок
               </p>
             </div>
@@ -758,11 +758,11 @@ export default function FilesPage() {
 
         {/* search */}
         <div className="relative">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">🔍</span>
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">🔍</span>
           <input
             type="text" placeholder="Пошук…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-48 rounded-lg border border-neutral-700 bg-neutral-800/60 py-2 pl-8 pr-3 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-accent transition"
+            className="w-48 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 py-2 pl-8 pr-3 text-sm text-[var(--text)] placeholder-neutral-500 outline-none focus:border-accent transition"
           />
         </div>
 
@@ -772,7 +772,7 @@ export default function FilesPage() {
             {uploadError && <span className="text-xs text-red-400">{uploadError}</span>}
             {!currentFolder && (
               <button onClick={() => setShowNewFolder(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-800/60 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-600 hover:bg-neutral-800">
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 px-3 py-2 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]">
                 <FolderIcon className="h-4 w-4 text-accent" />
                 Нова папка
               </button>
@@ -783,7 +783,7 @@ export default function FilesPage() {
               className="relative flex min-w-40 items-center justify-center gap-2 overflow-hidden rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent/90 disabled:cursor-default disabled:opacity-70"
             >
               {uploading && (
-                <span className="pointer-events-none absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
+                <span className="pointer-events-none absolute inset-y-0 left-0 bg-[var(--bg-elevated)]/20 transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
               )}
               <span className="relative flex items-center gap-2">
                 {uploading
@@ -812,7 +812,7 @@ export default function FilesPage() {
       {/* ── Folders grid (root only) ── */}
       {currentFolderId === null && folders.length > 0 && (
         <div className="mb-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
             Папки · {folders.length}
           </p>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
@@ -842,11 +842,11 @@ export default function FilesPage() {
                   "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition-all duration-150 cursor-default",
                   dragOverTarget === "root"
                     ? "border-orange-400 bg-orange-400/10 scale-105"
-                    : "border-neutral-700 opacity-60",
+                    : "border-[var(--border-strong)] opacity-60",
                 ].join(" ")}
               >
                 <span className="text-2xl">🏠</span>
-                <span className="text-center text-xs text-neutral-500 leading-tight">Без папки</span>
+                <span className="text-center text-xs text-[var(--text-muted)] leading-tight">Без папки</span>
               </div>
             )}
           </div>
@@ -856,7 +856,7 @@ export default function FilesPage() {
       {/* ── Compact folder strip inside folder view (for drag targets) ── */}
       {currentFolderId !== null && isDragging && folders.length > 1 && (
         <div className="mb-4">
-          <p className="mb-2 text-xs text-neutral-500">Перетягни до іншої папки:</p>
+          <p className="mb-2 text-xs text-[var(--text-muted)]">Перетягни до іншої папки:</p>
           <div className="flex flex-wrap gap-2">
             {folders.filter(f => f.id !== currentFolderId).map(folder => (
               <div
@@ -869,7 +869,7 @@ export default function FilesPage() {
                   "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all duration-150 cursor-default select-none",
                   dragOverTarget === folder.id
                     ? "scale-105 border-accent bg-accent/10 text-accent"
-                    : "border-neutral-700 text-neutral-400 hover:border-neutral-600",
+                    : "border-[var(--border-strong)] text-[var(--text-faint)] hover:border-[var(--border-strong)]",
                 ].join(" ")}
               >
                 <FolderIcon className="h-4 w-4 text-accent" />
@@ -882,13 +882,13 @@ export default function FilesPage() {
 
       {/* ── Files grid ── */}
       {currentFolderId === null && (
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           {files.filter(f => f.folder_id === null).length > 0 ? `Файли без папки · ${files.filter(f => f.folder_id === null).length}` : ""}
         </p>
       )}
 
       {visibleFiles.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-20 text-neutral-500">
+        <div className="flex flex-col items-center gap-3 py-20 text-[var(--text-muted)]">
           <span className="text-5xl">{currentFolderId ? "📁" : "🗂️"}</span>
           <p className="text-sm">
             {search ? "Нічого не знайдено" : currentFolderId ? "Папка порожня — перетягни сюди файли" : "Завантажте першу нарізку"}
@@ -922,7 +922,7 @@ export default function FilesPage() {
             "mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition-all",
             dragOverTarget === currentFolderId
               ? "border-accent bg-accent/10 text-accent"
-              : "border-neutral-700 text-neutral-600",
+              : "border-[var(--border-strong)] text-[var(--text-muted)]",
           ].join(" ")}
         >
           <span className="text-4xl">📁</span>

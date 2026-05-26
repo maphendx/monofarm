@@ -77,11 +77,11 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[] }> = [
 // ── Shared UI ──────────────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100";
+  "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-sm  ">
       {children}
     </div>
   );
@@ -95,7 +95,7 @@ function ComingSoon({ label }: { label: string }) {
   return (
     <SectionCard>
       <SectionTitle>{label}</SectionTitle>
-      <p className="text-sm text-neutral-400">Незабаром</p>
+      <p className="text-sm text-[var(--text-faint)]">Незабаром</p>
     </SectionCard>
   );
 }
@@ -124,13 +124,13 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
   const warn = pct >= 80;
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-neutral-500">
+      <div className="flex justify-between text-xs text-[var(--text-muted)]">
         <span>{label}</span>
         <span className={warn ? "font-medium text-amber-600 dark:text-amber-400" : ""}>{used} / {limit}</span>
       </div>
-      <div className="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800">
+      <div className="h-1.5 rounded-full bg-[var(--surface-hi)] ">
         <div
-          className={`h-1.5 rounded-full transition-all ${warn ? "bg-amber-500" : "bg-neutral-900 dark:bg-neutral-100"}`}
+          className={`h-1.5 rounded-full transition-all ${warn ? "bg-amber-500" : "bg-[var(--surface)] "}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -218,7 +218,7 @@ function BillingSection() {
     <SectionCard>
       <div className="mb-5 flex items-center justify-between">
         <SectionTitle>Білінг</SectionTitle>
-        <span className="rounded-full bg-neutral-900 px-3 py-0.5 text-xs font-medium text-white dark:bg-neutral-100 dark:text-neutral-900">
+        <span className="rounded-full bg-[var(--surface)] px-3 py-0.5 text-xs font-medium text-white  ">
           {PLAN_LABELS[billing.plan]} {billing.price_usd > 0 ? `$${billing.price_usd}/міс` : "Безкоштовно"}
         </span>
       </div>
@@ -229,12 +229,12 @@ function BillingSection() {
         </div>
       )}
       {billingMsg === "cancel" && (
-        <div className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800">
+        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-sm text-[var(--text-muted)]  ">
           Оплата скасована — план не змінено.
         </div>
       )}
 
-      <div className="mb-6 space-y-3 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+      <div className="mb-6 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4  ">
         <UsageBar used={billing.usage.printers} limit={billing.limits.printers} label="Принтери" />
         <UsageBar used={billing.usage.users} limit={billing.limits.users} label="Користувачі" />
       </div>
@@ -246,19 +246,19 @@ function BillingSection() {
           return (
             <div key={p.key}
               className={`rounded-xl border p-4 transition ${isCurrent
-                ? "border-neutral-900 bg-neutral-50 dark:border-neutral-100 dark:bg-neutral-800"
-                : "border-neutral-200 dark:border-neutral-700"}`}
+                ? "border-neutral-900 bg-[var(--bg)]  "
+                : "border-[var(--border)] "}`}
             >
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-medium">{PLAN_LABELS[p.key]}</span>
                 {isCurrent && (
-                  <span className="rounded bg-neutral-900 px-1.5 py-0.5 text-[10px] text-white dark:bg-neutral-100 dark:text-neutral-900">
+                  <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-white  ">
                     Поточний
                   </span>
                 )}
               </div>
-              <p className="mb-1 text-[11px] text-neutral-500">{PLAN_DESC[p.key]}</p>
-              <p className="mb-3 text-xs text-neutral-600 dark:text-neutral-400">
+              <p className="mb-1 text-[11px] text-[var(--text-muted)]">{PLAN_DESC[p.key]}</p>
+              <p className="mb-3 text-xs text-[var(--text-muted)] ">
                 до {p.limits.printers} принтерів · {p.limits.users === 999 ? "∞" : p.limits.users} користувач{p.limits.users === 1 ? "" : "ів"}
               </p>
               <div className="flex items-center justify-between">
@@ -269,7 +269,7 @@ function BillingSection() {
                   <button
                     onClick={() => upgrade(p.key)}
                     disabled={upgrading !== null}
-                    className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                    className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
                   >
                     {upgrading === p.key ? "…" : "Upgrade"}
                   </button>
@@ -282,11 +282,11 @@ function BillingSection() {
 
       {/* ── Extra printer slots ── */}
       {billing.extra_price_usd != null && (
-        <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4  ">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Додаткові принтери</p>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-[var(--text-muted)]">
                 ${billing.extra_price_usd}/принтер/міс · база {billing.limits.printers - (billing.extra_slots ?? 0)} +{" "}
                 {billing.extra_slots ?? 0} extra
                 {billing.max_printers != null && ` · макс ${billing.max_printers}`}
@@ -297,10 +297,10 @@ function BillingSection() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
+            <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]  ">
               <button
                 onClick={() => setExtraSlots((n) => Math.max(0, n - 1))}
-                className="px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 rounded-l-lg"
+                className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]   rounded-l-lg"
               >−</button>
               <span className="w-8 text-center text-sm font-semibold">{extraSlots}</span>
               <button
@@ -309,18 +309,18 @@ function BillingSection() {
                   const maxExtra = billing.max_printers != null ? billing.max_printers - base : 999;
                   return Math.min(maxExtra, n + 1);
                 })}
-                className="px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800 rounded-r-lg"
+                className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]   rounded-r-lg"
               >+</button>
             </div>
             <button
               onClick={saveExtraSlots}
               disabled={savingSlots || extraSlots === (billing.extra_slots ?? 0)}
-              className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              className="rounded-lg bg-[var(--surface)] px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
             >
               {savingSlots ? "…" : "Зберегти"}
             </button>
             {extraSlots !== (billing.extra_slots ?? 0) && (
-              <span className="text-xs text-neutral-400">
+              <span className="text-xs text-[var(--text-faint)]">
                 {extraSlots > (billing.extra_slots ?? 0) ? "+" : ""}{extraSlots - (billing.extra_slots ?? 0)} слот{Math.abs(extraSlots - (billing.extra_slots ?? 0)) === 1 ? "" : "и"}
               </span>
             )}
@@ -329,21 +329,21 @@ function BillingSection() {
       )}
 
       {billing.plan !== "free" && (
-        <div className="mt-4 border-t border-neutral-100 pt-4 dark:border-neutral-800">
+        <div className="mt-4 border-t border-[var(--border)] pt-4 ">
           {confirmCancel ? (
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-neutral-600 dark:text-neutral-400">Скасувати підписку? (план стане Free)</span>
+              <span className="text-[var(--text-muted)] ">Скасувати підписку? (план стане Free)</span>
               <button onClick={cancelSub} disabled={cancelling}
                 className="text-red-600 hover:underline disabled:opacity-50">
                 {cancelling ? "…" : "Так, скасувати"}
               </button>
-              <button onClick={() => setConfirmCancel(false)} className="text-neutral-500 hover:underline">
+              <button onClick={() => setConfirmCancel(false)} className="text-[var(--text-muted)] hover:underline">
                 Ні
               </button>
             </div>
           ) : (
             <button onClick={() => setConfirmCancel(true)}
-              className="text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300">
+              className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] ">
               Скасувати підписку
             </button>
           )}
@@ -368,10 +368,10 @@ const IS_LOCAL = typeof window !== "undefined" && (
 function CmdBlock({ cmd, id, copied, onCopy }: { cmd: string; id: string; copied: string | null; onCopy: (t: string, k: string) => void }) {
   return (
     <div className="relative mt-3">
-      <pre className="overflow-x-auto rounded-lg bg-neutral-950 px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">{cmd}</pre>
+      <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">{cmd}</pre>
       <button
         onClick={() => onCopy(cmd.replace(/\\\n\s+/g, " "), id)}
-        className="absolute right-2 top-2 rounded bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400 transition hover:bg-neutral-700 hover:text-white"
+        className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-neutral-700 hover:text-[var(--text-hi)]"
       >
         {copied === id ? "✓ Скопійовано" : "Копіювати"}
       </button>
@@ -462,14 +462,14 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
   const total   = (result?.bambu.length ?? 0) + (result?.moonraker.length ?? 0);
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6  ">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Додати принтери</h3>
-          <p className="mt-0.5 text-xs text-neutral-400">Агент сканує локальну мережу і знаходить Bambu + Klipper принтери</p>
+          <p className="mt-0.5 text-xs text-[var(--text-faint)]">Агент сканує локальну мережу і знаходить Bambu + Klipper принтери</p>
         </div>
         {limit && (
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${atLimit ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"}`}>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${atLimit ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-[var(--surface-hi)] text-[var(--text-muted)]  "}`}>
             {limit.count}/{limit.limit} принтерів
           </span>
         )}
@@ -484,7 +484,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
       <button
         onClick={scan}
         disabled={discovering || atLimit}
-        className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+        className="rounded-lg bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
       >
         {discovering ? "Сканування… (до 60 с)" : "Сканувати мережу"}
       </button>
@@ -492,7 +492,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
       {err && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{err}</p>}
 
       {result && total === 0 && (
-        <p className="mt-4 text-xs text-neutral-400">Нових принтерів не знайдено. Переконайся що принтери увімкнені та в одній мережі з агентом.</p>
+        <p className="mt-4 text-xs text-[var(--text-faint)]">Нових принтерів не знайдено. Переконайся що принтери увімкнені та в одній мережі з агентом.</p>
       )}
 
       {result && total > 0 && (
@@ -502,11 +502,11 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
             const done = addedKeys.has(key);
             const inp  = inputs[key] ?? { name: d.name, access_code: "" };
             return (
-              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+              <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4  ">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Bambu</span>
                   <span className="text-xs font-medium">{d.model || d.dev_id}</span>
-                  <span className="text-[11px] text-neutral-400">{d.ip}</span>
+                  <span className="text-[11px] text-[var(--text-faint)]">{d.ip}</span>
                 </div>
                 {!done && (
                   <div className="grid grid-cols-2 gap-2">
@@ -514,13 +514,13 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                       placeholder="Назва"
                       value={inp.name}
                       onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
-                      className="rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
                     />
                     <input
                       placeholder="Access Code (з принтера)"
                       value={inp.access_code}
                       onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, access_code: e.target.value } }))}
-                      className="rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
                     />
                   </div>
                 )}
@@ -531,7 +531,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                     <button
                       onClick={() => addBambu(d)}
                       disabled={addingKey === key || !inp.access_code}
-                      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                      className="rounded-lg bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50  "
                     >
                       {addingKey === key ? "Додавання…" : "Додати"}
                     </button>
@@ -546,17 +546,17 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
             const done = addedKeys.has(key);
             const inp  = inputs[key] ?? { name: d.name, access_code: "" };
             return (
-              <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+              <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4  ">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Klipper</span>
-                  <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{d.url}</span>
+                  <span className="text-xs font-medium text-[var(--text-muted)] ">{d.url}</span>
                 </div>
                 {!done && (
                   <input
                     placeholder="Назва принтера"
                     value={inp.name}
                     onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
-                    className="w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-900"
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
                   />
                 )}
                 <div className="mt-2 flex justify-end">
@@ -566,7 +566,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                     <button
                       onClick={() => addMoonraker(d)}
                       disabled={addingKey === key}
-                      className="rounded-lg bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                      className="rounded-lg bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50  "
                     >
                       {addingKey === key ? "Додавання…" : "Додати"}
                     </button>
@@ -632,7 +632,7 @@ function AgentSection() {
     <div className="space-y-5">
 
       {/* ── Header ── */}
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6  ">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="mb-1.5 flex items-center gap-2.5">
@@ -641,14 +641,14 @@ function AgentSection() {
                 Klipper · Moonraker
               </span>
             </div>
-            <p className="max-w-xl text-sm text-neutral-500 dark:text-neutral-400">
+            <p className="max-w-xl text-sm text-[var(--text-muted)] ">
               Тунель між локальними принтерами і хмарою. Встанови на Raspberry Pi або будь-якому PC у мережі принтерів — і вони з&apos;являться в monofarm автоматично.
             </p>
           </div>
           {/* Status badge */}
           <div className="shrink-0">
             {connected === null ? (
-              <span className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs text-neutral-400 dark:border-neutral-700">
+              <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-faint)] ">
                 Перевірка…
               </span>
             ) : connected ? (
@@ -657,7 +657,7 @@ function AgentSection() {
                 Агент підключений
               </span>
             ) : (
-              <span className="flex items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800">
+              <span className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-muted)]  ">
                 <span className="size-1.5 rounded-full bg-neutral-400" />
                 Не підключений
               </span>
@@ -686,7 +686,7 @@ function AgentSection() {
             ) : pairStatus === "error" ? (
               <div className="shrink-0 text-right">
                 <p className="mb-1 text-xs text-red-600 dark:text-red-400">Агент більше не чекає — перезапусти його.</p>
-                <button onClick={() => setPairStatus("idle")} className="text-xs text-neutral-500 hover:underline">Скинути</button>
+                <button onClick={() => setPairStatus("idle")} className="text-xs text-[var(--text-muted)] hover:underline">Скинути</button>
               </div>
             ) : (
               <button
@@ -705,67 +705,67 @@ function AgentSection() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
         {/* Linux / Pi */}
-        <div className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
               </svg>
             </span>
             <div>
               <p className="text-sm font-semibold">Linux / Raspberry Pi</p>
-              <p className="text-[11px] text-neutral-400">systemd автозапуск</p>
+              <p className="text-[11px] text-[var(--text-faint)]">systemd автозапуск</p>
             </div>
           </div>
-          <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="mb-1 text-xs text-[var(--text-muted)] ">
             Одна команда — встановлює залежності, агент і systemd-сервіс.
           </p>
           <CmdBlock cmd={cmds.linux} id="linux" copied={copied} onCopy={copy} />
-          <p className="mt-3 text-[11px] text-neutral-400">
-            Логи: <code className="rounded bg-neutral-100 px-1 py-0.5 dark:bg-neutral-800">journalctl --user -u monofarm-agent -f</code>
+          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
+            Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5 ">journalctl --user -u monofarm-agent -f</code>
           </p>
         </div>
 
         {/* Windows */}
-        <div className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.801"/>
               </svg>
             </span>
             <div>
               <p className="text-sm font-semibold">Windows</p>
-              <p className="text-[11px] text-neutral-400">Task Scheduler автозапуск</p>
+              <p className="text-[11px] text-[var(--text-faint)]">Task Scheduler автозапуск</p>
             </div>
           </div>
-          <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="mb-1 text-xs text-[var(--text-muted)] ">
             PowerShell (не CMD). Встановлює Python якщо потрібно, реєструє завдання при вході.
           </p>
           <CmdBlock cmd={cmds.windows} id="windows" copied={copied} onCopy={copy} />
-          <p className="mt-3 text-[11px] text-neutral-400">
-            Логи: <code className="rounded bg-neutral-100 px-1 py-0.5 dark:bg-neutral-800">Get-Content ~\.monofarm-agent\agent.log -Wait</code>
+          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
+            Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5 ">Get-Content ~\.monofarm-agent\agent.log -Wait</code>
           </p>
         </div>
 
         {/* Docker */}
-        <div className="flex flex-col rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
           <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
               <svg width="18" height="14" viewBox="0 0 24 19" fill="currentColor">
                 <path d="M13 7h2V5h-2v2zm-3 0h2V5h-2v2zM7 7h2V5H7v2zm3-3h2V2h-2v2zM7 4h2V2H7v2zM2.6 19C1.2 19 0 17.9 0 16.6c0-.2 0-.4.1-.6L1.5 9h21l1.4 6c0 .2.1.4.1.6 0 1.3-1.2 2.4-2.6 2.4H2.6zM22 7H4c-.6 0-1 .4-1 1v.5L1.5 9h21L21 8.5V8c0-.6-.4-1-1-1z"/>
               </svg>
             </span>
             <div>
               <p className="text-sm font-semibold">Docker</p>
-              <p className="text-[11px] text-neutral-400">--network host потрібен</p>
+              <p className="text-[11px] text-[var(--text-faint)]">--network host потрібен</p>
             </div>
           </div>
-          <p className="mb-1 text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="mb-1 text-xs text-[var(--text-muted)] ">
             Якщо на Pi вже є Docker — найпростіший варіант.
           </p>
           <CmdBlock cmd={cmds.docker} id="docker" copied={copied} onCopy={copy} />
-          <p className="mt-3 text-[11px] text-neutral-400">
+          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
             <code>--network host</code> потрібен щоб агент дістався до Moonraker у LAN.
           </p>
         </div>
@@ -773,8 +773,8 @@ function AgentSection() {
       </div>
 
       {/* ── How it works ── */}
-      <div className="rounded-2xl border border-neutral-100 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-800/40">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Як це працює</p>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-5  ">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-faint)]">Як це працює</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { n: "1", t: "Запусти агент", d: "Без токена — браузер відкривається автоматично" },
@@ -782,12 +782,12 @@ function AgentSection() {
             { n: "3", t: "Готово", d: "Токен збережено, наступні запуски — без аргументів" },
           ].map(({ n, t, d }) => (
             <div key={n} className="flex gap-3">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-bold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-xs font-bold text-[var(--text-muted)]  ">
                 {n}
               </span>
               <div>
-                <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{t}</p>
-                <p className="text-[11px] text-neutral-400">{d}</p>
+                <p className="text-xs font-medium text-[var(--text)] ">{t}</p>
+                <p className="text-[11px] text-[var(--text-faint)]">{d}</p>
               </div>
             </div>
           ))}
@@ -809,7 +809,7 @@ function BadgeStatus({ ok }: { ok: boolean }) {
       налаштовано
     </span>
   ) : (
-    <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800">
+    <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-xs text-[var(--text-muted)] ">
       не налаштовано
     </span>
   );
@@ -862,23 +862,23 @@ function KeyCRMSection() {
         <SectionTitle>KeyCRM</SectionTitle>
         {data && <BadgeStatus ok={data.keycrm_configured} />}
       </div>
-      <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+      <p className="mb-4 text-sm text-[var(--text-muted)] ">
         Налаштуйте вебхук у KeyCRM щоб замовлення автоматично потрапляли до системи.
       </p>
 
       {data && (
-        <div className="mb-5 rounded-lg bg-neutral-50 p-3 dark:bg-neutral-800">
-          <p className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-300">Webhook URL для KeyCRM</p>
+        <div className="mb-5 rounded-lg bg-[var(--bg)] p-3 ">
+          <p className="mb-1 text-xs font-medium text-[var(--text-muted)] ">Webhook URL для KeyCRM</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 truncate rounded border border-neutral-200 bg-white px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+            <code className="flex-1 truncate rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs  ">
               {data.webhook_url}
             </code>
             <button onClick={copyWebhook}
-              className="shrink-0 rounded-md border border-neutral-200 px-2 py-1.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-700">
+              className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-xs hover:bg-[var(--surface-hi)]  ">
               {copied ? "✓" : "Копіювати"}
             </button>
           </div>
-          <p className="mt-1.5 text-xs text-neutral-400">
+          <p className="mt-1.5 text-xs text-[var(--text-faint)]">
             В KeyCRM: Налаштування → Вебхуки → Додати → вставте цей URL. Метод: POST, Подія: order_created / order_updated.
           </p>
         </div>
@@ -886,24 +886,24 @@ function KeyCRMSection() {
 
       <form onSubmit={save} className="space-y-3">
         <label className="block">
-          <span className="mb-1 block text-sm text-neutral-600 dark:text-neutral-400">API ключ KeyCRM</span>
+          <span className="mb-1 block text-sm text-[var(--text-muted)] ">API ключ KeyCRM</span>
           <input value={apiKey} onChange={(e) => setApiKey(e.target.value)}
             placeholder="eyJ..." className={inputCls} />
-          <p className="mt-1 text-xs text-neutral-400">KeyCRM → Налаштування → API ключ</p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">KeyCRM → Налаштування → API ключ</p>
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm text-neutral-600 dark:text-neutral-400">
-            Webhook Secret {data?.keycrm_configured && <span className="text-xs text-neutral-400">(залиште порожнім щоб не змінювати)</span>}
+          <span className="mb-1 block text-sm text-[var(--text-muted)] ">
+            Webhook Secret {data?.keycrm_configured && <span className="text-xs text-[var(--text-faint)]">(залиште порожнім щоб не змінювати)</span>}
           </span>
           <input value={secret} onChange={(e) => setSecret(e.target.value)}
             type="password" autoComplete="new-password"
             placeholder={data?.keycrm_configured ? "••••••••" : "Секрет для підпису вебхука"}
             className={inputCls} />
-          <p className="mt-1 text-xs text-neutral-400">Придумайте будь-який рядок — вставте його ж у KeyCRM у полі "Secret"</p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">Придумайте будь-який рядок — вставте його ж у KeyCRM у полі "Secret"</p>
         </label>
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button type="submit" disabled={saving}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900">
+          className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
           {saving ? "Зберігаю…" : saved ? "✓ Збережено" : "Зберегти"}
         </button>
       </form>
@@ -1061,7 +1061,7 @@ function OrgSection({
         <SectionTitle>Організація</SectionTitle>
         <form onSubmit={saveName} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm text-neutral-500 dark:text-neutral-400">Назва</label>
+            <label className="text-sm text-[var(--text-muted)] ">Назва</label>
             <input
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
@@ -1070,13 +1070,13 @@ function OrgSection({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-neutral-500 dark:text-neutral-400">Slug</label>
+            <label className="text-sm text-[var(--text-muted)] ">Slug</label>
             <input
               value={settings.slug}
               readOnly
-              className={`${inputCls} cursor-default font-mono text-xs text-neutral-400 dark:text-neutral-500`}
+              className={`${inputCls} cursor-default font-mono text-xs text-[var(--text-faint)] `}
             />
-            <p className="text-xs text-neutral-400 dark:text-neutral-600">Використовується в URL та API · не редагується</p>
+            <p className="text-xs text-[var(--text-faint)] ">Використовується в URL та API · не редагується</p>
           </div>
           <div className="flex justify-end">
             <button
@@ -1099,7 +1099,7 @@ function OrgSection({
               ✓ Налаштовано
             </span>
           ) : (
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800">
+            <span className="rounded-full bg-[var(--surface-hi)] px-2.5 py-0.5 text-xs text-[var(--text-muted)] ">
               Не налаштовано
             </span>
           )}
@@ -1113,14 +1113,14 @@ function OrgSection({
             </div>
             <button
               onClick={() => { setReconnecting(true); setCodeStep("idle"); setCodeError(null); }}
-              className="text-sm text-neutral-500 transition hover:text-neutral-900 dark:hover:text-neutral-100"
+              className="text-sm text-[var(--text-muted)] transition hover:text-[var(--text-hi)] "
             >
               Перепідключити інший акаунт →
             </button>
           </div>
         ) : codeStep === "sent" ? (
           <form onSubmit={verifyCode} className="space-y-3">
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-[var(--text-muted)]">
               Код надіслано на <strong>{codeEmail}</strong>. Перевір пошту (і папку Спам).
             </p>
             <label className="block">
@@ -1142,14 +1142,14 @@ function OrgSection({
               <button
                 type="submit"
                 disabled={codeBusy || code.length < 6}
-                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
               >
                 {codeBusy ? "Перевірка…" : "Підтвердити"}
               </button>
               <button
                 type="button"
                 onClick={() => { setCodeStep("idle"); setCodeError(null); }}
-                className="rounded-md px-4 py-2 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className="rounded-md px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
               >
                 Назад
               </button>
@@ -1180,7 +1180,7 @@ function OrgSection({
             <button
               type="submit"
               disabled={codeBusy || !codeEmail}
-              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+              className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
             >
               {codeBusy ? "Надсилання…" : "Надіслати код"}
             </button>
@@ -1197,16 +1197,16 @@ function OrgSection({
               ✓ Налаштовано
             </span>
           ) : (
-            <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs text-neutral-500 dark:bg-neutral-800">
+            <span className="rounded-full bg-[var(--surface-hi)] px-2.5 py-0.5 text-xs text-[var(--text-muted)] ">
               Не налаштовано
             </span>
           )}
         </div>
 
         {!agentConnected ? (
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          <p className="text-sm text-[var(--text-muted)] ">
             Telegram-бот запускається локально на твоєму агенті.{" "}
-            <a href="/settings#integrations" className="underline hover:text-neutral-900 dark:hover:text-neutral-100">
+            <a href="/settings#integrations" className="underline hover:text-[var(--text-hi)] ">
               Спочатку встанови агента.
             </a>
           </p>
@@ -1215,12 +1215,12 @@ function OrgSection({
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
               {settings.tg_bot_username
                 ? <>Бот <strong>@{settings.tg_bot_username}</strong> підключено</>
-                : <span className="text-neutral-500">Бот запускається… зачекай кілька секунд</span>}
+                : <span className="text-[var(--text-muted)]">Бот запускається… зачекай кілька секунд</span>}
             </div>
             <div className="flex gap-3">
               <button
                 onClick={() => { setTgShowInput(true); setTgToken(""); setTgError(null); }}
-                className="text-sm text-neutral-500 transition hover:text-neutral-900 dark:hover:text-neutral-100"
+                className="text-sm text-[var(--text-muted)] transition hover:text-[var(--text-hi)] "
               >
                 Замінити токен →
               </button>
@@ -1235,7 +1235,7 @@ function OrgSection({
           </div>
         ) : (
           <form onSubmit={saveTgToken} className="space-y-3">
-            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            <p className="text-sm text-[var(--text-muted)] ">
               Створи бота у{" "}
               <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">
                 @BotFather
@@ -1259,7 +1259,7 @@ function OrgSection({
               <button
                 type="submit"
                 disabled={tgSaving || !tgToken.trim()}
-                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+                className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
               >
                 {tgSaving ? "Зберігаю…" : "Зберегти"}
               </button>
@@ -1267,7 +1267,7 @@ function OrgSection({
                 <button
                   type="button"
                   onClick={() => { setTgShowInput(false); setTgError(null); }}
-                  className="rounded-md px-4 py-2 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="rounded-md px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
                 >
                   Назад
                 </button>
@@ -1310,7 +1310,7 @@ function PrintersSection() {
     <div className="space-y-6">
       <PrintersManager />
 
-      <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm dark:border-red-900/50 dark:bg-neutral-900">
+      <div className="rounded-2xl border border-red-200 bg-[var(--bg-elevated)] p-6 shadow-sm dark:border-red-900/50 ">
         <h2 className="mb-4 font-semibold text-red-600 dark:text-red-400">Небезпечна зона</h2>
         <div className="space-y-3">
           {(["bambu", "snapmaker_u1", "other", "all"] as const).map((kind) => {
@@ -1321,11 +1321,11 @@ function PrintersSection() {
                     "Всі принтери";
             const key = kind === "all" ? undefined : kind;
             return (
-              <div key={kind} className="flex items-center justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 dark:border-neutral-800">
-                <span className="text-sm text-neutral-700 dark:text-neutral-300">{label}</span>
+              <div key={kind} className="flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] px-4 py-3 ">
+                <span className="text-sm text-[var(--text)] ">{label}</span>
                 {bulkConfirm === kind ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-neutral-500">Впевнені?</span>
+                    <span className="text-xs text-[var(--text-muted)]">Впевнені?</span>
                     <button
                       onClick={() => bulkDelete(key)}
                       disabled={bulkBusy}
@@ -1335,7 +1335,7 @@ function PrintersSection() {
                     </button>
                     <button
                       onClick={() => setBulkConfirm(null)}
-                      className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
                     >
                       Скасувати
                     </button>
@@ -1351,7 +1351,7 @@ function PrintersSection() {
               </div>
             );
           })}
-          {bulkMsg && <p className="text-sm text-neutral-600 dark:text-neutral-400">{bulkMsg}</p>}
+          {bulkMsg && <p className="text-sm text-[var(--text-muted)] ">{bulkMsg}</p>}
         </div>
       </div>
     </div>
@@ -1382,10 +1382,10 @@ export default function SettingsPage() {
   }, []);
 
   if (user?.role !== "admin") {
-    return <p className="text-sm text-neutral-500">Тільки для адміністраторів.</p>;
+    return <p className="text-sm text-[var(--text-muted)]">Тільки для адміністраторів.</p>;
   }
   if (loadError) return <p className="text-sm text-red-600">{loadError}</p>;
-  if (!settings) return <p className="text-sm text-neutral-500">Завантаження…</p>;
+  if (!settings) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
 
   return (
     <div className="flex gap-8">
@@ -1399,8 +1399,8 @@ export default function SettingsPage() {
                 className={[
                   "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                   active === item.id
-                    ? "bg-cyan-500/10 font-medium text-cyan-600 dark:text-cyan-400"
-                    : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-200",
+                    ? "bg-cyan-500/10 font-medium text-[var(--accent)] "
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]  ",
                 ].join(" ")}
               >
                 <NavIcon d={item.d} />

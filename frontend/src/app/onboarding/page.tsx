@@ -12,10 +12,10 @@ const API_BASE =
 const INSTALL_CMD = `curl -sSL ${typeof window !== "undefined" ? window.location.origin.replace(":3000", ":8000") : "https://api.monofarm.app"}/agent/install.sh | bash`;
 
 const primaryBtn =
-  "rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300";
+  "rounded-md bg-[var(--surface)] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700   ";
 
 const ghostBtn =
-  "rounded-md px-5 py-2.5 text-sm text-neutral-500 transition hover:bg-neutral-100 dark:hover:bg-neutral-800";
+  "rounded-md px-5 py-2.5 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
 
 function Mascot({ size = 40 }: { size?: number }) {
   const h = size;
@@ -83,7 +83,7 @@ export default function OnboardingPage() {
   const stepIndex = step === "install" ? 0 : step === "waiting" ? 1 : 2;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-16 dark:bg-neutral-950">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] px-4 py-16 ">
       <div className="w-full max-w-md">
 
         {/* Header */}
@@ -91,7 +91,7 @@ export default function OnboardingPage() {
           <div className="flex items-center gap-3">
             <Mascot size={36} />
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-widest text-neutral-400">monofarm</p>
+              <p className="text-[11px] font-medium uppercase tracking-widest text-[var(--text-faint)]">monofarm</p>
               <h1 className="text-lg font-bold leading-tight">Налаштування агента</h1>
             </div>
           </div>
@@ -99,37 +99,37 @@ export default function OnboardingPage() {
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
               <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === stepIndex ? "w-5 bg-neutral-900 dark:bg-neutral-100"
+                i === stepIndex ? "w-5 bg-[var(--surface)] "
                 : i < stepIndex ? "w-1.5 bg-neutral-400"
-                                : "w-1.5 bg-neutral-200 dark:bg-neutral-700"
+                                : "w-1.5 bg-[var(--surface-hi)] "
               }`}/>
             ))}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-sm  ">
 
           {/* ── Step: install ── */}
           {step === "install" && (
             <div className="space-y-5">
               <div>
                 <p className="text-sm font-semibold">Встанови локального агента</p>
-                <p className="mt-1 text-xs text-neutral-500">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   Агент запускається на PC або Raspberry Pi у мережі принтерів і дає доступ до Bambu + Klipper принтерів через хмару.
                 </p>
               </div>
 
-              <div className="space-y-2 text-xs text-neutral-500">
+              <div className="space-y-2 text-xs text-[var(--text-muted)]">
                 <div className="flex gap-2">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-bold dark:bg-neutral-800">1</span>
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[10px] font-bold ">1</span>
                   <span>Запусти команду нижче на PC у мережі принтерів</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-bold dark:bg-neutral-800">2</span>
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[10px] font-bold ">2</span>
                   <span>Агент відкриє браузер і автоматично підключиться до твого акаунту</span>
                 </div>
                 <div className="flex gap-2">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-bold dark:bg-neutral-800">3</span>
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[10px] font-bold ">3</span>
                   <span>Потім поверніться сюди і натисніть «Далі»</span>
                 </div>
               </div>
@@ -142,24 +142,24 @@ export default function OnboardingPage() {
                       className={[
                         "rounded-md px-3 py-1 text-xs font-medium transition",
                         os === platform
-                          ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                          : "border border-neutral-200 text-neutral-500 hover:border-neutral-400 dark:border-neutral-700 dark:text-neutral-400",
+                          ? "bg-[var(--surface)] text-white  "
+                          : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
                       ].join(" ")}>
                       {platform === "windows" ? "Windows" : "Linux / macOS"}
                     </button>
                   ))}
                 </div>
                 <div className="relative">
-                  <pre className="overflow-x-auto rounded-lg bg-neutral-950 px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
+                  <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
                     {installCmd(os)}
                   </pre>
                   <button onClick={copy}
-                    className="absolute right-2 top-2 rounded bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400 transition hover:bg-neutral-700 hover:text-white">
+                    className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-neutral-700 hover:text-[var(--text-hi)]">
                     {copied ? "✓" : "Копіювати"}
                   </button>
                 </div>
                 {os === "windows" && (
-                  <p className="mt-1.5 text-[10px] text-neutral-400">
+                  <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
                     Запусти в PowerShell (не cmd). Після встановлення значок з'явиться в системному треї.
                   </p>
                 )}
@@ -181,17 +181,17 @@ export default function OnboardingPage() {
             <div className="space-y-5">
               <div>
                 <p className="text-sm font-semibold">Очікуємо підключення агента…</p>
-                <p className="mt-1 text-xs text-neutral-500">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   Переконайся що агент запущений на PC у мережі принтерів. Статус оновлюється автоматично.
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-4 dark:border-neutral-800 dark:bg-neutral-800/40">
+              <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4  ">
                 <span className="size-2.5 animate-pulse rounded-full bg-amber-400" />
-                <span className="text-sm text-neutral-600 dark:text-neutral-300">Очікування агента…</span>
+                <span className="text-sm text-[var(--text-muted)] ">Очікування агента…</span>
               </div>
 
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-[var(--text-faint)]">
                 Після запуску агент автоматично підключиться — ця сторінка оновиться.
               </p>
 
@@ -199,7 +199,7 @@ export default function OnboardingPage() {
                 <button onClick={() => setStep("install")} className={ghostBtn}>
                   ← Назад
                 </button>
-                <button onClick={() => router.replace("/dashboard")} className="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
+                <button onClick={() => router.replace("/dashboard")} className="text-xs text-[var(--text-faint)] hover:text-neutral-600 ">
                   Пропустити →
                 </button>
               </div>
@@ -217,7 +217,7 @@ export default function OnboardingPage() {
                 </div>
                 <div>
                   <p className="font-semibold">Агент підключений!</p>
-                  <p className="mt-1 text-sm text-neutral-500">
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
                     Тепер можна додавати принтери через Settings → Агент → Сканувати мережу.
                   </p>
                 </div>
@@ -234,7 +234,7 @@ export default function OnboardingPage() {
 
         </div>
 
-        <p className="mt-4 text-center text-xs text-neutral-400">
+        <p className="mt-4 text-center text-xs text-[var(--text-faint)]">
           Принтери додаються через{" "}
           <button onClick={() => router.replace("/settings")} className="underline hover:text-neutral-600">
             Settings → Агент
