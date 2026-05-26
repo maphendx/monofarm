@@ -64,7 +64,7 @@ function NavLink({ href, label, exact }: { href: string; label: string; exact?: 
       className={[
         "flex items-center rounded-md px-3 py-1.5 text-sm transition-colors",
         active
-          ? "bg-cyan-500/10 font-medium text-[var(--accent)]  "
+          ? "bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)]  "
           : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]  dark:hover:bg-white/5 ",
       ].join(" ")}
     >

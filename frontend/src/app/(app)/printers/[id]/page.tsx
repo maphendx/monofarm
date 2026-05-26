@@ -71,7 +71,7 @@ function CameraCard({ printer }: { printer: Printer }) {
           </svg>
           <span className="text-xs">Камера недоступна</span>
           <button onClick={() => { setError(false); setLoaded(false); }}
-            className="text-[11px] text-[var(--text-muted)] underline hover:text-neutral-300">
+            className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
             Повторити
           </button>
         </div>
@@ -87,7 +87,7 @@ function CameraCard({ printer }: { printer: Printer }) {
       )}
       {loaded && !error && (
         <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] backdrop-blur-sm">
-          <span className="size-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--state-error)" }} />
           LIVE
         </span>
       )}
@@ -150,7 +150,7 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
 
                 <div className="flex items-center gap-1.5">
                   <span className={`font-mono text-sm font-bold tabular-nums ${
-                    heating ? "text-orange-500 dark:text-orange-400" : "text-[var(--text)] "
+                    heating ? "text-[var(--state-warn)]" : "text-[var(--text)] "
                   }`}>
                     {Math.round(r.current!)}°
                   </span>
@@ -172,7 +172,7 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
                     className={[
                       "w-14 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-right font-mono text-sm tabular-nums outline-none ",
                       isMoonraker
-                        ? "text-[var(--accent)]  border border-transparent focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 cursor-text"
+                        ? "text-[var(--accent)]  border border-transparent focus:border-[rgba(34,211,238,.5)] focus:ring-1 focus:ring-[rgba(34,211,238,.3)] cursor-text"
                         : "text-[var(--text-faint)] cursor-default",
                     ].join(" ")}
                   />
@@ -184,8 +184,8 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
                   const filled = (i / 20) * 100 < pct;
                   return (
                     <div key={i} className={`h-1 flex-1 rounded-sm transition-colors duration-300 ${
-                      filled ? pct > 90 ? "bg-red-500" : pct > 70 ? "bg-orange-400" : "bg-orange-300"
-                             : "bg-[var(--surface-hi)] "
+                      filled ? pct > 90 ? "bg-[var(--state-error)]" : pct > 70 ? "bg-[var(--state-warn)]" : "bg-[var(--accent)]"
+                             : "bg-[var(--surface-hi)]"
                     }`} />
                   );
                 })}
@@ -314,10 +314,10 @@ function ControlPanel({ printer }: { printer: Printer }) {
   );
 
   const SPEED_COLORS = [
-    "border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
-    "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300",
-    "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300",
-    "border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300",
+    "border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+    "border-[var(--state-print)] bg-[rgba(56,189,248,.10)] text-[var(--state-print)] hover:bg-[rgba(56,189,248,.15)]",
+    "border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)]",
+    "border-[var(--state-error)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)]",
   ];
 
   return (
@@ -472,11 +472,11 @@ function ControlPanel({ printer }: { printer: Printer }) {
             {utilBtn("Мотори вимк", "M84", "motors-off", "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18")}
             {utilBtn("Вент увімк", "M106 S255", "fan-on", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
             {utilBtn("Вент вимк", "M107", "fan-off", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
-            {utilBtn("Охолодити", "M104 S0\nM140 S0", "cool-down", "M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "text-blue-600 dark:text-blue-400")}
+            {utilBtn("Охолодити", "M104 S0\nM140 S0", "cool-down", "M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "text-[var(--accent)]")}
           </div>
         </div>
 
-        {err && <p className="text-xs text-red-500 dark:text-red-400">{err}</p>}
+        {err && <p className="text-xs text-[var(--state-error)]">{err}</p>}
       </div>
     </div>
   );
@@ -519,14 +519,14 @@ function PrintStatusCard({
   }
 
   const stateBarColor = {
-    printing: "bg-blue-500", ok: "bg-emerald-500", warn: "bg-amber-400",
-    bad: "bg-red-500", idle: "bg-neutral-300 ", muted: "bg-[var(--surface-hi)]",
-  }[tone] ?? "bg-neutral-300";
+    printing: "var(--state-print)", ok: "var(--state-ok)", warn: "var(--state-warn)",
+    bad: "var(--state-error)", idle: "var(--state-idle)", muted: "var(--surface-hi)",
+  }[tone] ?? "var(--state-idle)";
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
       {/* State bar — 3px color accent across top */}
-      <div className={`h-0.5 w-full ${stateBarColor}`} />
+      <div className="h-0.5 w-full" style={{ background: stateBarColor }} />
 
       <div className="p-5">
         {/* State row */}
@@ -535,7 +535,7 @@ function PrintStatusCard({
             <StateIcon state={printer.state} size={16} />
             <span className="text-sm font-semibold">{stateLabel(printer.state)}</span>
             {printer.flags?.map((f) => (
-              <span key={f} className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              <span key={f} className="badge badge-warn text-[10px]">
                 {flagLabel(f)}
               </span>
             ))}
@@ -545,11 +545,11 @@ function PrintStatusCard({
 
         {/* Error strip */}
         {printer.error_msg && (
-          <div className="mb-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900/50 dark:bg-red-900/10">
-            <svg className="mt-0.5 shrink-0 text-red-500" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2.5">
+            <svg className="mt-0.5 shrink-0 text-[var(--state-error)]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            <p className="text-xs text-red-700 dark:text-red-400">{printer.error_msg}</p>
+            <p className="text-xs text-[var(--state-error)]">{printer.error_msg}</p>
           </div>
         )}
 
@@ -566,18 +566,18 @@ function PrintStatusCard({
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <span className="font-mono text-[10px] text-[var(--text-faint)]">прогрес</span>
-                  <span className="font-mono text-sm font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                  <span className="font-mono text-sm font-bold tabular-nums text-[var(--state-print)]">
                     {printer.progress_pct}%
                   </span>
                 </div>
                 <div className="relative h-3 overflow-hidden rounded-sm bg-[var(--surface-hi)] ">
                   <div
-                    className="h-full bg-blue-500 transition-[width] duration-1000 ease-linear"
-                    style={{ width: `${printer.progress_pct}%` }}
+                    className="h-full transition-[width] duration-1000 ease-linear"
+                    style={{ background: "var(--state-print)", width: `${printer.progress_pct}%` }}
                   />
                   {/* Tick marks */}
                   {[25, 50, 75].map((t) => (
-                    <div key={t} className="absolute inset-y-0 w-px bg-[var(--bg-elevated)]/30 dark:bg-black/20" style={{ left: `${t}%` }} />
+                    <div key={t} className="absolute inset-y-0 w-px bg-[var(--border)]" style={{ left: `${t}%` }} />
                   ))}
                 </div>
               </div>
@@ -590,24 +590,24 @@ function PrintStatusCard({
           <div className="flex flex-wrap gap-2">
             {isPrinting && (
               <button onClick={() => act("pause")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-amber-100 disabled:opacity-40 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-300">
+                className="flex items-center gap-1.5 rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-4 py-2 text-xs font-medium text-[var(--state-warn)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(245,158,11,.15)] disabled:opacity-40">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                 {busy === "pause" ? "…" : "Пауза"}
               </button>
             )}
             {isPaused && (
               <button onClick={() => act("resume")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-emerald-300">
+                className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 {busy === "resume" ? "…" : "Продовжити"}
               </button>
             )}
             {(isPrinting || isPaused) && (
               confirmCancel ? (
-                <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900/50 dark:bg-red-900/10">
-                  <span className="text-xs text-red-700 dark:text-red-300">Зупинити друк?</span>
+                <div className="flex items-center gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2">
+                  <span className="text-xs text-[var(--state-error)]">Зупинити друк?</span>
                   <button onClick={() => act("cancel")} disabled={busy !== null}
-                    className="text-xs font-bold text-red-700 hover:underline disabled:opacity-40 dark:text-red-400">
+                    className="text-xs font-bold text-[var(--state-error)] hover:underline disabled:opacity-40">
                     {busy === "cancel" ? "…" : "Так"}
                   </button>
                   <span className="text-[var(--text-muted)]">·</span>
@@ -615,7 +615,7 @@ function PrintStatusCard({
                 </div>
               ) : (
                 <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
-                  className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-xs font-medium text-red-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-red-100 disabled:opacity-40 dark:border-red-900/50 dark:bg-red-900/10 dark:text-red-300">
+                  className="flex items-center gap-1.5 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-4 py-2 text-xs font-medium text-[var(--state-error)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(239,68,68,.15)] disabled:opacity-40">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                   Зупинити
                 </button>
@@ -623,7 +623,7 @@ function PrintStatusCard({
             )}
             {isOperational && (
               <button onClick={() => act("clear-bed")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-700 shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/50 dark:bg-emerald-900/10 dark:text-emerald-300">
+                className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 {busy === "clear-bed" ? "…" : "Стіл очищено"}
               </button>
@@ -644,7 +644,7 @@ function PrintStatusCard({
           </div>
         )}
 
-        {err && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{err}</p>}
+        {err && <p className="mt-3 text-xs text-[var(--state-error)]">{err}</p>}
       </div>
     </div>
   );
@@ -900,7 +900,7 @@ function ColorPaletteModal({
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); startEdit(c); }}
-                        className="flex size-4 items-center justify-center rounded-full bg-neutral-600 text-[8px] text-white"
+                        className="flex size-4 items-center justify-center rounded-full bg-[var(--surface-2)] text-[8px] text-[var(--text-muted)]"
                         title="Редагувати"
                       >
                         ✎
@@ -908,7 +908,7 @@ function ColorPaletteModal({
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); deleteColor(c.id); }}
-                        className="flex size-4 items-center justify-center rounded-full bg-red-500 text-[8px] text-white"
+                        className="flex size-4 items-center justify-center rounded-full bg-[var(--state-error)] text-[8px] text-white"
                         title="Видалити"
                       >
                         ✕
@@ -939,7 +939,7 @@ function ColorPaletteModal({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Назва кольору…"
-              className="flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
+              className="flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)]"
               onKeyDown={(e) => e.key === "Enter" && createColor()}
             />
             <button
@@ -1001,12 +1001,12 @@ function AmsDisplay({
                   className={[
                     "relative flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 transition-all",
                     isActive
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-sm shadow-blue-500/20"
+                      ? "border-[var(--state-print)] bg-[rgba(56,189,248,.08)] shadow-sm"
                       : "border-[var(--border)] ",
                   ].join(" ")}
                 >
                   {isActive && (
-                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white leading-none" style={{ background: "var(--state-print)" }}>
                       друкує
                     </span>
                   )}
@@ -1040,15 +1040,15 @@ function AmsDisplay({
         return (
           <div key={s.slot} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-4 py-3 ">
             <div
-              className={`size-6 shrink-0 rounded-full ring-2 ${isActive ? "ring-blue-500" : "ring-black/10 dark:ring-white/10"}`}
-              style={{ backgroundColor: hex }}
+              className="size-6 shrink-0 rounded-full ring-2"
+            style={{ boxShadow: isActive ? `0 0 0 2px var(--state-print)` : undefined, backgroundColor: hex }}
             />
             <div className="min-w-0">
               <div className="text-xs font-semibold">{s.type || "—"}</div>
               {s.brand && <div className="text-[10px] text-[var(--text-faint)]">{s.brand}</div>}
             </div>
             <span className="ml-auto text-[10px] text-[var(--text-faint)]">Зовнішня</span>
-            {isActive && <span className="rounded-full bg-blue-500 px-2 py-0.5 text-[9px] font-bold text-white">друкує</span>}
+            {isActive && <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-white" style={{ background: "var(--state-print)" }}>друкує</span>}
           </div>
         );
       })}
@@ -1157,8 +1157,8 @@ function LoadedFilamentsCard({
 
         {/* ── status / action bar ── */}
         <div className="mt-3 flex items-center gap-3">
-          {saved && <span className="text-sm text-emerald-600 dark:text-emerald-400">✓ Збережено</span>}
-          {err && <span className="text-sm text-red-500">{err}</span>}
+          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+          {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
           {canEdit && !editing && (
             <button
               type="button"
@@ -1246,7 +1246,7 @@ function LoadedFilamentsCard({
                 <button
                   type="button"
                   onClick={() => removeSlot(i)}
-                  className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  className="ml-auto rounded px-2 py-1 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
                 >
                   ✕
                 </button>
@@ -1258,7 +1258,7 @@ function LoadedFilamentsCard({
               <button
                 type="button"
                 onClick={addSlot}
-                className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-neutral-500 hover:text-[var(--text)]  dark:hover:border-neutral-500"
+                className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] "
               >
                 + Додати слот
               </button>
@@ -1280,7 +1280,7 @@ function LoadedFilamentsCard({
                 Скасувати
               </button>
 
-              {err && <span className="text-sm text-red-500">{err}</span>}
+              {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
             </div>
           </div>
         )}
@@ -1379,7 +1379,7 @@ function SettingsCard({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
+              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]"
             />
           </label>
 
@@ -1406,7 +1406,7 @@ function SettingsCard({
                   value={bambuIp}
                   onChange={(e) => setBambuIp(e.target.value)}
                   placeholder="192.168.1.100"
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]"
                 />
               </div>
             </label>
@@ -1420,7 +1420,7 @@ function SettingsCard({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="http://192.168.31.210"
-                className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
+                className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]"
               />
             </label>
           )}
@@ -1434,23 +1434,23 @@ function SettingsCard({
           >
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
-          {saved && <span className="text-sm text-emerald-600 dark:text-emerald-400">✓ Збережено</span>}
-          {err && <span className="text-sm text-red-600 dark:text-red-400">{err}</span>}
+          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+          {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
 
           <div className="flex-1" />
 
           {true && (
             confirmDelete ? (
-              <div className="flex items-center gap-2 rounded-lg border border-red-300 px-3 py-1.5 dark:border-red-900">
-                <span className="text-sm text-red-700 dark:text-red-400">Видалити {printer.name}?</span>
-                <button type="button" onClick={deletePrinter} className="rounded px-2 py-0.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-950/40">Так</button>
-                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-2 py-0.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Ні</button>
+              <div className="flex items-center gap-2 rounded-lg border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-1.5">
+                <span className="text-sm text-[var(--state-error)]">Видалити {printer.name}?</span>
+                <button type="button" onClick={deletePrinter} className="rounded px-2 py-0.5 text-sm font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.12)]">Так</button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="rounded px-2 py-0.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">Ні</button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={() => setConfirmDelete(true)}
-                className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+                className="rounded-lg border border-[var(--state-error)] px-4 py-2 text-sm text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
               >
                 Видалити принтер
               </button>
@@ -1510,7 +1510,7 @@ export default function PrinterPage() {
         <Link href="/printers" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-hi)] ">
           ← Назад
         </Link>
-        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <div className="rounded-lg border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-4 py-3 text-sm text-[var(--state-error)]">
           {error ?? "Принтер не знайдено"}
         </div>
       </div>

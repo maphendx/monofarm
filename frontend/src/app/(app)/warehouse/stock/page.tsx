@@ -37,9 +37,9 @@ export default function StockPage() {
   });
 
   const whColor = (name: string) => {
-    if (name.includes("Готова")) return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
-    if (name.includes("Сировина")) return "bg-blue-500/10 text-blue-700 dark:text-blue-400";
-    return "bg-red-500/10 text-red-700 dark:text-red-400";
+    if (name.includes("Готова")) return "badge badge-ok";
+    if (name.includes("Сировина")) return "badge badge-print";
+    return "badge badge-error";
   };
 
   const lowCount = stock.filter((s) => parseFloat(s.available) < 10).length;
@@ -64,7 +64,7 @@ export default function StockPage() {
         {lowCount > 0 && (
           <button onClick={() => setShowLow((v) => !v)}
             className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
-              showLow ? "bg-amber-600 text-white" : "border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400",
+              showLow ? "bg-[var(--state-warn)] text-white" : "border border-[rgba(245,158,11,.3)] text-[var(--state-warn)]",
             ].join(" ")}>
             ⚠ Мало залишків ({lowCount})
           </button>
@@ -94,10 +94,10 @@ export default function StockPage() {
                 const avail = parseFloat(s.available);
                 const isLow = avail < 10;
                 return (
-                  <tr key={s.id} className={isLow ? "bg-amber-50/40 dark:bg-amber-950/10" : "hover:bg-[var(--surface-hi)] "}>
+                  <tr key={s.id} className={isLow ? "bg-[rgba(245,158,11,.05)]" : "hover:bg-[var(--surface-hi)]"}>
                     <td className="px-4 py-3 font-medium">
                       {s.product_name}
-                      {isLow && <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">⚠</span>}
+                      {isLow && <span className="ml-2 text-xs text-[var(--state-warn)]">⚠</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs ${whColor(s.warehouse_name)}`}>
@@ -109,7 +109,7 @@ export default function StockPage() {
                       {parseFloat(s.reserved_qty) > 0 ? parseFloat(s.reserved_qty).toFixed(0) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
-                      <span className={avail < 0 ? "text-red-500" : isLow ? "text-amber-600 dark:text-amber-400" : ""}>
+                      <span className={avail < 0 ? "text-[var(--state-error)]" : isLow ? "text-[var(--state-warn)]" : ""}>
                         {avail.toFixed(0)}
                       </span>
                     </td>

@@ -41,15 +41,15 @@ function FilamentCard({
 }) {
   const pct = Math.min(100, Math.round((f.grams_remaining / FULL_SPOOL_G) * 100));
   const isLow = f.is_low;
-  const barColor = isLow ? "#f59e0b" : pct < 20 ? "#f97316" : "#3b82f6";
+  const barColor = isLow ? "var(--state-warn)" : pct < 20 ? "var(--state-error)" : "var(--accent)";
 
   return (
     <div className={[
       "group flex flex-col rounded-xl border bg-[var(--bg-elevated)]  overflow-hidden transition hover:shadow-md cursor-pointer",
       selected
-        ? "border-blue-500 ring-2 ring-blue-500/20"
+        ? "border-[var(--accent)] ring-2 ring-[rgba(34,211,238,.2)]"
         : isLow
-          ? "border-amber-300 dark:border-amber-700"
+          ? "border-[rgba(245,158,11,.5)]"
           : "border-[var(--border)] ",
     ].join(" ")} onClick={onSelect}>
 
@@ -64,7 +64,7 @@ function FilamentCard({
           className={[
             "absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded border transition",
             selected
-              ? "border-blue-500 bg-blue-500 text-white"
+              ? "border-[var(--accent)] bg-[var(--accent)] text-white"
               : "border-[var(--border-strong)] bg-[var(--bg-elevated)] opacity-0 group-hover:opacity-100  ",
           ].join(" ")}
           onClick={e => { e.stopPropagation(); onSelect(); }}
@@ -90,9 +90,7 @@ function FilamentCard({
 
         {/* low badge */}
         {isLow && (
-          <span className="absolute bottom-2 left-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-            мало
-          </span>
+          <span className="badge badge-warn absolute bottom-2 left-2 text-[10px]">мало</span>
         )}
       </div>
 
@@ -170,7 +168,7 @@ function FilamentCard({
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onDelete(); }}
-              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600  "
+              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]  "
               title="Видалити"
             >
               ✕
@@ -262,7 +260,7 @@ function FilamentFormModal({
     } finally { setBusy(false); }
   }
 
-  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-500  ";
+  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]  ";
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }} size="2xl"
@@ -316,7 +314,7 @@ function FilamentFormModal({
                       "flex flex-col items-center gap-1 rounded-lg border px-1.5 py-1.5 transition",
                       gramsTotal === g
                         ? "border-[var(--border-strong)] bg-[var(--bg)]  "
-                        : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500",
+                        : "border-[var(--border)] hover:border-[var(--border-strong)] ",
                     ].join(" ")}>
                     <div style={{ width: `${20 + (g / 1200) * 16}px`, height: `${20 + (g / 1200) * 16}px` }}>
                       <SpoolSVG hexColor={hexColor || "#9ca3af"} />
@@ -430,7 +428,7 @@ function FilamentFormModal({
           </div>
         </div>
 
-        {error && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="mt-3 text-xs text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -499,7 +497,7 @@ function AdjustModal({
             <div className="mt-0.5 text-xl font-semibold tabular-nums">
               {delta ? Math.max(0, previewGrams) : filament.grams_remaining} г
               {delta && previewGrams < 0 && (
-                <span className="ml-2 text-sm font-normal text-red-500">не вистачає!</span>
+                <span className="ml-2 text-sm font-normal text-[var(--state-error)]">не вистачає!</span>
               )}
             </div>
             {filament.sku && <div className="mt-0.5 font-mono text-[10px] text-[var(--text-faint)]">{filament.sku}</div>}
@@ -510,8 +508,8 @@ function AdjustModal({
             <button key={d} type="button" onClick={() => setDirection(d)}
               className={["rounded-lg border py-2.5 text-sm font-medium transition", direction === d
                 ? d === "consume"
-                  ? "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
-                  : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                  ? "border-[var(--state-error)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)]"
+                  : "border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] text-[var(--state-ok)]"
                 : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
               ].join(" ")}>
               {d === "consume" ? "− Списати" : "+ Надійшло"}
@@ -528,7 +526,7 @@ function AdjustModal({
           <input type="text" value={reason} onChange={e => setReason(e.target.value)}
             placeholder="Нова котушка, витрата на замовлення #12…" className={inputCls} />
         </label>
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -601,7 +599,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div className="ml-0.5 hidden gap-0.5 group-hover:flex">
                     <button onClick={() => openEdit(c)} className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] ">✎</button>
-                    <button onClick={() => remove(c)} className="text-[10px] text-[var(--text-faint)] hover:text-red-600">✕</button>
+                    <button onClick={() => remove(c)} className="text-[10px] text-[var(--text-faint)] hover:text-[var(--state-error)]">✕</button>
                   </div>
                 )}
               </div>
@@ -633,7 +631,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
                 pattern="^#[0-9a-fA-F]{6}$" className="w-28 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--border-focus)] " />
             </div>
           </label>
-          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
         </form>
       </Modal>
     </div>
@@ -728,9 +726,7 @@ export default function FilamentPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-semibold">{t("filament.title")}</h1>
           {stats.low > 0 && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-              ⚠ {stats.low} мало
-            </span>
+            <span className="badge badge-warn">⚠ {stats.low} мало</span>
           )}
         </div>
         {canEdit && (
@@ -751,7 +747,7 @@ export default function FilamentPage() {
           ].map(({ label, value, warn }) => (
             <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3  ">
               <div className="text-xs text-[var(--text-muted)]">{label}</div>
-              <div className={["mt-0.5 text-xl font-semibold tabular-nums", warn ? "text-amber-600 dark:text-amber-400" : ""].join(" ")}>
+              <div className={["mt-0.5 text-xl font-semibold tabular-nums", warn ? "text-[var(--state-warn)]" : ""].join(" ")}>
                 {value}
               </div>
             </div>

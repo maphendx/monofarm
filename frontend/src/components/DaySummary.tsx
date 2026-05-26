@@ -68,7 +68,7 @@ export function DaySummary() {
             <div className="text-sm font-semibold">
               {tasksTodo}
               {tasksOverdue > 0 && (
-                <span className="ml-2 text-xs font-normal text-red-600 dark:text-red-400">
+                <span className="ml-2 text-xs font-normal text-[var(--state-error)]">
                   ⚠️ {tasksOverdue} прострочено
                 </span>
               )}
@@ -80,14 +80,14 @@ export function DaySummary() {
       {lowFilament > 0 && (
         <Link
           href="/filament"
-          className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 shadow-sm hover:border-amber-500 dark:border-amber-900 dark:bg-amber-950/20"
+          className="flex items-center gap-2 rounded-xl border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3 shadow-sm hover:border-[var(--state-warn)]"
         >
           <span className="text-xl">⚠️</span>
           <div>
-            <div className="text-xs text-amber-700 dark:text-amber-400">
+            <div className="text-xs text-[var(--state-warn)]">
               Пластик закінчується
             </div>
-            <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            <div className="text-sm font-semibold text-[var(--state-warn)]">
               {lowFilament}{" "}
               <span className="font-normal">{lowFilament === 1 ? "котушка" : "котушок"}</span>
             </div>

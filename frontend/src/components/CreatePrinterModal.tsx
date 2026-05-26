@@ -174,7 +174,7 @@ export function CreatePrinterModal({
           </>
         )}
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-[var(--state-error)]">{error}</p>
         )}
       </form>
     </Modal>

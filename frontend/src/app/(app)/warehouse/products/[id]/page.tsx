@@ -98,7 +98,7 @@ export default function ProductDetailPage() {
   }
 
   if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
-  if (!product) return <div className="text-sm text-red-500">Товар не знайдено</div>;
+  if (!product) return <div className="text-sm text-[var(--state-error)]">Товар не знайдено</div>;
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "overview",       label: "Огляд" },
@@ -159,7 +159,7 @@ export default function ProductDetailPage() {
           <button key={t.id} onClick={() => setTab(t.id)}
             className={["relative px-3 py-2 text-sm transition-colors",
               tab === t.id
-                ? "text-[var(--text-hi)]  after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-cyan-500"
+                ? "text-[var(--text-hi)]  after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[var(--accent)]"
                 : "text-[var(--text-muted)] hover:text-[var(--text)] ",
             ].join(" ")}>
             {t.label}
@@ -197,7 +197,7 @@ export default function ProductDetailPage() {
         ) : (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+              <span className="rounded-full bg-[rgba(34,197,94,.10)] px-2.5 py-0.5 text-xs font-medium text-[var(--state-ok)]  dark:text-[var(--state-ok)]">
                 v{spec.version} · {spec.name}
               </span>
               <button className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
@@ -224,7 +224,7 @@ export default function ProductDetailPage() {
                           <th className="px-4 py-2.5 text-right font-medium">Вартість</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+                      <tbody className="divide-y divide-[var(--border)]">
                         {spec.components.length === 0 ? (
                           <tr><td colSpan={5} className="px-4 py-4 text-center text-xs text-[var(--text-faint)]">Немає компонентів</td></tr>
                         ) : (
@@ -311,9 +311,9 @@ export default function ProductDetailPage() {
                   ) : (
                     <>
                       {[
-                        { label: "Матеріали",     value: parseFloat(costData.material_cost),     cls: "bg-blue-500",    pct: 0 },
-                        { label: "Електрика",     value: parseFloat(costData.electricity_cost),  cls: "bg-amber-400",   pct: 0 },
-                        { label: "Трудовитрати",  value: parseFloat(costData.labor_cost),        cls: "bg-emerald-500", pct: 0 },
+                        { label: "Матеріали",     value: parseFloat(costData.material_cost),     cls: "bg-[rgba(56,189,248,.08)]0",    pct: 0 },
+                        { label: "Електрика",     value: parseFloat(costData.electricity_cost),  cls: "bg-[var(--state-warn)]",   pct: 0 },
+                        { label: "Трудовитрати",  value: parseFloat(costData.labor_cost),        cls: "bg-[rgba(34,197,94,.08)]0", pct: 0 },
                         { label: "Постпроцесинг", value: parseFloat(costData.other_cost),        cls: "bg-violet-500",  pct: 0 },
                       ].map((row) => {
                         const total = parseFloat(costData.total);
@@ -346,7 +346,7 @@ export default function ProductDetailPage() {
                             {margin != null && (
                               <div className="mt-2 flex items-center justify-between">
                                 <span className="text-sm text-[var(--text-muted)]">Маржа</span>
-                                <span className={`text-sm font-semibold ${margin >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                                <span className={`text-sm font-semibold ${margin >= 50 ? "text-[var(--state-ok)]" : "text-[var(--state-warn)]"}`}>
                                   {margin.toFixed(1)}% {margin >= 50 ? "🟢" : "🟡"}
                                 </span>
                               </div>

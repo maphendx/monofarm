@@ -297,7 +297,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
         type="button"
         onClick={show}
         title="Показати помічника"
-        className="fixed bottom-4 right-4 z-[35] size-5 rounded-full bg-cyan-500/25 opacity-30 transition-opacity hover:opacity-100"
+        className="fixed bottom-4 right-4 z-[35] size-5 rounded-full bg-[rgba(56,189,248,.08)] opacity-30 transition-opacity hover:opacity-100"
         aria-label="Показати помічника"
       />
     );
@@ -338,10 +338,10 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
           </div>
 
           {hasAlert && (
-            <div className="flex items-center gap-1 rounded-full bg-red-500/20 px-1.5 py-px text-[9px] leading-none text-red-300 ring-1 ring-red-500/20">
+            <div className="flex items-center gap-1 rounded-full bg-[rgba(239,68,68,.08)] px-1.5 py-px text-[9px] leading-none text-[var(--state-error)] ring-1 ring-[rgba(239,68,68,.2)]">
               <span className="relative flex size-2 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex size-2 rounded-full bg-red-500" />
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--state-error)] opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-[var(--state-error)]" />
               </span>
               {needsAttentionPrinterIds(printers).length}
             </div>

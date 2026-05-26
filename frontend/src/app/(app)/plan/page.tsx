@@ -313,13 +313,13 @@ export default function PlanPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">
           {error}
         </div>
       )}
 
       {distributeResult && (
-        <div className="rounded-md border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-300">
+        <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
           Розподілено: {distributeResult.sent.length} завдань
           {distributeResult.skipped.length > 0 &&
             ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map((s) => s.reason).join(", ")})`}
@@ -682,7 +682,7 @@ function QueueRow({
             {canEdit && (
               <button
                 onClick={() => { setMenuOpen(false); onDelete(); }}
-                className="w-full px-3 py-1.5 text-left text-sm text-red-400 hover:bg-[var(--surface-hi)]"
+                className="w-full px-3 py-1.5 text-left text-sm text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
               >
                 Видалити
               </button>

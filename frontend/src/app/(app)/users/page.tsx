@@ -16,9 +16,9 @@ const ROLE_LABEL: Record<UserRole, string> = {
 };
 
 const ROLE_COLOR: Record<UserRole, string> = {
-  admin: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  operator: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  manager: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  admin: "badge badge-accent",
+  operator: "badge badge-print",
+  manager: "badge badge-warn",
 };
 
 interface FormState {
@@ -141,7 +141,7 @@ function UserFormModal({
             ))}
           </select>
         </label>
-        {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -235,7 +235,7 @@ export default function UsersPage() {
                 </td>
                 <td className="px-4 py-3 text-xs">
                   {u.is_active ? (
-                    <span className="text-emerald-600 dark:text-emerald-400">● Активний</span>
+                    <span className="text-[var(--state-ok)]">● Активний</span>
                   ) : (
                     <span className="text-[var(--text-faint)]">○ Деактивований</span>
                   )}
@@ -244,7 +244,7 @@ export default function UsersPage() {
                   {u.telegram_chat_id ? (
                     <button
                       onClick={() => unlinkTelegram(u)}
-                      className="text-blue-600 hover:underline dark:text-blue-400"
+                      className="text-[var(--accent)] hover:underline"
                       title="Відвʼязати"
                     >
                       ✓ Привʼязано
@@ -271,7 +271,7 @@ export default function UsersPage() {
                           {u.is_active ? "⏸" : "▶"}
                         </button>
                         <button onClick={() => remove(u)}
-                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 "
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]"
                           title="Видалити">✕</button>
                       </>
                     )}

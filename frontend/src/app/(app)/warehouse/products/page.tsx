@@ -69,7 +69,7 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-const INPUT = "w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]    dark:focus:border-neutral-500";
+const INPUT = "w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]   ";
 const SEC   = "flex flex-col gap-3.5 px-6 py-4";
 const HR    = "border-[var(--border)] ";
 
@@ -89,7 +89,7 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
   }
 
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-strong)]   dark:focus-within:border-neutral-500">
+    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-strong)]  ">
       {value.map((t) => (
         <span key={t} className="flex items-center gap-1 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
           {t}
@@ -101,7 +101,7 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
         value={input} onChange={(e) => setInput(e.target.value)}
         onKeyDown={onKey} onBlur={() => add(input)}
         placeholder={value.length === 0 ? "Категорія, Enter щоб додати…" : ""}
-        className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-neutral-400"
+        className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
       />
     </div>
   );
@@ -232,7 +232,7 @@ function ProductModal({
             </FormRow>
           </div>
 
-          {err && <p className="px-6 pb-4 text-sm text-red-600 dark:text-red-400">{err}</p>}
+          {err && <p className="px-6 pb-4 text-sm text-[var(--state-error)]">{err}</p>}
         </form>
 
         {/* Footer */}
@@ -390,7 +390,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
           {loading ? (
             <div className="px-6 py-10 text-center text-sm text-[var(--text-faint)]">Завантаження…</div>
           ) : !spec ? null : (
-            <div className="space-y-0 divide-y divide-[var(--border)] dark:divide-neutral-800">
+            <div className="space-y-0 divide-y divide-[var(--border)]">
 
               {/* ── Materials ── */}
               <div className="px-6 py-5">
@@ -417,7 +417,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                           <th className="w-8 px-2 py-2.5" />
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+                      <tbody className="divide-y divide-[var(--border)]">
                         {spec.components.map((c) => (
                           <tr key={c.id} className="group">
                             <td className="px-4 py-2.5">{c.name}</td>
@@ -427,7 +427,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                             <td className="px-3 py-2.5 text-right text-[var(--text-faint)]">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
                             <td className="px-2 py-2.5">
                               <button onClick={() => deleteComponent(c.id)}
-                                className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
+                                className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]  transition-opacity">
                                 −
                               </button>
                             </td>
@@ -463,7 +463,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                             <td className="px-2 py-2">
                               <form onSubmit={submitComponent} className="flex gap-1">
                                 <button type="submit" disabled={cBusy || !cName.trim() || !cQty}
-                                  className="flex size-6 items-center justify-center rounded bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40 text-sm">
+                                  className="flex size-6 items-center justify-center rounded bg-[rgba(34,197,94,.08)]0 text-white hover:bg-[var(--state-ok)] disabled:opacity-40 text-sm">
                                   ✓
                                 </button>
                               </form>
@@ -505,7 +505,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                         </div>
                       </div>
                       <button onClick={() => deleteOperation(op.id)}
-                        className="opacity-0 group-hover:opacity-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-opacity">
+                        className="opacity-0 group-hover:opacity-100 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]  transition-opacity">
                         −
                       </button>
                     </div>
@@ -635,7 +635,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
 
 function SortIndicator({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <span className="ml-1 text-[var(--text-muted)] ">↕</span>;
-  return <span className="ml-1 text-cyan-500">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  return <span className="ml-1 text-[var(--accent)]">{sortDir === "asc" ? "↑" : "↓"}</span>;
 }
 
 function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
@@ -644,7 +644,7 @@ function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
 }) {
   return (
     <th onClick={() => onSort(col)}
-      className={`cursor-pointer select-none px-4 py-3 font-medium hover:text-neutral-800  ${className}`}>
+      className={`cursor-pointer select-none px-4 py-3 font-medium hover:text-[var(--text)]  ${className}`}>
       {children}<SortIndicator col={col} sortKey={sortKey} sortDir={sortDir} />
     </th>
   );
@@ -789,7 +789,7 @@ export default function ProductsPage() {
               </svg>
               <input type="search" placeholder="Назва або артикул…"
                 value={search} onChange={(e) => setSearch(e.target.value)}
-                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-[var(--border-strong)]   " />
+                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]   " />
             </div>
             <div className="flex flex-wrap gap-1">
               {allCategories.map((c) => {
@@ -801,12 +801,12 @@ export default function ProductsPage() {
                     onClick={() => setCategory(c)}
                     className={color ? [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors",
-                      active ? "ring-2 ring-offset-1 ring-neutral-900 " : "opacity-70 hover:opacity-100",
+                      active ? "ring-2 ring-offset-1 ring-[var(--bg)] " : "opacity-70 hover:opacity-100",
                     ].join(" ") : [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
                       active
                         ? "bg-[var(--accent)] text-white border-[var(--border-strong)]   "
-                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]   dark:hover:border-neutral-500",
+                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
                     ].join(" ")}
                     style={color ? { background: color, color: "#111" } : undefined}
                   >
@@ -825,15 +825,15 @@ export default function ProductsPage() {
 
         {/* Bulk bar */}
         {selected.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-800/50 dark:bg-amber-950/20">
-            <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Вибрано {selected.size}</span>
+          <div className="flex items-center gap-3 rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-2.5  ">
+            <span className="text-sm font-medium text-[var(--state-warn)]">Вибрано {selected.size}</span>
             <button onClick={() => setSelected(new Set())}
-              className="text-sm text-amber-600 underline underline-offset-2 hover:text-amber-800 dark:text-amber-400">
+              className="text-sm text-[var(--state-warn)] underline underline-offset-2 hover:text-[var(--state-warn)] dark:text-[var(--state-warn)]">
               Скасувати
             </button>
             <div className="ml-auto">
               <button onClick={deleteSelected} disabled={deleting}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50">
+                className="rounded-md bg-[var(--state-error)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50">
                 {deleting ? "Деактивую…" : "Деактивувати"}
               </button>
             </div>
@@ -861,7 +861,7 @@ export default function ProductsPage() {
                   <th className="w-20 px-3 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+              <tbody className="divide-y divide-[var(--border)]">
                 {paginated.length === 0 ? (
                   <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
                     {search || category !== "Всі" ? "Нічого не знайдено" : "Номенклатури ще немає"}
@@ -879,7 +879,7 @@ export default function ProductsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <button onClick={() => setEditProduct(p)}
-                          className="text-left font-medium text-[var(--text-hi)] hover:text-cyan-600  dark:hover:text-cyan-400">
+                          className="text-left font-medium text-[var(--text-hi)] hover:text-[var(--accent)] ">
                           {p.name}
                         </button>
                       </td>
@@ -907,8 +907,8 @@ export default function ProductsPage() {
                       <td className="px-4 py-3 text-right">
                         <span className={[
                           "font-mono text-sm tabular-nums",
-                          isOut ? "font-semibold text-red-600 dark:text-red-400"
-                            : avail < 5 ? "text-amber-600 dark:text-amber-400"
+                          isOut ? "font-semibold text-[var(--state-error)]"
+                            : avail < 5 ? "text-[var(--state-warn)]"
                             : "text-[var(--text)] ",
                         ].join(" ")}>{Math.round(avail)}</span>
                       </td>
@@ -917,9 +917,9 @@ export default function ProductsPage() {
                       <td className="px-4 py-3 text-right text-sm">
                         {margin !== null ? (
                           <span className={["font-medium tabular-nums",
-                            margin >= 50 ? "text-emerald-600 dark:text-emerald-400"
-                              : margin >= 20 ? "text-amber-600 dark:text-amber-400"
-                              : "text-red-600 dark:text-red-400",
+                            margin >= 50 ? "text-[var(--state-ok)]"
+                              : margin >= 20 ? "text-[var(--state-warn)]"
+                              : "text-[var(--state-error)]",
                           ].join(" ")}>{margin.toFixed(0)}%</span>
                         ) : "—"}
                       </td>

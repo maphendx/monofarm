@@ -20,19 +20,19 @@ const KIND_OPTIONS: { value: PrinterKind; label: string; desc: string }[] = [
 ];
 
 const KIND_BADGE: Record<string, string> = {
-  bambu:        "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  snapmaker_u1: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  other:        "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
+  bambu:        "badge badge-ok",
+  snapmaker_u1: "badge badge-accent",
+  other:        "badge badge-neutral",
 };
 
 const STATE_DOT: Record<string, string> = {
-  printing:    "bg-blue-500",
-  operational: "bg-emerald-500",
-  idle:        "bg-neutral-400",
-  paused:      "bg-amber-400",
-  error:       "bg-red-500",
-  offline:     "bg-neutral-300 ",
-  unknown:     "bg-neutral-300 ",
+  printing:    "bg-[var(--state-print)]",
+  operational: "bg-[var(--state-ok)]",
+  idle:        "bg-[var(--state-idle)]",
+  paused:      "bg-[var(--state-warn)]",
+  error:       "bg-[var(--state-error)]",
+  offline:     "bg-[var(--state-offline)]",
+  unknown:     "bg-[var(--state-offline)]",
 };
 
 interface PrinterForm {
@@ -70,7 +70,7 @@ function WizardTypeCard({ icon, title, desc, badge, onClick }: { icon: React.Rea
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{title}</span>
-          {badge && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{badge}</span>}
+          {badge && <span className="badge badge-ok text-[10px]">{badge}</span>}
         </div>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">{desc}</p>
       </div>
@@ -128,10 +128,10 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
         )}
         {step === "bambu" && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+            <div className="rounded-lg border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
               Bambu принтери підтягуються автоматично з вашого Bambu Cloud акаунту. Натисни синхронізувати — і вони з&apos;являться.
             </div>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2">
               <button onClick={syncBambu} disabled={syncing} className={primaryBtn}>{syncing ? "Синхронізація…" : "Синхронізувати Bambu Cloud"}</button>
               <button onClick={back} className={ghostBtn}>Назад</button>
@@ -142,7 +142,7 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
           <form onSubmit={(e) => { e.preventDefault(); createPrinter({ name: name.trim(), kind: "snapmaker_u1", moonraker_url: url.trim() }); }} className="space-y-3">
             <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Snapmaker J1s" className={inp} /></label>
             <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Moonraker URL</span><input type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.100:7125" className={inp} /><span className="mt-1 block text-[11px] text-[var(--text-faint)]">Знайди у Mainsail → Settings → адреса сервера</span></label>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2"><button type="submit" disabled={busy || !name || !url} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button><button type="button" onClick={back} className={ghostBtn}>Назад</button></div>
           </form>
         )}
@@ -150,13 +150,13 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
           <form onSubmit={(e) => { e.preventDefault(); createPrinter({ name: name.trim(), kind: "other" }); }} className="space-y-3">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs text-[var(--text-muted)]  ">Оператор вручну вказує стан принтера — що друкується, прогрес, статус.</div>
             <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Назва принтера</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ender-3 #1" className={inp} /></label>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2"><button type="submit" disabled={busy || !name} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button><button type="button" onClick={back} className={ghostBtn}>Назад</button></div>
           </form>
         )}
         {step === "done" && (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div className="flex size-12 items-center justify-center rounded-full bg-[rgba(34,197,94,.12)] text-[var(--state-ok)]"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
             <p className="font-medium">Принтер додано!</p>
             <div className="flex gap-2"><button onClick={() => { onDone(); onClose(); }} className={primaryBtn}>Готово</button><button onClick={() => { onDone(); setStep("choose"); setName(""); setUrl(""); setError(null); }} className={ghostBtn}>Ще один</button></div>
           </div>
@@ -206,7 +206,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           <span className="mb-2 block text-sm">Тип</span>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {KIND_OPTIONS.map((opt) => (
-              <button key={opt.value} type="button" onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition " + (form.kind === opt.value ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   " : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500")}>
+              <button key={opt.value} type="button" onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition " + (form.kind === opt.value ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   " : "border-[var(--border)] hover:border-[var(--border-strong)] ")}>
                 <p className="text-sm font-medium">{opt.label}</p>
                 <p className={`mt-0.5 text-xs leading-tight ${form.kind === opt.value ? "opacity-70" : "text-[var(--text-muted)]"}`}>{opt.desc}</p>
               </button>
@@ -214,7 +214,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           </div>
         </div>
         {isBambu && (<>
-          <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">Bambu-принтери автоматично синхронізуються з Bambu Cloud при наявності облікових даних в Налаштуваннях.</div>
+          <div className="rounded-lg bg-[rgba(34,197,94,.08)] px-3 py-2 text-xs text-[var(--state-ok)]">Bambu-принтери автоматично синхронізуються з Bambu Cloud при наявності облікових даних в Налаштуваннях.</div>
           <Field label="Serial / Dev ID" hint="(опційно)"><input type="text" value={form.bambu_dev_id} onChange={(e) => set("bambu_dev_id", e.target.value)} placeholder="01P09C321100123" className={inp} /></Field>
           <Field label="Access Code" hint={isEdit ? "(залиш порожнім = не змінювати)" : "(опційно)"}><input type="text" value={form.bambu_access_code} onChange={(e) => set("bambu_access_code", e.target.value)} placeholder="12345678" className={inp} /></Field>
           <Field label="IP адреса (LAN)" hint="(опційно)"><input type="text" value={form.bambu_dev_ip} onChange={(e) => set("bambu_dev_ip", e.target.value)} placeholder="192.168.1.50" className={inp} /></Field>
@@ -222,7 +222,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
         </>)}
         {hasUrl && (<Field label="Moonraker URL" hint="(опційно для ручного)"><input type="url" value={form.moonraker_url} onChange={(e) => set("moonraker_url", e.target.value)} placeholder="http://192.168.31.210" className={inp} /></Field>)}
         {isEdit && (<label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={(e) => set("is_active", e.target.checked)} className="h-4 w-4 rounded" /><span className="text-sm">Активний (показується на дашборді)</span></label>)}
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -308,11 +308,11 @@ export function PrintersManager() {
       </div>
 
       {isAdmin && discovered.length > 0 && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
-          <p className="mb-3 text-sm font-medium text-blue-800 dark:text-blue-300">Виявлено нові Bambu пристрої ({discovered.length})</p>
+        <div className="rounded-xl border border-[rgba(34,211,238,.2)] bg-[rgba(34,211,238,.06)] p-4">
+          <p className="mb-3 text-sm font-medium text-[var(--accent)]">Виявлено нові Bambu пристрої ({discovered.length})</p>
           <div className="flex flex-wrap gap-2">
             {discovered.map((d) => (
-              <div key={d.dev_id} className="flex items-center gap-3 rounded-lg border border-blue-200 bg-[var(--bg-elevated)] px-3 py-2 dark:border-blue-800 ">
+              <div key={d.dev_id} className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2">
                 <div><p className="text-sm font-medium">{d.name}</p><p className="text-xs text-[var(--text-faint)]">{d.model || d.dev_id}</p></div>
                 <button onClick={() => claimDevice(d.dev_id)} disabled={claiming === d.dev_id} className="btn btn-primary btn-sm disabled:opacity-50">{claiming === d.dev_id ? "…" : "Додати"}</button>
               </div>
@@ -356,13 +356,13 @@ export function PrintersManager() {
                         {confirmDeleteId === p.id ? (
                           <div className="flex items-center justify-end gap-2">
                             <span className="text-xs text-[var(--text-muted)]">Видалити?</span>
-                            <button onClick={() => handleDelete(p.id)} disabled={deleteId === p.id} className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20">{deleteId === p.id ? "…" : "Так"}</button>
+                            <button onClick={() => handleDelete(p.id)} disabled={deleteId === p.id} className="rounded px-2 py-1 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)] disabled:opacity-40">{deleteId === p.id ? "…" : "Так"}</button>
                             <button onClick={() => setConfirmDeleteId(null)} className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Ні</button>
                           </div>
                         ) : (
                           <div className="flex items-center justify-end gap-1">
                             <button onClick={() => { setEditing(p); setModalOpen(true); }} className="rounded p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  " title="Редагувати"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg></button>
-                            <button onClick={() => setConfirmDeleteId(p.id)} className="rounded p-1.5 text-[var(--text-faint)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400" title="Видалити"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            <button onClick={() => setConfirmDeleteId(p.id)} className="rounded p-1.5 text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]  dark:hover:text-[var(--state-error)]" title="Видалити"><svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                           </div>
                         )}
                       </td>

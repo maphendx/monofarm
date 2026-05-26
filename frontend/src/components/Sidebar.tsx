@@ -92,12 +92,8 @@ export function Sidebar({ user }: { user: User }) {
 
   const isAdmin = user.role === "admin";
 
-  const linkCls = (href: string) => [
-    "flex h-9 items-center gap-3 overflow-hidden rounded-lg px-2.5 text-sm transition-colors",
-    pathname === href || pathname.startsWith(href + "/")
-      ? "bg-[var(--accent-soft)] text-[var(--accent)]  "
-      : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]   ",
-  ].join(" ");
+  const linkCls = (href: string) =>
+    ["nav-link h-9 overflow-hidden", pathname === href || pathname.startsWith(href + "/") ? "active" : ""].join(" ");
 
   return (
     <aside className="group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[var(--border)] bg-[var(--bg-elevated)] transition-[width] duration-200 ease-out w-14 hover:w-[220px]  ">
@@ -204,7 +200,7 @@ export function Sidebar({ user }: { user: User }) {
               </div>
               <button
                 onClick={logout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-[var(--surface-hi)] dark:text-red-400 "
+                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
               >
                 <Icon d={ICONS.logout} className="size-3.5" />
                 {t("auth.logout")}

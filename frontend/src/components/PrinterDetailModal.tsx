@@ -57,7 +57,7 @@ function MoonrakerControls({
             type="button"
             onClick={() => act("pause")}
             disabled={busy !== null}
-            className="rounded-md bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+            className="rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)] disabled:opacity-50"
           >
             {busy === "pause" ? "…" : "Пауза"}
           </button>
@@ -67,7 +67,7 @@ function MoonrakerControls({
             type="button"
             onClick={() => act("resume")}
             disabled={busy !== null}
-            className="rounded-md bg-emerald-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-50"
           >
             {busy === "resume" ? "…" : "▶ Продовжити"}
           </button>
@@ -78,12 +78,12 @@ function MoonrakerControls({
             if (confirm("Скасувати поточний друк? Це не скасується автоматично.")) act("cancel");
           }}
           disabled={busy !== null}
-          className="col-span-2 rounded-md border border-red-300 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+          className="col-span-2 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)] disabled:opacity-50"
         >
           {busy === "cancel" ? "…" : "✕ Скасувати друк"}
         </button>
       </div>
-      {err && <p className="text-xs text-red-600 dark:text-red-400">{err}</p>}
+      {err && <p className="text-xs text-[var(--state-error)]">{err}</p>}
     </div>
   );
 }
@@ -137,7 +137,7 @@ function MoonrakerUrlEditor({
         />
       </label>
       <div className="flex justify-end gap-2 text-xs">
-        {saved && <span className="text-emerald-600 dark:text-emerald-400">✓ Збережено</span>}
+        {saved && <span className="text-[var(--state-ok)]">✓ Збережено</span>}
         <button
           onClick={save}
           disabled={busy || (url.trim() === (printer.moonraker_url ?? ""))}
@@ -292,7 +292,7 @@ export function PrinterDetailModal({
           {printer.flags.map((f) => (
             <span
               key={f}
-              className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900 dark:bg-amber-900/30 dark:text-amber-200"
+              className="badge badge-warn text-xs"
             >
               {flagLabel(f)}
             </span>
@@ -309,7 +309,7 @@ export function PrinterDetailModal({
               <button
                 type="button"
                 onClick={() => window.open(printer.moonraker_url!, "_blank", "noopener,noreferrer")}
-                className="rounded-md border border-blue-300 px-2 py-1 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                className="rounded-md border border-[var(--accent)] bg-[rgba(34,211,238,.08)] px-2 py-1 text-[var(--accent)] hover:bg-[rgba(34,211,238,.14)]"
               >
                 🔗 Відкрити в Mainsail
               </button>
@@ -342,8 +342,8 @@ export function PrinterDetailModal({
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
-                        className="h-full rounded-full bg-emerald-500"
-                        style={{ width: `${printer.progress_pct}%` }}
+                        className="h-full rounded-full"
+                        style={{ background: "var(--state-print)", width: `${printer.progress_pct}%` }}
                       />
                     </div>
                   </>
@@ -418,7 +418,7 @@ export function PrinterDetailModal({
                 <button
                   type="submit"
                   disabled={busy}
-                  className="w-full rounded-md bg-emerald-600 px-3 py-2 font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                  className="btn btn-primary w-full"
                 >
                   {busy ? "Зберігаю…" : "Зайняти"}
                 </button>
@@ -466,7 +466,7 @@ export function PrinterDetailModal({
         )}
 
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-[var(--state-error)]">{error}</p>
         )}
 
         {isManual && user.role === "admin" && onDeleted && (
@@ -484,7 +484,7 @@ export function PrinterDetailModal({
                   setError(err instanceof ApiError ? err.message : "Помилка видалення");
                 }
               }}
-              className="w-full rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+              className="btn btn-danger w-full"
             >
               Видалити принтер
             </button>

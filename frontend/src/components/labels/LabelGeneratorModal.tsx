@@ -193,7 +193,7 @@ export function LabelGeneratorModal({
     setPrintBusy(false);
   }
 
-  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-500   dark:focus:border-[var(--border-strong)]";
+  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--border-focus)]   dark:focus:border-[var(--border-strong)]";
 
   return (
     <Modal open={true} onClose={onClose}
@@ -202,7 +202,7 @@ export function LabelGeneratorModal({
       footer={
         <>
           {(pdfError || printStatus) && (
-            <span className={`mr-auto text-xs truncate max-w-xs ${pdfError ? "text-red-500" : "text-[var(--text-muted)]"}`}>
+            <span className={`mr-auto text-xs truncate max-w-xs ${pdfError ? "text-[var(--state-error)]" : "text-[var(--text-muted)]"}`}>
               {pdfError ?? printStatus}
             </span>
           )}

@@ -16,16 +16,33 @@ const STATE_LABELS: Record<string, string> = {
   unknown: "Невідомо",
 };
 
+// Maps each state to its CSS custom property from the design-system token set.
+const STATE_COLORS: Record<string, string> = {
+  operational:        "var(--state-ok)",
+  online:             "var(--state-ok)",
+  printing:           "var(--state-print)",
+  print_pending:      "var(--state-print)",
+  idle:               "var(--state-idle)",
+  paused:             "var(--state-warn)",
+  awaiting_bed_clear: "var(--state-warn)",
+  in_maintenance:     "var(--state-warn)",
+  error:              "var(--state-error)",
+  offline:            "var(--state-offline)",
+  not_connected:      "var(--state-offline)",
+  unknown:            "var(--state-offline)",
+};
+
 export function StateIcon({ state, size = 16 }: { state: string | null | undefined; size?: number }) {
   const s = state ?? "unknown";
   const label = STATE_LABELS[s] ?? s;
+  const color = STATE_COLORS[s] ?? "var(--state-idle)";
 
   if (["pausing", "resuming", "cancelling"].includes(s)) {
     return (
       <svg width={size} height={size} viewBox="0 0 16 16" className="animate-spin" aria-label={label} role="img">
         <title>{label}</title>
-        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.2" />
-        <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="8" cy="8" r="6" fill="none" stroke={color} strokeWidth="1.5" strokeOpacity="0.25" />
+        <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     );
   }
@@ -40,35 +57,21 @@ export function StateIcon({ state, size = 16 }: { state: string | null | undefin
         aria-label={label}
       >
         <span
-          className="absolute inline-flex rounded-full bg-blue-400 opacity-75 animate-ping"
-          style={{ width: dot, height: dot }}
+          className="absolute inline-flex rounded-full animate-ping"
+          style={{ width: dot, height: dot, background: "var(--state-print)", opacity: 0.5 }}
         />
         <span
-          className="relative inline-flex rounded-full bg-blue-500"
-          style={{ width: dot, height: dot }}
+          className="relative inline-flex rounded-full"
+          style={{ width: dot, height: dot, background: "var(--state-print)" }}
         />
       </span>
     );
   }
 
-  const colors: Record<string, string> = {
-    operational: "#10b981",
-    online: "#10b981",
-    print_pending: "#3b82f6",
-    idle: "#a3a3a3",
-    paused: "#f59e0b",
-    awaiting_bed_clear: "#f59e0b",
-    in_maintenance: "#f59e0b",
-    error: "#ef4444",
-    offline: "#404040",
-    not_connected: "#404040",
-    unknown: "#404040",
-  };
-
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-label={label} role="img">
       <title>{label}</title>
-      <circle cx="8" cy="8" r="4" fill={colors[s] ?? "#a3a3a3"} />
+      <circle cx="8" cy="8" r="4" fill={color} />
     </svg>
   );
 }

@@ -111,7 +111,7 @@ function CategoryModal({
                 />
               ))}
               {/* Custom hex */}
-              <label className="flex size-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)] hover:border-neutral-500 " title="Свій колір">
+              <label className="flex size-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)] hover:border-[var(--border-strong)] " title="Свій колір">
                 <input type="color" value={color ?? "#e5e7eb"} onChange={(e) => setColor(e.target.value)} className="sr-only" />
                 +
               </label>
@@ -127,7 +127,7 @@ function CategoryModal({
             </div>
           </div>
 
-          {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+          {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}
 
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} disabled={busy}
@@ -257,7 +257,7 @@ export default function CategoriesPage() {
                       <button
                         onClick={() => deleteCategory(cat.id)}
                         disabled={deleting === cat.id}
-                        className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30"
+                        className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-50 "
                         title="Видалити"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

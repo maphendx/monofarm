@@ -131,7 +131,7 @@ export default function AnalyticsPage() {
                       {fmt(p.revenue)} ₴ · {p.units} шт
                     </span>
                   </div>
-                  <MiniBar value={parseFloat(p.revenue)} max={maxRevenue} cls="bg-cyan-500" />
+                  <MiniBar value={parseFloat(p.revenue)} max={maxRevenue} cls="bg-[var(--accent)]" />
                 </div>
               ))}
             </div>
@@ -174,9 +174,9 @@ export default function AnalyticsPage() {
                   return (
                     <div key={w.label} className="flex flex-1 flex-col items-center gap-1">
                       <div className="flex w-full items-end justify-center gap-1">
-                        <div className="w-4 rounded-t bg-cyan-500/70" style={{ height: `${inH}px` }}
+                        <div className="w-4 rounded-t bg-[rgba(34,211,238,.7)]" style={{ height: `${inH}px` }}
                           title={`Надходження: ${fmt(w.inflow)} ₴`} />
-                        <div className="w-4 rounded-t bg-red-400/60" style={{ height: `${outH}px` }}
+                        <div className="w-4 rounded-t bg-[rgba(239,68,68,.5)]" style={{ height: `${outH}px` }}
                           title={`Витрати: ${fmt(w.outflow)} ₴`} />
                       </div>
                       <p className="text-center text-[10px] text-[var(--text-faint)]">{w.label}</p>
@@ -185,8 +185,8 @@ export default function AnalyticsPage() {
                 })}
               </div>
               <div className="mt-3 flex gap-4 text-xs text-[var(--text-faint)]">
-                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded bg-cyan-500/70" /> Надходження</span>
-                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded bg-red-400/60" /> Витрати</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded bg-[rgba(34,211,238,.7)]" /> Надходження</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded bg-[rgba(239,68,68,.5)]" /> Витрати</span>
               </div>
             </>
           )}

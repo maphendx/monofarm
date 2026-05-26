@@ -138,7 +138,7 @@ export function PrinterGroupsModal({
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Назва нової групи…"
             maxLength={120}
-            className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
+            className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)]"
           />
           <button
             type="submit"
@@ -150,7 +150,7 @@ export function PrinterGroupsModal({
         </form>
 
         {error && (
-          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-xs text-[var(--state-error)]">{error}</p>
         )}
 
         {/* list */}
@@ -205,7 +205,7 @@ export function PrinterGroupsModal({
                       <button
                         type="button"
                         onClick={() => saveEdit(g.id)}
-                        className="rounded px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                        className="rounded px-2 py-0.5 text-xs text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.08)]"
                       >
                         ✓
                       </button>
@@ -238,7 +238,7 @@ export function PrinterGroupsModal({
                   <button
                     type="button"
                     onClick={() => deleteGroup(g)}
-                    className="rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
+                    className="rounded px-1.5 py-0.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
                     title="Видалити групу"
                   >
                     ×

@@ -9,13 +9,13 @@ import { Modal } from "@/components/Modal";
 type MovementType = "PRODUCTION_IN" | "PRODUCTION_OUT" | "SALE_OUT" | "PURCHASE_IN" | "DEFECT" | "ADJUSTMENT" | "TRANSFER";
 
 const TYPE_META: Record<MovementType, { label: string; cls: string; needsFrom: boolean; needsTo: boolean }> = {
-  PRODUCTION_IN:  { label: "Виробництво +", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400", needsFrom: false, needsTo: true },
-  PRODUCTION_OUT: { label: "Сировина −",    cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400",         needsFrom: true,  needsTo: false },
-  SALE_OUT:       { label: "Продаж",        cls: "bg-cyan-500/15 text-[var(--accent)] ",          needsFrom: true,  needsTo: false },
+  PRODUCTION_IN:  { label: "Виробництво +", cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]", needsFrom: false, needsTo: true },
+  PRODUCTION_OUT: { label: "Сировина −",    cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)]",         needsFrom: true,  needsTo: false },
+  SALE_OUT:       { label: "Продаж",        cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)] ",          needsFrom: true,  needsTo: false },
   PURCHASE_IN:    { label: "Закупка",       cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400",    needsFrom: false, needsTo: true },
-  DEFECT:         { label: "Брак",          cls: "bg-red-500/15 text-red-600 dark:text-red-400",             needsFrom: true,  needsTo: true },
-  ADJUSTMENT:     { label: "Коригування",   cls: "bg-neutral-500/15 text-[var(--text-muted)] ", needsFrom: false, needsTo: true },
-  TRANSFER:       { label: "Переміщення",   cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400",       needsFrom: true,  needsTo: true },
+  DEFECT:         { label: "Брак",          cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",             needsFrom: true,  needsTo: true },
+  ADJUSTMENT:     { label: "Коригування",   cls: "bg-[var(--surface-hi)] text-[var(--text-muted)] ", needsFrom: false, needsTo: true },
+  TRANSFER:       { label: "Переміщення",   cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]",       needsFrom: true,  needsTo: true },
 };
 
 type Movement = {
@@ -197,7 +197,7 @@ function CreateMovementModal({
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );

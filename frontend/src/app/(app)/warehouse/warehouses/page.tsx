@@ -6,10 +6,10 @@ import { api } from "@/lib/api";
 type WarehouseType = "raw" | "wip" | "finished" | "defect";
 
 const TYPE_META: Record<WarehouseType, { label: string; cls: string }> = {
-  finished: { label: "Готова продукція", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
-  raw:      { label: "Сировина",         cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
-  wip:      { label: "В процесі",        cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  defect:   { label: "Брак",             cls: "bg-red-500/15 text-red-700 dark:text-red-400" },
+  finished: { label: "Готова продукція", cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" },
+  raw:      { label: "Сировина",         cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)]" },
+  wip:      { label: "В процесі",        cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" },
+  defect:   { label: "Брак",             cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" },
 };
 
 type Warehouse  = { id: number; name: string; type: WarehouseType; location: string | null; is_active: boolean };
@@ -93,7 +93,7 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
               className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none   "
             />
           </label>
-          {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+          {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} disabled={busy}
               className="rounded-md px-3 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
@@ -193,7 +193,7 @@ export default function WarehousesPage() {
                 <div>
                   <p className={[
                     "text-lg font-bold tabular-nums",
-                    stats.zero_stock > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400",
+                    stats.zero_stock > 0 ? "text-[var(--state-error)]" : "text-[var(--state-ok)]",
                   ].join(" ")}>
                     {stats.zero_stock}
                   </p>

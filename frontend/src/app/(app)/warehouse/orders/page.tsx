@@ -9,12 +9,12 @@ import { Modal } from "@/components/Modal";
 type OrderStatus = "new" | "confirmed" | "in_production" | "ready" | "shipped" | "cancelled";
 
 const STATUS_META: Record<OrderStatus, { label: string; cls: string }> = {
-  new:           { label: "Нове",        cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
+  new:           { label: "Нове",        cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)]" },
   confirmed:     { label: "Зарезервовано", cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
-  in_production: { label: "Виробництво", cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  ready:         { label: "Готово",      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  shipped:       { label: "Відправлено", cls: "bg-neutral-500/15 text-[var(--text-muted)] " },
-  cancelled:     { label: "Скасовано",   cls: "bg-red-500/15 text-red-600 dark:text-red-400" },
+  in_production: { label: "Виробництво", cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" },
+  ready:         { label: "Готово",      cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" },
+  shipped:       { label: "Відправлено", cls: "bg-[var(--surface-hi)] text-[var(--text-muted)] " },
+  cancelled:     { label: "Скасовано",   cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" },
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -176,7 +176,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
             <span className="text-[var(--text-muted)] ">Позиції</span>
             <button type="button"
               onClick={() => setLines((prev) => [...prev, { product_id: "", quantity: "1", unit_price: "" }])}
-              className="text-xs text-[var(--accent)] hover:text-cyan-500 ">
+              className="text-xs text-[var(--accent)] hover:text-[var(--accent)] ">
               + Позиція
             </button>
           </div>
@@ -196,7 +196,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
                   className="w-20 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm   " />
                 {lines.length > 1 && (
                   <button type="button" onClick={() => setLines((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-[var(--text-muted)] hover:text-red-500 ">✕</button>
+                    className="text-[var(--text-muted)] hover:text-[var(--state-error)] ">✕</button>
                 )}
               </div>
             ))}
@@ -208,7 +208,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -346,7 +346,7 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -417,7 +417,7 @@ function ReserveModal({ open, onClose, order, onReserved }: {
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </label>
-        {error && <p className="whitespace-pre-line text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="whitespace-pre-line text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -546,7 +546,7 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     {outstanding > 0
-                      ? <span className="text-red-600 dark:text-red-400">{outstanding.toLocaleString("uk-UA")} ₴</span>
+                      ? <span className="text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
                       : <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3">
@@ -565,7 +565,7 @@ export default function OrdersPage() {
                           onClick={() => shipOrder(o)}
                           disabled={isBusy}
                           title="Відвантажити"
-                          className="rounded-md bg-emerald-600/10 px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-600/20 disabled:opacity-50 dark:text-emerald-400">
+                          className="rounded-md bg-[var(--state-ok)]/10 px-2 py-1 text-xs font-medium text-[var(--state-ok)] hover:bg-[var(--state-ok)]/20 disabled:opacity-50 dark:text-[var(--state-ok)]">
                           {isBusy ? "…" : "Відвантажити"}
                         </button>
                       )}
@@ -582,7 +582,7 @@ export default function OrdersPage() {
                           onClick={() => cancelOrder(o)}
                           disabled={isBusy}
                           title="Скасувати"
-                          className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 dark:hover:text-red-400">
+                          className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]  dark:hover:text-[var(--state-error)]">
                           ✕
                         </button>
                       )}

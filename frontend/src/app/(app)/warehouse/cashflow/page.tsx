@@ -12,8 +12,8 @@ type TxCategory =
   | "utility" | "refund" | "other";
 
 const TYPE_META: Record<TxType, { label: string; sign: string; cls: string }> = {
-  income:  { label: "Дохід",   sign: "+", cls: "text-emerald-600 dark:text-emerald-400" },
-  expense: { label: "Витрата", sign: "−", cls: "text-red-600 dark:text-red-400" },
+  income:  { label: "Дохід",   sign: "+", cls: "text-[var(--state-ok)]" },
+  expense: { label: "Витрата", sign: "−", cls: "text-[var(--state-error)]" },
 };
 
 const CATEGORY_LABELS: Record<TxCategory, string> = {
@@ -163,7 +163,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
             placeholder="Оплата рахунку №…" className={inputCls} />
         </label>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -231,19 +231,19 @@ export default function CashFlowPage() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Доходи</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--state-ok)]">
             {fmt(summary?.total_income ?? 0)} ₴
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Витрати</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-red-600 dark:text-red-400">
+          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--state-error)]">
             {fmt(summary?.total_expense ?? 0)} ₴
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Баланс</p>
-          <p className={`mt-1 text-2xl font-bold tabular-nums ${net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+          <p className={`mt-1 text-2xl font-bold tabular-nums ${net >= 0 ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>
             {net >= 0 ? "+" : ""}{fmt(net)} ₴
           </p>
         </div>
@@ -330,7 +330,7 @@ export default function CashFlowPage() {
                     <button
                       onClick={() => deleteTx(tx.id)}
                       disabled={deleting === tx.id}
-                      className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30 dark:hover:text-red-400">
+                      className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-50  dark:hover:text-[var(--state-error)]">
                       {deleting === tx.id ? "…" : "✕"}
                     </button>
                   </td>
@@ -354,7 +354,7 @@ export default function CashFlowPage() {
                   <span className="text-xs text-[var(--text-muted)] ">
                     {CATEGORY_LABELS[row.category as TxCategory] ?? row.category}
                   </span>
-                  <span className={`text-sm font-medium tabular-nums ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  <span className={`text-sm font-medium tabular-nums ${isIncome ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>
                     {isIncome ? "+" : "−"}{fmt(row.total)} ₴
                   </span>
                 </div>

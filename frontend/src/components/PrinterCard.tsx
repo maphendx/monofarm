@@ -14,22 +14,14 @@ import {
 import { StateIcon } from "@/components/StateIcon";
 import type { Printer } from "@/lib/types";
 
-const TONE_TOP_COLOR: Record<string, string> = {
-  printing: "#3b82f6",
-  ok:       "#10b981",
-  warn:     "#f59e0b",
-  bad:      "#ef4444",
-  idle:     "transparent",
-  muted:    "transparent",
-};
-
-const TONE_STATE: Record<string, string> = {
-  printing: "text-[var(--state-print)]",
-  ok:       "text-[var(--state-ok)]",
-  warn:     "text-[var(--state-warn)]",
-  bad:      "text-[var(--state-error)]",
-  idle:     "text-[var(--text-muted)]",
-  muted:    "text-[var(--text-faint)]",
+// Maps printerTone → .printer-card state modifier class (also used for .pc-status)
+const TONE_CLASS: Record<string, string> = {
+  printing: "printing",
+  ok:       "ok",
+  warn:     "warn",
+  bad:      "error",
+  idle:     "",
+  muted:    "muted",
 };
 
 function formatEta(min: number | null): string | null {
@@ -96,6 +88,8 @@ export function PrinterCard({
     }
   }
 
+  const toneClass = TONE_CLASS[tone];
+
   return (
     <div
       data-printer-id={printer.id}
@@ -103,19 +97,13 @@ export function PrinterCard({
       tabIndex={0}
       onClick={() => onClick?.(printer)}
       onKeyDown={(e) => e.key === "Enter" && onClick?.(printer)}
-      className={[
-        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-[var(--bg-elevated)] p-3",
-        "border-[var(--border-strong)]  ",
-        tone === "muted" ? "opacity-60" : "",
-        "text-left transition-shadow hover:shadow-md",
-      ].join(" ")}
-      style={{ borderTopWidth: 2, borderTopColor: TONE_TOP_COLOR[tone] }}
+      className={["printer-card group cursor-pointer text-left", toneClass, tone === "muted" ? "opacity-60" : ""].join(" ")}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="pc-head">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold leading-tight">{printer.name}</div>
-          <div className="text-xs text-[var(--text-faint)]">{kindLabel(printer.kind)}</div>
+          <div className="pc-id truncate">{printer.name}</div>
+          <div className="pc-model">{kindLabel(printer.kind)}</div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {onSettings && (
@@ -123,7 +111,7 @@ export function PrinterCard({
               type="button"
               onClick={(e) => { e.stopPropagation(); onSettings(printer); }}
               title="Налаштування"
-              className="rounded p-0.5 text-[var(--text-muted)] opacity-0 transition hover:text-neutral-600 group-hover:opacity-100  "
+              className="rounded p-0.5 text-[var(--text-muted)] opacity-0 transition hover:text-[var(--text)] group-hover:opacity-100"
               tabIndex={-1}
             >
               <SettingsIcon />
@@ -134,7 +122,7 @@ export function PrinterCard({
       </div>
 
       {/* State label */}
-      <div className={`text-[11px] font-medium ${TONE_STATE[tone]}`}>
+      <div className={["pc-status", toneClass].filter(Boolean).join(" ")}>
         {stateLabel(printer.state)}
       </div>
 
@@ -187,15 +175,15 @@ export function PrinterCard({
 
       {/* Job + ETA */}
       {(printer.job || eta) && (
-        <div className="border-t border-[var(--border)] pt-1.5 text-xs text-[var(--text-faint)]">
-          {printer.job && <div className="truncate">{printer.job}</div>}
-          {eta && <div className="tabular-nums">{eta} залишилось</div>}
+        <div className="border-t border-[var(--border)] pt-1.5">
+          {printer.job && <div className="pc-file truncate">{printer.job}</div>}
+          {eta && <div className="pc-eta">{eta} залишилось</div>}
         </div>
       )}
 
       {/* Temps */}
       {(printer.extruder_temp != null || printer.bed_temp != null) && (
-        <div className="flex gap-2 text-xs text-[var(--text-faint)] tabular-nums">
+        <div className="pc-temps flex gap-2">
           {printer.extruder_temp != null && (
             <span title="Сопло">
               {Math.round(printer.extruder_temp)}°
@@ -223,8 +211,8 @@ export function PrinterCard({
 
       {/* Action strip */}
       {isActionable && (
-        <div className="mt-0.5 border-t border-[var(--border)] pt-1.5">
-          <div className="flex flex-wrap gap-1">
+        <div className="border-t border-[var(--border)] pt-1.5">
+          <div className="pc-actions flex-wrap">
             {isIdle && onPrint && (
               <button
                 type="button"

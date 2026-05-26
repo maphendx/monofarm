@@ -25,8 +25,8 @@ import type { FarmTask, FarmTaskStatus, Filament, PrintTask, PrintTaskStatus } f
 
 const COLUMNS: { id: FarmTaskStatus; label: string; color: string }[] = [
   { id: "todo", label: "До виконання", color: "border-[var(--border-strong)] " },
-  { id: "in_progress", label: "В процесі", color: "border-amber-400 dark:border-amber-600" },
-  { id: "done", label: "Виконано", color: "border-emerald-400 dark:border-emerald-600" },
+  { id: "in_progress", label: "В процесі", color: "border-[var(--state-warn)]" },
+  { id: "done", label: "Виконано", color: "border-[var(--state-ok)]" },
 ];
 
 function isOverdue(deadline: string | null, status: FarmTaskStatus) {
@@ -58,13 +58,13 @@ function FarmTaskCard({
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="rounded p-0.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">✎</button>
         <button onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="rounded p-0.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 ">✕</button>
+          className="rounded p-0.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]">✕</button>
       </div>
       <p className="pr-10 text-sm font-medium leading-snug">{task.title}</p>
       {task.description && <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{task.description}</p>}
       {task.deadline && (
         <div className={`mt-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${
-          overdue ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+          overdue ? "bg-[rgba(239,68,68,.10)] text-[var(--state-error)]"
                   : "bg-[var(--surface-hi)] text-[var(--text-muted)]  "}`}>
           {overdue ? "⚠️" : "🗓"} {task.deadline}
         </div>
@@ -177,7 +177,7 @@ function FarmTaskEditModal({ task, onClose, onSaved }: { task: FarmTask | null; 
               <option value="done">Виконано</option>
             </select></label>
         </div>
-        {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -275,7 +275,7 @@ function CompleteModal({ task, onClose, onDone }: {
           Скасувати
         </button>
         <button onClick={submit} disabled={busy || piecesOk < 0}
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50">
+          className="btn btn-primary disabled:opacity-50">
           {busy ? "Зберігаю…" : "Виконано ✓"}
         </button>
       </>}>
@@ -304,7 +304,7 @@ function CompleteModal({ task, onClose, onDone }: {
               {DEFECT_PRESETS.map(p => (
                 <button key={p} type="button" onClick={() => setDefectPreset(p)}
                   className={["rounded-full border px-2.5 py-1 text-xs transition", defectPreset === p
-                    ? "border-red-400 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950/30 dark:text-red-300"
+                    ? "border-[rgba(239,68,68,.4)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"
                     : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "].join(" ")}>
                   {p}
                 </button>
@@ -365,7 +365,7 @@ function CompleteModal({ task, onClose, onDone }: {
           </div>
         )}
 
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
       </div>
     </Modal>
   );
@@ -383,10 +383,10 @@ const PRINT_STATUS_LABELS: Record<PrintTaskStatus, string> = {
 };
 
 const PRINT_STATUS_CLS: Record<PrintTaskStatus, string> = {
-  queued: "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
-  in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-  cancelled: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+  queued: "badge badge-neutral",
+  in_progress: "badge badge-warn",
+  done: "badge badge-ok",
+  cancelled: "badge badge-error",
 };
 
 function fmtMinutes(m: number | null) {
@@ -453,7 +453,7 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
         <label className="block"><span className="mb-1 block">Примітки</span>
           <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
             className="input" /></label>
-        {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -562,9 +562,9 @@ function PrintTasksTab() {
                       {task.status === "done" && task.pieces_ok != null ? (
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5 text-xs">
-                            <span className="text-emerald-600 dark:text-emerald-400">✓ {task.pieces_ok} шт.</span>
+                            <span className="text-[var(--state-ok)]">✓ {task.pieces_ok} шт.</span>
                             {(task.pieces_defective ?? 0) > 0 && (
-                              <span className="text-red-500 dark:text-red-400" title={task.defect_reason ?? ""}>
+                              <span className="text-[var(--state-error)]" title={task.defect_reason ?? ""}>
                                 ✕ {task.pieces_defective}
                               </span>
                             )}
@@ -582,7 +582,7 @@ function PrintTasksTab() {
                       <div className="flex items-center gap-1 justify-end">
                         {(task.status === "queued" || task.status === "in_progress") && (
                           <button onClick={() => setCompleting(task)}
-                            className="rounded px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                            className="rounded px-2 py-1 text-xs font-medium text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.08)]"
                             title="Завершити">
                             ✓
                           </button>
@@ -590,7 +590,7 @@ function PrintTasksTab() {
                         <button onClick={() => setEditing(task)}
                           className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">✎</button>
                         <button onClick={() => remove(task)}
-                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-600 ">✕</button>
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]">✕</button>
                       </div>
                     </td>
                   </tr>

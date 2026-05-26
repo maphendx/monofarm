@@ -17,10 +17,10 @@ interface HistoryEntry {
 }
 
 const RESULT_STYLE: Record<string, string> = {
-  completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
-  failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-  cancelled: "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
-  in_progress: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  completed: "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)]  dark:text-[var(--state-ok)]",
+  failed: "bg-[rgba(239,68,68,.10)] text-[var(--state-error)]",
+  cancelled: "bg-[var(--surface-hi)] text-[var(--text-muted)]",
+  in_progress: "bg-[rgba(56,189,248,.10)] text-[var(--accent)]",
 };
 
 // Labels are resolved via t() at render time in the table cell

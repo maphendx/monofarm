@@ -45,7 +45,7 @@ export function TaskQueueItem({
       <div className="flex items-start justify-between gap-1 pr-5">
         <span className="text-sm font-medium leading-tight">{task.title}</span>
         {assignedCount > 0 && (
-          <span className="shrink-0 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <span className="badge badge-ok shrink-0 text-[10px]">
             ✓×{assignedCount}
           </span>
         )}
@@ -84,7 +84,7 @@ export function TaskQueueItem({
           e.stopPropagation();
           onDelete(task.id);
         }}
-        className="absolute right-2 top-2 hidden rounded p-0.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-red-500 group-hover:flex"
+        className="absolute right-2 top-2 hidden rounded p-0.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)] group-hover:flex"
         aria-label="Видалити задачу"
       >
         ✕

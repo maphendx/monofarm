@@ -125,11 +125,11 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-[var(--text-muted)]">
         <span>{label}</span>
-        <span className={warn ? "font-medium text-amber-600 dark:text-amber-400" : ""}>{used} / {limit}</span>
+        <span className={warn ? "font-medium text-[var(--state-warn)]" : ""}>{used} / {limit}</span>
       </div>
       <div className="h-1.5 rounded-full bg-[var(--surface-hi)] ">
         <div
-          className={`h-1.5 rounded-full transition-all ${warn ? "bg-amber-500" : "bg-[var(--surface)] "}`}
+          className={`h-1.5 rounded-full transition-all ${warn ? "bg-[var(--state-warn)]" : "bg-[var(--surface)] "}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -223,7 +223,7 @@ function BillingSection() {
       </div>
 
       {billingMsg === "success" && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-300">
+        <div className="mb-4 rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
           Підписку оформлено! Ваш план оновлено.
         </div>
       )}
@@ -333,7 +333,7 @@ function BillingSection() {
             <div className="flex items-center gap-3 text-sm">
               <span className="text-[var(--text-muted)] ">Скасувати підписку? (план стане Free)</span>
               <button onClick={cancelSub} disabled={cancelling}
-                className="text-red-600 hover:underline disabled:opacity-50">
+                className="text-[var(--state-error)] hover:underline disabled:opacity-50">
                 {cancelling ? "…" : "Так, скасувати"}
               </button>
               <button onClick={() => setConfirmCancel(false)} className="text-[var(--text-muted)] hover:underline">
@@ -367,7 +367,7 @@ const IS_LOCAL = typeof window !== "undefined" && (
 function CmdBlock({ cmd, id, copied, onCopy }: { cmd: string; id: string; copied: string | null; onCopy: (t: string, k: string) => void }) {
   return (
     <div className="relative mt-3">
-      <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">{cmd}</pre>
+      <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-[var(--state-ok)] whitespace-pre-wrap break-all leading-relaxed">{cmd}</pre>
       <button
         onClick={() => onCopy(cmd.replace(/\\\n\s+/g, " "), id)}
         className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-[var(--accent-hi)] hover:text-[var(--text-hi)]"
@@ -468,14 +468,14 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
           <p className="mt-0.5 text-xs text-[var(--text-faint)]">Агент сканує локальну мережу і знаходить Bambu + Klipper принтери</p>
         </div>
         {limit && (
-          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${atLimit ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400" : "bg-[var(--surface-hi)] text-[var(--text-muted)]  "}`}>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${atLimit ? "bg-[rgba(239,68,68,.12)] text-[var(--state-error)]" : "bg-[var(--surface-hi)] text-[var(--text-muted)]  "}`}>
             {limit.count}/{limit.limit} принтерів
           </span>
         )}
       </div>
 
       {atLimit && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/20 dark:text-amber-300">
+        <div className="mb-4 rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3 text-xs text-[var(--state-warn)]">
           Досягнуто ліміт плану <strong>{orgPlan}</strong>. Оновіть план щоб додати більше принтерів.
         </div>
       )}
@@ -488,7 +488,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
         {discovering ? "Сканування… (до 60 с)" : "Сканувати мережу"}
       </button>
 
-      {err && <p className="mt-3 text-xs text-red-600 dark:text-red-400">{err}</p>}
+      {err && <p className="mt-3 text-xs text-[var(--state-error)]">{err}</p>}
 
       {result && total === 0 && (
         <p className="mt-4 text-xs text-[var(--text-faint)]">Нових принтерів не знайдено. Переконайся що принтери увімкнені та в одній мережі з агентом.</p>
@@ -503,7 +503,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
             return (
               <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4  ">
                 <div className="mb-3 flex items-center gap-2">
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">Bambu</span>
+                  <span className="badge badge-ok text-[10px]">Bambu</span>
                   <span className="text-xs font-medium">{d.model || d.dev_id}</span>
                   <span className="text-[11px] text-[var(--text-faint)]">{d.ip}</span>
                 </div>
@@ -525,7 +525,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                 )}
                 <div className="mt-2 flex justify-end">
                   {done ? (
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Додано</span>
+                    <span className="text-xs font-medium text-[var(--state-ok)]">✓ Додано</span>
                   ) : (
                     <button
                       onClick={() => addBambu(d)}
@@ -560,7 +560,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                 )}
                 <div className="mt-2 flex justify-end">
                   {done ? (
-                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Додано</span>
+                    <span className="text-xs font-medium text-[var(--state-ok)]">✓ Додано</span>
                   ) : (
                     <button
                       onClick={() => addMoonraker(d)}
@@ -651,13 +651,13 @@ function AgentSection() {
                 Перевірка…
               </span>
             ) : connected ? (
-              <span className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-400">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+              <span className="flex items-center gap-2 rounded-full border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-1.5 text-xs font-medium text-[var(--state-ok)]">
+                <span className="size-1.5 animate-pulse rounded-full bg-[var(--state-ok)]" />
                 Агент підключений
               </span>
             ) : (
               <span className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-xs text-[var(--text-muted)]  ">
-                <span className="size-1.5 rounded-full bg-neutral-400" />
+                <span className="size-1.5 rounded-full bg-[var(--state-idle)]" />
                 Не підключений
               </span>
             )}
@@ -678,13 +678,13 @@ function AgentSection() {
               </p>
             </div>
             {pairStatus === "done" ? (
-              <div className="flex shrink-0 items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                <span className="size-2 rounded-full bg-emerald-500" />
+              <div className="flex shrink-0 items-center gap-2 rounded-xl bg-[rgba(34,197,94,.10)] px-4 py-2.5 text-sm font-medium text-[var(--state-ok)]">
+                <span className="size-2 rounded-full bg-[var(--state-ok)]" />
                 Підключено!
               </div>
             ) : pairStatus === "error" ? (
               <div className="shrink-0 text-right">
-                <p className="mb-1 text-xs text-red-600 dark:text-red-400">Агент більше не чекає — перезапусти його.</p>
+                <p className="mb-1 text-xs text-[var(--state-error)]">Агент більше не чекає — перезапусти його.</p>
                 <button onClick={() => setPairStatus("idle")} className="text-xs text-[var(--text-muted)] hover:underline">Скинути</button>
               </div>
             ) : (
@@ -804,7 +804,7 @@ function AgentSection() {
 
 function BadgeStatus({ ok }: { ok: boolean }) {
   return ok ? (
-    <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700 dark:bg-green-900/40 dark:text-green-400">
+    <span className="badge badge-ok text-xs">
       налаштовано
     </span>
   ) : (
@@ -900,7 +900,7 @@ function KeyCRMSection() {
             className={inputCls} />
           <p className="mt-1 text-xs text-[var(--text-faint)]">Придумайте будь-який рядок — вставте його ж у KeyCRM у полі "Secret"</p>
         </label>
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
         <button type="submit" disabled={saving}
           className="btn btn-primary disabled:opacity-50">
           {saving ? "Зберігаю…" : saved ? "✓ Збережено" : "Зберегти"}
@@ -1081,7 +1081,7 @@ function OrgSection({
             <button
               type="submit"
               disabled={!nameChanged || nameSaving}
-              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-700 disabled:opacity-40"
+              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-40"
             >
               {nameSaved ? "Збережено ✓" : nameSaving ? "…" : "Зберегти зміни"}
             </button>
@@ -1094,7 +1094,7 @@ function OrgSection({
         <div className="mb-5 flex items-center gap-3">
           <h2 className="font-semibold">Bambu Lab</h2>
           {settings.bambu_configured ? (
-            <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="badge badge-ok">
               ✓ Налаштовано
             </span>
           ) : (
@@ -1106,9 +1106,9 @@ function OrgSection({
 
         {(codeStep === "done" || settings.bambu_configured) && codeStep !== "sent" && !reconnecting ? (
           <div className="space-y-3">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+            <div className="rounded-lg border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
               Підключено як <strong>{settings.bambu_email}</strong>
-              <span className="ml-1.5 text-emerald-500/70">({settings.bambu_region?.toUpperCase()})</span>
+              <span className="ml-1.5 text-[var(--state-ok)] opacity-70">({settings.bambu_region?.toUpperCase()})</span>
             </div>
             <button
               onClick={() => { setReconnecting(true); setCodeStep("idle"); setCodeError(null); }}
@@ -1136,7 +1136,7 @@ function OrgSection({
                 className={inputCls}
               />
             </label>
-            {codeError && <p className="text-sm text-red-600 dark:text-red-400">{codeError}</p>}
+            {codeError && <p className="text-sm text-[var(--state-error)]">{codeError}</p>}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -1175,7 +1175,7 @@ function OrgSection({
                 <option value="cn">CN</option>
               </select>
             </label>
-            {codeError && <p className="text-sm text-red-600 dark:text-red-400">{codeError}</p>}
+            {codeError && <p className="text-sm text-[var(--state-error)]">{codeError}</p>}
             <button
               type="submit"
               disabled={codeBusy || !codeEmail}
@@ -1192,7 +1192,7 @@ function OrgSection({
         <div className="mb-5 flex items-center gap-3">
           <h2 className="font-semibold">Telegram-бот</h2>
           {settings.tg_configured ? (
-            <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="badge badge-ok">
               ✓ Налаштовано
             </span>
           ) : (
@@ -1211,7 +1211,7 @@ function OrgSection({
           </p>
         ) : settings.tg_configured && !tgShowInput ? (
           <div className="space-y-3">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+            <div className="rounded-lg border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
               {settings.tg_bot_username
                 ? <>Бот <strong>@{settings.tg_bot_username}</strong> підключено</>
                 : <span className="text-[var(--text-muted)]">Бот запускається… зачекай кілька секунд</span>}
@@ -1226,7 +1226,7 @@ function OrgSection({
               <button
                 onClick={disableTg}
                 disabled={tgSaving}
-                className="text-sm text-red-500 transition hover:text-red-700 disabled:opacity-50"
+                className="text-sm text-[var(--state-error)] transition hover:opacity-80 disabled:opacity-50"
               >
                 Відключити
               </button>
@@ -1253,7 +1253,7 @@ function OrgSection({
                 className={inputCls}
               />
             </label>
-            {tgError && <p className="text-sm text-red-600 dark:text-red-400">{tgError}</p>}
+            {tgError && <p className="text-sm text-[var(--state-error)]">{tgError}</p>}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -1309,8 +1309,8 @@ function PrintersSection() {
     <div className="space-y-6">
       <PrintersManager />
 
-      <div className="rounded-2xl border border-red-200 bg-[var(--bg-elevated)] p-6 shadow-sm dark:border-red-900/50 ">
-        <h2 className="mb-4 font-semibold text-red-600 dark:text-red-400">Небезпечна зона</h2>
+      <div className="rounded-2xl border border-[rgba(239,68,68,.2)] bg-[var(--bg-elevated)] p-6 shadow-sm">
+        <h2 className="mb-4 font-semibold text-[var(--state-error)]">Небезпечна зона</h2>
         <div className="space-y-3">
           {(["bambu", "snapmaker_u1", "other", "all"] as const).map((kind) => {
             const label =
@@ -1328,7 +1328,7 @@ function PrintersSection() {
                     <button
                       onClick={() => bulkDelete(key)}
                       disabled={bulkBusy}
-                      className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20"
+                      className="rounded px-2 py-1 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)] disabled:opacity-40"
                     >
                       {bulkBusy && bulkConfirm === kind ? "…" : "Видалити"}
                     </button>
@@ -1342,7 +1342,7 @@ function PrintersSection() {
                 ) : (
                   <button
                     onClick={() => { setBulkMsg(null); setBulkConfirm(kind); }}
-                    className="rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/20"
+                    className="rounded-md border border-[rgba(239,68,68,.3)] px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
                   >
                     Видалити
                   </button>
@@ -1383,7 +1383,7 @@ export default function SettingsPage() {
   if (user?.role !== "admin") {
     return <p className="text-sm text-[var(--text-muted)]">Тільки для адміністраторів.</p>;
   }
-  if (loadError) return <p className="text-sm text-red-600">{loadError}</p>;
+  if (loadError) return <p className="text-sm text-[var(--state-error)]">{loadError}</p>;
   if (!settings) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
 
   return (
@@ -1398,7 +1398,7 @@ export default function SettingsPage() {
                 className={[
                   "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                   active === item.id
-                    ? "bg-cyan-500/10 font-medium text-[var(--accent)] "
+                    ? "bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)] "
                     : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]  ",
                 ].join(" ")}
               >

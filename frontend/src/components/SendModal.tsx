@@ -50,9 +50,9 @@ export function compatBadge(slots: ReturnType<typeof checkSlots>) {
   if (slots.length === 0) return { label: "немає даних", cls: "bg-[var(--surface-hi)] text-[var(--text-muted)] " };
   const missing = slots.filter((s) => s.match === "missing").length;
   const mismatch = slots.filter((s) => s.match === "type_mismatch").length;
-  if (missing === 0 && mismatch === 0) return { label: "сумісний ✓", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" };
-  if (missing > 0) return { label: `${missing} слот${missing > 1 ? "и" : ""} відсутні`, cls: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" };
-  return { label: `тип не збігається (${mismatch})`, cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" };
+  if (missing === 0 && mismatch === 0) return { label: "сумісний ✓", cls: "badge badge-ok" };
+  if (missing > 0) return { label: `${missing} слот${missing > 1 ? "и" : ""} відсутні`, cls: "badge badge-error" };
+  return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
 }
 
 function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
@@ -263,7 +263,7 @@ export function SendModal({
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
                         selectedId === p.id
                           ? "border-[var(--border-strong)] bg-[var(--bg)]  "
-                          : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500",
+                          : "border-[var(--border)] hover:border-[var(--border-strong)] ",
                       ].join(" ")}>
                         <div className="flex items-center gap-3">
                           <input type="radio" name="printer" value={p.id}
@@ -274,9 +274,9 @@ export function SendModal({
                           </div>
                           <span className={[
                             "shrink-0 rounded px-1.5 py-0.5 text-xs",
-                            p.state === "printing" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                              : p.state === "idle" || p.state === "operational" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                              : "bg-[var(--surface-hi)] text-[var(--text-muted)] ",
+                            p.state === "printing" ? "badge badge-warn"
+                              : p.state === "idle" || p.state === "operational" ? "badge badge-ok"
+                              : "badge badge-neutral",
                           ].join(" ")}>{p.state ?? "—"}</span>
                         </div>
                         {slots.length > 0 && (
@@ -284,9 +284,9 @@ export function SendModal({
                             {slots.map((s) => (
                               <div key={s.slot} className={[
                                 "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]",
-                                s.match === "ok" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                                  : s.match === "type_mismatch" ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
-                                  : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400",
+                                s.match === "ok" ? "badge badge-ok"
+                                  : s.match === "type_mismatch" ? "badge badge-warn"
+                                  : "badge badge-error",
                               ].join(" ")}>
                                 {s.fileColor && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: s.fileColor }} />}
                                 {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot}
@@ -329,7 +329,7 @@ export function SendModal({
                           <span className="text-[var(--text-faint)]">→</span>
                           <select value={currentPrinterSlot}
                             onChange={(e) => setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))}
-                            className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-neutral-500  ">
+                            className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-[var(--border-focus)]  ">
                             {selectedPrinter.loaded_filaments.length > 0
                               ? selectedPrinter.loaded_filaments.map((lf) => (
                                   <option key={lf.slot} value={lf.slot}>
@@ -396,8 +396,9 @@ export function SendModal({
           {/* result banner */}
           {result && (
             <div className={["rounded-lg px-3 py-2 text-sm",
-              result.ok ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                        : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+              result.ok
+                ? "border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]"
+                : "border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",
             ].join(" ")}>
               {result.ok ? "✓ " : "✕ "}{result.message}
             </div>

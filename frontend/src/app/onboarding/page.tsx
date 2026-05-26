@@ -11,11 +11,8 @@ const API_BASE =
 
 const INSTALL_CMD = `curl -sSL ${typeof window !== "undefined" ? window.location.origin.replace(":3000", ":8000") : "https://api.monofarm.app"}/agent/install.sh | bash`;
 
-const primaryBtn =
-  "rounded-md bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)]   ";
-
-const ghostBtn =
-  "rounded-md px-5 py-2.5 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
+const primaryBtn = "btn btn-primary btn-lg";
+const ghostBtn = "btn btn-ghost btn-lg";
 
 function Mascot({ size = 40 }: { size?: number }) {
   const h = size;
@@ -100,7 +97,7 @@ export default function OnboardingPage() {
             {[0, 1, 2].map((i) => (
               <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${
                 i === stepIndex ? "w-5 bg-[var(--surface)] "
-                : i < stepIndex ? "w-1.5 bg-neutral-400"
+                : i < stepIndex ? "w-1.5 bg-[var(--state-idle)]"
                                 : "w-1.5 bg-[var(--surface-hi)] "
               }`}/>
             ))}
@@ -150,7 +147,7 @@ export default function OnboardingPage() {
                   ))}
                 </div>
                 <div className="relative">
-                  <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">
+                  <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-[var(--state-ok)] whitespace-pre-wrap break-all leading-relaxed">
                     {installCmd(os)}
                   </pre>
                   <button onClick={copy}
@@ -187,7 +184,7 @@ export default function OnboardingPage() {
               </div>
 
               <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4  ">
-                <span className="size-2.5 animate-pulse rounded-full bg-amber-400" />
+                <span className="size-2.5 animate-pulse rounded-full bg-[var(--state-warn)]" />
                 <span className="text-sm text-[var(--text-muted)] ">Очікування агента…</span>
               </div>
 
@@ -199,7 +196,7 @@ export default function OnboardingPage() {
                 <button onClick={() => setStep("install")} className={ghostBtn}>
                   ← Назад
                 </button>
-                <button onClick={() => router.replace("/dashboard")} className="text-xs text-[var(--text-faint)] hover:text-neutral-600 ">
+                <button onClick={() => router.replace("/dashboard")} className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] ">
                   Пропустити →
                 </button>
               </div>
@@ -210,7 +207,7 @@ export default function OnboardingPage() {
           {step === "done" && (
             <div className="space-y-5">
               <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <div className="flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                <div className="flex size-14 items-center justify-center rounded-full bg-[rgba(34,197,94,.15)] text-[var(--state-ok)]">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
@@ -236,7 +233,7 @@ export default function OnboardingPage() {
 
         <p className="mt-4 text-center text-xs text-[var(--text-faint)]">
           Принтери додаються через{" "}
-          <button onClick={() => router.replace("/settings")} className="underline hover:text-neutral-600">
+          <button onClick={() => router.replace("/settings")} className="underline hover:text-[var(--text-muted)]">
             Settings → Агент
           </button>{" "}
           після підключення агента

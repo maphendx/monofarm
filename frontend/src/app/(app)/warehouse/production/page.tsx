@@ -19,8 +19,8 @@ type Spec    = { id: number; name: string; version: number; is_default: boolean 
 
 const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
   { status: "draft",  label: "Заплановано", accent: "border-[var(--border-strong)] " },
-  { status: "active", label: "Друкується",  accent: "border-blue-400 dark:border-blue-600" },
-  { status: "done",   label: "Готово",      accent: "border-emerald-400 dark:border-emerald-600" },
+  { status: "active", label: "Друкується",  accent: "border-[var(--accent)]" },
+  { status: "done",   label: "Готово",      accent: "border-[var(--state-ok)]" },
 ];
 
 // ── Create batch modal ────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ function CreateBatchModal({
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -132,7 +132,7 @@ function CreateBatchModal({
 function ProgressBar({ value }: { value: number }) {
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
-      <div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.min(100, value)}%` }} />
+      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.min(100, value)}%` }} />
     </div>
   );
 }
@@ -156,10 +156,10 @@ function BatchCard({ batch, onStatusChange }: {
       <div className="mb-1 flex items-start justify-between gap-2">
         <span className="font-medium leading-tight">{batch.product_name}</span>
         {batch.status === "active" && (
-          <span className="shrink-0 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">● live</span>
+          <span className="shrink-0 rounded-full bg-[rgba(56,189,248,.08)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">● live</span>
         )}
         {batch.status === "done" && (
-          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">✓</span>
+          <span className="shrink-0 rounded-full bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">✓</span>
         )}
       </div>
 
@@ -168,7 +168,7 @@ function BatchCard({ batch, onStatusChange }: {
           <ProgressBar value={pct} />
           <p className="mt-1.5 text-xs text-[var(--text-muted)]">
             {batch.printed_qty}/{batch.target_qty} надруковано · {pct.toFixed(0)}%
-            {defects > 0 && <span className="ml-1.5 text-red-400">{defects} брак</span>}
+            {defects > 0 && <span className="ml-1.5 text-[var(--state-error)]">{defects} брак</span>}
           </p>
         </>
       ) : (
@@ -189,7 +189,7 @@ function BatchCard({ batch, onStatusChange }: {
       )}
       {batch.status === "active" && (
         <button disabled={busy} onClick={() => move("done")}
-          className="mt-3 w-full rounded-md border border-emerald-300 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/20">
+          className="mt-3 w-full rounded-md border border-[rgba(34,197,94,.3)] py-1.5 text-xs text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.08)] disabled:opacity-50 ">
           ✓ Завершити
         </button>
       )}

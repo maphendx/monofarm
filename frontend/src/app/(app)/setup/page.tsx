@@ -16,14 +16,14 @@ import {
 // ── connection type badge ─────────────────────────────────────────────────────
 
 const CONN_BADGE: Record<ConnectionType, string> = {
-  cloud:            "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  klipper:          "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
-  "klipper-custom": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-  "klipper-pad":    "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
-  octoprint:        "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
-  prusalink:        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  makerbase:        "bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300",
-  manual:           "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
+  cloud:            "badge badge-ok",
+  klipper:          "badge badge-accent",
+  "klipper-custom": "badge badge-warn",
+  "klipper-pad":    "badge badge-accent",
+  octoprint:        "badge badge-neutral",
+  prusalink:        "badge badge-neutral",
+  makerbase:        "badge badge-neutral",
+  manual:           "badge badge-neutral",
 };
 
 const _cloudIcon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>;
@@ -72,7 +72,7 @@ function StepNumber({ n, done }: { n: number; done?: boolean }) {
   return (
     <div className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
       done
-        ? "bg-emerald-500 text-white"
+        ? "bg-[var(--state-ok)] text-white"
         : "border-2 border-[var(--border-strong)] text-[var(--text-muted)] "
     }`}>
       {done
@@ -86,7 +86,7 @@ function StepNumber({ n, done }: { n: number; done?: boolean }) {
 
 function CodeBlock({ code }: { code: string }) {
   return (
-    <pre className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs leading-relaxed text-emerald-400 ">
+    <pre className="mt-2 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-xs leading-relaxed text-[var(--state-ok)]">
       {code}
     </pre>
   );
@@ -292,7 +292,7 @@ export default function SetupPage() {
             </div>
 
             {model.connection === "klipper-custom" && (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+              <div className="mt-4 rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3 text-xs text-[var(--state-warn)]">
                 <strong>Потрібна підготовка:</strong> ця модель вимагає встановлення кастомної прошивки перед підключенням до monofarm. Це займе 15–30 хвилин. Процес безпечний, але технічний — ми проведемо тебе крок за кроком.
               </div>
             )}
@@ -303,7 +303,7 @@ export default function SetupPage() {
               </div>
             )}
             {guide.monofarmNote && model.connection !== "manual" && model.connection !== "cloud" && model.connection !== "klipper" && model.connection !== "klipper-custom" && model.connection !== "klipper-pad" && (
-              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+              <div className="mt-4 rounded-lg border border-[rgba(56,189,248,.25)] bg-[rgba(56,189,248,.08)] px-4 py-3 text-xs text-[var(--accent)]">
                 <strong>monofarm:</strong> {guide.monofarmNote}
               </div>
             )}
@@ -318,7 +318,7 @@ export default function SetupPage() {
                   <div className="min-w-0 flex-1 space-y-2">
                     <h3 className="font-semibold text-sm">{s.title}</h3>
                     {s.warning && (
-                      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+                      <div className="flex items-start gap-2 rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-3 py-2 text-xs text-[var(--state-warn)]">
                         <svg className="mt-0.5 shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                         {s.warning}
                       </div>
@@ -330,7 +330,7 @@ export default function SetupPage() {
                         href={s.link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                        className="inline-flex items-center gap-1.5 text-xs text-[var(--accent)] hover:underline"
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                         {s.link.label}

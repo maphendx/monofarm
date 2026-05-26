@@ -145,7 +145,7 @@ export function CreateTaskModal({
             type="file"
             accept=".gcode,.gco,.g,.3mf,.bgcode"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-white file:hover:bg-[var(--accent-hi)]  dark:file:bg-neutral-100 dark:file:text-neutral-900"
+            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--accent)] file:px-3 file:py-1.5 file:text-xs file:text-[var(--on-accent)] file:hover:bg-[var(--accent-hi)]"
           />
           {file && (
             <p className="mt-1 text-xs text-[var(--text-muted)]">
@@ -153,7 +153,7 @@ export function CreateTaskModal({
             </p>
           )}
         </label>
-        {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );

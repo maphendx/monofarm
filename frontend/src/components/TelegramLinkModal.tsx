@@ -50,7 +50,7 @@ export function TelegramLinkModal({
     >
       <div className="space-y-3 text-sm">
         {busy && <div className="text-[var(--text-muted)]">Генерую…</div>}
-        {error && <div className="text-red-600 dark:text-red-400">{error}</div>}
+        {error && <div className="text-[var(--state-error)]">{error}</div>}
         {link && link.deep_link && (
           <>
             <p className="text-[var(--text-muted)] ">
@@ -82,7 +82,7 @@ export function TelegramLinkModal({
           </>
         )}
         {link && !link.deep_link && (
-          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          <div className="rounded-md border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] p-3 text-[var(--state-warn)]">
             Telegram-бот не запущено. Перевір TG_BOT_TOKEN у бекенді.
           </div>
         )}

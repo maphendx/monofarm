@@ -33,13 +33,13 @@ type Movement = {
 };
 
 const TYPE_META: Record<string, { label: string; cls: string }> = {
-  PRODUCTION_IN:  { label: "Виробництво +", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  PRODUCTION_OUT: { label: "Сировина −",    cls: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
-  SALE_OUT:       { label: "Продаж",        cls: "bg-cyan-500/15 text-[var(--accent)] " },
-  PURCHASE_IN:    { label: "Закупка",       cls: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
-  DEFECT:         { label: "Брак",          cls: "bg-red-500/15 text-red-600 dark:text-red-400" },
-  ADJUSTMENT:     { label: "Коригування",   cls: "bg-neutral-500/15 text-[var(--text-muted)] " },
-  TRANSFER:       { label: "Переміщення",   cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  PRODUCTION_IN:  { label: "Виробництво +", cls: "badge badge-ok" },
+  PRODUCTION_OUT: { label: "Сировина −",    cls: "badge badge-print" },
+  SALE_OUT:       { label: "Продаж",        cls: "badge badge-accent" },
+  PURCHASE_IN:    { label: "Закупка",       cls: "badge badge-accent" },
+  DEFECT:         { label: "Брак",          cls: "badge badge-error" },
+  ADJUSTMENT:     { label: "Коригування",   cls: "badge badge-neutral" },
+  TRANSFER:       { label: "Переміщення",   cls: "badge badge-warn" },
 };
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ function ProgressBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.round(value));
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
-      <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${pct}%` }} />
+      <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -116,15 +116,15 @@ export default function WarehouseDashboard() {
 
       {/* Low stock alert */}
       {lowStock.length > 0 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700/50 dark:bg-amber-950/20">
-          <p className="mb-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+        <div className="rounded-xl border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3">
+          <p className="mb-2 text-sm font-medium text-[var(--state-warn)]">
             ⚠ {lowStock.length} позиції нижче мінімального залишку
           </p>
           <ul className="space-y-1">
             {lowStock.map((s) => (
-              <li key={s.product_id} className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+              <li key={s.product_id} className="flex items-center gap-2 text-sm text-[var(--state-warn)]">
                 <span className="font-medium">{s.product_name}</span>
-                <span className="text-amber-500">—</span>
+                <span>—</span>
                 <span>{parseFloat(s.available).toFixed(0)} шт</span>
               </li>
             ))}

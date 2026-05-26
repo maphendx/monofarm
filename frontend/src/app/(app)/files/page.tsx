@@ -99,9 +99,9 @@ function compatBadge(slots: ReturnType<typeof checkSlots>) {
   if (!slots.length) return { label: "немає даних", cls: "bg-[var(--surface-2)] text-[var(--text-faint)]" };
   const missing = slots.filter(s => s.match === "missing").length;
   const mismatch = slots.filter(s => s.match === "type_mismatch").length;
-  if (!missing && !mismatch) return { label: "✓ сумісний", cls: "bg-emerald-500/20 text-emerald-400" };
-  if (missing > 0) return { label: `${missing} слот відсутні`, cls: "bg-red-500/20 text-red-400" };
-  return { label: `тип не збігається (${mismatch})`, cls: "bg-amber-500/20 text-amber-400" };
+  if (!missing && !mismatch) return { label: "✓ сумісний", cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" };
+  if (missing > 0) return { label: `${missing} слот відсутні`, cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" };
+  return { label: `тип не збігається (${mismatch})`, cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" };
 }
 
 // ── Send modal ────────────────────────────────────────────────────────────────
@@ -189,8 +189,8 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                       <input type="radio" name="printer" value={p.id} checked={selectedId === p.id} onChange={() => selectPrinter(p.id)} className="accent-[var(--accent)]" />
                       <span className="flex-1 truncate text-sm font-medium text-[var(--text)]">{p.name}</span>
                       <span className={["shrink-0 rounded px-1.5 py-0.5 text-xs",
-                        p.state === "printing" ? "bg-amber-500/20 text-amber-400"
-                          : p.state === "idle" || p.state === "operational" ? "bg-emerald-500/20 text-emerald-400"
+                        p.state === "printing" ? "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]"
+                          : p.state === "idle" || p.state === "operational" ? "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]"
                           : "bg-[var(--surface-2)] text-[var(--text-faint)]"].join(" ")}>
                         {p.state ?? "—"}
                       </span>
@@ -199,9 +199,9 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                       <div className="ml-6 flex flex-wrap gap-1">
                         {slots.map(s => (
                           <span key={s.slot} className={["flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]",
-                            s.match === "ok" ? "bg-emerald-500/15 text-emerald-400"
-                              : s.match === "type_mismatch" ? "bg-amber-500/15 text-amber-400"
-                              : "bg-red-500/15 text-red-400"].join(" ")}>
+                            s.match === "ok" ? "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]"
+                              : s.match === "type_mismatch" ? "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]"
+                              : "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"].join(" ")}>
                             {s.fileColor && <span className="h-2 w-2 rounded-full" style={{ background: s.fileColor }} />}
                             {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} S{s.slot}
                           </span>
@@ -254,7 +254,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           )}
 
           {result && (
-            <div className={["rounded-lg px-3 py-2 text-sm", result.ok ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"].join(" ")}>
+            <div className={["rounded-lg px-3 py-2 text-sm", result.ok ? "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" : "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"].join(" ")}>
               {result.ok ? "✓ " : "✕ "}{result.message}
             </div>
           )}
@@ -306,7 +306,7 @@ function FolderNameModal({ title, initialValue, onConfirm, onClose }: {
           <input ref={ref} type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="Назва папки" maxLength={255}
             className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder-neutral-500 outline-none focus:border-accent" />
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">Скасувати</button>
             <button type="submit" disabled={busy || !name.trim()}
@@ -392,12 +392,12 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
               </button>
               {confirmDel ? (
                 <button onClick={() => { setMenuOpen(false); setConfirmDel(false); onDelete(); }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-medium text-red-400 hover:bg-red-900/30 animate-pulse">
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.10)] animate-pulse">
                   <span>✕</span> Підтвердити
                 </button>
               ) : (
                 <button onClick={() => setConfirmDel(true)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-400 hover:bg-red-900/30">
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--state-error)] hover:bg-[rgba(239,68,68,.10)]">
                   <span>🗑️</span> Видалити
                 </button>
               )}
@@ -510,10 +510,10 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
         {canEdit && (
           confirmDel ? (
             <button onClick={() => { setConfirmDel(false); onDelete(); }}
-              className="animate-pulse rounded-lg bg-red-600 px-2 py-1.5 text-xs font-medium text-white">✕</button>
+              className="animate-pulse rounded-lg bg-[var(--state-error)] px-2 py-1.5 text-xs font-medium text-white">✕</button>
           ) : (
             <button onClick={() => setConfirmDel(true)}
-              className="rounded-lg border border-[var(--border-strong)] px-2 py-1.5 text-xs text-[var(--text-muted)] transition hover:border-red-500/40 hover:bg-red-900/20 hover:text-red-400">✕</button>
+              className="rounded-lg border border-[var(--border-strong)] px-2 py-1.5 text-xs text-[var(--text-muted)] transition hover:border-[rgba(239,68,68,.3)] hover:bg-[rgba(239,68,68,.10)] hover:text-[var(--state-error)]">✕</button>
           )
         )}
       </div>
@@ -537,8 +537,8 @@ function RootDropZone({ isDragOver, onDragOver, onDragLeave, onDrop }: {
       className={[
         "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 px-4 text-sm transition-all duration-150",
         isDragOver
-          ? "border-orange-400 bg-orange-400/10 text-orange-400 scale-[1.02]"
-          : "border-[var(--border-strong)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-neutral-500",
+          ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] text-[var(--accent)] scale-[1.02]"
+          : "border-[var(--border-strong)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-muted)]",
       ].join(" ")}
     >
       <span>🏠</span>
@@ -717,12 +717,12 @@ export default function FilesPage() {
     <div className="min-h-screen">
       {/* printer banner */}
       {targetPrinter && !sendFile && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-blue-400">
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-[rgba(56,189,248,.3)] bg-[rgba(56,189,248,.08)] px-4 py-3">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-[var(--accent)]">
             <polygon points="5 3 19 12 5 21 5 3"/>
           </svg>
-          <p className="text-sm text-blue-300">
-            Вибери файл для відправки на <strong className="text-blue-200">{targetPrinter.name}</strong>
+          <p className="text-sm text-[var(--accent)]">
+            Вибери файл для відправки на <strong className="text-[var(--text)]">{targetPrinter.name}</strong>
           </p>
         </div>
       )}
@@ -769,7 +769,7 @@ export default function FilesPage() {
         {/* actions */}
         {canEdit && (
           <div className="flex items-center gap-2">
-            {uploadError && <span className="text-xs text-red-400">{uploadError}</span>}
+            {uploadError && <span className="text-xs text-[var(--state-error)]">{uploadError}</span>}
             {!currentFolder && (
               <button onClick={() => setShowNewFolder(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 px-3 py-2 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]">
@@ -841,7 +841,7 @@ export default function FilesPage() {
                 className={[
                   "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition-all duration-150 cursor-default",
                   dragOverTarget === "root"
-                    ? "border-orange-400 bg-orange-400/10 scale-105"
+                    ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] scale-105"
                     : "border-[var(--border-strong)] opacity-60",
                 ].join(" ")}
               >

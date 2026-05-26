@@ -42,7 +42,7 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${SIZE_CLS[size] ?? "max-w-md"} rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl  `}
+        className={`modal-panel p-0 w-full ${SIZE_CLS[size] ?? "max-w-md"}`}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
           <h2 className="text-base font-semibold">{title}</h2>

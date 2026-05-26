@@ -7,17 +7,17 @@ import { useState } from "react";
 type ComponentType = "printable" | "purchased" | "assembly";
 
 const COMPONENT_TYPE_META: Record<ComponentType, { label: string; cls: string }> = {
-  printable:  { label: "Друк",    cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+  printable:  { label: "Друк",    cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)]" },
   purchased:  { label: "Закупка", cls: "bg-violet-500/15 text-violet-700 dark:text-violet-400" },
-  assembly:   { label: "Збірка",  cls: "bg-cyan-500/15 text-[var(--accent)] " },
+  assembly:   { label: "Збірка",  cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)] " },
 };
 
 type AssemblyStatus = "draft" | "in_progress" | "done";
 
 const STATUS_META: Record<AssemblyStatus, { label: string; cls: string }> = {
-  draft:       { label: "Чернетка",  cls: "bg-neutral-500/15 text-[var(--text-muted)] " },
-  in_progress: { label: "Збирається", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  done:        { label: "Готово",     cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  draft:       { label: "Чернетка",  cls: "bg-[var(--surface-hi)] text-[var(--text-muted)] " },
+  in_progress: { label: "Збирається", cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" },
+  done:        { label: "Готово",     cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" },
 };
 
 type AssemblyComponent = {
@@ -91,7 +91,7 @@ function ProgressBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.round(value));
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
-      <div className="h-full rounded-full bg-cyan-500" style={{ width: `${pct}%` }} />
+      <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -128,7 +128,7 @@ function OrderCard({ order }: { order: AssemblyOrder }) {
 
         <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
           <span>
-            Компоненти: <span className={allReady ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+            Компоненти: <span className={allReady ? "text-[var(--state-ok)]" : "text-[var(--state-warn)]"}>
               {readyComponents}/{order.components.length} готово
             </span>
           </span>
@@ -161,7 +161,7 @@ function OrderCard({ order }: { order: AssemblyOrder }) {
                 const ctMeta = COMPONENT_TYPE_META[c.type];
                 const shortage = c.totalQty - c.ready;
                 return (
-                  <tr key={i} className={shortage > 0 ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}>
+                  <tr key={i} className={shortage > 0 ? "bg-[rgba(245,158,11,.08)]/40 " : ""}>
                     <td className="px-4 py-2">{c.name}</td>
                     <td className="px-4 py-2">
                       <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ctMeta.cls}`}>
@@ -170,10 +170,10 @@ function OrderCard({ order }: { order: AssemblyOrder }) {
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{c.totalQty} шт</td>
                     <td className="px-4 py-2 text-right tabular-nums">
-                      <span className={shortage > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}>
+                      <span className={shortage > 0 ? "text-[var(--state-warn)]" : "text-[var(--state-ok)]"}>
                         {c.ready}
                       </span>
-                      {shortage > 0 && <span className="ml-1 text-amber-500">−{shortage}</span>}
+                      {shortage > 0 && <span className="ml-1 text-[var(--state-warn)]">−{shortage}</span>}
                     </td>
                   </tr>
                 );

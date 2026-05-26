@@ -74,7 +74,7 @@ function PlanEntryRow({
               <span className="ml-1 text-xs text-[var(--text-faint)]">×{entry.task.quantity}</span>
             )}
             {entry.task.file_name && (
-              <span className="ml-1 text-xs text-blue-500" title={entry.task.file_name}>📎</span>
+              <span className="ml-1 text-xs text-[var(--accent)]" title={entry.task.file_name}>📎</span>
             )}
           </div>
           {entry.task.filament_meta && (
@@ -86,7 +86,7 @@ function PlanEntryRow({
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 text-[var(--text-muted)] hover:text-red-500"
+          className="shrink-0 text-[var(--text-muted)] hover:text-[var(--state-error)]"
           aria-label="Прибрати"
         >
           ✕
@@ -100,7 +100,7 @@ function PlanEntryRow({
         className={
           "mt-2 block w-full rounded-md py-1.5 text-xs font-medium transition" +
           (canSend
-            ? " bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+            ? " bg-[var(--accent)] text-white hover:bg-[var(--accent-hi)] disabled:opacity-50"
             : " cursor-not-allowed bg-[var(--surface-hi)] text-[var(--text-muted)]")
         }
         title={canSend ? "Завантажити файл і запустити друк" : (cantSendReason ?? "")}
@@ -168,7 +168,7 @@ export function PrinterDropZone({
       className={
         "flex min-h-[120px] flex-col rounded-xl border-2 p-3 transition" +
         (isOver
-          ? " border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/20"
+          ? " border-[var(--state-ok)] bg-[rgba(34,197,94,.06)]"
           : " border-[var(--border)] bg-[var(--bg-elevated)]")
       }
     >
@@ -199,7 +199,7 @@ export function PrinterDropZone({
       </div>
 
       {isOver && entries.length === 0 && (
-        <div className="flex flex-1 items-center justify-center text-xs text-emerald-600 dark:text-emerald-400">
+        <div className="flex flex-1 items-center justify-center text-xs text-[var(--state-ok)]">
           Відпустити тут
         </div>
       )}

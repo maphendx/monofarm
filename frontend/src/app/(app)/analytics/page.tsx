@@ -261,10 +261,10 @@ export default function AnalyticsPage() {
           <h2 className="mb-4 font-medium">Завдання друку — розподіл</h2>
           <div className="flex flex-wrap gap-4">
             {[
-              { key: "queued", label: "В черзі", color: "bg-neutral-400" },
-              { key: "in_progress", label: "В процесі", color: "bg-amber-400" },
-              { key: "done", label: "Виконано", color: "bg-emerald-400" },
-              { key: "cancelled", label: "Скасовано", color: "bg-red-300" },
+              { key: "queued", label: "В черзі", color: "bg-[var(--state-idle)]" },
+              { key: "in_progress", label: "В процесі", color: "bg-[var(--state-warn)]" },
+              { key: "done", label: "Виконано", color: "bg-[var(--state-ok)]" },
+              { key: "cancelled", label: "Скасовано", color: "bg-[var(--state-error)]" },
             ].map(({ key, label, color }) => {
               const count = summary.tasks[key as keyof typeof summary.tasks];
               return (

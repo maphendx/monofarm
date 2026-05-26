@@ -21,19 +21,19 @@ const KIND_OPTIONS: { value: PrinterKind; label: string; desc: string }[] = [
 ];
 
 const KIND_BADGE: Record<string, string> = {
-  bambu: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  snapmaker_u1: "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300",
-  other: "bg-[var(--surface-hi)] text-[var(--text-muted)]  ",
+  bambu: "badge badge-ok",
+  snapmaker_u1: "badge badge-accent",
+  other: "badge badge-neutral",
 };
 
 const STATE_DOT: Record<string, string> = {
-  printing: "bg-blue-500",
-  operational: "bg-emerald-500",
-  idle: "bg-neutral-400",
-  paused: "bg-amber-400",
-  error: "bg-red-500",
-  offline: "bg-neutral-300 ",
-  unknown: "bg-neutral-300 ",
+  printing: "bg-[var(--state-print)]",
+  operational: "bg-[var(--state-ok)]",
+  idle: "bg-[var(--state-idle)]",
+  paused: "bg-[var(--state-warn)]",
+  error: "bg-[var(--state-error)]",
+  offline: "bg-[var(--state-offline)]",
+  unknown: "bg-[var(--state-offline)]",
 };
 
 interface PrinterForm {
@@ -102,7 +102,7 @@ function WizardTypeCard({ icon, title, desc, badge, onClick }: {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{title}</span>
-          {badge && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{badge}</span>}
+          {badge && <span className="badge badge-ok text-[10px]">{badge}</span>}
         </div>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">{desc}</p>
       </div>
@@ -187,7 +187,7 @@ function AddPrinterWizard({ open, onClose, onDone }: {
             />
             <button
               onClick={() => { onClose(); router.push("/setup"); }}
-              className="w-full text-center text-xs text-[var(--text-faint)] hover:text-neutral-600  pt-1"
+              className="w-full text-center text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] pt-1"
             >
               Не знаєш як підключити свій принтер? Відкрити гід →
             </button>
@@ -197,10 +197,10 @@ function AddPrinterWizard({ open, onClose, onDone }: {
         {/* bambu */}
         {step === "bambu" && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+            <div className="rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
               Bambu принтери підтягуються автоматично з вашого Bambu Cloud акаунту. Натисни синхронізувати — і вони з&apos;являться.
             </div>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2">
               <button onClick={syncBambu} disabled={syncing} className={primaryBtn}>
                 {syncing ? "Синхронізація…" : "Синхронізувати Bambu Cloud"}
@@ -209,7 +209,7 @@ function AddPrinterWizard({ open, onClose, onDone }: {
             </div>
             <p className="text-xs text-[var(--text-faint)]">
               Немає акаунту? Налаштуй у{" "}
-              <a href="/settings" className="underline hover:text-neutral-600">Налаштуваннях</a>.
+              <a href="/settings" className="underline hover:text-[var(--text-muted)]">Налаштуваннях</a>.
             </p>
           </div>
         )}
@@ -226,7 +226,7 @@ function AddPrinterWizard({ open, onClose, onDone }: {
               <input type="url" required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.100:7125" className={inp} />
               <span className="mt-1 block text-[11px] text-[var(--text-faint)]">Знайди у Mainsail → Settings → адреса сервера</span>
             </label>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={busy || !name || !url} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button>
               <button type="button" onClick={back} className={ghostBtn}>Назад</button>
@@ -244,7 +244,7 @@ function AddPrinterWizard({ open, onClose, onDone }: {
               <span className="mb-1 block text-xs font-medium text-[var(--text-muted)] ">Назва принтера</span>
               <input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ender-3 #1" className={inp} />
             </label>
-            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
             <div className="flex gap-2">
               <button type="submit" disabled={busy || !name} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button>
               <button type="button" onClick={back} className={ghostBtn}>Назад</button>
@@ -255,7 +255,7 @@ function AddPrinterWizard({ open, onClose, onDone }: {
         {/* done */}
         {step === "done" && (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <div className="flex size-12 items-center justify-center rounded-full bg-[rgba(34,197,94,.12)] text-[var(--state-ok)]">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
             </div>
             <p className="font-medium">Принтер додано!</p>
@@ -385,7 +385,7 @@ function PrinterModal({
                   "rounded-lg border p-3 text-left transition " +
                   (form.kind === opt.value
                     ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   "
-                    : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500")
+                    : "border-[var(--border)] hover:border-[var(--border-strong)] ")
                 }
               >
                 <p className="text-sm font-medium">{opt.label}</p>
@@ -399,7 +399,7 @@ function PrinterModal({
 
         {isBambu && (
           <>
-            <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+            <div className="rounded-lg bg-[rgba(34,197,94,.08)] px-3 py-2 text-xs text-[var(--state-ok)]">
               Bambu-принтери автоматично синхронізуються з Bambu Cloud при
               наявності облікових даних в Налаштуваннях. Поля нижче — для
               ручного додавання або корекції.
@@ -467,7 +467,7 @@ function PrinterModal({
           </label>
         )}
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -590,14 +590,14 @@ export default function PrintersPage() {
       </div>
       {/* discovered but not yet claimed Bambu devices */}
       {isAdmin && discovered.length > 0 && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
-          <p className="mb-3 text-sm font-medium text-blue-800 dark:text-blue-300">
+        <div className="rounded-xl border border-[rgba(34,211,238,.25)] bg-[rgba(34,211,238,.06)] p-4">
+          <p className="mb-3 text-sm font-medium text-[var(--accent)]">
             Виявлено нові Bambu пристрої ({discovered.length}) — оберіть які додати до ферми
           </p>
           <div className="flex flex-wrap gap-2">
             {discovered.map((d) => (
               <div key={d.dev_id}
-                className="flex items-center gap-3 rounded-lg border border-blue-200 bg-[var(--bg-elevated)] px-3 py-2 dark:border-blue-800 ">
+                className="flex items-center gap-3 rounded-lg border border-[rgba(34,211,238,.2)] bg-[var(--bg-elevated)] px-3 py-2">
                 <div>
                   <p className="text-sm font-medium">{d.name}</p>
                   <p className="text-xs text-[var(--text-faint)]">{d.model || d.dev_id}</p>
@@ -675,7 +675,7 @@ export default function PrintersPage() {
                             <button
                               onClick={() => handleDelete(p.id)}
                               disabled={deleteId === p.id}
-                              className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20"
+                              className="rounded px-2 py-1 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)] disabled:opacity-40 "
                             >
                               {deleteId === p.id ? "…" : "Так"}
                             </button>
@@ -699,7 +699,7 @@ export default function PrintersPage() {
                             </button>
                             <button
                               onClick={() => setConfirmDeleteId(p.id)}
-                              className="rounded p-1.5 text-[var(--text-faint)] hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                              className="rounded p-1.5 text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]  dark:hover:text-[var(--state-error)]"
                               title="Видалити"
                             >
                               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -98,11 +98,11 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
   const t = useT();
   return (
     <div className="flex items-center gap-1.5">
-      <StatBadge count={stats.printing} label={t("dashboard.printing")} className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400" />
-      <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
-      <StatBadge count={stats.action}   label={t("dashboard.action")}   className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400" />
-      <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400" />
-      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="bg-[var(--surface-hi)] text-[var(--text-muted)]  " />
+      <StatBadge count={stats.printing} label={t("dashboard.printing")} className="badge badge-print" />
+      <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="badge badge-warn" />
+      <StatBadge count={stats.action}   label={t("dashboard.action")}   className="badge badge-warn" />
+      <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="badge badge-ok" />
+      <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="badge badge-offline" />
     </div>
   );
 }
@@ -192,16 +192,6 @@ function bambuCover(model: string | null | undefined): string | null {
   return null;
 }
 
-const STATE_COLOR: Record<string, string> = {
-  printing:          "bg-blue-500",
-  idle:              "bg-emerald-500",
-  operational:       "bg-emerald-500",
-  paused:            "bg-amber-500",
-  awaiting_bed_clear:"bg-orange-500",
-  error:             "bg-red-500",
-  offline:           "bg-neutral-500",
-  unknown:           "bg-neutral-500",
-};
 
 function fmtFinish(eta_minutes: number): string {
   const finish = new Date(Date.now() + eta_minutes * 60_000);
@@ -239,12 +229,12 @@ function PrinterPhotoCard({
   const [busy, setBusy] = useState<string | null>(null);
 
   const TOP: Record<string, string> = {
-    printing: "#3b82f6", ok: "#10b981", warn: "#f59e0b", bad: "#ef4444",
+    printing: "var(--state-print)", ok: "var(--state-ok)", warn: "var(--state-warn)", bad: "var(--state-error)",
     idle: "transparent", muted: "transparent",
   };
   const STATE_LABEL: Record<string, string> = {
-    printing: "text-blue-400", ok: "text-emerald-400", warn: "text-amber-400",
-    bad: "text-red-400", idle: "text-[var(--text-muted)]", muted: "text-[var(--text-faint)]",
+    printing: "text-[var(--state-print)]", ok: "text-[var(--state-ok)]", warn: "text-[var(--state-warn)]",
+    bad: "text-[var(--state-error)]", idle: "text-[var(--text-muted)]", muted: "text-[var(--text-faint)]",
   };
 
   async function act(e: React.MouseEvent, action: string) {
@@ -317,8 +307,7 @@ function PrinterPhotoCard({
         <div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
             <div
-              className={`h-full rounded-full transition-all ${isPrinting ? "bg-blue-500" : "bg-amber-400"}`}
-              style={{ width: `${Math.max(pct, 1)}%` }}
+              style={{ background: isPrinting ? "var(--state-print)" : "var(--state-warn)", width: `${Math.max(pct, 1)}%` }}
             />
           </div>
           <div className="mt-0.5 flex justify-between text-[10px] text-[var(--text-faint)]">
@@ -336,17 +325,18 @@ function PrinterPhotoCard({
           <button
             onClick={(e) => act(e, isPaused ? "resume" : "pause")}
             disabled={!!busy}
-            className={`flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40
-              ${isPaused
-                ? "border-emerald-400 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                : "border-amber-400 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"}`}
+            className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+            style={isPaused
+              ? { borderColor: "var(--state-ok)", color: "var(--state-ok)" }
+              : { borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
           >
             {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
           </button>
           <button
             onClick={(e) => act(e, "cancel")}
             disabled={!!busy}
-            className="flex flex-1 items-center justify-center rounded-lg border border-red-400 py-1.5 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-900/20"
+            className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+            style={{ borderColor: "var(--state-error)", color: "var(--state-error)" }}
           >
             {busy === "cancel" ? "…" : "⏹"}
           </button>
@@ -520,16 +510,16 @@ export default function DashboardPage() {
                 : `${statusStats.nextFinish.eta}m`
               : "—"}
             sub={statusStats.nextFinish?.name}
-            color="#3b82f6"
+            color="var(--state-print)"
             active={filter === "printing"}
             onClick={() => setFilter(filter === "printing" ? "all" : "printing")}
           />
-          <StatusCard label="Requires attention" value={statusStats.attention} color="#ef4444" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
-          <StatusCard label="Idle & ready" value={statusStats.idle} color="#22c55e" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
-          <StatusCard label="Paused" value={statusStats.paused} color="#eab308" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
-          <StatusCard label="Awaiting" value={statusStats.awaiting} color="#f97316" active={filter === "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
-          <StatusCard label="Printing" value={statusStats.printing} color="#8b5cf6" active={filter === "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
-          <StatusCard label="Offline / not connected" value={statusStats.offline} color="#6b7280" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
+          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
+          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
+          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
+          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={filter === "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
+          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={filter === "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
+          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
         </div>
       )}
 
@@ -568,14 +558,14 @@ export default function DashboardPage() {
             <button
               onClick={() => setView("cards")}
               title="Картки"
-              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-neutral-700 text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
+              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </button>
             <button
               onClick={() => setView("photos")}
               title="Фото"
-              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "photos" ? "bg-neutral-700 text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
+              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "photos" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
             </button>
@@ -593,7 +583,7 @@ export default function DashboardPage() {
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+        <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">
           {error}
         </div>
       )}

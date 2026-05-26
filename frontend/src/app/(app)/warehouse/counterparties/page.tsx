@@ -10,8 +10,8 @@ type CounterpartyType = "supplier" | "customer" | "both";
 
 const TYPE_META: Record<CounterpartyType, { label: string; cls: string }> = {
   supplier: { label: "Постачальник", cls: "bg-violet-500/15 text-violet-700 dark:text-violet-400" },
-  customer: { label: "Клієнт",       cls: "bg-cyan-500/15 text-[var(--accent)] " },
-  both:     { label: "Обидва",       cls: "bg-neutral-500/15 text-[var(--text)] " },
+  customer: { label: "Клієнт",       cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)] " },
+  both:     { label: "Обидва",       cls: "bg-[var(--surface-hi)] text-[var(--text)] " },
 };
 
 type Counterparty = {
@@ -177,7 +177,7 @@ function CounterpartyModal({
           <input value={form.notes} onChange={(e) => set("notes", e.target.value)} className={inputCls} />
         </label>
 
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -236,7 +236,7 @@ function BalanceModal({
     >
       <form id="balance-form" onSubmit={submit} className="space-y-3 text-sm">
         <p className="text-[var(--text-muted)] ">
-          Поточний баланс: <span className={`font-medium ${parseFloat(cp?.balance ?? "0") > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+          Поточний баланс: <span className={`font-medium ${parseFloat(cp?.balance ?? "0") > 0 ? "text-[var(--state-error)]" : "text-[var(--state-ok)]"}`}>
             {parseFloat(cp?.balance ?? "0").toLocaleString("uk-UA")} ₴
           </span>
         </p>
@@ -250,7 +250,7 @@ function BalanceModal({
           <input value={note} onChange={(e) => setNote(e.target.value)}
             placeholder="Оплата рахунку №123" className={inputCls} />
         </label>
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
   );
@@ -268,7 +268,7 @@ function fmtBalance(v: string) {
   const n = parseFloat(v);
   if (n === 0) return <span className="text-[var(--text-faint)]">0 ₴</span>;
   return (
-    <span className={n > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}>
+    <span className={n > 0 ? "text-[var(--state-error)]" : "text-[var(--state-ok)]"}>
       {n > 0 ? "+" : ""}{n.toLocaleString("uk-UA")} ₴
     </span>
   );
@@ -320,7 +320,7 @@ export default function CounterpartiesPage() {
             placeholder="Пошук…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-[var(--border-strong)]   "
+            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]   "
           />
           <div className="flex gap-1">
             {TYPE_FILTERS.map((f) => (
@@ -388,7 +388,7 @@ export default function CounterpartiesPage() {
                       <button
                         onClick={() => { setBalanceCp(c); }}
                         title="Записати оплату"
-                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-emerald-600  dark:hover:text-emerald-400">
+                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-ok)]  dark:hover:text-[var(--state-ok)]">
                         ₴
                       </button>
                       <button
