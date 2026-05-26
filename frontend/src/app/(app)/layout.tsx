@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { DynamicFavicon } from "@/components/DynamicFavicon";
 import { Sidebar } from "@/components/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
@@ -44,11 +45,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider user={user}>
+      <DynamicFavicon />
       <div className="flex min-h-screen">
         <Sidebar user={user} />
         {/* pl-14 = collapsed sidebar width; sidebar expands on hover over itself only */}
-        <main className="flex-1 pl-14">
-          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
+        <main className="flex-1 min-w-0 pl-14">
+          <div className="px-6 py-6">
             {children}
           </div>
         </main>
