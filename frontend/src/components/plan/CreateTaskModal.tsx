@@ -90,7 +90,7 @@ export function CreateTaskModal({
             Скасувати
           </button>
           <button type="submit" form="create-task-form" disabled={busy || !title.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Додати"}
           </button>
         </>
@@ -101,20 +101,20 @@ export function CreateTaskModal({
           <span className="mb-1 block">Назва / деталь</span>
           <input type="text" required value={title} onChange={e => setTitle(e.target.value)}
             placeholder="Корпус для проєкту X"
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  "
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] "
             autoFocus />
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block">Кількість</span>
             <input type="number" min={1} value={qty} onChange={e => setQty(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
           </label>
           <label className="block">
             <span className="mb-1 block">Час друку (хв)</span>
             <input type="number" min={0} value={etaMin} onChange={e => setEtaMin(e.target.value)}
               placeholder="240"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
           </label>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -122,19 +122,19 @@ export function CreateTaskModal({
             <span className="mb-1 block">Пластик</span>
             <input type="text" value={filamentType} onChange={e => setFilamentType(e.target.value)}
               placeholder="PLA, PETG…"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
           </label>
           <label className="block">
             <span className="mb-1 block">Колір</span>
             <input type="text" value={filamentColor} onChange={e => setFilamentColor(e.target.value)}
               placeholder="Чорний"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
           </label>
         </div>
         <label className="block">
           <span className="mb-1 block">Дедлайн (опційно)</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " />
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " />
         </label>
         <label className="block">
           <span className="mb-1 block">
@@ -145,7 +145,7 @@ export function CreateTaskModal({
             type="file"
             accept=".gcode,.gco,.g,.3mf,.bgcode"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-white file:hover:bg-neutral-700  dark:file:bg-neutral-100 dark:file:text-neutral-900"
+            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-md file:border-0 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-white file:hover:bg-[var(--accent-hi)]  dark:file:bg-neutral-100 dark:file:text-neutral-900"
           />
           {file && (
             <p className="mt-1 text-xs text-[var(--text-muted)]">

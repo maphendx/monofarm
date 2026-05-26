@@ -149,7 +149,7 @@ export default function AnalyticsPage() {
                 className={
                   "rounded px-2.5 py-1 text-xs transition " +
                   (days === d
-                    ? "bg-[var(--surface)] text-white  "
+                    ? "bg-[var(--accent)] text-white  "
                     : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ")
                 }
               >

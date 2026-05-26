@@ -58,7 +58,7 @@ function ProfileMenu({ user }: { user: User }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface)] text-xs font-semibold text-white transition hover:bg-neutral-700   "
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-semibold text-white transition hover:bg-[var(--accent-hi)]   "
         title={user.name || user.email}
       >
         {initials(user)}
@@ -81,7 +81,7 @@ function ProfileMenu({ user }: { user: User }) {
           )}
           <button
             onClick={logout}
-            className="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-[var(--surface-hi)] dark:text-red-400 "
+            className="flex w-full items-center px-4 py-2 text-sm text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
           >
             {t("auth.logout")}
           </button>
@@ -124,8 +124,8 @@ export function Topbar({ user }: { user: User | null }) {
                   className={
                     "rounded-md px-3 py-1.5 transition " +
                     (active
-                      ? "bg-[var(--surface)] text-white  "
-                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ")
+                      ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]")
                   }
                 >
                   {item.label}

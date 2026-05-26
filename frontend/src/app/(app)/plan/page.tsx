@@ -597,7 +597,7 @@ function QueueRow({
         <div className="flex items-center gap-1 flex-wrap">
           <FilamentChips meta={task.filament_meta} />
           <button
-            className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-muted)] hover:border-neutral-400"
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-muted)] hover:border-[var(--border-strong)]"
             title="Додати тег"
           >
             +

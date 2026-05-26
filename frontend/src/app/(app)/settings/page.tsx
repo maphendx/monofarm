@@ -77,7 +77,7 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[] }> = [
 // ── Shared UI ──────────────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
+  "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
@@ -218,7 +218,7 @@ function BillingSection() {
     <SectionCard>
       <div className="mb-5 flex items-center justify-between">
         <SectionTitle>Білінг</SectionTitle>
-        <span className="rounded-full bg-[var(--surface)] px-3 py-0.5 text-xs font-medium text-white  ">
+        <span className="rounded-full bg-[var(--accent)] px-3 py-0.5 text-xs font-medium text-white  ">
           {PLAN_LABELS[billing.plan]} {billing.price_usd > 0 ? `$${billing.price_usd}/міс` : "Безкоштовно"}
         </span>
       </div>
@@ -246,13 +246,13 @@ function BillingSection() {
           return (
             <div key={p.key}
               className={`rounded-xl border p-4 transition ${isCurrent
-                ? "border-neutral-900 bg-[var(--bg)]  "
+                ? "border-[var(--border-strong)] bg-[var(--bg)]  "
                 : "border-[var(--border)] "}`}
             >
               <div className="mb-1 flex items-center justify-between">
                 <span className="text-sm font-medium">{PLAN_LABELS[p.key]}</span>
                 {isCurrent && (
-                  <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-white  ">
+                  <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[10px] text-white  ">
                     Поточний
                   </span>
                 )}
@@ -269,7 +269,7 @@ function BillingSection() {
                   <button
                     onClick={() => upgrade(p.key)}
                     disabled={upgrading !== null}
-                    className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+                    className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
                   >
                     {upgrading === p.key ? "…" : "Upgrade"}
                   </button>
@@ -315,7 +315,7 @@ function BillingSection() {
             <button
               onClick={saveExtraSlots}
               disabled={savingSlots || extraSlots === (billing.extra_slots ?? 0)}
-              className="rounded-lg bg-[var(--surface)] px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+              className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
             >
               {savingSlots ? "…" : "Зберегти"}
             </button>
@@ -371,7 +371,7 @@ function CmdBlock({ cmd, id, copied, onCopy }: { cmd: string; id: string; copied
       <pre className="overflow-x-auto rounded-lg bg-[var(--bg)] px-4 py-3 text-xs text-emerald-400 whitespace-pre-wrap break-all leading-relaxed">{cmd}</pre>
       <button
         onClick={() => onCopy(cmd.replace(/\\\n\s+/g, " "), id)}
-        className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-neutral-700 hover:text-[var(--text-hi)]"
+        className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-[var(--accent-hi)] hover:text-[var(--text-hi)]"
       >
         {copied === id ? "✓ Скопійовано" : "Копіювати"}
       </button>
@@ -484,7 +484,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
       <button
         onClick={scan}
         disabled={discovering || atLimit}
-        className="rounded-lg bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+        className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
       >
         {discovering ? "Сканування… (до 60 с)" : "Сканувати мережу"}
       </button>
@@ -514,13 +514,13 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                       placeholder="Назва"
                       value={inp.name}
                       onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
-                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
+                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--border-focus)] "
                     />
                     <input
                       placeholder="Access Code (з принтера)"
                       value={inp.access_code}
                       onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, access_code: e.target.value } }))}
-                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
+                      className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--border-focus)] "
                     />
                   </div>
                 )}
@@ -531,7 +531,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                     <button
                       onClick={() => addBambu(d)}
                       disabled={addingKey === key || !inp.access_code}
-                      className="rounded-lg bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50  "
+                      className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50  "
                     >
                       {addingKey === key ? "Додавання…" : "Додати"}
                     </button>
@@ -556,7 +556,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                     placeholder="Назва принтера"
                     value={inp.name}
                     onChange={(e) => setInputs((p) => ({ ...p, [key]: { ...inp, name: e.target.value } }))}
-                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-neutral-900  "
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--border-focus)] "
                   />
                 )}
                 <div className="mt-2 flex justify-end">
@@ -566,7 +566,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
                     <button
                       onClick={() => addMoonraker(d)}
                       disabled={addingKey === key}
-                      className="rounded-lg bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50  "
+                      className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50  "
                     >
                       {addingKey === key ? "Додавання…" : "Додати"}
                     </button>
@@ -903,7 +903,7 @@ function KeyCRMSection() {
         </label>
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button type="submit" disabled={saving}
-          className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+          className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {saving ? "Зберігаю…" : saved ? "✓ Збережено" : "Зберегти"}
         </button>
       </form>
@@ -1142,7 +1142,7 @@ function OrgSection({
               <button
                 type="submit"
                 disabled={codeBusy || code.length < 6}
-                className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+                className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
               >
                 {codeBusy ? "Перевірка…" : "Підтвердити"}
               </button>
@@ -1180,7 +1180,7 @@ function OrgSection({
             <button
               type="submit"
               disabled={codeBusy || !codeEmail}
-              className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
             >
               {codeBusy ? "Надсилання…" : "Надіслати код"}
             </button>
@@ -1259,7 +1259,7 @@ function OrgSection({
               <button
                 type="submit"
                 disabled={tgSaving || !tgToken.trim()}
-                className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+                className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
               >
                 {tgSaving ? "Зберігаю…" : "Зберегти"}
               </button>

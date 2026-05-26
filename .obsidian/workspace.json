@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "d4233229c05746bd",
+        "id": "38243abd2d5a61c5",
         "type": "tabs",
         "children": [
           {
-            "id": "f1d2edd621c3c22b",
+            "id": "0f86b77d7e6232b2",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "CLAUDE.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "CLAUDE"
+              "title": "New tab"
             }
           }
         ]
@@ -183,20 +179,23 @@
       "bases:Create new base": false
     }
   },
-  "active": "f1d2edd621c3c22b",
+  "active": "0f86b77d7e6232b2",
   "lastOpenFiles": [
-    "backend/data/gcodes/cd58290d38f942c8a27af49039c6274f.gcode",
-    "backend/data/gcodes/6ef3bd928cca4ba28ceb1b91d4a13b47.gcode",
-    "backend/data/gcodes/0e7aaa4487364bda8eb004131c90632f.gcode",
-    "backend/data/gcodes/f298c72491e24bd19db1ef303076e28b.gcode",
-    "backend/data/gcodes/85bb803da83d4c4c970bf40157504727.gcode",
+    "github.md",
+    "backend/data/gcodes/1e8d0939622e4fc3a86fd895e2f38964.gcode",
+    "backend/data/gcodes/fb4bcc2a383347ba85669402723bec38.gcode",
+    "backend/data/gcodes/565fdc03ef9c460db04471271ea8f8f9.gcode",
+    "agent/__pycache__/monofarm_tray.cpython-314.pyc",
+    "agent/__pycache__/monofarm_agent.cpython-314.pyc",
+    "agent/__pycache__",
+    "backend/scripts/__pycache__/seed_warehouse.cpython-314.pyc",
+    "backend/scripts/__pycache__/__init__.cpython-314.pyc",
+    "backend/scripts/__pycache__",
+    "backend/scripts/seed_warehouse.py",
+    "bruno/monofarm/README.md",
+    "docs/API_BRUNO.md",
+    "CLAUDE.md",
     "TECH_DEBT.md",
-    "backend/data/gcodes/69e5cfccc81f4403bb25069a0dccae82.gcode",
-    "backend/data/gcodes/4c9360beac3f4f3987cd46a87ffcf696.gcode",
-    "backend/data/gcodes/65d79f1f81884ff3865d1ad79824b0f0.gcode",
-    "backend/data/gcodes/3c7f91e5cbc44e45a8af3b56852a5f70.gcode",
-    "backend/tests/integration/__pycache__/test_printers_api.cpython-314-pytest-9.0.3.pyc",
-    "backend/tests/integration/__pycache__/test_files_api.cpython-314-pytest-9.0.3.pyc",
     "README.md",
     "Untitled.canvas",
     "frontend/node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-viewport.md"

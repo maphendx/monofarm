@@ -188,7 +188,7 @@ export default function SetupPage() {
               placeholder="Пошук бренду або моделі…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-2.5 pl-10 pr-4 text-sm outline-none focus:border-neutral-400  "
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-2.5 pl-10 pr-4 text-sm outline-none focus:border-[var(--border-strong)]  "
             />
           </div>
 
@@ -251,7 +251,7 @@ export default function SetupPage() {
               <button
                 key={m.id}
                 onClick={() => selectModel(m)}
-                className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600"
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-[var(--border-strong)] hover:shadow-sm   dark:hover:border-[var(--border-strong)]"
               >
                 <div>
                   <span className="text-sm font-medium">{m.name}</span>
@@ -343,7 +343,7 @@ export default function SetupPage() {
           </div>
 
           {/* CTA */}
-          <div className="rounded-2xl border border-neutral-900 bg-[var(--surface)] p-5  ">
+          <div className="rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-5  ">
             <p className="text-sm font-semibold text-white ">Готовий до підключення?</p>
             <p className="mt-0.5 text-xs text-[var(--text-faint)] ">
               {model.connection === "cloud"
@@ -380,7 +380,7 @@ function BrandCard({ brand, onClick }: { brand: PrinterBrand; onClick: () => voi
   return (
     <button
       onClick={onClick}
-      className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600"
+      className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition hover:border-[var(--border-strong)] hover:shadow-sm   dark:hover:border-[var(--border-strong)]"
     >
       <div className="flex items-center gap-3">
         <BrandBadge brand={brand} />
@@ -404,7 +404,7 @@ function BrandRow({ brand, onClick }: { brand: PrinterBrand; onClick: () => void
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-neutral-400   dark:hover:border-neutral-600"
+      className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-left transition hover:border-[var(--border-strong)]   dark:hover:border-[var(--border-strong)]"
     >
       <BrandBadge brand={brand} />
       <div className="flex-1 min-w-0">

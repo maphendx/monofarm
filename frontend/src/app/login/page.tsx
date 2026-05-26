@@ -80,7 +80,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
               autoComplete="email"
               autoFocus
             />
@@ -92,7 +92,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
               autoComplete="current-password"
             />
           </label>
@@ -105,7 +105,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+          className="w-full rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
         >
           {busy ? t("auth.loggingIn") : t("auth.loginBtn")}
         </button>

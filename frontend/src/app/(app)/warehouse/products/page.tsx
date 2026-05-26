@@ -69,7 +69,7 @@ function FormRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-const INPUT = "w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400    dark:focus:border-neutral-500";
+const INPUT = "w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]    dark:focus:border-neutral-500";
 const SEC   = "flex flex-col gap-3.5 px-6 py-4";
 const HR    = "border-[var(--border)] ";
 
@@ -89,7 +89,7 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
   }
 
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-neutral-400   dark:focus-within:border-neutral-500">
+    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-strong)]   dark:focus-within:border-neutral-500">
       {value.map((t) => (
         <span key={t} className="flex items-center gap-1 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
           {t}
@@ -242,7 +242,7 @@ function ProductModal({
             Скасувати
           </button>
           <button type="submit" form="product-form" disabled={busy || !name.trim() || !sku.trim()}
-            className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : isEdit ? "Змінити" : "Додати"}
           </button>
         </div>
@@ -440,25 +440,25 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                             <td className="px-4 py-2">
                               <input autoFocus value={cName} onChange={(e) => setCName(e.target.value)}
                                 placeholder="Назва матеріалу"
-                                className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-400  " />
+                                className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--border-strong)]  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.001" min="0" value={cQty} onChange={(e) => setCQty(e.target.value)}
                                 placeholder="0"
-                                className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
+                                className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-[var(--border-strong)]  " />
                             </td>
                             <td className="px-3 py-2">
                               <input value={cUnit} onChange={(e) => setCUnit(e.target.value)}
-                                className="w-12 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-400  " />
+                                className="w-12 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--border-strong)]  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.0001" min="0" value={cPrice} onChange={(e) => setCPrice(e.target.value)}
                                 placeholder="—"
-                                className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
+                                className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-[var(--border-strong)]  " />
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.1" min="0" max="100" value={cWaste} onChange={(e) => setCWaste(e.target.value)}
-                                className="w-16 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-neutral-400  " />
+                                className="w-16 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right text-sm outline-none focus:border-[var(--border-strong)]  " />
                             </td>
                             <td className="px-2 py-2">
                               <form onSubmit={submitComponent} className="flex gap-1">
@@ -535,25 +535,25 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                         <div>
                           <label className="mb-1 block text-xs text-[var(--text-muted)]">Назва</label>
                           <input required value={oName} onChange={(e) => setOName(e.target.value)}
-                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]  " />
                         </div>
                         {oType === "print" ? (
                           <div>
                             <label className="mb-1 block text-xs text-[var(--text-muted)]">Час друку (хв)</label>
                             <input type="number" step="0.1" min="0" value={oMin} onChange={(e) => setOMin(e.target.value)}
-                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
+                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]  " />
                           </div>
                         ) : (
                           <div>
                             <label className="mb-1 block text-xs text-[var(--text-muted)]">Трудозатрати (хв)</label>
                             <input type="number" step="0.1" min="0" value={oLabMin} onChange={(e) => setOLabMin(e.target.value)}
-                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
+                              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]  " />
                           </div>
                         )}
                         <div>
                           <label className="mb-1 block text-xs text-[var(--text-muted)]">Додаткові витрати ₴</label>
                           <input type="number" step="0.01" min="0" value={oExp} onChange={(e) => setOExp(e.target.value)}
-                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-neutral-400  " />
+                            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]  " />
                         </div>
                       </div>
                       <div className="flex justify-end gap-2">
@@ -562,7 +562,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                           Скасувати
                         </button>
                         <button type="submit" disabled={oBusy || !oName.trim()}
-                          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+                          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
                           {oBusy ? "Зберігаю…" : "Додати"}
                         </button>
                       </div>
@@ -596,7 +596,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                         </p>
                       </div>
                     ))}
-                    <div className="col-span-2 sm:col-span-4 flex items-center justify-between rounded-lg border border-neutral-900 bg-[var(--surface)] px-4 py-3 text-white   ">
+                    <div className="col-span-2 sm:col-span-4 flex items-center justify-between rounded-lg border border-[var(--border-strong)] bg-[var(--accent)] px-4 py-3 text-white   ">
                       <span className="text-sm font-medium">Загалом / шт</span>
                       <span className="font-mono text-lg font-bold tabular-nums">
                         {totalCost?.toFixed(2)} ₴
@@ -622,7 +622,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
         {/* Footer */}
         <div className="flex shrink-0 items-center justify-end border-t border-[var(--border)] px-6 py-4 ">
           <button onClick={onClose}
-            className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  ">
+            className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]  ">
             Закрити
           </button>
         </div>
@@ -789,7 +789,7 @@ export default function ProductsPage() {
               </svg>
               <input type="search" placeholder="Назва або артикул…"
                 value={search} onChange={(e) => setSearch(e.target.value)}
-                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400   " />
+                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-neutral-400 focus:border-[var(--border-strong)]   " />
             </div>
             <div className="flex flex-wrap gap-1">
               {allCategories.map((c) => {
@@ -805,8 +805,8 @@ export default function ProductsPage() {
                     ].join(" ") : [
                       "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
                       active
-                        ? "bg-[var(--surface)] text-white border-neutral-900   "
-                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400   dark:hover:border-neutral-500",
+                        ? "bg-[var(--accent)] text-white border-[var(--border-strong)]   "
+                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]   dark:hover:border-neutral-500",
                     ].join(" ")}
                     style={color ? { background: color, color: "#111" } : undefined}
                   >
@@ -818,7 +818,7 @@ export default function ProductsPage() {
             <span className="text-sm text-[var(--text-faint)]">{filtered.length} позицій</span>
           </div>
           <button onClick={() => setEditProduct("create")}
-            className="h-9 rounded-lg bg-[var(--surface)] px-4 text-sm font-medium text-white hover:bg-neutral-700   ">
+            className="h-9 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:bg-[var(--accent-hi)]   ">
             + Номенклатура
           </button>
         </div>
@@ -958,7 +958,7 @@ export default function ProductsPage() {
                 {PAGE_SIZES.map((s) => (
                   <button key={s} onClick={() => setPageSize(s)}
                     className={["rounded px-2 py-0.5 text-sm",
-                      pageSize === s ? "bg-[var(--surface)] text-white  "
+                      pageSize === s ? "bg-[var(--accent)] text-white  "
                         : "hover:bg-[var(--surface-hi)] "].join(" ")}>
                     {s}
                   </button>
@@ -973,7 +973,7 @@ export default function ProductsPage() {
                 {totalPages <= 7 && Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                   <button key={p} onClick={() => setPage(p)}
                     className={["flex size-7 items-center justify-center rounded-md text-sm",
-                      page === p ? "bg-[var(--surface)] text-white  "
+                      page === p ? "bg-[var(--accent)] text-white  "
                         : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "].join(" ")}>
                     {p}
                   </button>

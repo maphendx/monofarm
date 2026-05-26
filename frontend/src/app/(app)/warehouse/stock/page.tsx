@@ -54,8 +54,8 @@ export default function StockPage() {
             <button key={w} onClick={() => setWhFilter(w)}
               className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
                 whFilter === w
-                  ? "bg-[var(--surface)] text-white  "
-                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                  ? "bg-[var(--accent)] text-white  "
+                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
               ].join(" ")}>
               {w}
             </button>

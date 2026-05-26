@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,9 @@ class Printer(Base):
     bambu_access_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     bambu_dev_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
     bambu_model: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # LAN-only MQTT mode (for older firmware without reliable cloud)
+    bambu_lan_mode: Mapped[bool] = mapped_column(default=False, server_default="false")
 
     sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     # Array of {slot, color, type, brand?, filament_id?} dicts — what's loaded in each slot

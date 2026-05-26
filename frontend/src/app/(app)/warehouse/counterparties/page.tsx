@@ -109,7 +109,7 @@ function CounterpartyModal({
     }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal
@@ -123,7 +123,7 @@ function CounterpartyModal({
             Скасувати
           </button>
           <button type="submit" form="cp-form" disabled={busy || !form.name.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : editing ? "Зберегти" : "Створити"}
           </button>
         </>
@@ -217,7 +217,7 @@ function BalanceModal({
     }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal open={open} onClose={onClose} title={`Оплата — ${cp?.name ?? ""}`}
@@ -228,7 +228,7 @@ function BalanceModal({
             Скасувати
           </button>
           <button type="submit" form="balance-form" disabled={busy || !delta}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Записати"}
           </button>
         </>
@@ -320,7 +320,7 @@ export default function CounterpartiesPage() {
             placeholder="Пошук…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-neutral-400   "
+            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-neutral-400 focus:border-[var(--border-strong)]   "
           />
           <div className="flex gap-1">
             {TYPE_FILTERS.map((f) => (
@@ -328,8 +328,8 @@ export default function CounterpartiesPage() {
                 className={[
                   "rounded-md px-2.5 py-1.5 text-xs transition-colors",
                   typeFilter === f
-                    ? "bg-[var(--surface)] text-white  "
-                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                    ? "bg-[var(--accent)] text-white  "
+                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
                 ].join(" ")}>
                 {TYPE_FILTER_LABELS[f]}
               </button>
@@ -337,7 +337,7 @@ export default function CounterpartiesPage() {
           </div>
         </div>
         <button onClick={() => { setEditing(null); setCreateOpen(true); }}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
           + Контрагент
         </button>
       </div>

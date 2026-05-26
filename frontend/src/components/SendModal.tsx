@@ -196,7 +196,7 @@ export function SendModal({
               className={[
                 "flex-1 py-2 text-xs font-medium transition",
                 mode === m.key
-                  ? "border-b-2 border-neutral-900 text-[var(--text-hi)]  "
+                  ? "border-b-2 border-[var(--border-strong)] text-[var(--text-hi)]  "
                   : "text-[var(--text-muted)] hover:text-[var(--text)] ",
               ].join(" ")}>
               {m.label}
@@ -262,8 +262,8 @@ export function SendModal({
                       <label key={p.id} className={[
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
                         selectedId === p.id
-                          ? "border-neutral-900 bg-[var(--bg)]  "
-                          : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500",
+                          ? "border-[var(--border-strong)] bg-[var(--bg)]  "
+                          : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500",
                       ].join(" ")}>
                         <div className="flex items-center gap-3">
                           <input type="radio" name="printer" value={p.id}
@@ -412,19 +412,19 @@ export function SendModal({
           </button>
           {!result?.ok && mode === "print" && (
             <button onClick={sendPrint} disabled={!selectedId || busy}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40  ">
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-40  ">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
           {!result?.ok && mode === "save" && (
             <button onClick={onClose}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
               Готово
             </button>
           )}
           {!result?.ok && mode === "queue" && (
             <button onClick={addToQueue} disabled={busy}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-40  ">
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-40  ">
               {busy ? "Додаю…" : "Додати в чергу"}
             </button>
           )}

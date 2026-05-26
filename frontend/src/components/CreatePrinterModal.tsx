@@ -90,7 +90,7 @@ export function CreatePrinterModal({
             type="submit"
             form="create-printer-form"
             disabled={busy || !name.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50   "
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50   "
           >
             {busy ? "Додаю…" : "Додати"}
           </button>
@@ -106,7 +106,7 @@ export function CreatePrinterModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="U1-01"
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
             autoFocus
           />
         </label>
@@ -115,7 +115,7 @@ export function CreatePrinterModal({
           <select
             value={kind}
             onChange={(e) => setKind(e.target.value as PrinterKind)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
           >
             {KINDS.map((k) => (
               <option key={k.value} value={k.value}>
@@ -135,7 +135,7 @@ export function CreatePrinterModal({
               value={moonrakerUrl}
               onChange={(e) => setMoonrakerUrl(e.target.value)}
               placeholder="http://192.168.31.210"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
             />
           </label>
         )}
@@ -155,7 +155,7 @@ export function CreatePrinterModal({
                 value={bambuDevId}
                 onChange={(e) => setBambuDevId(e.target.value)}
                 placeholder="01P09C321100123"
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
               />
             </label>
             <label className="block">
@@ -168,7 +168,7 @@ export function CreatePrinterModal({
                 value={bambuAccessCode}
                 onChange={(e) => setBambuAccessCode(e.target.value)}
                 placeholder="12345678"
-                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+                className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] "
               />
             </label>
           </>

@@ -269,7 +269,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
       onClick={() => gcode(script, key)}
       disabled={busy !== null}
       title={`${dir} ${dist}мм`}
-      className="flex size-10 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)] transition active:shadow-none active:translate-y-px hover:border-neutral-400 hover:bg-[var(--surface-hi)] disabled:opacity-40    "
+      className="flex size-10 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.08)] transition active:shadow-none active:translate-y-px hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)] disabled:opacity-40    "
     >
       {busy === key ? (
         <span className="text-[10px]">…</span>
@@ -286,7 +286,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
       type="button"
       onClick={() => gcode(script, key)}
       disabled={busy !== null}
-      className="flex size-10 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:border-neutral-400 hover:bg-[var(--surface-hi)] hover:text-[var(--text)] disabled:opacity-40    "
+      className="flex size-10 items-center justify-center rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] disabled:opacity-40    "
       title={`Home ${label}`}
     >
       {busy === key ? (
@@ -342,7 +342,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
                 onClick={() => setDist(d)}
                 className={`px-3 py-1.5 text-[11px] font-medium tabular-nums transition ${
                   dist === d
-                    ? "bg-[var(--surface)] text-white  "
+                    ? "bg-[var(--accent)] text-white  "
                     : "bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   "
                 }`}
               >
@@ -864,7 +864,7 @@ function ColorPaletteModal({
                         <button
                           type="button"
                           onClick={() => saveEdit(c.id)}
-                          className="flex-1 rounded bg-[var(--surface)] py-0.5 text-[10px] text-white  "
+                          className="flex-1 rounded bg-[var(--accent)] py-0.5 text-[10px] text-white  "
                         >
                           ✓
                         </button>
@@ -939,14 +939,14 @@ function ColorPaletteModal({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Назва кольору…"
-              className="flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-neutral-900  dark:focus:border-neutral-300"
+              className="flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
               onKeyDown={(e) => e.key === "Enter" && createColor()}
             />
             <button
               type="button"
               onClick={createColor}
               disabled={busy || !newName.trim()}
-              className="rounded-lg bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40  "
+              className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40  "
             >
               {busy ? "…" : "+ Додати"}
             </button>
@@ -1267,7 +1267,7 @@ function LoadedFilamentsCard({
                 type="button"
                 onClick={save}
                 disabled={busy}
-                className="rounded-lg bg-[var(--surface)] px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50  "
+                className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  "
               >
                 {busy ? "Зберігаю…" : "Зберегти"}
               </button>
@@ -1379,7 +1379,7 @@ function SettingsCard({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-300"
+              className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
             />
           </label>
 
@@ -1406,7 +1406,7 @@ function SettingsCard({
                   value={bambuIp}
                   onChange={(e) => setBambuIp(e.target.value)}
                   placeholder="192.168.1.100"
-                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-300"
+                  className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
                 />
               </div>
             </label>
@@ -1420,7 +1420,7 @@ function SettingsCard({
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="http://192.168.31.210"
-                className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-300"
+                className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
               />
             </label>
           )}
@@ -1430,7 +1430,7 @@ function SettingsCard({
           <button
             type="submit"
             disabled={busy}
-            className="rounded-lg bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50   "
+            className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50   "
           >
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>

@@ -193,7 +193,7 @@ export function LabelGeneratorModal({
     setPrintBusy(false);
   }
 
-  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-500   dark:focus:border-neutral-400";
+  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-neutral-500   dark:focus:border-[var(--border-strong)]";
 
   return (
     <Modal open={true} onClose={onClose}
@@ -219,7 +219,7 @@ export function LabelGeneratorModal({
             ↓ SVG
           </button>
           <button type="button" onClick={downloadPdf} disabled={busy}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Генерую…" : "Друкувати PDF"}
           </button>
         </>
@@ -236,14 +236,14 @@ export function LabelGeneratorModal({
                 <button key={t} type="button" onClick={() => setTemplate(t)}
                   className={["rounded-lg border py-1.5 text-xs font-medium transition",
                     template === t
-                      ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                      ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   "
                       : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                   ].join(" ")}>{LABEL_DIMS[t].label}</button>
               ))}
               <button type="button" onClick={() => setTemplate("custom")}
                 className={["col-span-2 rounded-lg border py-1.5 text-xs font-medium transition",
                   template === "custom"
-                    ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                    ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   "
                     : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                 ].join(" ")}>Свій розмір</button>
             </div>
@@ -257,7 +257,7 @@ export function LabelGeneratorModal({
                   <button key={bt} type="button" onClick={() => setBarcodeType(bt)}
                     className={["rounded-lg border py-1.5 text-xs font-medium transition",
                       barcodeType === bt
-                        ? "border-neutral-900 bg-[var(--surface)] text-white   "
+                        ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   "
                         : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
                     ].join(" ")}>
                     {bt === "qr" ? "QR" : bt === "code128" ? "Code128" : "Немає"}

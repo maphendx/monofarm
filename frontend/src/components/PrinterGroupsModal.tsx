@@ -138,12 +138,12 @@ export function PrinterGroupsModal({
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Назва нової групи…"
             maxLength={120}
-            className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-300"
+            className="flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-focus)] dark:focus:border-neutral-300"
           />
           <button
             type="submit"
             disabled={creating || !newName.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40   "
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-40   "
           >
             {creating ? "…" : "+ Додати"}
           </button>
@@ -200,7 +200,7 @@ export function PrinterGroupsModal({
                           if (e.key === "Enter") saveEdit(g.id);
                           if (e.key === "Escape") cancelEdit();
                         }}
-                        className="flex-1 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-0.5 text-sm outline-none focus:border-neutral-900  "
+                        className="flex-1 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-0.5 text-sm outline-none focus:border-[var(--border-focus)] "
                       />
                       <button
                         type="button"

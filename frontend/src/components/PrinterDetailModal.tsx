@@ -133,7 +133,7 @@ function MoonrakerUrlEditor({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="http://192.168.31.210"
-          className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs outline-none focus:border-neutral-900  "
+          className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs outline-none focus:border-[var(--border-focus)] "
         />
       </label>
       <div className="flex justify-end gap-2 text-xs">
@@ -141,7 +141,7 @@ function MoonrakerUrlEditor({
         <button
           onClick={save}
           disabled={busy || (url.trim() === (printer.moonraker_url ?? ""))}
-          className="rounded bg-[var(--surface)] px-2 py-1 text-white hover:bg-neutral-700 disabled:opacity-50  "
+          className="rounded bg-[var(--accent)] px-2 py-1 text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  "
         >
           {busy ? "…" : "Зберегти URL"}
         </button>
@@ -398,7 +398,7 @@ export function PrinterDetailModal({
                     value={job}
                     onChange={(e) => setJob(e.target.value)}
                     placeholder="Деталь / задача"
-                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] "
                     autoFocus
                   />
                 </label>
@@ -412,7 +412,7 @@ export function PrinterDetailModal({
                     value={eta}
                     onChange={(e) => setEta(e.target.value)}
                     placeholder="напр. 240"
-                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   dark:focus:border-neutral-100"
+                    className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] "
                   />
                 </label>
                 <button
@@ -438,7 +438,7 @@ export function PrinterDetailModal({
                   type="button"
                   onClick={release}
                   disabled={busy}
-                  className="w-full rounded-md bg-[var(--surface)] px-3 py-2 font-medium text-white hover:bg-neutral-700 disabled:opacity-50   "
+                  className="w-full rounded-md bg-[var(--accent)] px-3 py-2 font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50   "
                 >
                   {busy ? "Зберігаю…" : "Звільнити (друк завершено)"}
                 </button>

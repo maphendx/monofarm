@@ -97,7 +97,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
   const incomeCategories: TxCategory[]  = ["order_payment", "refund", "other"];
   const expenseCategories: TxCategory[] = ["supplier_payment", "salary", "utility", "refund", "other"];
   const categories = type === "income" ? incomeCategories : expenseCategories;
@@ -111,7 +111,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
             Скасувати
           </button>
           <button type="submit" form="cash-form" disabled={busy || !amount}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Додати"}
           </button>
         </>
@@ -259,8 +259,8 @@ export default function CashFlowPage() {
                 className={[
                   "rounded-md px-2.5 py-1.5 text-xs transition-colors",
                   typeFilter === f
-                    ? "bg-[var(--surface)] text-white  "
-                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                    ? "bg-[var(--accent)] text-white  "
+                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
                 ].join(" ")}>
                 {f === "all" ? "Всі" : f === "income" ? "Доходи" : "Витрати"}
               </button>
@@ -276,7 +276,7 @@ export default function CashFlowPage() {
           </div>
         </div>
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
           + Транзакція
         </button>
       </div>

@@ -51,7 +51,7 @@ function FarmTaskCard({
         "group relative cursor-grab rounded-lg border bg-[var(--bg-elevated)] p-3 shadow-sm active:cursor-grabbing ",
         dragging
           ? "opacity-50 ring-2 ring-neutral-400"
-          : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-600",
+          : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-[var(--border-strong)]",
       ].join(" ")}
     >
       <div className="absolute right-2 top-2 hidden gap-1 group-hover:flex">
@@ -112,7 +112,7 @@ function KanbanColumn({
               onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(""); setAdding(false); } }}
               placeholder="Назва завдання…" className="w-full bg-transparent text-sm outline-none" />
             <div className="mt-2 flex gap-2">
-              <button onClick={commit} className="rounded bg-[var(--surface)] px-2 py-1 text-xs text-white hover:bg-neutral-700  ">Додати</button>
+              <button onClick={commit} className="rounded bg-[var(--accent)] px-2 py-1 text-xs text-white hover:bg-[var(--accent-hi)]  ">Додати</button>
               <button onClick={() => { setDraft(""); setAdding(false); }} className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ">Скасувати</button>
             </div>
           </div>
@@ -155,16 +155,16 @@ function FarmTaskEditModal({ task, onClose, onSaved }: { task: FarmTask | null; 
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання"
       footer={<>
         <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
-        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="submit" form="edit-farm-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-farm-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
         <label className="block"><span className="mb-1 block">Опис</span>
           <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)}
-            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
+            className="w-full resize-none rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Дедлайн</span>
             <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
@@ -265,7 +265,7 @@ function CompleteModal({ task, onClose, onDone }: {
     } finally { setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title={`Завершити: ${task.title}`}
@@ -428,13 +428,13 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
     <Modal open={!!task} onClose={() => { if (!busy) onClose(); }} title="Редагувати завдання друку"
       footer={<>
         <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
-        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
+        <button type="submit" form="edit-print-form" disabled={busy || !title.trim()} className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">{busy ? "Зберігаю…" : "Зберегти"}</button>
       </>}
     >
       <form id="edit-print-form" onSubmit={submit} className="space-y-3 text-sm">
         <label className="block"><span className="mb-1 block">Назва</span>
           <input type="text" required autoFocus value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900  " /></label>
+            className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] " /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="mb-1 block">Кількість</span>
             <input type="number" min={1} value={qty} onChange={e => setQty(Number(e.target.value))}
@@ -509,7 +509,7 @@ function PrintTasksTab() {
           <button key={opt.value} onClick={() => setFilter(opt.value)}
             className={["rounded-full px-3 py-1 text-sm transition",
               filter === opt.value
-                ? "bg-[var(--surface)] text-white  "
+                ? "bg-[var(--accent)] text-white  "
                 : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
             ].join(" ")}>
             {opt.label}
@@ -678,7 +678,7 @@ export default function TasksPage() {
           <button key={id} onClick={() => setTab(id)}
             className={["px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px",
               tab === id
-                ? "border-neutral-900 text-[var(--text-hi)]  "
+                ? "border-[var(--border-strong)] text-[var(--text-hi)]  "
                 : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)] ",
             ].join(" ")}>
             {label}
@@ -701,7 +701,7 @@ export default function TasksPage() {
             </div>
             <DragOverlay dropAnimation={null}>
               {draggingTask && (
-                <div className="w-72 cursor-grabbing rounded-lg border-2 border-neutral-400 bg-[var(--bg-elevated)] p-3 shadow-xl ">
+                <div className="w-72 cursor-grabbing rounded-lg border-2 border-[var(--border-strong)] bg-[var(--bg-elevated)] p-3 shadow-xl ">
                   <p className="text-sm font-medium">{draggingTask.title}</p>
                   {draggingTask.description && <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{draggingTask.description}</p>}
                 </div>

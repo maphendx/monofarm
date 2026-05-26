@@ -69,6 +69,8 @@ _state_cache: dict[str, dict[str, Any]] = {}
 _ams_cache: dict[str, list[dict]] = {}
 # dev_id → org_id  — routes publish to the right MQTT client
 _dev_to_org: dict[str, int] = {}
+# dev_id → paho Client  — per-device LAN MQTT clients (older firmware, no cloud)
+_lan_mqtt_clients: dict[str, Any] = {}
 
 
 def _next_seq() -> str:
@@ -620,6 +622,15 @@ def get_ams_filaments(dev_id: str) -> list[dict]:
 
 
 def _publish(dev_id: str, payload: dict) -> None:
+    # LAN client takes priority (per-device, older firmware)
+    lan_client = _lan_mqtt_clients.get(dev_id)
+    if lan_client is not None:
+        lan_client.publish(
+            f"device/{dev_id}/request",
+            json.dumps(payload, separators=(",", ":")),
+        )
+        return
+    # Cloud MQTT client (per-org)
     org_id = _dev_to_org.get(dev_id)
     client = _mqtt_clients.get(org_id) if org_id is not None else None
     if client is not None:
@@ -837,8 +848,37 @@ def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) ->
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 
+async def init_lan_printers(org_id: int) -> None:
+    """Start LAN MQTT clients for printers with bambu_lan_mode=True.
+
+    Called from FastAPI lifespan after DB is ready. LAN printers don't need
+    cloud auth — they connect directly to the printer IP with the access code.
+    """
+    try:
+        from app.core.db import SessionLocal
+        from app.models.printer import Printer, PrinterKind
+        with SessionLocal() as db:
+            rows = (
+                db.query(Printer)
+                .filter(
+                    Printer.organization_id == org_id,
+                    Printer.kind == PrinterKind.bambu,
+                    Printer.bambu_lan_mode.is_(True),
+                    Printer.is_active.is_(True),
+                )
+                .all()
+            )
+        for row in rows:
+            if row.bambu_dev_id and row.bambu_dev_ip and row.bambu_access_code:
+                start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+    except Exception:
+        log.exception("Bambu LAN MQTT init failed (org_id=%s)", org_id)
+
+
 async def init(org: "Organization") -> None:
     """Start Bambu Cloud auth + MQTT for one org.  Called from FastAPI lifespan."""
+    await init_lan_printers(org.id)
+
     if not _is_configured(org):
         return
 
@@ -893,7 +933,7 @@ async def init(org: "Organization") -> None:
 async def shutdown(org_id: int | None = None) -> None:
     """Stop MQTT loop(s).  Called from FastAPI lifespan.
 
-    If org_id is None, shuts down all orgs.
+    If org_id is None, shuts down all orgs and all LAN clients.
     """
     targets = [org_id] if org_id is not None else list(_mqtt_clients.keys())
     for oid in targets:
@@ -904,3 +944,73 @@ async def shutdown(org_id: int | None = None) -> None:
                 client.disconnect()
             except Exception:
                 pass
+
+    if org_id is None:
+        for dev_id in list(_lan_mqtt_clients.keys()):
+            stop_lan_mqtt(dev_id)
+
+
+# ── LAN MQTT (per-device, older firmware without cloud) ──────────────────────
+
+
+def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str) -> None:
+    """Connect directly to a printer over LAN MQTT (port 8883, TLS, no cloud).
+
+    Auth: username="bblp", password=access_code (LAN Access Code from display).
+    Creates a dedicated paho client per device; reuses the same _on_message handler.
+    Idempotent — stops and replaces any existing LAN client for this device.
+    """
+    stop_lan_mqtt(dev_id)
+
+    try:
+        import paho.mqtt.client as mqtt
+
+        def _on_connect_lan(client: Any, userdata: Any, flags: Any, rc: int, properties: Any = None) -> None:
+            if rc != 0:
+                log.warning("Bambu LAN MQTT connect failed (dev_id=%s): rc=%s", dev_id, rc)
+                return
+            log.info("Bambu LAN MQTT connected (dev_id=%s ip=%s)", dev_id, dev_ip)
+            client.subscribe(f"device/{dev_id}/report")
+            # Request full state dump on connect
+            client.publish(
+                f"device/{dev_id}/request",
+                json.dumps({"pushing": {"command": "pushall", "sequence_id": "0", "version": 1, "push_target": 1}},
+                           separators=(",", ":")),
+            )
+
+        def _on_disconnect_lan(client: Any, userdata: Any, rc: int, properties: Any = None) -> None:
+            if rc != 0:
+                log.warning("Bambu LAN MQTT disconnected unexpectedly (dev_id=%s): rc=%s", dev_id, rc)
+
+        client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            protocol=mqtt.MQTTv311,
+            client_id=f"monofarm-lan-{dev_id}",
+        )
+        client.username_pw_set("bblp", access_code)
+        client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+        client.tls_insecure_set(True)
+
+        client.on_connect = _on_connect_lan
+        client.on_disconnect = _on_disconnect_lan
+        client.on_message = _on_message
+
+        _state_cache.setdefault(dev_id, {"ts": 0, "state": "unknown"})
+        client.connect_async(dev_ip, 8883, MQTT_KEEPALIVE)
+        client.loop_start()
+        _lan_mqtt_clients[dev_id] = client
+        log.info("Bambu LAN MQTT loop started (dev_id=%s ip=%s)", dev_id, dev_ip)
+    except Exception:
+        log.exception("Bambu LAN MQTT startup failed (dev_id=%s ip=%s)", dev_id, dev_ip)
+
+
+def stop_lan_mqtt(dev_id: str) -> None:
+    """Stop and remove the LAN MQTT client for a device."""
+    client = _lan_mqtt_clients.pop(dev_id, None)
+    if client is not None:
+        try:
+            client.loop_stop()
+            client.disconnect()
+        except Exception:
+            pass
+        log.info("Bambu LAN MQTT stopped (dev_id=%s)", dev_id)

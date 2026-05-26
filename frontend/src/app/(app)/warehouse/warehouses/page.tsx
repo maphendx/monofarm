@@ -71,7 +71,7 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
             <span className="mb-1 block text-[var(--text-muted)] ">Назва</span>
             <input
               required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-neutral-900   "
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] "
             />
           </label>
           <label className="block">
@@ -100,7 +100,7 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
               Скасувати
             </button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-white hover:bg-neutral-700 disabled:opacity-50  ">
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
               {busy ? "Зберігаю…" : "Додати"}
             </button>
           </div>
@@ -149,7 +149,7 @@ export default function WarehousesPage() {
         </div>
         <button
           onClick={() => setAddOpen(true)}
-          className="rounded-lg bg-[var(--surface)] px-3.5 py-2 text-sm font-medium text-white hover:bg-neutral-700   "
+          className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-white hover:bg-[var(--accent-hi)]   "
         >
           + Склад
         </button>
@@ -232,7 +232,7 @@ export default function WarehousesPage() {
           <p className="text-sm text-[var(--text-muted)]">Складів ще немає</p>
           <button
             onClick={() => setAddOpen(true)}
-            className="mt-3 rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  "
+            className="mt-3 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]  "
           >
             Додати перший склад
           </button>

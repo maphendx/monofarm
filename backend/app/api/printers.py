@@ -786,12 +786,16 @@ def create_printer(
         bambu_access_code=payload.bambu_access_code,
         bambu_dev_ip=payload.bambu_dev_ip,
         bambu_model=payload.bambu_model,
+        bambu_lan_mode=payload.bambu_lan_mode,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
-        bambu.subscribe_device(row.bambu_dev_id, org.id)
+        if row.bambu_lan_mode and row.bambu_dev_ip and row.bambu_access_code:
+            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+        else:
+            bambu.subscribe_device(row.bambu_dev_id, org.id)
     return _to_dto(row, db)
 
 
@@ -820,8 +824,18 @@ def update_printer(
         row.bambu_dev_ip = payload.bambu_dev_ip.strip() or None
     if payload.bambu_model is not None:
         row.bambu_model = payload.bambu_model.strip() or None
+    if payload.bambu_lan_mode is not None:
+        row.bambu_lan_mode = payload.bambu_lan_mode
     db.commit()
     db.refresh(row)
+
+    # Restart LAN MQTT if relevant fields changed on a Bambu printer
+    if row.kind == PrinterKind.bambu and row.bambu_dev_id:
+        if row.bambu_lan_mode and row.bambu_dev_ip and row.bambu_access_code:
+            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+        else:
+            bambu.stop_lan_mqtt(row.bambu_dev_id)
+
     return _to_dto(row, db)
 
 

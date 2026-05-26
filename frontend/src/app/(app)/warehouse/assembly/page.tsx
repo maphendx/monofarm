@@ -205,7 +205,7 @@ export default function AssemblyPage() {
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-[var(--text-muted)]">Assembly Orders — збірка з компонентів</p>
-        <button className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700   ">
+        <button className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]   ">
           + Збірка
         </button>
       </div>

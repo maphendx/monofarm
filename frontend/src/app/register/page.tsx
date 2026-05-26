@@ -51,7 +51,7 @@ export default function RegisterPage() {
   }
 
   const inputCls =
-    "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
+    "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
@@ -140,7 +140,7 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   "
+          className="w-full rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   "
         >
           {busy ? t("auth.registering") : t("auth.signUp")}
         </button>

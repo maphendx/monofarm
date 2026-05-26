@@ -97,8 +97,8 @@ export default function AnalyticsPage() {
           <button key={p} onClick={() => setPeriod(p)}
             className={["rounded-md px-3 py-1.5 text-xs transition-colors",
               period === p
-                ? "bg-[var(--surface)] text-white  "
-                : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                ? "bg-[var(--accent)] text-white  "
+                : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
             ].join(" ")}>
             {PERIOD_LABELS[p]}
           </button>

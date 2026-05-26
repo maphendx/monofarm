@@ -12,7 +12,7 @@ const API_BASE =
 const INSTALL_CMD = `curl -sSL ${typeof window !== "undefined" ? window.location.origin.replace(":3000", ":8000") : "https://api.monofarm.app"}/agent/install.sh | bash`;
 
 const primaryBtn =
-  "rounded-md bg-[var(--surface)] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-700   ";
+  "rounded-md bg-[var(--accent)] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)]   ";
 
 const ghostBtn =
   "rounded-md px-5 py-2.5 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
@@ -142,8 +142,8 @@ export default function OnboardingPage() {
                       className={[
                         "rounded-md px-3 py-1 text-xs font-medium transition",
                         os === platform
-                          ? "bg-[var(--surface)] text-white  "
-                          : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                          ? "bg-[var(--accent)] text-white  "
+                          : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
                       ].join(" ")}>
                       {platform === "windows" ? "Windows" : "Linux / macOS"}
                     </button>
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
                     {installCmd(os)}
                   </pre>
                   <button onClick={copy}
-                    className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-neutral-700 hover:text-[var(--text-hi)]">
+                    className="absolute right-2 top-2 rounded bg-[var(--surface-2)] px-2 py-1 text-[10px] text-[var(--text-faint)] transition hover:bg-[var(--accent-hi)] hover:text-[var(--text-hi)]">
                     {copied ? "✓" : "Копіювати"}
                   </button>
                 </div>

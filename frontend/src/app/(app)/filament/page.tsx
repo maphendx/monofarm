@@ -273,7 +273,7 @@ function FilamentFormModal({
           Скасувати
         </button>
         <button type="submit" form="filament-form" disabled={busy || !material.trim() || !color.trim()}
-          className="rounded-md bg-[var(--surface)] px-4 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50  ">
+          className="rounded-md bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити котушку"}
         </button>
       </>}>
@@ -315,8 +315,8 @@ function FilamentFormModal({
                     className={[
                       "flex flex-col items-center gap-1 rounded-lg border px-1.5 py-1.5 transition",
                       gramsTotal === g
-                        ? "border-neutral-900 bg-[var(--bg)]  "
-                        : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500",
+                        ? "border-[var(--border-strong)] bg-[var(--bg)]  "
+                        : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500",
                     ].join(" ")}>
                     <div style={{ width: `${20 + (g / 1200) * 16}px`, height: `${20 + (g / 1200) * 16}px` }}>
                       <SpoolSVG hexColor={hexColor || "#9ca3af"} />
@@ -348,7 +348,7 @@ function FilamentFormModal({
                       className={[
                         "px-2.5 py-1.5 font-medium transition",
                         amountMode === m
-                          ? "bg-[var(--surface)] text-white  "
+                          ? "bg-[var(--accent)] text-white  "
                           : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] ",
                       ].join(" ")}>
                       {m === "gram" ? "г" : "%"}
@@ -474,7 +474,7 @@ function AdjustModal({
 
   const previewGrams = filament.grams_remaining + (direction === "add" ? 1 : -1) * (parseInt(delta) || 0);
   const previewPct = Math.min(100, Math.round((Math.max(0, previewGrams) / FULL_SPOOL_G) * 100));
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal open={!!filament} onClose={() => { if (!busy) onClose(); }}
@@ -485,7 +485,7 @@ function AdjustModal({
           Скасувати
         </button>
         <button type="submit" form="adjust-form" disabled={busy || !delta}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Застосувати"}
         </button>
       </>}>
@@ -576,7 +576,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
     setColors(prev => prev.filter(x => x.id !== c.id));
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900  ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <div>
@@ -614,7 +614,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
           <button type="button" onClick={() => setAddOpen(false)} disabled={busy}
             className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">Скасувати</button>
           <button type="submit" form="color-form" disabled={busy || !name.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
             {busy ? "Зберігаю…" : "Зберегти"}
           </button>
         </>}>
@@ -630,7 +630,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
               <input type="color" value={hex} onChange={e => setHex(e.target.value)}
                 className="h-10 w-14 cursor-pointer rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1  " />
               <input type="text" value={hex} onChange={e => setHex(e.target.value)}
-                pattern="^#[0-9a-fA-F]{6}$" className="w-28 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900  " />
+                pattern="^#[0-9a-fA-F]{6}$" className="w-28 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 font-mono text-sm outline-none focus:border-[var(--border-focus)] " />
             </div>
           </label>
           {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
@@ -735,7 +735,7 @@ export default function FilamentPage() {
         </div>
         {canEdit && (
           <button onClick={() => { setEditFilament(null); setEditOpen(true); }}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
             + Котушка
           </button>
         )}
@@ -767,7 +767,7 @@ export default function FilamentPage() {
         <>
           <input type="search" placeholder="Пошук за матеріалом, кольором, SKU…"
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400  " />
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]  " />
 
           {grouped.length === 0 ? (
             <p className="text-sm text-[var(--text-faint)]">Нічого не знайдено</p>
@@ -823,7 +823,7 @@ export default function FilamentPage() {
             <button
               type="button"
               onClick={() => setLabelFilaments(selectedFilaments)}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700  "
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--accent-hi)]  "
             >
               🏷 Генерувати лейбли
             </button>

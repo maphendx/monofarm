@@ -95,7 +95,7 @@ function CreateMovementModal({
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal open={open} onClose={onClose} title="Новий рух товару"
@@ -106,7 +106,7 @@ function CreateMovementModal({
         </button>
         <button type="submit" form="movement-form"
           disabled={busy || !productId || parseFloat(quantity) <= 0}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Зафіксувати"}
         </button>
       </>}
@@ -231,8 +231,8 @@ export default function MovementsPage() {
             <button key={f} onClick={() => setFilter(f)}
               className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
                 filter === f
-                  ? "bg-[var(--surface)] text-white  "
-                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-neutral-400  ",
+                  ? "bg-[var(--accent)] text-white  "
+                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
               ].join(" ")}>
               {f}
             </button>
@@ -241,7 +241,7 @@ export default function MovementsPage() {
         <div className="flex gap-2">
           <button onClick={load} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]  ">↻</button>
           <button onClick={() => setCreateOpen(true)}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
             + Рух
           </button>
         </div>

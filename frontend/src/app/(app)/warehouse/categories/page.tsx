@@ -91,7 +91,7 @@ function CategoryModal({
             <label className="mb-1.5 block text-sm text-[var(--text-muted)] ">Назва</label>
             <input
               required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-400   "
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]   "
             />
           </div>
 
@@ -105,7 +105,7 @@ function CategoryModal({
                   onClick={() => setColor(c)}
                   className={[
                     "size-7 rounded-full border-2 transition-transform hover:scale-110",
-                    color === c ? "border-neutral-900  scale-110" : "border-transparent",
+                    color === c ? "border-[var(--border-strong)]  scale-110" : "border-transparent",
                   ].join(" ")}
                   style={{ background: c }}
                 />
@@ -135,7 +135,7 @@ function CategoryModal({
               Скасувати
             </button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+              className="rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
               {busy ? "Зберігаю…" : isEdit ? "Зберегти" : "Додати"}
             </button>
           </div>
@@ -193,7 +193,7 @@ export default function CategoriesPage() {
         </div>
         <button
           onClick={() => setModal("create")}
-          className="h-9 rounded-lg bg-[var(--surface)] px-4 text-sm font-medium text-white hover:bg-neutral-700  "
+          className="h-9 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:bg-[var(--accent-hi)]  "
         >
           + Категорія
         </button>
@@ -206,7 +206,7 @@ export default function CategoriesPage() {
           <p className="mt-1 text-xs text-[var(--text-faint)]">Додай першу, щоб групувати номенклатуру</p>
           <button
             onClick={() => setModal("create")}
-            className="mt-4 rounded-md bg-[var(--surface)] px-4 py-2 text-sm text-white hover:bg-neutral-700  "
+            className="mt-4 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]  "
           >
             Додати категорію
           </button>

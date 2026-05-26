@@ -68,7 +68,7 @@ export function StartPrintModal({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm outline-none focus:border-neutral-400   dark:focus:border-neutral-500"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]   dark:focus:border-neutral-500"
           />
         </div>
 

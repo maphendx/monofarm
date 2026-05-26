@@ -157,7 +157,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
         <div className="border-b border-[var(--border)] px-5 py-4">
-          <h2 className="font-semibold text-neutral-100">Надіслати на принтер</h2>
+          <h2 className="font-semibold text-[var(--text-hi)]">Надіслати на принтер</h2>
           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{file.original_name}</p>
         </div>
 
@@ -300,12 +300,12 @@ function FolderNameModal({ title, initialValue, onConfirm, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-xs rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
         <div className="border-b border-[var(--border)] px-5 py-4">
-          <h2 className="font-semibold text-sm text-neutral-100">{title}</h2>
+          <h2 className="font-semibold text-sm text-[var(--text-hi)]">{title}</h2>
         </div>
         <form onSubmit={submit} className="px-5 py-4 space-y-3">
           <input ref={ref} type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="Назва папки" maxLength={255}
-            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:border-accent" />
+            className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-hi)] placeholder-neutral-500 outline-none focus:border-accent" />
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded-md px-3 py-1.5 text-sm text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">Скасувати</button>
@@ -364,7 +364,7 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
       </div>
 
       <div className="w-full text-center">
-        <p className="truncate text-sm font-medium text-neutral-100" title={folder.name}>{folder.name}</p>
+        <p className="truncate text-sm font-medium text-[var(--text-hi)]" title={folder.name}>{folder.name}</p>
         <p className="text-xs text-[var(--text-muted)]">
           {folder.file_count} {folder.file_count === 1 ? "файл" : folder.file_count < 5 ? "файли" : "файлів"}
         </p>
@@ -741,14 +741,14 @@ export default function FilesPage() {
                 Файли
               </button>
               <span className="text-[var(--text-muted)]">/</span>
-              <span className="text-sm font-semibold text-neutral-100">{currentFolder.name}</span>
+              <span className="text-sm font-semibold text-[var(--text-hi)]">{currentFolder.name}</span>
               <span className="rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
                 {currentFolder.file_count}
               </span>
             </>
           ) : (
             <div>
-              <h1 className="text-lg font-bold text-neutral-100">Файли</h1>
+              <h1 className="text-lg font-bold text-[var(--text-hi)]">Файли</h1>
               <p className="text-xs text-[var(--text-muted)]">
                 {files.length} файлів · {folders.length} папок
               </p>

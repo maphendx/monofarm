@@ -147,7 +147,7 @@ export default function ProductDetailPage() {
             className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50  ">
             {costBusy ? "Рахую…" : "↻ Собівартість"}
           </button>
-          <button className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700  ">
+          <button className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]  ">
             + Партія
           </button>
         </div>

@@ -74,7 +74,7 @@ function printerToForm(p: Printer): PrinterForm {
 }
 
 function inputCls() {
-  return "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
+  return "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -95,7 +95,7 @@ function WizardTypeCard({ icon, title, desc, badge, onClick }: {
   icon: React.ReactNode; title: string; desc: string; badge?: string; onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className="group flex w-full items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4 text-left transition hover:border-neutral-400 hover:shadow-sm   dark:hover:border-neutral-600">
+    <button onClick={onClick} className="group flex w-full items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4 text-left transition hover:border-[var(--border-strong)] hover:shadow-sm   dark:hover:border-[var(--border-strong)]">
       <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[var(--text-muted)]   ">
         {icon}
       </div>
@@ -154,8 +154,8 @@ function AddPrinterWizard({ open, onClose, onDone }: {
     }
   }
 
-  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   dark:focus:border-neutral-100";
-  const primaryBtn = "rounded-md bg-[var(--surface)] px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50   ";
+  const inp = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const primaryBtn = "rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hi)] disabled:opacity-50   ";
   const ghostBtn = "rounded-md px-4 py-2 text-sm text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] ";
 
   return (
@@ -353,7 +353,7 @@ function PrinterModal({
             type="submit"
             form="printer-form"
             disabled={busy || !form.name.trim()}
-            className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50   "
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50   "
           >
             {busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}
           </button>
@@ -384,8 +384,8 @@ function PrinterModal({
                 className={
                   "rounded-lg border p-3 text-left transition " +
                   (form.kind === opt.value
-                    ? "border-neutral-900 bg-[var(--surface)] text-white   "
-                    : "border-[var(--border)] hover:border-neutral-400  dark:hover:border-neutral-500")
+                    ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   "
+                    : "border-[var(--border)] hover:border-[var(--border-strong)]  dark:hover:border-neutral-500")
                 }
               >
                 <p className="text-sm font-medium">{opt.label}</p>
@@ -581,7 +581,7 @@ export default function PrintersPage() {
           {isAdmin && (
             <button
               onClick={() => setWizardOpen(true)}
-              className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700   "
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]   "
             >
               + Додати принтер
             </button>
@@ -605,7 +605,7 @@ export default function PrintersPage() {
                 <button
                   onClick={() => claimDevice(d.dev_id)}
                   disabled={claiming === d.dev_id}
-                  className="rounded-md bg-[var(--surface)] px-3 py-1 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50  "
+                  className="rounded-md bg-[var(--accent)] px-3 py-1 text-xs font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  "
                 >
                   {claiming === d.dev_id ? "…" : "Додати"}
                 </button>

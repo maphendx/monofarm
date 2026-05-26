@@ -72,7 +72,7 @@ function CreateBatchModal({
     finally { inFlight.current = false; setBusy(false); }
   }
 
-  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-neutral-900   ";
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
 
   return (
     <Modal open={open} onClose={onClose} title="Нова виробнича партія"
@@ -82,7 +82,7 @@ function CreateBatchModal({
           Скасувати
         </button>
         <button type="submit" form="batch-form" disabled={busy || !productId || parseInt(targetQty) < 1}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:opacity-50  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Створити"}
         </button>
       </>}
@@ -224,7 +224,7 @@ export default function ProductionPage() {
     <div className="space-y-4">
       <div className="flex justify-end">
         <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-[var(--surface)] px-3 py-1.5 text-xs text-white hover:bg-neutral-700  ">
+          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
           + Партія
         </button>
       </div>
