@@ -12,15 +12,48 @@ import { useUser } from "@/lib/auth-context";
 import type { Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 
-// ── status tabs config ────────────────────────────────────────────────────────
+// ── mascot ────────────────────────────────────────────────────────────────────
+
+function Mascot() {
+  const B = "#0891b2";
+  const S = "#0e7490";
+  const F = "#cffafe";
+  const E = "#083344";
+  const A = "#22d3ee";
+  return (
+    <svg width={90} height={117} viewBox="0 0 10 13" shapeRendering="crispEdges"
+      style={{ imageRendering: "pixelated" }} aria-hidden>
+      <rect x="4" y="0" width="2" height="1" fill={A} />
+      <rect x="4" y="1" width="2" height="1" fill={B} />
+      <rect x="2" y="2" width="6" height="1" fill={F} />
+      <rect x="1" y="3" width="8" height="3" fill={F} />
+      <rect x="2" y="6" width="6" height="1" fill={F} />
+      <rect x="2" y="4" width="2" height="2" fill={E} />
+      <rect x="6" y="4" width="2" height="2" fill={E} />
+      <rect x="3" y="4" width="1" height="1" fill="white" opacity="0.65" />
+      <rect x="7" y="4" width="1" height="1" fill="white" opacity="0.65" />
+      <rect x="1" y="5" width="1" height="1" fill="#f9a8d4" opacity="0.6" />
+      <rect x="8" y="5" width="1" height="1" fill="#f9a8d4" opacity="0.6" />
+      <rect x="3" y="6" width="4" height="1" fill={S} opacity="0.5" />
+      <rect x="2" y="7" width="6" height="3" fill={B} />
+      <rect x="3" y="8" width="4" height="1" fill={S} opacity="0.35" />
+      <rect x="0" y="7" width="2" height="2" fill={B} />
+      <rect x="8" y="7" width="2" height="2" fill={B} />
+      <rect x="3" y="10" width="2" height="2" fill={S} />
+      <rect x="5" y="11" width="2" height="2" fill={S} />
+    </svg>
+  );
+}
+
+// ── tabs config ───────────────────────────────────────────────────────────────
 
 type StatusTab = PrintTaskStatus;
 
-const TABS: { id: StatusTab; labelUk: string; labelEn: string }[] = [
-  { id: "queued",      labelUk: "В черзі",   labelEn: "Queued" },
-  { id: "in_progress", labelUk: "В процесі", labelEn: "In Progress" },
-  { id: "done",        labelUk: "Виконано",  labelEn: "Completed" },
-  { id: "cancelled",   labelUk: "Скасовано", labelEn: "Cancelled" },
+const TABS: { id: StatusTab; label: string; dot: string }[] = [
+  { id: "queued",      label: "В черзі",   dot: "bg-[var(--accent)]" },
+  { id: "in_progress", label: "В процесі", dot: "bg-[var(--state-warn)]" },
+  { id: "done",        label: "Виконано",  dot: "bg-[var(--state-ok)]" },
+  { id: "cancelled",   label: "Скасовано", dot: "bg-[var(--state-idle)]" },
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -75,21 +108,12 @@ function MaterialCell({ meta }: { meta: PrintTask["filament_meta"] }) {
     <div className="flex items-center gap-1.5">
       <div className="flex">
         {colors.slice(0, 3).map((c, i) => (
-          <span key={i} className="h-3 w-3 rounded-full border border-[var(--border)]" style={{ background: c, marginLeft: i > 0 ? -4 : 0 }} />
+          <span key={i} className="h-3 w-3 rounded-full border border-[var(--border)]"
+            style={{ background: c, marginLeft: i > 0 ? -4 : 0 }} />
         ))}
       </div>
-      <span className="text-[var(--text-muted)]">{total > 0 ? `${total.toFixed(1)} g` : "—"}</span>
+      <span className="text-[var(--text-muted)]">{total > 0 ? `${total.toFixed(1)} г` : "—"}</span>
     </div>
-  );
-}
-
-function PrinterCell({ printerId, printerName }: { printerId: number | null; printerName: string | null }) {
-  if (!printerId || !printerName) return <span className="text-[var(--text-muted)]">—</span>;
-  return (
-    <span className="flex items-center gap-1.5 text-[var(--text-muted)]">
-      <span className="text-base">🖨️</span>
-      <span className="truncate max-w-[80px]">{printerName}</span>
-    </span>
   );
 }
 
@@ -103,16 +127,10 @@ function EmptyState({ status, onAdd }: { status: StatusTab; onAdd: () => void })
     cancelled:   "Скасованих завдань немає",
   };
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="text-[var(--text-faint)]">
-        <rect x="8" y="20" width="48" height="28" rx="4" stroke="currentColor" strokeWidth="2" />
-        <rect x="18" y="28" width="28" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M8 30h48" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="22" y="48" width="20" height="6" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="26" y="54" width="12" height="4" rx="1" fill="currentColor" opacity="0.3" />
-        <circle cx="20" cy="24" r="2" fill="currentColor" opacity="0.4" />
-        <circle cx="28" cy="24" r="2" fill="currentColor" opacity="0.4" />
-      </svg>
+    <div className="flex flex-col items-center justify-center gap-5 py-20 text-center">
+      <div className="opacity-60">
+        <Mascot />
+      </div>
       <div>
         <p className="text-sm font-medium text-[var(--text-muted)]">{messages[status]}</p>
         {status === "queued" && (
@@ -120,12 +138,73 @@ function EmptyState({ status, onAdd }: { status: StatusTab; onAdd: () => void })
         )}
       </div>
       {status === "queued" && (
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
+        <button onClick={onAdd}
+          className="flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white hover:opacity-90">
           + Нове завдання
         </button>
+      )}
+    </div>
+  );
+}
+
+// ── printer slot (in_progress view) ──────────────────────────────────────────
+
+function PrinterSlot({
+  printer, task, onSend, onComplete, canEdit,
+}: {
+  printer: Printer;
+  task: PrintTask | null;
+  onSend: (t: PrintTask) => void;
+  onComplete: (t: PrintTask) => void;
+  canEdit: boolean;
+}) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const thumbSrc = task?.has_thumbnail && task?.gcode_file_id
+    ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
+
+  if (!task) {
+    return (
+      <div className="flex min-h-[80px] items-center justify-center rounded-lg border-2 border-dashed border-[var(--state-ok)]/40 bg-[var(--bg-elevated)] px-4 py-3">
+        <div className="text-center">
+          <p className="text-xs font-medium text-[var(--state-ok)]/70">{printer.name}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">Вільний</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3">
+      <div className="flex items-start gap-2">
+        {thumbSrc ? (
+          <img src={thumbSrc} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+        ) : (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)]">3mf</div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-[var(--accent)]">{task.file_name ?? task.title}</p>
+          <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">{printer.name}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <MaterialCell meta={task.filament_meta} />
+        {task.estimated_minutes ? (
+          <span className="ml-auto text-[10px] text-[var(--text-faint)]">{formatDuration(task.estimated_minutes)}</span>
+        ) : null}
+      </div>
+      {canEdit && (
+        <div className="flex gap-1.5 border-t border-[var(--border)]/60 pt-2">
+          {task.gcode_file_id && (
+            <button onClick={() => onSend(task)}
+              className="flex-1 rounded border border-[var(--border-strong)] bg-[var(--surface-hi)] py-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--text)]">
+              Відправити
+            </button>
+          )}
+          <button onClick={() => onComplete(task)}
+            className="flex-1 rounded border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.07)] py-1 text-[10px] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.12)]">
+            Завершити ✓
+          </button>
+        </div>
       )}
     </div>
   );
@@ -135,7 +214,9 @@ function EmptyState({ status, onAdd }: { status: StatusTab; onAdd: () => void })
 
 const DEFECT_PRESETS = ["Варпінг", "Відшарування шарів", "Забій сопла", "Збій живлення", "Помилка налаштувань", "Інше"];
 
-function CompleteModal({ task, onClose, onDone }: { task: PrintTask | null; onClose: () => void; onDone: (updated: PrintTask) => void }) {
+function CompleteModal({ task, onClose, onDone }: {
+  task: PrintTask | null; onClose: () => void; onDone: (updated: PrintTask) => void;
+}) {
   const [filaments, setFilaments] = useState<Filament[]>([]);
   const [piecesOk, setPiecesOk] = useState(1);
   const [piecesDefective, setPiecesDefective] = useState(0);
@@ -215,7 +296,8 @@ function CompleteModal({ task, onClose, onDone }: { task: PrintTask | null; onCl
               {DEFECT_PRESETS.map(p => (
                 <button key={p} type="button" onClick={() => setDefectPreset(p)}
                   className={["rounded-full border px-2.5 py-1 text-xs transition",
-                    defectPreset === p ? "border-[rgba(239,68,68,.4)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"
+                    defectPreset === p
+                      ? "border-[rgba(239,68,68,.4)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"
                       : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"].join(" ")}>
                   {p}
                 </button>
@@ -230,7 +312,7 @@ function CompleteModal({ task, onClose, onDone }: { task: PrintTask | null; onCl
         {usedG.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
-              Котушки (фактично ~{actualPrinted} шт. × {Math.round(usedG.reduce((s, g) => s + g, 0) / plannedQty)}г)
+              Котушки (~{actualPrinted} шт. × {Math.round(usedG.reduce((s, g) => s + g, 0) / plannedQty)}г)
             </p>
             <div className="space-y-2">
               {usedG.map((g, i) => {
@@ -258,7 +340,7 @@ function CompleteModal({ task, onClose, onDone }: { task: PrintTask | null; onCl
           <div className="rounded-lg bg-[var(--bg)] px-4 py-3">
             <p className="text-xs text-[var(--text-muted)]">Собівартість матеріалів</p>
             <p className="mt-1 text-lg font-semibold">{totalCost.toFixed(2)} грн</p>
-            {costPerOk != null && <p className="text-xs text-[var(--text-muted)]">{costPerOk.toFixed(2)} грн/шт. (для {piecesOk} добрих)</p>}
+            {costPerOk != null && <p className="text-xs text-[var(--text-muted)]">{costPerOk.toFixed(2)} грн/шт. для {piecesOk} добрих</p>}
           </div>
         )}
         {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
@@ -267,12 +349,12 @@ function CompleteModal({ task, onClose, onDone }: { task: PrintTask | null; onCl
   );
 }
 
-// ── queue row ─────────────────────────────────────────────────────────────────
+// ── queue row (table view) ────────────────────────────────────────────────────
 
 function QueueRow({
-  index, task, printers, status, selected, onToggle, onUpdated, onDelete, onSend, onComplete, onRestore, canEdit,
+  index, task, status, selected, onToggle, onUpdated, onDelete, onSend, onComplete, onRestore, canEdit,
 }: {
-  index: number; task: PrintTask; printers: Printer[]; status: StatusTab;
+  index: number; task: PrintTask; status: StatusTab;
   selected: boolean; onToggle: () => void;
   onUpdated: (t: PrintTask) => void; onDelete: () => void;
   onSend: () => void; onComplete: () => void; onRestore: () => void;
@@ -280,46 +362,35 @@ function QueueRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  const thumbSrc = task.has_thumbnail && task.gcode_file_id ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
+  const thumbSrc = task.has_thumbnail && task.gcode_file_id
+    ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
 
   return (
-    <tr className={["border-b border-[var(--border)]/60 transition-colors", selected ? "bg-[var(--accent)]/5" : "hover:bg-[var(--surface-hi)]/30"].join(" ")}>
+    <tr className={["border-b border-[var(--border)]/60 transition-colors",
+      selected ? "bg-[var(--accent)]/5" : "hover:bg-[var(--surface-hi)]/30"].join(" ")}>
       <td className="px-3 py-2">
         <input type="checkbox" checked={selected} onChange={onToggle} className="accent-[var(--accent)] cursor-pointer" />
       </td>
-      <td className="px-2 py-2 text-[var(--text-muted)]">{index}.</td>
+      <td className="px-2 py-2 text-[var(--text-faint)]">{index}.</td>
 
-      {/* File */}
-      <td className="max-w-[180px] px-3 py-2">
+      <td className="max-w-[200px] px-3 py-2">
         <div className="flex items-center gap-2">
           {thumbSrc ? (
             <img src={thumbSrc} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
           ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[var(--text-muted)] text-xs">3mf</div>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)]">3mf</div>
           )}
           <span className="truncate text-[var(--accent)]">{task.file_name ?? task.title}</span>
         </div>
       </td>
 
-      {/* Tags */}
-      <td className="px-3 py-2">
-        <FilamentChips meta={task.filament_meta} />
-      </td>
-
-      {/* Cost */}
+      <td className="px-3 py-2"><FilamentChips meta={task.filament_meta} /></td>
       <td className="px-3 py-2 text-right text-[var(--text-muted)]">
-        {task.material_cost_uah ? `${task.material_cost_uah.toFixed(2)} UAH` : "—"}
+        {task.material_cost_uah ? `${task.material_cost_uah.toFixed(2)} грн` : "—"}
       </td>
-
-      {/* Time */}
-      <td className="px-3 py-2 text-right text-[var(--text-muted)]">
-        {formatDuration(task.estimated_minutes)}
-      </td>
-
-      {/* Material */}
+      <td className="px-3 py-2 text-right text-[var(--text-muted)]">{formatDuration(task.estimated_minutes)}</td>
       <td className="px-3 py-2"><MaterialCell meta={task.filament_meta} /></td>
 
-      {/* Amount or Result */}
       {status === "done" ? (
         <td className="px-3 py-2">
           {task.pieces_ok != null ? (
@@ -341,16 +412,15 @@ function QueueRow({
         </td>
       )}
 
-      {/* User */}
       <td className="max-w-[100px] truncate px-3 py-2 text-[var(--text-faint)]">{task.created_by_name ?? "—"}</td>
-
-      {/* Added */}
       <td className="whitespace-nowrap px-3 py-2 text-[var(--text-faint)]">{formatRelativeDate(task.created_at)}</td>
 
-      {/* Printer */}
-      <td className="px-3 py-2"><PrinterCell printerId={task.assigned_printer_id} printerName={task.assigned_printer_name} /></td>
+      {status !== "in_progress" && (
+        <td className="px-3 py-2 text-[var(--text-muted)]">
+          {task.assigned_printer_name ?? "—"}
+        </td>
+      )}
 
-      {/* Actions */}
       <td className="relative px-2 py-2">
         <button onClick={() => setMenuOpen(v => !v)}
           className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
@@ -431,13 +501,11 @@ export default function QueuePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // counts per status
   const counts = useMemo(
     () => tasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {} as Record<string, number>),
     [tasks],
   );
 
-  // tasks for current tab, filtered by search
   const visible = useMemo(() => {
     let list = tasks.filter(t => t.status === activeTab);
     if (search.trim()) {
@@ -447,13 +515,23 @@ export default function QueuePage() {
     return list;
   }, [tasks, activeTab, search]);
 
-  // stats (queued / in_progress tabs)
   const stats = useMemo(() => ({
     jobs: visible.length,
     totalMin: visible.reduce((s, t) => s + (t.estimated_minutes ?? 0), 0),
     totalG: visible.reduce((s, t) => s + sumArray(t.filament_meta?.used_g), 0),
     totalCost: visible.reduce((s, t) => s + (t.material_cost_uah ?? 0), 0),
   }), [visible]);
+
+  // in_progress: map printer → task
+  const printerTaskMap = useMemo(() => {
+    const map = new Map<number, PrintTask>();
+    for (const t of tasks.filter(t => t.status === "in_progress")) {
+      if (t.assigned_printer_id) map.set(t.assigned_printer_id, t);
+    }
+    return map;
+  }, [tasks]);
+
+  const activePrinters = printers.filter(p => p.is_active);
 
   const allChecked = visible.length > 0 && visible.every(t => selected.has(t.id));
   const someChecked = !allChecked && visible.some(t => selected.has(t.id));
@@ -503,137 +581,160 @@ export default function QueuePage() {
   if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="-mx-6 -mt-6 flex flex-col">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Черга друку</h1>
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
+        <div className="flex items-center gap-4">
+          <h1 className="text-base font-semibold">Черга друку</h1>
+          {(activeTab === "queued" || activeTab === "in_progress") && stats.jobs > 0 && (
+            <div className="hidden items-center gap-4 text-xs text-[var(--text-muted)] sm:flex">
+              <span>{stats.jobs} завдань</span>
+              {stats.totalMin > 0 && (
+                <span>{stats.totalMin >= 60 ? `${Math.floor(stats.totalMin / 60)}г ${stats.totalMin % 60}хв` : `${stats.totalMin}хв`}</span>
+              )}
+              {stats.totalG > 0 && (
+                <span>{stats.totalG >= 1000 ? `${(stats.totalG / 1000).toFixed(2)} кг` : `${stats.totalG.toFixed(1)} г`}</span>
+              )}
+              {stats.totalCost > 0 && <span>{stats.totalCost.toFixed(0)} грн</span>}
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {canEdit && activeTab === "queued" && (
             <button onClick={handle1Click}
-              className="flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm text-[var(--text)] hover:bg-[var(--surface-hi)]">
-              <span>≡</span> 1-CLICK PRINT
+              className="flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)]">
+              ≡ 1-CLICK PRINT
             </button>
           )}
           {canEdit && (
             <button onClick={() => setCreateOpen(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--accent)] text-lg font-bold text-white hover:opacity-90">
-              +
+              className="flex h-8 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 text-sm font-semibold text-white hover:opacity-90">
+              + Нове завдання
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Status tabs ── */}
-      <div className="flex items-center overflow-x-auto border-b border-[var(--border)]">
+      {/* ── Tab bar ── */}
+      <div className="flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4">
         {TABS.map(tab => (
-          <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelected(new Set()); setSearch(""); }}
+          <button key={tab.id}
+            onClick={() => { setActiveTab(tab.id); setSelected(new Set()); setSearch(""); }}
             className={[
-              "flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm transition-colors",
+              "flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors",
               activeTab === tab.id
-                ? "border-[var(--accent)] font-medium text-[var(--accent)]"
-                : "border-transparent text-[var(--text-faint)] hover:text-[var(--text)]",
+                ? "border-[var(--accent)] font-medium text-[var(--text)]"
+                : "border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)]",
             ].join(" ")}>
-            {tab.labelUk}
+            <span className={`h-2 w-2 shrink-0 rounded-full ${tab.dot}`} />
+            {tab.label}
             <span className={[
-              "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-              activeTab === tab.id ? "bg-[var(--accent)]/20 text-[var(--accent)]" : "bg-[var(--surface-hi)] text-[var(--text-muted)]",
+              "rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums",
+              activeTab === tab.id ? "bg-[var(--surface-hi)] text-[var(--text-muted)]" : "text-[var(--text-faint)]",
             ].join(" ")}>
               {counts[tab.id] ?? 0}
             </span>
           </button>
         ))}
+
+        <div className="ml-auto flex items-center gap-2 py-1.5">
+          <input type="text" placeholder="Пошук…" value={search} onChange={e => setSearch(e.target.value)}
+            className="h-7 w-40 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]" />
+        </div>
       </div>
 
       {/* ── Alerts ── */}
-      {error && (
-        <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
-      )}
-      {distributeResult && (
-        <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
-          Розподілено: {distributeResult.sent.length} завдань
-          {distributeResult.skipped.length > 0 && ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map(s => s.reason).join(", ")})`}
-        </div>
-      )}
-
-      {/* ── Stats bar (queued / in_progress) ── */}
-      {(activeTab === "queued" || activeTab === "in_progress") && (
-        <div className="flex flex-wrap gap-6 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]/60 px-4 py-3 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">Завдань:</span>
-            <span className="font-medium text-[var(--text)]">{stats.jobs}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">Час друку:</span>
-            <span className="font-medium text-[var(--text)]">
-              {stats.totalMin >= 60 ? `${Math.floor(stats.totalMin / 60)}г ${stats.totalMin % 60}хв` : `${stats.totalMin}хв`}
-            </span>
-          </div>
-          {stats.totalG > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">Матеріал:</span>
-              <span className="font-medium text-[var(--text)]">
-                {stats.totalG >= 1000 ? `${(stats.totalG / 1000).toFixed(2)} кг` : `${stats.totalG.toFixed(1)} г`}
-              </span>
-            </div>
+      {(error || distributeResult) && (
+        <div className="px-6 pt-3">
+          {error && (
+            <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
           )}
-          {stats.totalCost > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-muted)]">Вартість:</span>
-              <span className="font-medium text-[var(--text)]">{stats.totalCost.toFixed(2)} UAH</span>
+          {distributeResult && (
+            <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
+              Розподілено: {distributeResult.sent.length} завдань
+              {distributeResult.skipped.length > 0 && ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map(s => s.reason).join(", ")})`}
             </div>
           )}
         </div>
       )}
-
-      {/* ── Search ── */}
-      <div className="flex items-center gap-2">
-        <input type="text" placeholder="Пошук…" value={search} onChange={e => setSearch(e.target.value)}
-          className="h-8 w-48 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]" />
-      </div>
 
       {/* ── Content ── */}
-      {visible.length === 0 ? (
-        <EmptyState status={activeTab} onAdd={() => setCreateOpen(true)} />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]/80 text-xs text-[var(--text-muted)]">
-                <th className="w-8 px-3 py-2.5">
-                  <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked; }}
-                    onChange={toggleAll} className="accent-[var(--accent)] cursor-pointer" />
-                </th>
-                <th className="w-8 px-2 py-2.5 text-left">#</th>
-                <th className="px-3 py-2.5 text-left">Файл</th>
-                <th className="px-3 py-2.5 text-left">Теги</th>
-                <th className="px-3 py-2.5 text-right">Вартість</th>
-                <th className="px-3 py-2.5 text-right">Час</th>
-                <th className="px-3 py-2.5 text-left">Матеріал</th>
-                <th className="px-3 py-2.5 text-center">{activeTab === "done" ? "Результат" : "К-сть"}</th>
-                <th className="px-3 py-2.5 text-left">Користувач</th>
-                <th className="px-3 py-2.5 text-left">Додано</th>
-                <th className="px-3 py-2.5 text-left">Принтер</th>
-                <th className="w-8 px-2 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((task, idx) => (
-                <QueueRow
-                  key={task.id} index={idx + 1} task={task} printers={printers} status={activeTab}
-                  selected={selected.has(task.id)} onToggle={() => toggleOne(task.id)}
-                  onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
-                  onSend={() => setSendTask(task)} onComplete={() => setCompleteTask(task)}
-                  onRestore={() => handleRestore(task.id)} canEdit={canEdit}
-                />
+      <div className="flex-1 px-6 py-4">
+
+        {/* In Progress: printer slot grid */}
+        {activeTab === "in_progress" && (
+          visible.length === 0 && activePrinters.length === 0 ? (
+            <EmptyState status="in_progress" onAdd={() => setCreateOpen(true)} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {activePrinters.map(p => (
+                <PrinterSlot key={p.id} printer={p} task={printerTaskMap.get(p.id) ?? null}
+                  onSend={setSendTask} onComplete={setCompleteTask} canEdit={canEdit} />
               ))}
-            </tbody>
-          </table>
-          <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
-            {selected.size > 0 ? `${selected.size} з ${visible.length} вибрано` : `${visible.length} завдань`}
-          </div>
-        </div>
-      )}
+              {/* unassigned in_progress tasks */}
+              {visible.filter(t => !t.assigned_printer_id).map(t => (
+                <div key={t.id} className="rounded-lg border border-[var(--state-warn)]/40 bg-[var(--bg-elevated)] p-3">
+                  <p className="truncate text-xs font-medium text-[var(--accent)]">{t.file_name ?? t.title}</p>
+                  <p className="mt-1 text-[10px] text-[var(--text-faint)]">Без принтера</p>
+                  {canEdit && (
+                    <button onClick={() => setCompleteTask(t)}
+                      className="mt-2 w-full rounded border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.07)] py-1 text-[10px] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.12)]">
+                      Завершити ✓
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* All other tabs: table */}
+        {activeTab !== "in_progress" && (
+          visible.length === 0 ? (
+            <EmptyState status={activeTab} onAdd={() => setCreateOpen(true)} />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]/80 text-xs text-[var(--text-muted)]">
+                    <th className="w-8 px-3 py-2.5">
+                      <input type="checkbox" checked={allChecked}
+                        ref={el => { if (el) el.indeterminate = someChecked; }}
+                        onChange={toggleAll} className="accent-[var(--accent)] cursor-pointer" />
+                    </th>
+                    <th className="w-8 px-2 py-2.5 text-left">#</th>
+                    <th className="px-3 py-2.5 text-left">Файл</th>
+                    <th className="px-3 py-2.5 text-left">Теги</th>
+                    <th className="px-3 py-2.5 text-right">Вартість</th>
+                    <th className="px-3 py-2.5 text-right">Час</th>
+                    <th className="px-3 py-2.5 text-left">Матеріал</th>
+                    <th className="px-3 py-2.5 text-center">{activeTab === "done" ? "Результат" : "К-сть"}</th>
+                    <th className="px-3 py-2.5 text-left">Користувач</th>
+                    <th className="px-3 py-2.5 text-left">Додано</th>
+                    <th className="px-3 py-2.5 text-left">Принтер</th>
+                    <th className="w-8 px-2 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((task, idx) => (
+                    <QueueRow
+                      key={task.id} index={idx + 1} task={task} status={activeTab}
+                      selected={selected.has(task.id)} onToggle={() => toggleOne(task.id)}
+                      onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
+                      onSend={() => setSendTask(task)} onComplete={() => setCompleteTask(task)}
+                      onRestore={() => handleRestore(task.id)} canEdit={canEdit}
+                    />
+                  ))}
+                </tbody>
+              </table>
+              <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                {selected.size > 0 ? `${selected.size} з ${visible.length} вибрано` : `${visible.length} завдань`}
+              </div>
+            </div>
+          )
+        )}
+      </div>
 
       {/* ── Modals ── */}
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => setTasks(prev => [t, ...prev])} />
