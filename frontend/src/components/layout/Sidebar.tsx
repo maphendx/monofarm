@@ -227,9 +227,8 @@ export function Sidebar({
               </div>
             </div>
 
-            {/* Theme + language */}
+            {/* Language */}
             <div className="flex h-9 items-center gap-2 overflow-hidden rounded-lg px-2.5">
-              <ThemeToggle compact />
               <button
                 onClick={() => setLocale(locale === "uk" ? "en" : "uk")}
                 title="Switch language"
@@ -248,43 +247,44 @@ export function Sidebar({
         )}
       </div>
 
-      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
-
-      {/* Bottom toolbar: search, pin, agent */}
-      <div className="flex flex-col gap-0.5 px-2 py-3">
-
-        {/* Search */}
-        <button onClick={onSearch} title="Пошук (⌘K)" className="nav-link h-9">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <span className={`flex-1 whitespace-nowrap ${txt}`}>Пошук</span>
-          <kbd className={`text-[10px] text-[var(--text-faint)] border border-[var(--border)] rounded px-1 py-0.5 ${txt}`}>⌘K</kbd>
-        </button>
+      {/* Bottom toolbar: pin · theme · search · agent — always a horizontal icon row */}
+      <div className="flex items-center border-t border-[var(--border)] py-2.5 overflow-hidden">
 
         {/* Pin / unpin */}
-        <button onClick={onPinToggle} title={pinned ? "Відкріпити сайдбар" : "Закріпити сайдбар"} className="nav-link h-9">
+        <button onClick={onPinToggle} title={pinned ? "Відкріпити сайдбар" : "Закріпити сайдбар"}
+          className="flex flex-1 items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
           {pinned ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6"/>
             </svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6"/><polyline points="15 18 21 12 15 6"/>
             </svg>
           )}
-          <span className={`whitespace-nowrap ${txt}`}>{pinned ? "Згорнути" : "Закріпити"}</span>
+        </button>
+
+        {/* Theme */}
+        <div className="flex flex-1 items-center justify-center">
+          <ThemeToggle compact />
+        </div>
+
+        {/* Search */}
+        <button onClick={onSearch} title="Пошук (⌘K)"
+          className="flex flex-1 items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
         </button>
 
         {/* Agent status */}
-        <div className="nav-link h-9 cursor-default" title={agentLabel}>
-          <span className="relative flex size-[18px] shrink-0 items-center justify-center">
+        <div title={agentLabel} className="flex flex-1 items-center justify-center cursor-default">
+          <span className="relative flex items-center justify-center">
             {agentConnected && (
               <span className={`absolute size-2.5 rounded-full ${agentColor} animate-ping opacity-60`} />
             )}
             <span className={`size-2.5 rounded-full transition-colors duration-500 ${agentColor}`} />
           </span>
-          <span className={`whitespace-nowrap text-xs text-[var(--text-muted)] ${txt}`}>{agentLabel}</span>
         </div>
 
       </div>
