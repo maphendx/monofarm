@@ -211,7 +211,7 @@ class SpecOperationOut(BaseModel):
 
 
 class SpecCreate(BaseModel):
-    product_id: int
+    product_id: int | None = None
     name:       str = "Основна"
     notes:      str | None = None
 
