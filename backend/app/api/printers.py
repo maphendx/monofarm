@@ -1136,7 +1136,8 @@ async def print_clear_bed(
         try:
             await asyncio.to_thread(moonraker.send_gcode, row.moonraker_url, "G28")
         except Exception:
-            pass  # best-effort; state will refresh from Moonraker cache
+            pass
+        moonraker.invalidate_status(row.moonraker_url)
 
     else:
         row.manual_status = "idle"
