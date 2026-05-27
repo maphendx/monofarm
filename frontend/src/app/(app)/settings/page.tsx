@@ -1,8 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { PrintersManager } from "@/components/printers/PrintersManager";
-import { ApiError, api, getToken } from "@/lib/api";
+import { ApiError, api, clearToken, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
+import { useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -30,12 +33,17 @@ interface BillingStatus {
 }
 
 type SectionId =
-  | "general" | "organization" | "printers" | "filament"
+  | "profile" | "general"
+  | "organization" | "printers" | "filament"
   | "queue" | "notifications" | "maintenance" | "integrations" | "billing";
 
 // ── Nav config ─────────────────────────────────────────────────────────────
 
-const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[] }> = [
+const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[]; adminOnly?: boolean }> = [
+  {
+    id: "profile", label: "Профіль",
+    d: ["M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2", "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"],
+  },
   {
     id: "general", label: "Загальне",
     d: ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"],
@@ -43,34 +51,42 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[] }> = [
   {
     id: "organization", label: "Організація",
     d: ["M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
+    adminOnly: true,
   },
   {
     id: "printers", label: "Принтери",
     d: ["M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6", "M6 18h12v3H6z"],
+    adminOnly: true,
   },
   {
     id: "filament", label: "Пластик",
     d: ["M12 2a10 10 0 1 0 10 10", "M12 8a4 4 0 1 0 4 4", "M12 12h.01"],
+    adminOnly: true,
   },
   {
     id: "queue", label: "Черга",
     d: ["M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"],
+    adminOnly: true,
   },
   {
     id: "notifications", label: "Сповіщення",
     d: ["M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9", "M13.73 21a2 2 0 0 1-3.46 0"],
+    adminOnly: true,
   },
   {
     id: "maintenance", label: "Обслуговування",
     d: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"],
+    adminOnly: true,
   },
   {
     id: "integrations", label: "Вебхуки & API",
     d: ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"],
+    adminOnly: true,
   },
   {
     id: "billing", label: "Білінг",
     d: ["M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z", "M1 10h22"],
+    adminOnly: true,
   },
 ];
 
@@ -1357,15 +1373,166 @@ function PrintersSection() {
   );
 }
 
+// ── Profile section ────────────────────────────────────────────────────────
+
+function ProfileSection() {
+  const user = useUser();
+  const router = useRouter();
+  const [name, setName] = useState(user?.name ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const inFlight = useRef(false);
+
+  const initials = (user?.name ?? "?").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const roleLabel: Record<string, string> = { admin: "Адмін", operator: "Оператор", manager: "Менеджер" };
+
+  const changed = name.trim() !== (user?.name ?? "") && name.trim().length >= 2;
+
+  async function saveName(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user || inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      await api(`/api/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* ignore */ } finally {
+      setSaving(false);
+      inFlight.current = false;
+    }
+  }
+
+  function logout() {
+    clearToken();
+    router.push("/login");
+  }
+
+  return (
+    <SectionCard>
+      <SectionTitle>Профіль</SectionTitle>
+      <div className="mb-6 flex items-center gap-4">
+        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-lg font-semibold text-white">
+          {initials}
+        </div>
+        <div>
+          <p className="font-medium">{user?.name}</p>
+          <p className="text-sm text-[var(--text-muted)]">{user?.email}</p>
+          <span className="mt-1 inline-block rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+            {roleLabel[user?.role ?? ""] ?? user?.role}
+          </span>
+        </div>
+      </div>
+
+      <form onSubmit={saveName} className="mb-6 space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-sm text-[var(--text-muted)]">Ім&apos;я</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={120}
+            className="input"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!changed || saving}
+          className="btn btn-primary disabled:opacity-50"
+        >
+          {saved ? "✓ Збережено" : saving ? "…" : "Зберегти"}
+        </button>
+      </form>
+
+      <div className="border-t border-[var(--border)] pt-5">
+        <button
+          onClick={logout}
+          className="flex items-center gap-2 text-sm text-[var(--state-error)] hover:opacity-80"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Вийти
+        </button>
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── General section ────────────────────────────────────────────────────────
+
+function GeneralSection() {
+  const { locale, setLocale } = useLocale();
+  const [currency, setCurrencyState] = useState<string>(() =>
+    typeof window !== "undefined" ? (localStorage.getItem("currency") ?? "UAH") : "UAH"
+  );
+
+  function pickCurrency(c: string) {
+    setCurrencyState(c);
+    localStorage.setItem("currency", c);
+  }
+
+  return (
+    <SectionCard>
+      <SectionTitle>Загальні налаштування</SectionTitle>
+      <div className="space-y-6">
+        <div>
+          <p className="mb-2 text-sm text-[var(--text-muted)]">Мова інтерфейсу</p>
+          <div className="flex gap-2">
+            {(["uk", "en"] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLocale(l)}
+                className={[
+                  "rounded-lg border px-4 py-2 text-sm transition-colors",
+                  locale === l
+                    ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                ].join(" ")}
+              >
+                {l === "uk" ? "Українська" : "English"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-sm text-[var(--text-muted)]">Валюта</p>
+          <div className="flex gap-2">
+            {["UAH", "USD"].map((c) => (
+              <button
+                key={c}
+                onClick={() => pickCurrency(c)}
+                className={[
+                  "rounded-lg border px-4 py-2 text-sm transition-colors",
+                  currency === c
+                    ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                ].join(" ")}
+              >
+                {c === "UAH" ? "₴ UAH" : "$ USD"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 function defaultSection(): SectionId {
-  if (typeof window === "undefined") return "organization";
+  if (typeof window === "undefined") return "profile";
   const params = new URLSearchParams(window.location.search);
   if (params.get("billing")) return "billing";
   const section = params.get("section") as SectionId | null;
   if (section) return section;
-  return "organization";
+  return "profile";
 }
 
 export default function SettingsPage() {
@@ -1373,33 +1540,31 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [active, setActive] = useState<SectionId>(defaultSection);
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
+    if (!isAdmin) return;
     api<OrgSettings>("/api/orgs/me")
       .then(setSettings)
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : "Помилка завантаження"));
-  }, []);
+  }, [isAdmin]);
 
-  if (user?.role !== "admin") {
-    return <p className="text-sm text-[var(--text-muted)]">Тільки для адміністраторів.</p>;
-  }
-  if (loadError) return <p className="text-sm text-[var(--state-error)]">{loadError}</p>;
-  if (!settings) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
+  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="flex gap-8">
       {/* Left nav */}
       <nav className="w-48 shrink-0">
         <ul className="flex flex-col gap-0.5">
-          {NAV_ITEMS.map((item) => (
+          {visibleItems.map((item) => (
             <li key={item.id}>
               <button
                 onClick={() => setActive(item.id)}
                 className={[
                   "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
                   active === item.id
-                    ? "bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)] "
-                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]  ",
+                    ? "bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)]"
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
                 ].join(" ")}
               >
                 <NavIcon d={item.d} />
@@ -1412,8 +1577,13 @@ export default function SettingsPage() {
 
       {/* Content */}
       <div className={`min-w-0 flex-1 ${active === "integrations" ? "" : "max-w-[720px]"}`}>
-        {active === "general" && <ComingSoon label="Загальне" />}
-        {active === "organization" && <OrgSection settings={settings} onUpdate={setSettings} />}
+        {active === "profile" && <ProfileSection />}
+        {active === "general" && <GeneralSection />}
+        {active === "organization" && (
+          loadError ? <p className="text-sm text-[var(--state-error)]">{loadError}</p>
+          : !settings ? <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>
+          : <OrgSection settings={settings} onUpdate={setSettings} />
+        )}
         {active === "printers" && <PrintersSection />}
         {active === "filament" && <ComingSoon label="Пластик" />}
         {active === "queue" && <ComingSoon label="Черга" />}
