@@ -197,3 +197,35 @@ Cloudflare Tunnel: `cloudflared service install` → конфіг на `localhos
 - **Chrome блокує `http://192.168.x.x`** з localhost. Тестуй Mainsail-посилання в Safari або з фермового ПК.
 - **Слоти: 0-based** у БД/gcode/API, 1-based лише в UI.
 - **Tailwind v4**: перезапуск dev server після зміни `globals.css`.
+
+## Development
+
+### Гілки
+
+| Гілка | Призначення |
+| --- | --- |
+| `main` | Production. Завжди стабільна. |
+| `dev` | Staging / integration. Всі PR ідуть сюди. |
+| `feature/xxx` | Нова функціональність — від `dev`. |
+| `fix/xxx` | Баг-фікс — від `dev` (або `main` для hotfix). |
+
+### Коміти
+
+```text
+feat: нова функція
+fix: виправлення бага
+chore: рефакторинг / залежності / CI
+docs: документація
+agent: зміни в agent/
+```
+
+### Версіювання агента
+
+При змінах у `agent/` — збампати версію в трьох файлах: `agent/monofarm_agent.py`, `agent/monofarm_tray.py`, `backend/app/api/agent.py`. Схема: `major.minor.patch`.
+
+### PR Checklist
+
+- Тести проходять (`pytest`)
+- Lint чистий (`ruff check .`)
+- Міграція додана якщо змінилась схема
+- `.env.example` оновлений якщо нові змінні
