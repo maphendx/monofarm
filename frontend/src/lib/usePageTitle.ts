@@ -9,7 +9,7 @@ export function usePageTitle(key: TKey) {
   const t = useT();
   const label = t(key);
   useEffect(() => {
-    document.title = `monofarm | ${label}`;
+    document.title = `${label} | monofarm`;
     return () => { document.title = "monofarm"; };
   }, [label]);
 }
