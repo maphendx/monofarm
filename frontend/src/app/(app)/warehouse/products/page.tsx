@@ -128,12 +128,13 @@ function ProductModal({
 }) {
   const isEdit = product !== null;
 
-  const [name,  setName]  = useState(product?.name  ?? "");
-  const [sku,   setSku]   = useState(product?.sku   ?? "");
-  const [cats,  setCats]  = useState<string[]>(product?.categories ?? []);
-  const [unit,  setUnit]  = useState(product?.unit  ?? "шт");
-  const [price, setPrice] = useState(product?.sale_price ? parseFloat(product.sale_price).toString() : "");
-  const [desc,  setDesc]  = useState(product?.description ?? "");
+  const [name,    setName]    = useState(product?.name    ?? "");
+  const [sku,     setSku]     = useState(product?.sku     ?? "");
+  const [barcode, setBarcode] = useState(product?.barcode ?? "");
+  const [cats,    setCats]    = useState<string[]>(product?.categories ?? []);
+  const [unit,    setUnit]    = useState(product?.unit    ?? "шт");
+  const [price,   setPrice]   = useState(product?.sale_price ? parseFloat(product.sale_price).toString() : "");
+  const [desc,    setDesc]    = useState(product?.description ?? "");
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState<string | null>(null);
 
@@ -142,8 +143,8 @@ function ProductModal({
     setBusy(true); setErr(null);
     try {
       const body = {
-        name: name.trim(), sku: sku.trim(), categories: cats,
-        unit: unit.trim() || "шт",
+        name: name.trim(), sku: sku.trim(), barcode: barcode.trim() || null,
+        categories: cats, unit: unit.trim() || "шт",
         sale_price: price ? parseFloat(price) : null,
         description: desc.trim() || null,
       };
@@ -186,6 +187,11 @@ function ProductModal({
             </FormRow>
             <FormRow label="SKU">
               <input required value={sku} onChange={(e) => setSku(e.target.value)}
+                className={INPUT} />
+            </FormRow>
+            <FormRow label="Штрих-код">
+              <input value={barcode} onChange={(e) => setBarcode(e.target.value)}
+                placeholder="EAN-13, QR або будь-який"
                 className={INPUT} />
             </FormRow>
             <FormRow label="Категорії">
