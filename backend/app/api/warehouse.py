@@ -1346,7 +1346,7 @@ def list_stock(
     import math
     import collections
     from sqlalchemy import func
-    from app.models.warehouse import CellStock, WarehouseCell
+    from app.models.warehouse import CellStock, WarehouseCell, WarehouseZone
 
     product_ids = {p.id for _, p, _ in rows}
     warehouse_ids = {wh.id for _, _, wh in rows}
@@ -1366,18 +1366,22 @@ def list_stock(
     if product_ids and warehouse_ids:
         cell_stocks = db.query(
             CellStock.product_id,
-            WarehouseCell.warehouse_id,
-            WarehouseCell.name,
+            WarehouseZone.warehouse_id,
+            WarehouseZone.name.label("zone_name"),
+            WarehouseCell.code,
             CellStock.quantity
         ).join(
             WarehouseCell, WarehouseCell.id == CellStock.cell_id
+        ).join(
+            WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id
         ).filter(
-            WarehouseCell.organization_id == org.id,
+            WarehouseZone.organization_id == org.id,
             CellStock.product_id.in_(product_ids),
-            WarehouseCell.warehouse_id.in_(warehouse_ids),
+            WarehouseZone.warehouse_id.in_(warehouse_ids),
             CellStock.quantity > 0
         ).all()
-        for pid, wid, cell_name, qty in cell_stocks:
+        for pid, wid, zone_name, cell_code, qty in cell_stocks:
+            cell_name = f"{zone_name} {cell_code}"
             cell_stock_map[(pid, wid)].append({"name": cell_name, "quantity": qty})
 
     result = []
