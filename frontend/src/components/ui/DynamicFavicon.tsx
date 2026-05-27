@@ -115,11 +115,8 @@ function applyFavicon(url: string) {
   el.href = url;
 }
 
-function applyTitle(state: FavState) {
-  const base = "monofarm";
-  if (state.kind === "printing") document.title = `(${state.count} 🖨) ${base}`;
-  else if (state.kind === "alert") document.title = `(! ${state.count}) ${base}`;
-  else document.title = base;
+function applyTitle(_state: FavState) {
+  // title is managed by usePageTitle per page
 }
 
 export function DynamicFavicon() {
