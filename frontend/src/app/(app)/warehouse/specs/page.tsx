@@ -19,9 +19,7 @@ type SpecImportResult = {
   errors: { sku: string; reason: string }[];
 };
 
-type StockEntry = { product_id: number; available: string };
-
-type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin";
+type SortKey = "name" | "sku" | "full_cost" | "sale_price" | "margin";
 type SortDir = "asc" | "desc";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,7 +38,6 @@ function calcMargin(sale: string | null, cost: string | null): number | null {
 
 export default function SpecsPage() {
   const [products,     setProducts]     = useState<Product[]>([]);
-  const [stock,        setStock]        = useState<StockEntry[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState("");
   const [sortKey,      setSortKey]      = useState<SortKey>("name");
@@ -52,26 +49,14 @@ export default function SpecsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [prods, stk] = await Promise.all([
-        api<Product[]>("/api/warehouse/products"),
-        api<StockEntry[]>("/api/warehouse/stock"),
-      ]);
+      const prods = await api<Product[]>("/api/warehouse/products");
       setProducts(prods);
-      setStock(stk);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const stockByProduct = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const s of stock) {
-      map.set(s.product_id, (map.get(s.product_id) ?? 0) + parseFloat(s.available));
-    }
-    return map;
-  }, [stock]);
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -129,7 +114,6 @@ export default function SpecsPage() {
       let av: number | string = 0, bv: number | string = 0;
       if (sortKey === "name")       { av = a.name; bv = b.name; }
       else if (sortKey === "sku")   { av = a.sku;  bv = b.sku;  }
-      else if (sortKey === "stock") { av = stockByProduct.get(a.id) ?? 0; bv = stockByProduct.get(b.id) ?? 0; }
       else if (sortKey === "full_cost")   { av = parseFloat(a.full_cost   ?? "0"); bv = parseFloat(b.full_cost   ?? "0"); }
       else if (sortKey === "sale_price")  { av = parseFloat(a.sale_price  ?? "0"); bv = parseFloat(b.sale_price  ?? "0"); }
       else if (sortKey === "margin") {
@@ -139,7 +123,7 @@ export default function SpecsPage() {
       const cmp = typeof av === "string" ? av.localeCompare(bv as string, "uk") : (av as number) - (bv as number);
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [filtered, sortKey, sortDir, stockByProduct]);
+  }, [filtered, sortKey, sortDir]);
 
   const withSpec  = products.filter((p) => p.full_cost).length;
   const withoutSpec = products.length - withSpec;
@@ -258,7 +242,6 @@ export default function SpecsPage() {
                 <Th col="name"       className="text-left">Назва</Th>
                 <Th col="sku"        className="text-left">SKU</Th>
                 <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>
-                <Th col="stock"      className="text-right">Залишок</Th>
                 <Th col="full_cost"  className="text-right">Собівартість</Th>
                 <Th col="sale_price" className="text-right">Ціна</Th>
                 <Th col="margin"     className="text-right">Маржа</Th>
@@ -268,13 +251,13 @@ export default function SpecsPage() {
             <tbody className="divide-y divide-[var(--border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
                     Завантаження…
                   </td>
                 </tr>
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
                     {search || filter !== "all" ? "Нічого не знайдено" : "Немає продуктів"}
                   </td>
                 </tr>
@@ -309,9 +292,6 @@ export default function SpecsPage() {
                             <span className="text-[10px] text-[var(--text-faint)]">+{p.categories.length - 3}</span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-[var(--text-muted)]">
-                        {stockByProduct.get(p.id) ?? 0} {p.unit}
                       </td>
                       <td className="px-4 py-3 text-right font-mono tabular-nums">
                         {hasSpec ? (
