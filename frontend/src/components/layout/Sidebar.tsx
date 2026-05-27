@@ -80,6 +80,8 @@ export function Sidebar({
   const t        = useT();
 
   const [agentConnected, setAgentConnected] = useState<boolean | null>(null);
+  const [agentLastChecked, setAgentLastChecked] = useState<Date | null>(null);
+  const [agentHover, setAgentHover] = useState(false);
 
   useEffect(() => {
     async function check() {
@@ -89,6 +91,7 @@ export function Sidebar({
       } catch {
         setAgentConnected(false);
       }
+      setAgentLastChecked(new Date());
     }
     check();
     const id = setInterval(check, 30_000);
@@ -107,9 +110,6 @@ export function Sidebar({
   const agentColor = agentConnected === null ? "bg-[var(--text-faint)]"
     : agentConnected ? "bg-[var(--state-ok)]"
     : "bg-[var(--state-idle)]";
-  const agentLabel = agentConnected === null ? "Агент: перевірка…"
-    : agentConnected ? "Агент: підключено"
-    : "Агент: відключено";
 
   return (
     <aside className={[
@@ -219,13 +219,33 @@ export function Sidebar({
               </svg>
             </button>
 
-            <div title={agentLabel} className="flex flex-1 items-center justify-center cursor-default py-1.5">
+            <div
+              className="relative flex flex-1 items-center justify-center cursor-default py-1.5"
+              onMouseEnter={() => setAgentHover(true)}
+              onMouseLeave={() => setAgentHover(false)}
+            >
               <span className="relative flex items-center justify-center">
                 {agentConnected && (
                   <span className={`absolute size-2.5 rounded-full ${agentColor} animate-ping opacity-60`} />
                 )}
                 <span className={`size-2.5 rounded-full transition-colors duration-500 ${agentColor}`} />
               </span>
+              {agentHover && (
+                <div className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-52 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-3 shadow-lg z-50 text-left">
+                  <p className="mb-2 text-xs font-semibold text-[var(--text)]">Статус агента</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`size-2 shrink-0 rounded-full ${agentColor}`} />
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {agentConnected === null ? "Перевірка…" : agentConnected ? "Підключено" : "Відключено"}
+                    </span>
+                  </div>
+                  {agentLastChecked && (
+                    <p className="mt-2 text-[10px] text-[var(--text-faint)]">
+                      Перевірено: {agentLastChecked.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
           </div>
