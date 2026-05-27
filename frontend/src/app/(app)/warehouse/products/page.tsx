@@ -1270,7 +1270,7 @@ export default function ProductsPage() {
             <input
               ref={specImportRef}
               type="file"
-              accept=".tsv,.txt"
+              accept=".xlsx,.tsv,.txt"
               className="hidden"
               onChange={handleSpecImport}
             />

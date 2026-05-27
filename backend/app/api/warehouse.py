@@ -1154,12 +1154,8 @@ def export_ordage_specs(
     )
 
 
-def _parse_ordage_spec(content: bytes) -> list[dict]:
-    """Parse Ordage spec TSV → list of {sku, components[], operations[]}."""
-    text   = content.decode("utf-8-sig")
-    reader = csv.reader(io.StringIO(text), delimiter="\t")
-    rows   = list(reader)
-
+def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:
+    """Shared parser for both TSV and XLSX rows (after normalisation to str lists)."""
     products: list[dict] = []
     current: dict | None = None
 
@@ -1198,6 +1194,25 @@ def _parse_ordage_spec(content: bytes) -> list[dict]:
     return products
 
 
+def _parse_ordage_spec(content: bytes) -> list[dict]:
+    """Parse Ordage spec TSV."""
+    text   = content.decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(text), delimiter="\t")
+    return _parse_spec_rows(list(reader))
+
+
+def _parse_ordage_xlsx(content: bytes) -> list[dict]:
+    """Parse Ordage spec XLSX."""
+    wb   = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws   = wb.active
+    rows = [
+        [str(c).strip() if c is not None else "" for c in row]
+        for row in ws.iter_rows(values_only=True)
+    ]
+    wb.close()
+    return _parse_spec_rows(rows)
+
+
 class OrdageSpecImportResult(BaseModel):
     updated: int
     skipped: int
@@ -1211,7 +1226,9 @@ def import_ordage_specs(
     org:  Organization    = Depends(get_current_org),
     _:    User            = Depends(require_roles(UserRole.admin)),
 ) -> OrdageSpecImportResult:
-    parsed           = _parse_ordage_spec(file.file.read())
+    content  = file.file.read()
+    filename = (file.filename or "").lower()
+    parsed   = _parse_ordage_xlsx(content) if filename.endswith(".xlsx") else _parse_ordage_spec(content)
     updated, skipped = 0, 0
     errors: list[dict] = []
 

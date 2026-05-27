@@ -159,7 +159,7 @@ export default function SpecsPage() {
           <input
             ref={importRef}
             type="file"
-            accept=".tsv,.txt"
+            accept=".xlsx,.tsv,.txt"
             className="hidden"
             onChange={handleImport}
           />
