@@ -232,6 +232,7 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
     pid = movement.product_id
 
     def _entry(product_id: int, warehouse_id: int) -> StockEntry:
+        from decimal import Decimal
         row = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
         if not row:
             product = db.get(Product, product_id)
@@ -239,6 +240,8 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
                 organization_id=product.organization_id,  # type: ignore[union-attr]
                 product_id=product_id,
                 warehouse_id=warehouse_id,
+                quantity=Decimal("0"),
+                reserved_qty=Decimal("0"),
             )
             db.add(row)
         return row
