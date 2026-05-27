@@ -30,30 +30,32 @@ function buildStats(warehouseId: number, stock: StockEntry[]): WarehouseStats {
   return { sku_count: skus.size, total_units: total, zero_stock: zeros };
 }
 
-// ── Add modal ─────────────────────────────────────────────────────────────────
+// ── Warehouse modal (create + edit) ──────────────────────────────────────────
 
-function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void; onAdd: (w: Warehouse) => void }) {
-  const [name, setName]   = useState("");
-  const [type, setType]   = useState<WarehouseType>("finished");
-  const [loc,  setLoc]    = useState("");
+function WarehouseModal({
+  warehouse, onClose, onSaved,
+}: {
+  warehouse: Warehouse | null;  // null = create mode
+  onClose: () => void;
+  onSaved: (w: Warehouse) => void;
+}) {
+  const isEdit = !!warehouse;
+  const [name, setName]   = useState(warehouse?.name ?? "");
+  const [type, setType]   = useState<WarehouseType>(warehouse?.type ?? "finished");
+  const [loc,  setLoc]    = useState(warehouse?.location ?? "");
+  const [active, setActive] = useState(warehouse?.is_active ?? true);
   const [busy, setBusy]   = useState(false);
   const [err,  setErr]    = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) { setName(""); setType("finished"); setLoc(""); setErr(null); }
-  }, [open]);
-
-  if (!open) return null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
-      const w = await api<Warehouse>("/api/warehouse/warehouses", {
-        method: "POST",
-        body: JSON.stringify({ name: name.trim(), type, location: loc.trim() || null }),
-      });
-      onAdd(w);
+      const body = { name: name.trim(), type, location: loc.trim() || null, ...(isEdit ? { is_active: active } : {}) };
+      const w = isEdit
+        ? await api<Warehouse>(`/api/warehouse/warehouses/${warehouse!.id}`, { method: "PATCH", body: JSON.stringify(body) })
+        : await api<Warehouse>("/api/warehouse/warehouses", { method: "POST", body: JSON.stringify(body) });
+      onSaved(w);
       onClose();
     } catch {
       setErr("Помилка збереження");
@@ -65,21 +67,21 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl  ">
-        <h2 className="mb-4 font-semibold">Новий склад</h2>
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-xl">
+        <h2 className="mb-4 font-semibold">{isEdit ? "Редагувати склад" : "Новий склад"}</h2>
         <form onSubmit={submit} className="space-y-3 text-sm">
           <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)] ">Назва</span>
+            <span className="mb-1 block text-[var(--text-muted)]">Назва</span>
             <input
               required autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)] "
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-focus)]"
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)] ">Тип</span>
+            <span className="mb-1 block text-[var(--text-muted)]">Тип</span>
             <select
               value={type} onChange={(e) => setType(e.target.value as WarehouseType)}
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2   "
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2"
             >
               {(Object.keys(TYPE_META) as WarehouseType[]).map((t) => (
                 <option key={t} value={t}>{TYPE_META[t].label}</option>
@@ -87,22 +89,29 @@ function AddModal({ open, onClose, onAdd }: { open: boolean; onClose: () => void
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)] ">Місце</span>
+            <span className="mb-1 block text-[var(--text-muted)]">Місце</span>
             <input
               value={loc} onChange={(e) => setLoc(e.target.value)}
               placeholder="Полиця A, Офіс, …"
-              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none   "
+              className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 outline-none"
             />
           </label>
+          {isEdit && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)}
+                className="accent-[var(--accent)]" />
+              <span className="text-[var(--text-muted)]">Активний</span>
+            </label>
+          )}
           {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} disabled={busy}
-              className="rounded-md px-3 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
+              className="rounded-md px-3 py-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
               Скасувати
             </button>
             <button type="submit" disabled={busy || !name.trim()}
-              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
-              {busy ? "Зберігаю…" : "Додати"}
+              className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-white hover:bg-[var(--accent-hi)] disabled:opacity-50">
+              {busy ? "Зберігаю…" : isEdit ? "Зберегти" : "Додати"}
             </button>
           </div>
         </form>
@@ -118,7 +127,7 @@ export default function WarehousesPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stock,      setStock]      = useState<StockEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
-  const [addOpen,    setAddOpen]    = useState(false);
+  const [modalWh,    setModalWh]    = useState<Warehouse | null | "create">(null);
 
   const load = useCallback(async () => {
     try {
@@ -150,8 +159,8 @@ export default function WarehousesPage() {
           <p className="mt-0.5 text-sm text-[var(--text-muted)]">{active.length} активних</p>
         </div>
         <button
-          onClick={() => setAddOpen(true)}
-          className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-white hover:bg-[var(--accent-hi)]   "
+          onClick={() => setModalWh("create")}
+          className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-white hover:bg-[var(--accent-hi)]"
         >
           + Склад
         </button>
@@ -187,6 +196,16 @@ export default function WarehousesPage() {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                       <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setModalWh(w)}
+                    title="Редагувати"
+                    className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
                   </button>
                   <button
@@ -260,19 +279,27 @@ export default function WarehousesPage() {
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center ">
           <p className="text-sm text-[var(--text-muted)]">Складів ще немає</p>
           <button
-            onClick={() => setAddOpen(true)}
-            className="mt-3 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]  "
+            onClick={() => setModalWh("create")}
+            className="mt-3 rounded-md bg-[var(--accent)] px-4 py-2 text-sm text-white hover:bg-[var(--accent-hi)]"
           >
             Додати перший склад
           </button>
         </div>
       )}
 
-      <AddModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onAdd={(w) => setWarehouses((prev) => [...prev, w])}
-      />
+      {modalWh !== null && (
+        <WarehouseModal
+          warehouse={modalWh === "create" ? null : modalWh}
+          onClose={() => setModalWh(null)}
+          onSaved={(w) => {
+            setWarehouses((prev) => {
+              const idx = prev.findIndex((x) => x.id === w.id);
+              return idx >= 0 ? prev.map((x) => x.id === w.id ? w : x) : [...prev, w];
+            });
+            setModalWh(null);
+          }}
+        />
+      )}
     </div>
   );
 }
