@@ -3,64 +3,78 @@
 import { useEffect } from "react";
 import { api } from "@/lib/api";
 
-type Printer = { state: string };
+type Printer = { state: string | null };
 
-type FavState =
-  | { kind: "idle" }
-  | { kind: "printing"; count: number }
-  | { kind: "alert"; count: number }
-  | { kind: "disconnected" };
+const C_ACCENT = "#22d3ee";
+const C_WARN   = "#f59e0b";
+const C_ERROR  = "#ef4444";
+const C_GREY   = "#71717a";
+const C_DIM    = "#3f3f46";
+const C_EMPTY  = "#1e1e20";
 
-const C_ACCENT  = "#22d3ee";
-const C_GREY    = "#71717a";
-const C_DIM     = "#3f3f46";
-const C_ERROR   = "#ef4444";
-
-const OUTER: [number, number][] = [
-  [5,5],[12,5],[19,5],
-  [5,12],      [19,12],
-  [5,19],[12,19],[19,19],
+// 3×3 grid — index 4 is center
+const GRID: [number, number][] = [
+  [5, 5],  [12, 5],  [19, 5],
+  [5, 12], [12, 12], [19, 12],
+  [5, 19], [12, 19], [19, 19],
 ];
 
-function derive(printers: Printer[]): FavState {
-  if (!printers.length) return { kind: "idle" };
-  const printing = printers.filter(p => p.state === "printing" || p.state === "paused").length;
-  const errors   = printers.filter(p => p.state === "error").length;
-  const online   = printers.filter(p => p.state !== "offline" && p.state !== "unknown").length;
-  if (online === 0)    return { kind: "disconnected" };
-  if (errors > 0)      return { kind: "alert", count: errors };
-  if (printing > 0)    return { kind: "printing", count: printing };
-  return { kind: "idle" };
+function stateColor(state: string | null): string {
+  switch (state) {
+    case "printing":    return C_ACCENT;
+    case "paused":      return C_WARN;
+    case "error":       return C_ERROR;
+    case "idle":
+    case "operational": return C_GREY;
+    default:            return C_DIM;
+  }
 }
 
-function draw(state: FavState): string {
-  const SIZE = 64;
-  const S    = SIZE / 24; // scale factor
+function statePriority(state: string | null): number {
+  switch (state) {
+    case "error":       return 0;
+    case "printing":    return 1;
+    case "paused":      return 2;
+    case "idle":
+    case "operational": return 3;
+    default:            return 4;
+  }
+}
 
-  const canvas = document.createElement("canvas");
+function draw(printers: Printer[], disconnected = false): string {
+  const SIZE = 64;
+  const S    = SIZE / 24;
+
+  const canvas  = document.createElement("canvas");
   canvas.width  = SIZE;
   canvas.height = SIZE;
-  const ctx = canvas.getContext("2d")!;
+  const ctx     = canvas.getContext("2d")!;
 
-  const dotCol    = state.kind === "disconnected" ? C_DIM  : C_GREY;
-  const centerCol = state.kind === "printing"     ? C_ACCENT : dotCol;
+  // sort: errors → printing → paused → idle → offline
+  const sorted = [...printers].sort(
+    (a, b) => statePriority(a.state) - statePriority(b.state),
+  );
 
-  // outer dots
-  for (const [x, y] of OUTER) {
+  GRID.forEach(([x, y], i) => {
+    const isCenter = i === 4;
+    const r = isCenter ? 2.8 * S : 1.8 * S;
+
+    let color: string;
+    if (disconnected) {
+      color = C_DIM;
+    } else if (!sorted[i]) {
+      color = C_EMPTY;
+    } else {
+      color = stateColor(sorted[i].state);
+    }
+
     ctx.beginPath();
-    ctx.arc(x * S, y * S, 1.6 * S, 0, Math.PI * 2);
-    ctx.fillStyle = dotCol;
+    ctx.arc(x * S, y * S, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
-  }
+  });
 
-  // center dot
-  ctx.beginPath();
-  ctx.arc(12 * S, 12 * S, 2.6 * S, 0, Math.PI * 2);
-  ctx.fillStyle = centerCol;
-  ctx.fill();
-
-  // disconnected slash
-  if (state.kind === "disconnected") {
+  if (disconnected) {
     ctx.beginPath();
     ctx.moveTo(4 * S, 4 * S);
     ctx.lineTo(20 * S, 20 * S);
@@ -68,55 +82,22 @@ function draw(state: FavState): string {
     ctx.lineWidth   = 2 * S;
     ctx.lineCap     = "round";
     ctx.stroke();
-    return canvas.toDataURL("image/png");
-  }
-
-  // badge (alert = red, printing = cyan)
-  if (state.kind === "alert" || state.kind === "printing") {
-    const bx    = 19 * S;
-    const by    = 5  * S;
-    const br    = 4  * S;
-    const col   = state.kind === "alert" ? C_ERROR : C_ACCENT;
-    const n     = state.count;
-
-    ctx.beginPath();
-    ctx.arc(bx, by, br, 0, Math.PI * 2);
-    ctx.fillStyle = "#0c0c0e"; // dark bg ring
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(bx, by, br - 1, 0, Math.PI * 2);
-    ctx.fillStyle = col;
-    ctx.fill();
-
-    if (n > 0) {
-      ctx.font         = `bold ${Math.round(4.5 * S)}px system-ui`;
-      ctx.fillStyle    = "#000";
-      ctx.textAlign    = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(n > 9 ? "9" : String(n), bx, by + 0.5);
-    }
   }
 
   return canvas.toDataURL("image/png");
 }
 
 function applyFavicon(url: string) {
-  let el = document.querySelector<HTMLLinkElement>('link[data-dyn-favicon]');
+  let el = document.querySelector<HTMLLinkElement>("link[data-dyn-favicon]");
   if (!el) {
     el = document.createElement("link");
     el.rel = "icon";
     el.setAttribute("data-dyn-favicon", "1");
-    // insert before any existing icon links so it takes priority
     const first = document.querySelector('link[rel~="icon"]');
     document.head.insertBefore(el, first ?? null);
   }
   el.type = "image/png";
   el.href = url;
-}
-
-function applyTitle(_state: FavState) {
-  // title is managed by usePageTitle per page
 }
 
 export function DynamicFavicon() {
@@ -127,11 +108,9 @@ export function DynamicFavicon() {
       try {
         const printers = await api<Printer[]>("/api/printers");
         if (!active) return;
-        const state = derive(printers);
-        applyFavicon(draw(state));
-        applyTitle(state);
+        applyFavicon(draw(printers));
       } catch {
-        // silently ignore — keep current favicon on error
+        if (active) applyFavicon(draw([], true));
       }
     }
 
