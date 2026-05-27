@@ -96,14 +96,14 @@ const inputCls = "input";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-sm  ">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8 shadow-sm">
       {children}
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="mb-5 font-semibold">{children}</h2>;
+  return <h2 className="mb-6 text-lg font-semibold">{children}</h2>;
 }
 
 function ComingSoon({ label }: { label: string }) {
@@ -1654,7 +1654,8 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Content ── */}
-      <div className="px-6 py-5">
+      <div className="px-8 py-6">
+        <div className="mx-auto max-w-6xl">
         {active === "profile" && <ProfileSection />}
         {active === "general" && <GeneralSection />}
         {active === "organization" && (
@@ -1674,6 +1675,7 @@ export default function SettingsPage() {
           </div>
         )}
         {active === "billing" && <BillingSection />}
+        </div>
       </div>
 
 
