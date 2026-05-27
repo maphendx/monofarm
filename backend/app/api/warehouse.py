@@ -19,7 +19,7 @@ from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
     CellStock, Counterparty, MovementType, Order, OrderItem,
     OrderStatus, ProductCategory, ProductionBatch, SpecComponent, SpecOperation,
-    Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
+    SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseZone, Product,
 )
 from app.schemas.warehouse import (
@@ -976,6 +976,28 @@ def delete_product(
     db.commit()
 
 
+class StockThresholdsUpdate(BaseModel):
+    min_stock:     int | None = None
+    desired_stock: int | None = None
+    box_limit:     int | None = None
+
+
+@router.patch("/products/{product_id}/thresholds", response_model=ProductOut)
+def update_thresholds(
+    product_id: int,
+    payload:    StockThresholdsUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ProductOut:
+    p = _get_product(product_id, org, db)
+    for k, v in payload.model_dump(exclude_unset=True).items():
+        setattr(p, k, v)
+    db.commit()
+    db.refresh(p)
+    return ProductOut.model_validate(p)
+
+
 # ── Specifications ────────────────────────────────────────────────────────────
 
 @router.get("/products/{product_id}/specs", response_model=list[SpecOut])
@@ -1006,6 +1028,186 @@ def create_spec(
     db.commit()
     db.refresh(spec)
     return _spec_to_out(spec, db)
+
+
+_SPEC_TSV_HEADER = "\t".join([
+    "Назва виробу", "SKU виробу", "Од. вим. виробу",
+    "Пряма собівартість виробу", "Повна собівартість виробу",
+    "Назва матеріалу", "SKU матеріалу", "К-сть матеріалу", "Одиниця виміру матеріалу", "Сер.зважена ціна матеріалу",
+    "Назва роботи", "К-сть роботи", "Одиниця виміру роботи", "Ціна роботи", "Додаткові витрати", "Вартість витрати",
+])
+
+
+@router.get("/specs/export-ordage")
+def export_ordage_specs(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    products = (
+        db.query(Product)
+        .filter(Product.organization_id == org.id, Product.is_active)
+        .order_by(Product.name)
+        .all()
+    )
+    rows = [_SPEC_TSV_HEADER]
+    blank16 = [""] * 16
+
+    for p in products:
+        spec = db.query(Specification).filter_by(product_id=p.id, is_default=True).first()
+        if not spec:
+            continue
+        components = (
+            db.query(SpecComponent).filter_by(specification_id=spec.id)
+            .order_by(SpecComponent.sort_order).all()
+        )
+        operations = (
+            db.query(SpecOperation).filter_by(specification_id=spec.id)
+            .order_by(SpecOperation.sort_order).all()
+        )
+
+        row = blank16.copy()
+        row[0]  = p.name
+        row[1]  = p.sku
+        row[2]  = p.unit
+        row[3]  = str(p.direct_cost or "")
+        row[4]  = str(p.full_cost   or "")
+        rows.append("\t".join(row))
+
+        for c in components:
+            r = blank16.copy()
+            r[1]  = p.sku
+            r[5]  = c.name
+            r[7]  = str(c.quantity)
+            r[8]  = c.unit
+            r[9]  = str(c.unit_price or "")
+            rows.append("\t".join(r))
+
+        for op in operations:
+            total = op.explicit_cost or Decimal("0")
+            if op.type.value == "print" and op.print_time_min:
+                kwh    = Decimal(op.power_watts or _PRINTER_WATTS) * op.print_time_min / 60 / 1000
+                total += kwh * _ELECTRICITY_RATE
+            if op.labor_minutes:
+                total += (op.labor_minutes / 60) * (op.labor_rate_per_hour or _LABOR_RATE)
+            r = blank16.copy()
+            r[1]  = p.sku
+            r[10] = op.name
+            r[11] = "1"
+            r[13] = str(total.quantize(Decimal("0.0001")))
+            rows.append("\t".join(r))
+
+    content = "\n".join(rows).encode("utf-8-sig")
+    return Response(
+        content=content,
+        media_type="text/tab-separated-values; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="specs.tsv"'},
+    )
+
+
+def _parse_ordage_spec(content: bytes) -> list[dict]:
+    """Parse Ordage spec TSV → list of {sku, components[], operations[]}."""
+    text   = content.decode("utf-8-sig")
+    reader = csv.reader(io.StringIO(text), delimiter="\t")
+    rows   = list(reader)
+
+    products: list[dict] = []
+    current: dict | None = None
+
+    for row in rows[1:]:          # skip header
+        while len(row) < 16:
+            row.append("")
+        product_name = row[0].strip()
+        sku          = row[1].strip()
+        if not sku:
+            continue
+        if product_name:
+            current = {"sku": sku, "unit": row[2].strip(), "components": [], "operations": []}
+            products.append(current)
+        elif current:
+            mat_name = row[5].strip()
+            op_name  = row[10].strip()
+            if mat_name:
+                qty   = row[7].strip()
+                price = row[9].strip()
+                current["components"].append({
+                    "name":       mat_name,
+                    "quantity":   Decimal(qty)   if qty   else Decimal("0"),
+                    "unit":       row[8].strip() or "шт",
+                    "unit_price": Decimal(price) if price else None,
+                })
+            elif op_name:
+                qty   = row[11].strip()
+                price = row[13].strip()
+                q     = Decimal(qty)   if qty   else Decimal("0")
+                p     = Decimal(price) if price else Decimal("0")
+                current["operations"].append({
+                    "name": op_name,
+                    "cost": (q * p) if (q and p) else None,
+                    "is_print": "друк" in op_name.lower() or "print" in op_name.lower(),
+                })
+    return products
+
+
+class OrdageSpecImportResult(BaseModel):
+    updated: int
+    skipped: int
+    errors:  list[dict]
+
+
+@router.post("/specs/import-ordage", response_model=OrdageSpecImportResult)
+def import_ordage_specs(
+    file: UploadFile      = File(...),
+    db:   Session         = Depends(get_db),
+    org:  Organization    = Depends(get_current_org),
+    _:    User            = Depends(require_roles(UserRole.admin)),
+) -> OrdageSpecImportResult:
+    parsed           = _parse_ordage_spec(file.file.read())
+    updated, skipped = 0, 0
+    errors: list[dict] = []
+
+    for item in parsed:
+        product = db.query(Product).filter_by(organization_id=org.id, sku=item["sku"]).first()
+        if not product:
+            skipped += 1
+            errors.append({"sku": item["sku"], "reason": "не знайдено"})
+            continue
+
+        spec = db.query(Specification).filter_by(product_id=product.id, is_default=True).first()
+        if not spec:
+            ver  = db.query(Specification).filter_by(product_id=product.id).count()
+            spec = Specification(product_id=product.id, name="Основна", is_default=True, version=ver + 1)
+            db.add(spec)
+            db.flush()
+
+        db.query(SpecComponent).filter_by(specification_id=spec.id).delete()
+        for i, c in enumerate(item["components"]):
+            db.add(SpecComponent(
+                specification_id=spec.id,
+                name=c["name"], quantity=c["quantity"],
+                unit=c["unit"], unit_price=c["unit_price"],
+                waste_pct=Decimal("0"), sort_order=i,
+            ))
+
+        db.query(SpecOperation).filter_by(specification_id=spec.id).delete()
+        for i, op in enumerate(item["operations"]):
+            n = op["name"].lower()
+            t = (SpecOpType.print       if ("друк" in n or "print" in n) else
+                 SpecOpType.postprocess if ("постобр" in n or "post" in n) else
+                 SpecOpType.manual)
+            db.add(SpecOperation(
+                specification_id=spec.id,
+                type=t, name=op["name"], sort_order=i,
+                explicit_cost=op["cost"],
+            ))
+
+        db.flush()
+        cost = _calc_cost(spec, db)
+        product.direct_cost = cost.material_cost + cost.electricity_cost
+        product.full_cost   = cost.total
+        db.commit()
+        updated += 1
+
+    return OrdageSpecImportResult(updated=updated, skipped=skipped, errors=errors)
 
 
 @router.get("/specs/{spec_id}", response_model=SpecOut)
@@ -1137,20 +1339,32 @@ def list_stock(
     if product_id:
         q = q.filter(StockEntry.product_id == product_id)
     rows = q.order_by(Product.name).all()
-    return [
-        StockEntryOut(
+    import math
+    result = []
+    for e, p, wh in rows:
+        avail = e.quantity - e.reserved_qty
+        boxes_to_order = None
+        if (p.desired_stock is not None and p.box_limit and p.box_limit > 0
+                and avail < p.desired_stock):
+            boxes_to_order = math.ceil((p.desired_stock - float(avail)) / p.box_limit)
+        result.append(StockEntryOut(
             id=e.id,
             product_id=e.product_id,
             product_name=p.name,
+            product_sku=p.sku,
+            product_unit=p.unit,
             warehouse_id=e.warehouse_id,
             warehouse_name=wh.name,
             quantity=e.quantity,
             reserved_qty=e.reserved_qty,
-            available=e.quantity - e.reserved_qty,
+            available=avail,
+            min_stock=p.min_stock,
+            desired_stock=p.desired_stock,
+            box_limit=p.box_limit,
+            boxes_to_order=boxes_to_order,
             updated_at=e.updated_at,
-        )
-        for e, p, wh in rows
-    ]
+        ))
+    return result
 
 
 # ── Movements ─────────────────────────────────────────────────────────────────

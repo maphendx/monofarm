@@ -1,0 +1,338 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { API_URL, api, getToken } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Product = {
+  id: number; name: string; sku: string; categories: string[];
+  unit: string; sale_price: string | null;
+  cost_price: string | null; direct_cost: string | null; full_cost: string | null;
+  min_stock: number | null; desired_stock: number | null; box_limit: number | null;
+};
+
+type SpecImportResult = {
+  updated: number;
+  skipped: number;
+  errors: { sku: string; reason: string }[];
+};
+
+type SortKey = "name" | "sku" | "full_cost" | "sale_price" | "margin";
+type SortDir = "asc" | "desc";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmt2(v: string | null) {
+  if (!v || parseFloat(v) === 0) return "—";
+  return `${parseFloat(v).toFixed(2)} ₴`;
+}
+
+function calcMargin(sale: string | null, cost: string | null): number | null {
+  if (!sale || !cost || parseFloat(sale) === 0) return null;
+  return ((parseFloat(sale) - parseFloat(cost)) / parseFloat(sale)) * 100;
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function SpecsPage() {
+  const [products,     setProducts]     = useState<Product[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState("");
+  const [sortKey,      setSortKey]      = useState<SortKey>("name");
+  const [sortDir,      setSortDir]      = useState<SortDir>("asc");
+  const [filter,       setFilter]       = useState<"all" | "has" | "none">("all");
+  const [importing,    setImporting]    = useState(false);
+  const [importResult, setImportResult] = useState<SpecImportResult | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const prods = await api<Product[]>("/api/warehouse/products");
+      setProducts(prods);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const result = await api<SpecImportResult>("/api/warehouse/specs/import-ordage", { method: "POST", body });
+      setImportResult(result);
+      await load();
+    } catch {
+      alert("Помилка імпорту специфікацій");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function handleExport() {
+    const token = getToken();
+    const url   = `${API_URL}/api/warehouse/specs/export-ordage`;
+    const a     = document.createElement("a");
+    a.href      = token ? `${url}?token=${token}` : url;
+
+    // Use fetch with auth header instead
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const href = URL.createObjectURL(blob);
+        Object.assign(a, { href, download: "specs.tsv" });
+        a.click();
+        URL.revokeObjectURL(href);
+      });
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return products.filter((p) => {
+      if (filter === "has"  && !p.full_cost) return false;
+      if (filter === "none" &&  p.full_cost) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [products, search, filter]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let av: number | string = 0, bv: number | string = 0;
+      if (sortKey === "name")       { av = a.name; bv = b.name; }
+      else if (sortKey === "sku")   { av = a.sku;  bv = b.sku;  }
+      else if (sortKey === "full_cost")   { av = parseFloat(a.full_cost   ?? "0"); bv = parseFloat(b.full_cost   ?? "0"); }
+      else if (sortKey === "sale_price")  { av = parseFloat(a.sale_price  ?? "0"); bv = parseFloat(b.sale_price  ?? "0"); }
+      else if (sortKey === "margin") {
+        av = calcMargin(a.sale_price, a.full_cost) ?? -999;
+        bv = calcMargin(b.sale_price, b.full_cost) ?? -999;
+      }
+      const cmp = typeof av === "string" ? av.localeCompare(bv as string, "uk") : (av as number) - (bv as number);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const withSpec  = products.filter((p) => p.full_cost).length;
+  const withoutSpec = products.length - withSpec;
+
+  function Th({ col, children, className = "" }: { col: SortKey; children: React.ReactNode; className?: string }) {
+    const active = sortKey === col;
+    return (
+      <th
+        onClick={() => toggleSort(col)}
+        className={`cursor-pointer select-none px-4 py-3 font-medium text-[var(--text-muted)] hover:text-[var(--text)] ${className}`}
+      >
+        {children}
+        <span className={`ml-1 text-xs ${active ? "text-[var(--accent)]" : "opacity-30"}`}>
+          {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+        </span>
+      </th>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Специфікації</h1>
+          <p className="text-xs text-[var(--text-faint)]">
+            {withSpec} з {products.length} позицій мають специфікацію
+            {withoutSpec > 0 && ` · ${withoutSpec} без`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importRef}
+            type="file"
+            accept=".tsv,.txt"
+            className="hidden"
+            onChange={handleImport}
+          />
+          <button
+            onClick={handleExport}
+            className="btn btn-ghost btn-sm"
+            title="Експорт TSV"
+          >
+            ↓ Експорт
+          </button>
+          <button
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            className="btn btn-ghost btn-sm disabled:opacity-50"
+          >
+            {importing ? "Імпортую…" : "↑ Імпорт"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Import result ── */}
+      {importResult && (
+        <div className="flex items-start gap-3 rounded-lg border border-[rgba(34,211,238,.25)] bg-[rgba(34,211,238,.06)] px-4 py-3">
+          <div className="flex-1 text-sm">
+            <span className="font-medium text-[var(--accent)]">
+              Оновлено {importResult.updated} специфікацій
+            </span>
+            {importResult.skipped > 0 && (
+              <span className="ml-2 text-[var(--text-muted)]">· пропущено {importResult.skipped}</span>
+            )}
+            {importResult.errors.length > 0 && (
+              <ul className="mt-1.5 space-y-0.5 text-xs text-[var(--text-faint)]">
+                {importResult.errors.slice(0, 8).map((e) => (
+                  <li key={e.sku}><span className="font-mono">{e.sku}</span> — {e.reason}</li>
+                ))}
+                {importResult.errors.length > 8 && <li>…ще {importResult.errors.length - 8}</li>}
+              </ul>
+            )}
+          </div>
+          <button
+            onClick={() => setImportResult(null)}
+            className="shrink-0 text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Filters / search ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Назва або SKU…"
+          className="w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]"
+        />
+        {(["all", "has", "none"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={[
+              "rounded-full px-3 py-1 text-xs transition-colors",
+              filter === f
+                ? "bg-[var(--accent)] text-white"
+                : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:text-[var(--text)]",
+            ].join(" ")}
+          >
+            {f === "all" ? "Всі" : f === "has" ? "Зі специфікацією" : "Без специфікації"}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-[var(--text-faint)]">{sorted.length} позицій</span>
+      </div>
+
+      {/* ── Table ── */}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)]">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-xs">
+              <tr>
+                <Th col="name"       className="text-left">Назва</Th>
+                <Th col="sku"        className="text-left">SKU</Th>
+                <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>
+                <Th col="full_cost"  className="text-right">Собівартість</Th>
+                <Th col="sale_price" className="text-right">Ціна</Th>
+                <Th col="margin"     className="text-right">Маржа</Th>
+                <th className="w-24 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border)]">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                    Завантаження…
+                  </td>
+                </tr>
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                    {search || filter !== "all" ? "Нічого не знайдено" : "Немає продуктів"}
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((p) => {
+                  const margin = calcMargin(p.sale_price, p.full_cost);
+                  const hasSpec = !!p.full_cost;
+                  return (
+                    <tr key={p.id} className="group hover:bg-[var(--surface-hi)]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={[
+                              "inline-block size-1.5 shrink-0 rounded-full",
+                              hasSpec ? "bg-[var(--state-ok)]" : "bg-[var(--border-strong)]",
+                            ].join(" ")}
+                            title={hasSpec ? "Специфікація є" : "Без специфікації"}
+                          />
+                          <span className="font-medium">{p.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {p.categories.slice(0, 3).map((c) => (
+                            <span key={c}
+                              className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                              {c}
+                            </span>
+                          ))}
+                          {p.categories.length > 3 && (
+                            <span className="text-[10px] text-[var(--text-faint)]">+{p.categories.length - 3}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums">
+                        {hasSpec ? (
+                          <span className="text-[var(--text-hi)]">{fmt2(p.full_cost)}</span>
+                        ) : (
+                          <span className="text-[var(--text-faint)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono tabular-nums text-[var(--text-muted)]">
+                        {fmt2(p.sale_price)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {margin !== null ? (
+                          <span className={[
+                            "font-mono tabular-nums text-xs font-medium",
+                            margin >= 50 ? "text-[var(--state-ok)]"
+                              : margin >= 20 ? "text-[var(--state-warn)]"
+                              : "text-[var(--state-error)]",
+                          ].join(" ")}>
+                            {margin.toFixed(0)}%
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-faint)]">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/warehouse/products/${p.id}`}
+                          className="invisible rounded-md px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg)] group-hover:visible"
+                        >
+                          Редагувати →
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

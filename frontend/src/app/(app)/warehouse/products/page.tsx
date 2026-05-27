@@ -10,6 +10,7 @@ type Product = {
   unit: string; description: string | null; is_active: boolean;
   sale_price: string | null; cost_price: string | null;
   direct_cost: string | null; full_cost: string | null;
+  min_stock: number | null; desired_stock: number | null; box_limit: number | null;
 };
 
 type StockEntry = { product_id: number; available: string };
@@ -50,6 +51,7 @@ type ActionNew      = "import" | "skip";
 type ActionExisting = "update"  | "skip";
 type ActionMissing  = "nothing" | "hide";
 type BarcodeFilter  = "all" | "has" | "none";
+type SpecImportResult = { updated: number; skipped: number; errors: { sku: string; reason: string }[] };
 const PAGE_SIZES = [25, 50, 100] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -129,13 +131,16 @@ function ProductModal({
 }) {
   const isEdit = product !== null;
 
-  const [name,    setName]    = useState(product?.name    ?? "");
-  const [sku,     setSku]     = useState(product?.sku     ?? "");
-  const [barcode, setBarcode] = useState(product?.barcode ?? "");
-  const [cats,    setCats]    = useState<string[]>(product?.categories ?? []);
-  const [unit,    setUnit]    = useState(product?.unit    ?? "шт");
-  const [price,   setPrice]   = useState(product?.sale_price ? parseFloat(product.sale_price).toString() : "");
-  const [desc,    setDesc]    = useState(product?.description ?? "");
+  const [name,         setName]         = useState(product?.name    ?? "");
+  const [sku,          setSku]          = useState(product?.sku     ?? "");
+  const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
+  const [cats,         setCats]         = useState<string[]>(product?.categories ?? []);
+  const [unit,         setUnit]         = useState(product?.unit    ?? "шт");
+  const [price,        setPrice]        = useState(product?.sale_price ? parseFloat(product.sale_price).toString() : "");
+  const [desc,         setDesc]         = useState(product?.description ?? "");
+  const [minStock,     setMinStock]     = useState(product?.min_stock?.toString() ?? "");
+  const [desiredStock, setDesiredStock] = useState(product?.desired_stock?.toString() ?? "");
+  const [boxLimit,     setBoxLimit]     = useState(product?.box_limit?.toString() ?? "");
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState<string | null>(null);
 
@@ -148,6 +153,9 @@ function ProductModal({
         categories: cats, unit: unit.trim() || "шт",
         sale_price: price ? parseFloat(price) : null,
         description: desc.trim() || null,
+        min_stock:     minStock     ? parseInt(minStock)     : null,
+        desired_stock: desiredStock ? parseInt(desiredStock) : null,
+        box_limit:     boxLimit     ? parseInt(boxLimit)     : null,
       };
       const p = isEdit
         ? await api<Product>(`/api/warehouse/products/${product!.id}`, { method: "PATCH", body: JSON.stringify(body) })
@@ -249,7 +257,32 @@ function ProductModal({
 
           <hr className={HR} />
 
-          {/* Section 4: description */}
+          {/* Section 4: stock thresholds */}
+          <div className={SEC}>
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">Управління запасами</p>
+            <FormRow label="Мін. залишок">
+              <input type="number" min="0" step="1" value={minStock}
+                onChange={(e) => setMinStock(e.target.value)}
+                placeholder="сигнал поповнення"
+                className={INPUT} />
+            </FormRow>
+            <FormRow label="Бажаний залишок">
+              <input type="number" min="0" step="1" value={desiredStock}
+                onChange={(e) => setDesiredStock(e.target.value)}
+                placeholder="цільовий рівень"
+                className={INPUT} />
+            </FormRow>
+            <FormRow label="Ліміт в коробці">
+              <input type="number" min="1" step="1" value={boxLimit}
+                onChange={(e) => setBoxLimit(e.target.value)}
+                placeholder="шт / коробка"
+                className={INPUT} />
+            </FormRow>
+          </div>
+
+          <hr className={HR} />
+
+          {/* Section 5: description */}
           <div className={SEC}>
             <FormRow label="Опис">
               <textarea rows={3} value={desc} onChange={(e) => setDesc(e.target.value)}
@@ -991,7 +1024,10 @@ export default function ProductsPage() {
   const [actionExisting, setActionExisting] = useState<ActionExisting>("update");
   const [actionMissing,  setActionMissing]  = useState<ActionMissing>("nothing");
   const [colMapping,     setColMapping]     = useState<Record<number, string>>({});
-  const importRef = useRef<HTMLInputElement>(null);
+  const importRef     = useRef<HTMLInputElement>(null);
+  const specImportRef = useRef<HTMLInputElement>(null);
+  const [specImporting,    setSpecImporting]    = useState(false);
+  const [specImportResult, setSpecImportResult] = useState<SpecImportResult | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -1144,6 +1180,25 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleSpecImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setSpecImporting(true);
+    setSpecImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const result = await api<SpecImportResult>("/api/warehouse/specs/import-ordage", { method: "POST", body });
+      setSpecImportResult(result);
+      await load();
+    } catch {
+      alert("Помилка імпорту специфікацій");
+    } finally {
+      setSpecImporting(false);
+    }
+  }
+
   function handleExport() {
     const token = getToken();
     fetch(`${API_URL}/api/warehouse/products/export`, {
@@ -1212,6 +1267,13 @@ export default function ProductsPage() {
               className="hidden"
               onChange={handleImport}
             />
+            <input
+              ref={specImportRef}
+              type="file"
+              accept=".tsv,.txt"
+              className="hidden"
+              onChange={handleSpecImport}
+            />
             <button
               onClick={handleExport}
               className="btn btn-ghost btn-sm"
@@ -1223,9 +1285,17 @@ export default function ProductsPage() {
               onClick={() => importRef.current?.click()}
               disabled={importing}
               className="btn btn-ghost btn-sm disabled:opacity-50"
-              title="Імпорт TSV/CSV (Ordage)"
+              title="Імпорт номенклатури TSV/CSV (Ordage)"
             >
-              {importing ? "…" : "↑ Імпорт"}
+              {importing ? "…" : "↑ Номенклатура"}
+            </button>
+            <button
+              onClick={() => specImportRef.current?.click()}
+              disabled={specImporting}
+              className="btn btn-ghost btn-sm disabled:opacity-50"
+              title="Імпорт специфікацій (Ordage TSV)"
+            >
+              {specImporting ? "…" : "↑ Специфікації"}
             </button>
             <button onClick={() => setEditProduct("create")}
               className="btn btn-primary">
@@ -1243,6 +1313,34 @@ export default function ProductsPage() {
             <button
               onClick={() => setImportResult(null)}
               className="ml-auto text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Spec import result banner */}
+        {specImportResult && (
+          <div className="flex items-start gap-3 rounded-lg border border-[rgba(34,211,238,.25)] bg-[rgba(34,211,238,.06)] px-4 py-2.5">
+            <div className="flex-1 text-sm">
+              <span className="text-[var(--accent)]">
+                Специфікації: оновлено {specImportResult.updated}
+                {specImportResult.skipped > 0 && `, пропущено ${specImportResult.skipped}`}
+              </span>
+              {specImportResult.errors.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-faint)]">
+                  {specImportResult.errors.slice(0, 5).map((e) => (
+                    <li key={e.sku}>{e.sku} — {e.reason}</li>
+                  ))}
+                  {specImportResult.errors.length > 5 && (
+                    <li>…ще {specImportResult.errors.length - 5}</li>
+                  )}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setSpecImportResult(null)}
+              className="text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
             >
               ✕
             </button>

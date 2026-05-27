@@ -1,0 +1,179 @@
+/* =========================================================================
+   MONOFARM · DESIGN TOKENS · v1.0
+   Drop into frontend/src/app/globals.css
+   Keep your existing @import "tailwindcss" and @custom-variant lines.
+   ========================================================================= */
+
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────── Tokens · LIGHT (default) ─────────── */
+:root {
+  /* Surfaces */
+  --bg:           #f7f7f6;
+  --bg-elevated:  #ffffff;
+  --surface:      #ffffff;
+  --surface-2:    #fafafa;
+  --surface-hi:   #f4f4f5;
+  --overlay:      rgba(255,255,255,.85);
+
+  /* Borders */
+  --border:        rgba(0,0,0,.07);
+  --border-strong: rgba(0,0,0,.12);
+  --border-focus:  rgba(8,145,178,.40);
+
+  /* Text */
+  --text:        #18181b;
+  --text-hi:     #09090b;
+  --text-muted:  #52525b;
+  --text-faint:  #71717a;
+  --text-dim:    #a1a1aa;
+
+  /* Accent · cyan */
+  --accent:        #0891b2;
+  --accent-hi:     #0e7490;
+  --accent-soft:   rgba(8,145,178,.10);
+  --accent-ring:   rgba(8,145,178,.20);
+  --accent-strong: #0e7490;
+
+  /* Printer states */
+  --state-print:   #0284c7;
+  --state-ok:      #16a34a;
+  --state-idle:    #71717a;
+  --state-warn:    #d97706;
+  --state-error:   #dc2626;
+  --state-offline: #a1a1aa;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg: 0 20px 40px rgba(0,0,0,.10), 0 4px 8px rgba(0,0,0,.06);
+
+  /* Radii */
+  --r-xs:   4px;
+  --r-sm:   6px;
+  --r-md:   8px;
+  --r-lg:   10px;
+  --r-xl:   14px;
+  --r-2xl:  20px;
+  --r-full: 9999px;
+
+  /* Spacing (2px ramp) */
+  --s-0:  2px;
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* Motion */
+  --dur-instant: 80ms;
+  --dur-quick:   160ms;
+  --dur-base:    240ms;
+  --dur-slow:    400ms;
+  --ease-out:    cubic-bezier(.16, 1, .3, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* ─────────── Tokens · DARK (primary theme) ─────────── */
+.dark {
+  --bg:           #0a0a0b;
+  --bg-elevated:  #111113;
+  --surface:      #141416;
+  --surface-2:    #18181b;
+  --surface-hi:   #1f1f23;
+  --overlay:      rgba(10,10,11,.72);
+
+  --border:        rgba(255,255,255,.06);
+  --border-strong: rgba(255,255,255,.10);
+  --border-focus:  rgba(34,211,238,.45);
+
+  --text:        #ededed;
+  --text-hi:     #ffffff;
+  --text-muted:  #a1a1aa;
+  --text-faint:  #71717a;
+  --text-dim:    #52525b;
+
+  --accent:        #22d3ee;
+  --accent-hi:     #67e8f9;
+  --accent-soft:   rgba(34,211,238,.12);
+  --accent-ring:   rgba(34,211,238,.20);
+  --accent-strong: #06b6d4;
+
+  --state-print:   #38bdf8;
+  --state-ok:      #22c55e;
+  --state-idle:    #a3a3a3;
+  --state-warn:    #f59e0b;
+  --state-error:   #ef4444;
+  --state-offline: #52525b;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.30);
+  --shadow-lg: 0 20px 40px rgba(0,0,0,.55), 0 4px 8px rgba(0,0,0,.30);
+}
+
+/* ─────────── Tailwind v4 theme bridge ─────────── */
+@theme inline {
+  /* Colors */
+  --color-bg:            var(--bg);
+  --color-bg-elevated:   var(--bg-elevated);
+  --color-surface:       var(--surface);
+  --color-surface-2:     var(--surface-2);
+  --color-surface-hi:    var(--surface-hi);
+  --color-border:        var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text:          var(--text);
+  --color-text-hi:       var(--text-hi);
+  --color-text-muted:    var(--text-muted);
+  --color-text-faint:    var(--text-faint);
+  --color-text-dim:      var(--text-dim);
+  --color-accent:        var(--accent);
+  --color-accent-hi:     var(--accent-hi);
+  --color-state-print:   var(--state-print);
+  --color-state-ok:      var(--state-ok);
+  --color-state-idle:    var(--state-idle);
+  --color-state-warn:    var(--state-warn);
+  --color-state-error:   var(--state-error);
+  --color-state-offline: var(--state-offline);
+
+  /* Type */
+  --font-sans: var(--font-sans), "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: var(--font-mono), "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Radii */
+  --radius-xs:   var(--r-xs);
+  --radius-sm:   var(--r-sm);
+  --radius-md:   var(--r-md);
+  --radius-lg:   var(--r-lg);
+  --radius-xl:   var(--r-xl);
+  --radius-2xl:  var(--r-2xl);
+  --radius-full: var(--r-full);
+}
+
+/* ─────────── Base ─────────── */
+* { box-sizing: border-box; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  line-height: 1.5;
+}
+.font-mono, code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero";
+}
+
+::selection { background: var(--accent-soft); color: var(--text-hi); }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

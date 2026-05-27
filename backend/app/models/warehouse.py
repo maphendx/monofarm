@@ -151,6 +151,10 @@ class Product(Base):
     # Cached computed costs (updated by cost calculator endpoint)
     direct_cost:     Mapped[Decimal | None]  = mapped_column(Numeric(12, 4), nullable=True)
     full_cost:       Mapped[Decimal | None]  = mapped_column(Numeric(12, 4), nullable=True)
+    # Inventory thresholds
+    min_stock:       Mapped[int | None]      = mapped_column(Integer, nullable=True)
+    desired_stock:   Mapped[int | None]      = mapped_column(Integer, nullable=True)
+    box_limit:       Mapped[int | None]      = mapped_column(Integer, nullable=True)  # items per physical box/cell
     created_by_id:   Mapped[int | None]      = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

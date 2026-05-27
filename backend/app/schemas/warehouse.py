@@ -108,40 +108,49 @@ class CounterpartyBalanceAdjust(BaseModel):
 # ── Product ───────────────────────────────────────────────────────────────────
 
 class ProductCreate(BaseModel):
-    name:        str
-    sku:         str
-    barcode:     str | None = None
-    categories:  list[str] = []
-    unit:        str = "шт"
-    description: str | None = None
-    sale_price:  Decimal | None = None
+    name:          str
+    sku:           str
+    barcode:       str | None = None
+    categories:    list[str] = []
+    unit:          str = "шт"
+    description:   str | None = None
+    sale_price:    Decimal | None = None
+    min_stock:     int | None = None
+    desired_stock: int | None = None
+    box_limit:     int | None = None
 
 
 class ProductUpdate(BaseModel):
-    name:        str | None = None
-    sku:         str | None = None
-    barcode:     str | None = None
-    categories:  list[str] | None = None
-    unit:        str | None = None
-    description: str | None = None
-    sale_price:  Decimal | None = None
-    is_active:   bool | None = None
+    name:          str | None = None
+    sku:           str | None = None
+    barcode:       str | None = None
+    categories:    list[str] | None = None
+    unit:          str | None = None
+    description:   str | None = None
+    sale_price:    Decimal | None = None
+    is_active:     bool | None = None
+    min_stock:     int | None = None
+    desired_stock: int | None = None
+    box_limit:     int | None = None
 
 
 class ProductOut(BaseModel):
-    id:          int
-    name:        str
-    sku:         str
-    barcode:     str | None
-    categories:  list[str]
-    unit:        str
-    description: str | None
-    is_active:   bool
-    sale_price:  Decimal | None
-    cost_price:  Decimal | None
-    direct_cost: Decimal | None
-    full_cost:   Decimal | None
-    created_at:  datetime
+    id:            int
+    name:          str
+    sku:           str
+    barcode:       str | None
+    categories:    list[str]
+    unit:          str
+    description:   str | None
+    is_active:     bool
+    sale_price:    Decimal | None
+    cost_price:    Decimal | None
+    direct_cost:   Decimal | None
+    full_cost:     Decimal | None
+    min_stock:     int | None
+    desired_stock: int | None
+    box_limit:     int | None
+    created_at:    datetime
 
     class Config:
         from_attributes = True
@@ -240,11 +249,17 @@ class StockEntryOut(BaseModel):
     id:             int
     product_id:     int
     product_name:   str
+    product_sku:    str
+    product_unit:   str
     warehouse_id:   int
     warehouse_name: str
     quantity:       Decimal
     reserved_qty:   Decimal
     available:      Decimal
+    min_stock:      int | None
+    desired_stock:  int | None
+    box_limit:      int | None
+    boxes_to_order: int | None   # ceil((desired - available) / box_limit) when available < desired
     updated_at:     datetime
 
     class Config:
