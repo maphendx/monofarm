@@ -1634,7 +1634,7 @@ export default function SettingsPage() {
 
       {/* ── Horizontal tab nav ── */}
       <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="flex overflow-x-auto px-4 scrollbar-none">
+        <div className="flex justify-center overflow-x-auto px-4 scrollbar-none">
           {visibleItems.map((item) => (
             <button
               key={item.id}
@@ -1654,6 +1654,7 @@ export default function SettingsPage() {
 
       {/* ── Content ── */}
       <div className="px-6 py-5">
+        <div className="mx-auto max-w-4xl">
         {active === "profile" && <ProfileSection />}
         {active === "general" && <GeneralSection />}
         {active === "organization" && (
@@ -1673,6 +1674,7 @@ export default function SettingsPage() {
           </div>
         )}
         {active === "billing" && <BillingSection />}
+        </div>
       </div>
 
 
