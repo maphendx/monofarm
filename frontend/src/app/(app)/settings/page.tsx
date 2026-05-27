@@ -1423,7 +1423,7 @@ function ProfileSection() {
   }
 
   return (
-    <div className="max-w-[860px] space-y-4">
+    <div className="space-y-4">
 
       {/* ── Header card ── */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
@@ -1674,6 +1674,7 @@ export default function SettingsPage() {
         )}
         {active === "billing" && <BillingSection />}
       </div>
+
 
     </div>
   );
