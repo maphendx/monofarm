@@ -10,6 +10,8 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  created_at: string;
+  telegram_chat_id: number | null;
 }
 
 export interface AdminUser extends User {

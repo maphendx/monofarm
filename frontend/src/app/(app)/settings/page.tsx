@@ -1378,19 +1378,20 @@ function PrintersSection() {
 function ProfileSection() {
   const user = useUser();
   const router = useRouter();
-  const [name, setName] = useState(user?.name ?? "");
+  const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const inFlight = useRef(false);
 
-  const initials = (user?.name ?? "?").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const initials = user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   const roleLabel: Record<string, string> = { admin: "Адмін", operator: "Оператор", manager: "Менеджер" };
+  const joinedDate = new Date(user.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
 
-  const changed = name.trim() !== (user?.name ?? "") && name.trim().length >= 2;
+  const changed = name.trim() !== user.name && name.trim().length >= 2;
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || inFlight.current) return;
+    if (inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
     try {
@@ -1414,19 +1415,41 @@ function ProfileSection() {
   return (
     <SectionCard>
       <SectionTitle>Профіль</SectionTitle>
+
+      {/* Avatar + info */}
       <div className="mb-6 flex items-center gap-4">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-lg font-semibold text-white">
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-xl font-semibold text-white">
           {initials}
         </div>
-        <div>
-          <p className="font-medium">{user?.name}</p>
-          <p className="text-sm text-[var(--text-muted)]">{user?.email}</p>
+        <div className="min-w-0">
+          <p className="truncate font-semibold">{user.name}</p>
+          <p className="truncate text-sm text-[var(--text-muted)]">{user.email}</p>
           <span className="mt-1 inline-block rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
-            {roleLabel[user?.role ?? ""] ?? user?.role}
+            {roleLabel[user.role] ?? user.role}
           </span>
         </div>
       </div>
 
+      {/* Meta */}
+      <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
+          <p className="text-[11px] text-[var(--text-faint)]">Зареєстровано</p>
+          <p className="mt-0.5 text-sm font-medium">{joinedDate}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
+          <p className="text-[11px] text-[var(--text-faint)]">Telegram</p>
+          {user.telegram_chat_id ? (
+            <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-[var(--state-ok)]">
+              <span className="size-1.5 rounded-full bg-[var(--state-ok)]" />
+              Підключено
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm text-[var(--text-faint)]">Не підключено</p>
+          )}
+        </div>
+      </div>
+
+      {/* Edit name */}
       <form onSubmit={saveName} className="mb-6 space-y-3">
         <label className="block">
           <span className="mb-1 block text-sm text-[var(--text-muted)]">Ім&apos;я</span>
@@ -1446,6 +1469,7 @@ function ProfileSection() {
         </button>
       </form>
 
+      {/* Logout */}
       <div className="border-t border-[var(--border)] pt-5">
         <button
           onClick={logout}

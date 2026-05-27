@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 
 from app.models.user import UserRole
@@ -18,6 +20,8 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
+    created_at: datetime
+    telegram_chat_id: int | None = None
 
     class Config:
         from_attributes = True
