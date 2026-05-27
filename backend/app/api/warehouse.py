@@ -267,6 +267,53 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
         _entry(pid, movement.warehouse_to_id).quantity   += q
 
 
+def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
+    from sqlalchemy import func
+    from app.models.warehouse import Product, StockEntry, ProductionBatch, Specification, BatchStatus
+    import math
+
+    p = db.get(Product, pid)
+    if not p or p.min_stock is None:
+        return
+
+    total_qty = db.query(func.sum(StockEntry.quantity)).filter_by(product_id=pid).scalar() or 0
+    total_res = db.query(func.sum(StockEntry.reserved_qty)).filter_by(product_id=pid).scalar() or 0
+    available = float(total_qty - total_res)
+
+    if available >= p.min_stock:
+        return
+
+    active_batch = db.query(ProductionBatch).filter(
+        ProductionBatch.product_id == pid,
+        ProductionBatch.status.in_([BatchStatus.draft, BatchStatus.active])
+    ).first()
+
+    if active_batch:
+        return
+
+    target_qty = (p.desired_stock - available) if p.desired_stock is not None else (p.min_stock - available)
+    if target_qty <= 0:
+        target_qty = 10
+
+    if p.box_limit and p.box_limit > 0:
+        boxes = math.ceil(target_qty / p.box_limit)
+        target_qty = boxes * p.box_limit
+
+    target_qty = int(target_qty)
+
+    spec = db.query(Specification).filter_by(product_id=pid, is_default=True).first()
+
+    batch = ProductionBatch(
+        organization_id=org_id,
+        product_id=pid,
+        specification_id=spec.id if spec else None,
+        target_qty=target_qty,
+        status=BatchStatus.draft,
+        notes="Автоматичне поповнення запасів"
+    )
+    db.add(batch)
+
+
 def _order_to_out(o: Order, db: Session) -> OrderOut:
     items = db.query(OrderItem).filter_by(order_id=o.id).all()
     item_outs = []
@@ -1342,7 +1389,7 @@ def list_stock(
     if product_id:
         q = q.filter(StockEntry.product_id == product_id)
     rows = q.order_by(Product.name).all()
-    
+
     import math
     import collections
     from sqlalchemy import func
@@ -1391,7 +1438,7 @@ def list_stock(
         if (p.desired_stock is not None and p.box_limit and p.box_limit > 0
                 and avail < p.desired_stock):
             boxes_to_order = math.ceil((p.desired_stock - float(avail)) / p.box_limit)
-            
+
         total_stock = total_stock_map.get(e.product_id, Decimal(0))
         locations = cell_stock_map.get((e.product_id, e.warehouse_id), [])
 
@@ -1478,6 +1525,10 @@ def create_movement(
     db.add(m)
     db.flush()
     _apply_movement(m, db)
+
+    if payload.type in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.DEFECT, MovementType.TRANSFER):
+        _check_and_auto_replenish(m.product_id, org.id, db)
+
     db.commit()
     db.refresh(m)
     p = db.get(Product, m.product_id)

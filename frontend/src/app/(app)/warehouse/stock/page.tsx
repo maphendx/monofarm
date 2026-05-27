@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import Link from "next/link";
 import { CreateMovementModal, Movement, MovementType } from "@/components/warehouse/MovementModal";
+import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export default function StockPage() {
   // Movement Modal state
   const [movementOpen, setMovementOpen] = useState(false);
   const [movementType, setMovementType] = useState<MovementType>("PURCHASE_IN");
+  const [batchProductId, setBatchProductId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setStock(await api<StockEntry[]>("/api/warehouse/stock")); }
@@ -431,13 +433,22 @@ export default function StockPage() {
                       <ThresholdCell value={e.box_limit} productId={e.product_id}
                         field="box_limit" onSaved={updateThreshold} />
                     </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {e.boxes_to_order != null ? (
-                        <span className="inline-flex items-center gap-1 font-mono text-sm font-bold text-[var(--accent)] tabular-nums">
-                          {e.boxes_to_order}
-                          <span className="text-base">📦</span>
-                        </span>
-                      ) : <span className="text-[var(--text-faint)]">—</span>}
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-3">
+                        {e.boxes_to_order != null ? (
+                          <span className="inline-flex items-center gap-1 font-mono text-sm font-bold text-[var(--accent)] tabular-nums" title="Рекомендовано замовити (коробок)">
+                            {e.boxes_to_order}
+                            <span className="text-base">📦</span>
+                          </span>
+                        ) : <span className="text-[var(--text-faint)] w-8 text-center">—</span>}
+                        <button
+                          onClick={() => setBatchProductId(e.product_id.toString())}
+                          className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--accent)] hover:text-white hover:border-transparent transition-colors"
+                          title="Відправити у виробництво"
+                        >
+                          + Партія
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -457,6 +468,16 @@ export default function StockPage() {
         initialType={movementType}
         onCreated={() => {
           load(); // Reload stock after new movement
+        }}
+      />
+
+      <CreateBatchModal
+        open={batchProductId !== null}
+        onClose={() => setBatchProductId(null)}
+        initialProductId={batchProductId ?? undefined}
+        onCreated={() => {
+          // Typically we don't need to reload stock when a batch is created,
+          // because it starts as 'draft' and doesn't affect current stock.
         }}
       />
     </div>
