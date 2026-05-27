@@ -1,6 +1,6 @@
 # monofarm
 
-Multi-tenant SaaS для управління 3D print farm: моніторинг принтерів (Snapmaker U1 через Moonraker + Bambu Lab через Cloud MQTT), план друку, центральне сховище нарізок, task manager, облік пластику. Telegram-бот для сповіщень. Інтеграція з OrcaSlicer через OctoPrint API shim. Білінг через Paddle.
+Multi-tenant SaaS для управління 3D print farm: моніторинг принтерів (Snapmaker U1 через Moonraker + Bambu Lab через Cloud MQTT), план друку, центральне сховище нарізок, task manager, облік пластику, warehouse/ERP модуль (продукти, склад, замовлення, виробничі партії, cash flow). Telegram-бот для сповіщень. Інтеграція з OrcaSlicer через OctoPrint API shim. Білінг через Lemon Squeezy.
 
 ## Стек
 
@@ -11,7 +11,7 @@ Multi-tenant SaaS для управління 3D print farm: моніторин�
 - **Storage:** Cloudflare R2 (S3-compatible) — presigned URLs; local disk fallback
 - **Bot:** `python-telegram-bot` 21+, вбудований у FastAPI lifespan
 - **Інтеграції:** Moonraker REST, Bambu Lab Cloud (MQTT + FTPS), OctoPrint shim
-- **Білінг:** Paddle — free / starter $19 / pro $49 / farm $99
+- **Білінг:** Lemon Squeezy — free / starter / pro / farm
 - **Деплой:** Docker Compose (web + worker), Cloudflare Tunnel + Access
 
 ## Структура
@@ -20,7 +20,8 @@ Multi-tenant SaaS для управління 3D print farm: моніторин�
 backend/    FastAPI + Alembic + міграції
 frontend/   Next.js (App Router)
 agent/      Local agent (farm PC) — Moonraker proxy + Bambu camera tunnel
-docs/       Архітектурні нотатки
+bruno/      Bruno API collection (всі ендпоінти)
+docs/       Архітектурні нотатки і дизайн
 ```
 
 ## Перший запуск (macOS / dev)
@@ -145,6 +146,21 @@ Physical Printer → Host Type: `OctoPrint`, Hostname: backend URL, API Key: JWT
 - `/план`, `/статус`, `/допомога` — кириличні команди
 - 09:00 Kyiv — автоматичний денний план усім лінкованим юзерам
 
+## Warehouse / ERP модуль
+
+Повноцінний ERP поверх print farm:
+
+- **Продукти** — каталог з SKU, штрихкодом, цінами, порогами залишків
+- **Специфікації (BOM)** — компоненти + операції (різка / шиття / друк / пакування) з розрахунком собівартості
+- **Склад** — зони → комірки → залишки; логування кожного руху (PURCHASE_IN / SALE_OUT / RETURN_IN / TRANSFER / PRODUCTION_IN / PRODUCTION_OUT / WRITE_OFF / ADJUSTMENT)
+- **Виробничі партії** — відкриття партії → закриття → автоматичні рухи PRODUCTION_IN/OUT
+- **Замовлення** — резервування → відвантаження; джерело: manual або KeyCRM webhook
+- **Контрагенти** — постачальники/покупці з балансом
+- **Cash flow** — прибутки/витрати по категоріях, зведення
+- **Аналітика** — виручка, собівартість, топ продукти, вартість залишків
+
+Інтеграція з KeyCRM: вебхук `POST /api/keycrm/webhook/{org_slug}` → автоматично створює замовлення у складі.
+
 ## Підключення Bambu Lab (P1S, A1, A1 mini)
 
 ```env
@@ -184,12 +200,12 @@ Windows: `agent/monofarm_tray.py` — system tray app з GUI.
 
 ## Деплой (production)
 
-Docker Compose (планується):
+Railway: два сервіси з одного Docker образу через `APP_MODE` env var.
 
-- `web` — `uvicorn app.main:app --workers 4`
-- `worker` — scheduler + Telegram + Bambu MQTT (окремий процес)
+- `web` — `APP_MODE=web` → `uvicorn app.main:app --workers 2` (API, `INLINE_WORKERS=false`)
+- `worker` — `APP_MODE=worker` → `python -m app.workers.main` (Telegram + APScheduler + Bambu MQTT)
 
-Cloudflare Tunnel: `cloudflared service install` → конфіг на `localhost:3000` і `localhost:8000`.
+Frontend деплоїться окремим Next.js сервісом. Домен: `monofarm.app`.
 
 ## Нотатки
 
