@@ -49,6 +49,7 @@ type ImportPreview = {
 type ActionNew      = "import" | "skip";
 type ActionExisting = "update"  | "skip";
 type ActionMissing  = "nothing" | "hide";
+type BarcodeFilter  = "all" | "has" | "none";
 const PAGE_SIZES = [25, 50, 100] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -848,15 +849,131 @@ function ImportPreviewModal({
   );
 }
 
+// ── FilterDropdown ────────────────────────────────────────────────────────────
+
+function FilterDropdown({
+  categories, catColorMap, selectedCats, onCatsChange,
+  barcodeFilter, onBarcodeChange,
+}: {
+  categories: string[];
+  catColorMap: Map<string, string | null>;
+  selectedCats: string[];
+  onCatsChange: (v: string[]) => void;
+  barcodeFilter: BarcodeFilter;
+  onBarcodeChange: (v: BarcodeFilter) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const active = selectedCats.length + (barcodeFilter !== "all" ? 1 : 0);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={["btn btn-ghost btn-sm flex items-center gap-1.5",
+          active > 0 ? "!border-[var(--accent)] !text-[var(--accent)]" : "",
+        ].join(" ")}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+        </svg>
+        Фільтри
+        {active > 0 && (
+          <span className="flex size-4 items-center justify-center rounded-full bg-[var(--accent)] text-[9px] font-bold text-white leading-none">
+            {active}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+
+          {/* Categories */}
+          <div className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Категорії</p>
+            {categories.length === 0 ? (
+              <p className="text-xs text-[var(--text-faint)]">Немає категорій</p>
+            ) : (
+              <div className="max-h-52 space-y-0.5 overflow-y-auto">
+                {categories.map((c) => {
+                  const color = catColorMap.get(c);
+                  return (
+                    <label key={c} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                      <input
+                        type="checkbox"
+                        checked={selectedCats.includes(c)}
+                        onChange={(e) => {
+                          if (e.target.checked) onCatsChange([...selectedCats, c]);
+                          else onCatsChange(selectedCats.filter((x) => x !== c));
+                        }}
+                        className="rounded accent-[var(--accent)]"
+                      />
+                      {color && <span className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />}
+                      <span className="text-sm">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-[var(--border)] p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Штрих-код</p>
+            <div className="space-y-0.5">
+              {([ { value: "all" as BarcodeFilter, label: "Всі" },
+                  { value: "has" as BarcodeFilter, label: "Є штрих-код" },
+                  { value: "none" as BarcodeFilter, label: "Немає штрих-коду" },
+              ]).map((opt) => (
+                <label key={opt.value} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                  <input
+                    type="radio"
+                    name="barcode-filter"
+                    checked={barcodeFilter === opt.value}
+                    onChange={() => onBarcodeChange(opt.value)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span className="text-sm">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {active > 0 && (
+            <div className="border-t border-[var(--border)] p-3">
+              <button
+                onClick={() => { onCatsChange([]); onBarcodeChange("all"); }}
+                className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+              >
+                Скинути фільтри
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const [products,   setProducts]   = useState<Product[]>([]);
   const [stock,      setStock]      = useState<StockEntry[]>([]);
   const [cats,       setCats]       = useState<ProductCat[]>([]);
   const [loading,    setLoading]    = useState(true);
 
-  const [search,   setSearch]   = useState("");
-  const [category, setCategory] = useState("Всі");
-  const [sortKey,  setSortKey]  = useState<SortKey>("name");
+  const [search,        setSearch]        = useState("");
+  const [selectedCats,  setSelectedCats]  = useState<string[]>([]);
+  const [barcodeFilter, setBarcodeFilter] = useState<BarcodeFilter>("all");
+  const [sortKey,       setSortKey]       = useState<SortKey>("name");
   const [sortDir,  setSortDir]  = useState<SortDir>("asc");
   const [pageSize, setPageSize] = useState<number>(25);
   const [page,     setPage]     = useState(1);
@@ -899,10 +1016,10 @@ export default function ProductsPage() {
 
   // Merge: API categories + any ad-hoc tags from products not yet in registry
   const allCategories = useMemo(() => {
-    const fromApi  = cats.map((c) => c.name);
+    const fromApi   = cats.map((c) => c.name);
     const fromProds = Array.from(new Set(products.flatMap((p) => p.categories)));
-    const extra = fromProds.filter((n) => !fromApi.includes(n));
-    return ["Всі", ...fromApi, ...extra.sort()];
+    const extra     = fromProds.filter((n) => !fromApi.includes(n));
+    return [...fromApi, ...extra.sort()];
   }, [cats, products]);
 
   const catColorMap = useMemo(() => {
@@ -914,11 +1031,13 @@ export default function ProductsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return products.filter((p) => {
-      if (category !== "Всі" && !p.categories.includes(category)) return false;
+      if (selectedCats.length > 0 && !selectedCats.some((c) => p.categories.includes(c))) return false;
+      if (barcodeFilter === "has"  && !p.barcode) return false;
+      if (barcodeFilter === "none" &&  p.barcode) return false;
       if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [products, search, category]);
+  }, [products, search, selectedCats, barcodeFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -945,7 +1064,7 @@ export default function ProductsPage() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const paginated  = useMemo(() => sorted.slice((page - 1) * pageSize, page * pageSize), [sorted, page, pageSize]);
 
-  useEffect(() => { setPage(1); }, [search, category, sortKey, sortDir, pageSize]);
+  useEffect(() => { setPage(1); }, [search, selectedCats, barcodeFilter, sortKey, sortDir, pageSize]);
 
   function toggleSort(col: SortKey) {
     if (sortKey === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -1057,32 +1176,32 @@ export default function ProductsPage() {
               </svg>
               <input type="search" placeholder="Назва або артикул…"
                 value={search} onChange={(e) => setSearch(e.target.value)}
-                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]   " />
+                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]" />
             </div>
-            <div className="flex flex-wrap gap-1">
-              {allCategories.map((c) => {
-                const color  = c === "Всі" ? null : catColorMap.get(c);
-                const active = category === c;
-                return (
-                  <button
-                    key={c}
-                    onClick={() => setCategory(c)}
-                    className={color ? [
-                      "h-7 rounded-full px-2.5 text-xs font-medium transition-colors",
-                      active ? "ring-2 ring-offset-1 ring-[var(--bg)] " : "opacity-70 hover:opacity-100",
-                    ].join(" ") : [
-                      "h-7 rounded-full px-2.5 text-xs font-medium transition-colors border",
-                      active
-                        ? "bg-[var(--accent)] text-white border-[var(--border-strong)]   "
-                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
-                    ].join(" ")}
-                    style={color ? { background: color, color: "#111" } : undefined}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
+            <FilterDropdown
+              categories={allCategories}
+              catColorMap={catColorMap}
+              selectedCats={selectedCats}
+              onCatsChange={setSelectedCats}
+              barcodeFilter={barcodeFilter}
+              onBarcodeChange={setBarcodeFilter}
+            />
+            {selectedCats.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {selectedCats.map((c) => {
+                  const color = catColorMap.get(c);
+                  return (
+                    <span key={c}
+                      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                      style={color ? { background: color, color: "#111" } : { background: "var(--surface-hi)" }}>
+                      {c}
+                      <button onClick={() => setSelectedCats(selectedCats.filter((x) => x !== c))}
+                        className="opacity-60 hover:opacity-100">×</button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
             <span className="text-sm text-[var(--text-faint)]">{filtered.length} позицій</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1172,7 +1291,7 @@ export default function ProductsPage() {
               <tbody className="divide-y divide-[var(--border)]">
                 {paginated.length === 0 ? (
                   <tr><td colSpan={11} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
-                    {search || category !== "Всі" ? "Нічого не знайдено" : "Номенклатури ще немає"}
+                    {search || selectedCats.length > 0 || barcodeFilter !== "all" ? "Нічого не знайдено" : "Номенклатури ще немає"}
                   </td></tr>
                 ) : paginated.map((p) => {
                   const avail  = stockByProduct.get(p.id) ?? 0;
@@ -1202,7 +1321,7 @@ export default function ProductsPage() {
                             return (
                               <span
                                 key={c}
-                                onClick={() => setCategory(c)}
+                                onClick={() => setSelectedCats((prev) => prev.includes(c) ? prev : [...prev, c])}
                                 className={color
                                   ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
                                   : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)]  transition-opacity"}
