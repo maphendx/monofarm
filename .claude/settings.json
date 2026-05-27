@@ -12,7 +12,9 @@
       "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")",
       "Bash(git config *)",
       "Bash(ls .git/hooks/post-commit)",
-      "Bash(rm \"/Users/maphendx/Documents/!Projects/monofarm/.git/hooks/post-merge\")"
+      "Bash(rm \"/Users/maphendx/Documents/!Projects/monofarm/.git/hooks/post-merge\")",
+      "Bash(git rm *)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "/Users/maphendx/Documents/monofarm/frontend/src/app/(app)/warehouse/products"

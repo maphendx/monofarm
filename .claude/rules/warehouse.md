@@ -1,0 +1,64 @@
+---
+paths:
+  - "backend/app/api/warehouse.py"
+  - "backend/app/models/warehouse.py"
+  - "backend/app/schemas/warehouse.py"
+  - "frontend/src/app/**/warehouse/**"
+  - "frontend/src/components/warehouse/**"
+---
+
+# Warehouse / ERP module
+
+Long-form context in root `CLAUDE.md`. Rules specific to warehouse code:
+
+## Stock ledger — never mutate directly
+
+All stock changes go through `_apply_movement(movement, db)` — it updates `StockEntry.quantity` and `reserved_qty`. Never write to `StockEntry` directly outside this function.
+
+Movement types and when to use them:
+- `PURCHASE_IN` — goods received from supplier
+- `SALE_OUT` — shipped to customer (decrements both quantity and reserved_qty)
+- `RETURN_IN` — customer return
+- `TRANSFER` — between warehouses
+- `ADJUSTMENT` — manual correction
+- `PRODUCTION_IN` — output of a closed batch (finished goods)
+- `PRODUCTION_OUT` — components consumed by a closed batch
+- `WRITE_OFF` — spoilage / loss
+
+## AVCO cost tracking
+
+`_update_avco(product_id, incoming_qty, incoming_cost, db)` must be called **before** `_apply_movement` when receiving stock (PURCHASE_IN, PRODUCTION_IN). It recalculates `Product.cost_price` as weighted average. Wrong call order corrupts cost history.
+
+## Auto-replenish
+
+`_check_and_auto_replenish(pid, org_id, db)` fires after SALE_OUT and PRODUCTION_OUT. Opens a new `ProductionBatch` when `available_qty < reorder_point` and a default spec exists. Do not call it after ADJUSTMENT or manual movements.
+
+## Order state machine
+
+`new` → `reserved` (reserve endpoint, locks `reserved_qty`) → `shipped` (ship endpoint, writes SALE_OUT movements and releases reservation) → `cancelled` (cancel endpoint, releases reserved_qty without movement).
+Never skip states. Shipping a non-reserved order will raise 400.
+
+## Production batch state machine
+
+`draft` → `open` (create batch) → `closed` (close batch — writes PRODUCTION_IN for output qty and PRODUCTION_OUT for each spec component). Closing is irreversible.
+
+## Warehouse enums — use the existing values
+
+```python
+MovementType:    PURCHASE_IN, SALE_OUT, RETURN_IN, TRANSFER, ADJUSTMENT, PRODUCTION_IN, PRODUCTION_OUT, WRITE_OFF
+BatchStatus:     draft, open, closed
+OrderStatus:     new, reserved, shipped, cancelled
+OrderSource:     manual, keycrm
+WarehouseType:   physical, virtual, consignment
+CounterpartyType: supplier, customer
+SpecOpType:      cut, sew, print, pack, other
+CashTxType:      income, expense
+```
+
+## KeyCRM webhook
+
+Endpoint: `POST /api/keycrm/webhook/{org_slug}`. Validates `X-KeyCRM-Signature: sha256=<hex>` HMAC. Creates/updates `Order` + `OrderItem`. The org must have `keycrm_webhook_secret` set. Do not bypass signature validation.
+
+## Frontend warehouse components
+
+Reuse `CloseBatchModal`, `CreateBatchModal`, `MovementModal` from `src/components/warehouse/`. Check these before creating new modals. Use `Modal` from `src/components/ui/Modal` as the base wrapper.
