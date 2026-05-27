@@ -39,6 +39,14 @@ type CostBreakdown = {
 
 type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin";
 type SortDir = "asc" | "desc";
+
+type PreviewItem  = { name: string; sku: string; unit?: string; sale_price?: string; cost_price?: string };
+type ExistingItem = { id: number; name: string; sku: string; changes: Record<string, { from: string; to: string }> };
+type MissingItem  = { id: number; name: string; sku: string };
+type ImportPreview = { new: PreviewItem[]; existing: ExistingItem[]; missing: MissingItem[] };
+type ActionNew      = "import" | "skip";
+type ActionExisting = "update"  | "skip";
+type ActionMissing  = "nothing" | "hide";
 const PAGE_SIZES = [25, 50, 100] as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -652,6 +660,157 @@ function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// ── Import preview helpers ────────────────────────────────────────────────────
+
+const FIELD_LABEL: Record<string, string> = {
+  name: "Назва", unit: "Одиниця", sale_price: "Роздрібна ціна",
+  cost_price: "Сер. ціна", direct_cost: "Собівартість",
+  description: "Опис", categories: "Категорії",
+};
+
+function ActionToggle<T extends string>({
+  options, value, onChange,
+}: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div className="flex gap-1 shrink-0">
+      {options.map((o) => (
+        <button key={o.value} type="button" onClick={() => onChange(o.value)}
+          className={["rounded-md px-3 py-1 text-sm font-medium transition-colors",
+            value === o.value
+              ? "bg-[var(--accent)] text-white"
+              : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:text-[var(--text)]",
+          ].join(" ")}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PreviewSection<T extends string>({
+  title, subtitle, count, options, action, onAction, children,
+}: {
+  title: string; subtitle: string; count: number;
+  options: { value: T; label: string }[];
+  action: T; onAction: (v: T) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--border)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 bg-[var(--bg-elevated)] px-4 py-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{title}</span>
+            <span className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-muted)]">{count}</span>
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--text-faint)]">{subtitle}</div>
+        </div>
+        <ActionToggle options={options} value={action} onChange={onAction} />
+      </div>
+      {count > 0 && (
+        <details className="group">
+          <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 border-t border-[var(--border)] px-4 py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
+            <svg className="size-3.5 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+            Показати список
+          </summary>
+          <div className="max-h-52 overflow-y-auto border-t border-[var(--border)]">{children}</div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ImportPreviewModal({
+  preview,
+  actionNew, setActionNew,
+  actionExisting, setActionExisting,
+  actionMissing, setActionMissing,
+  onConfirm, onClose, busy,
+}: {
+  preview: ImportPreview;
+  actionNew: ActionNew; setActionNew: (v: ActionNew) => void;
+  actionExisting: ActionExisting; setActionExisting: (v: ActionExisting) => void;
+  actionMissing: ActionMissing; setActionMissing: (v: ActionMissing) => void;
+  onConfirm: () => void; onClose: () => void; busy: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <h2 className="font-semibold">Операції з товарами</h2>
+          <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">×</button>
+        </div>
+
+        <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
+          <PreviewSection
+            title="Нові товари" subtitle="Товари з файлу, яких поки що немає на сайті"
+            count={preview.new.length}
+            options={[{ value: "import", label: "Імпортувати" }, { value: "skip", label: "Не імпортувати" }]}
+            action={actionNew} onAction={setActionNew}
+          >
+            {preview.new.map((item, i) => (
+              <div key={i} className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-sm last:border-0">
+                <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku || "—"}</span>
+                <span className="flex-1 truncate">{item.name}</span>
+                {item.sale_price && <span className="shrink-0 text-xs text-[var(--text-muted)]">{parseFloat(item.sale_price).toFixed(2)} ₴</span>}
+              </div>
+            ))}
+          </PreviewSection>
+
+          <PreviewSection
+            title="Існуючі товари" subtitle="Товари з файлу, які вже є на сайті"
+            count={preview.existing.length}
+            options={[{ value: "update", label: "Оновити" }, { value: "skip", label: "Не оновлювати" }]}
+            action={actionExisting} onAction={setActionExisting}
+          >
+            {preview.existing.map((item) => (
+              <div key={item.id} className="border-b border-[var(--border)] px-4 py-2 last:border-0">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku}</span>
+                  <span className="flex-1 truncate">{item.name}</span>
+                  {Object.keys(item.changes).length > 0 && (
+                    <span className="shrink-0 text-xs text-[var(--state-warn)]">{Object.keys(item.changes).length} змін</span>
+                  )}
+                </div>
+                {Object.entries(item.changes).map(([field, { from, to }]) => (
+                  <div key={field} className="mt-1 flex items-center gap-1.5 pl-24 text-xs text-[var(--text-faint)]">
+                    <span className="text-[var(--text-muted)]">{FIELD_LABEL[field] ?? field}:</span>
+                    <span className="line-through opacity-60">{from || "—"}</span>
+                    <span>→</span>
+                    <span className="text-[var(--text)]">{to}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </PreviewSection>
+
+          <PreviewSection
+            title="Відсутні товари" subtitle="Товари на сайті, але відсутні у файлі"
+            count={preview.missing.length}
+            options={[{ value: "nothing", label: "Нічого не робити" }, { value: "hide", label: "Сховати товари" }]}
+            action={actionMissing} onAction={setActionMissing}
+          >
+            {preview.missing.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-sm last:border-0">
+                <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku || "—"}</span>
+                <span className="flex-1 truncate">{item.name}</span>
+              </div>
+            ))}
+          </PreviewSection>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] px-6 py-4">
+          <button onClick={onClose} className="btn btn-ghost">Скасувати</button>
+          <button onClick={onConfirm} disabled={busy} className="btn btn-primary disabled:opacity-50">
+            {busy ? "Імпортуємо…" : "Підтвердити імпорт"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const [products,   setProducts]   = useState<Product[]>([]);
   const [stock,      setStock]      = useState<StockEntry[]>([]);
@@ -670,8 +829,13 @@ export default function ProductsPage() {
   // Modal state
   const [editProduct,  setEditProduct]  = useState<Product | null | "create">(null);
   const [specProduct,  setSpecProduct]  = useState<Product | null>(null);
-  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; hidden: number; new_categories: number } | null>(null);
   const [importing,    setImporting]    = useState(false);
+  const [importPreview,  setImportPreview]  = useState<ImportPreview | null>(null);
+  const [importFile,     setImportFile]     = useState<File | null>(null);
+  const [actionNew,      setActionNew]      = useState<ActionNew>("import");
+  const [actionExisting, setActionExisting] = useState<ActionExisting>("update");
+  const [actionMissing,  setActionMissing]  = useState<ActionMissing>("nothing");
   const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -785,11 +949,33 @@ export default function ProductsPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const result = await api<{ created: number; updated: number; skipped: number }>(
-        "/api/warehouse/products/import",
+      const preview = await api<ImportPreview>("/api/warehouse/products/import/preview", { method: "POST", body });
+      setImportFile(file);
+      setImportPreview(preview);
+      setActionNew("import");
+      setActionExisting("update");
+      setActionMissing("nothing");
+    } catch {
+      alert("Помилка читання файлу");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleImportConfirm() {
+    if (!importFile) return;
+    setImporting(true);
+    try {
+      const body = new FormData();
+      body.append("file", importFile);
+      const params = new URLSearchParams({ action_new: actionNew, action_existing: actionExisting, action_missing: actionMissing });
+      const result = await api<{ created: number; updated: number; skipped: number; hidden: number; new_categories: number }>(
+        `/api/warehouse/products/import?${params}`,
         { method: "POST", body },
       );
       setImportResult(result);
+      setImportPreview(null);
+      setImportFile(null);
       await load();
     } catch {
       alert("Помилка імпорту");
@@ -892,7 +1078,7 @@ export default function ProductsPage() {
         {importResult && (
           <div className="flex items-center gap-3 rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-2.5">
             <span className="text-sm text-[var(--state-ok)]">
-              Імпорт завершено: додано {importResult.created}, оновлено {importResult.updated}, пропущено {importResult.skipped}
+              Імпорт завершено: додано {importResult.created}, оновлено {importResult.updated}{importResult.hidden ? `, сховано ${importResult.hidden}` : ""}{importResult.new_categories ? `, нових категорій ${importResult.new_categories}` : ""}, пропущено {importResult.skipped}
             </span>
             <button
               onClick={() => setImportResult(null)}
@@ -1066,6 +1252,19 @@ export default function ProductsPage() {
           )}
         </div>
       </div>
+
+      {/* Import preview modal */}
+      {importPreview && (
+        <ImportPreviewModal
+          preview={importPreview}
+          actionNew={actionNew} setActionNew={setActionNew}
+          actionExisting={actionExisting} setActionExisting={setActionExisting}
+          actionMissing={actionMissing} setActionMissing={setActionMissing}
+          onConfirm={handleImportConfirm}
+          onClose={() => { setImportPreview(null); setImportFile(null); }}
+          busy={importing}
+        />
+      )}
 
       {/* Product modal */}
       {editProduct !== null && (

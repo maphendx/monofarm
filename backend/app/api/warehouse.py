@@ -480,7 +480,6 @@ _EXPORT_HEADERS = [
 
 
 def _rows_from_upload(file: UploadFile) -> list[dict]:
-    """Return list of dicts from TSV, CSV, or XLSX upload."""
     raw = file.file.read()
     fname = (file.filename or "").lower()
     if fname.endswith(".xlsx") or fname.endswith(".xls"):
@@ -494,9 +493,110 @@ def _rows_from_upload(file: UploadFile) -> list[dict]:
     return list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
 
 
+def _sync_categories(names: list[str], org_id: int, db: Session) -> int:
+    """Create any ProductCategory rows that don't yet exist for this org. Returns count created."""
+    if not names:
+        return 0
+    existing = {
+        r.name for r in db.query(ProductCategory.name).filter(
+            ProductCategory.organization_id == org_id,
+            ProductCategory.name.in_(names),
+        ).all()
+    }
+    created = 0
+    for name in dict.fromkeys(names):  # preserve order, deduplicate
+        if name and name not in existing:
+            db.add(ProductCategory(organization_id=org_id, name=name))
+            created += 1
+    return created
+
+
+def _parse_product_fields(row: dict) -> dict:
+    fields: dict = {}
+    for col, field in _IMPORT_COL_MAP.items():
+        val = (row.get(col) or "").strip()
+        if not val:
+            continue
+        if field == "categories":
+            fields[field] = [c.strip() for c in val.split(",") if c.strip()]
+        elif field in ("cost_price", "sale_price", "direct_cost"):
+            try:
+                fields[field] = Decimal(val.replace(",", ".").replace(" ", ""))
+            except Exception:
+                pass
+        else:
+            fields[field] = val
+    return fields
+
+
+_COMPARABLE_FIELDS = ["name", "unit", "sale_price", "cost_price", "direct_cost", "description", "categories"]
+
+
+@router.post("/products/import/preview")
+def preview_import(
+    file: UploadFile = File(...),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    try:
+        rows = _rows_from_upload(file)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Не вдалося прочитати файл: {exc}") from exc
+
+    db_products = {
+        p.sku: p
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.is_active).all()
+    }
+    file_skus: set[str] = set()
+    new_items: list[dict] = []
+    existing_items: list[dict] = []
+
+    for row in rows:
+        fields = _parse_product_fields(row)
+        sku = fields.get("sku", "").strip()
+        name = fields.get("name", "").strip()
+        if not sku and not name:
+            continue
+        if sku:
+            file_skus.add(sku)
+
+        if sku and sku in db_products:
+            p = db_products[sku]
+            changes: dict = {}
+            for field in _COMPARABLE_FIELDS:
+                new_val = fields.get(field)
+                if new_val is None:
+                    continue
+                old_val = getattr(p, field, None)
+                new_str = str(new_val) if not isinstance(new_val, list) else ", ".join(new_val)
+                old_str = str(old_val) if not isinstance(old_val, list) else ", ".join(old_val or [])
+                if new_str != old_str:
+                    changes[field] = {"from": old_str, "to": new_str}
+            existing_items.append({"id": p.id, "name": p.name, "sku": p.sku, "changes": changes})
+        else:
+            if not name:
+                continue
+            item: dict = {"name": name, "sku": sku}
+            for f in ("unit", "sale_price", "cost_price"):
+                if f in fields:
+                    item[f] = str(fields[f])
+            new_items.append(item)
+
+    missing_items = [
+        {"id": p.id, "name": p.name, "sku": p.sku}
+        for sku, p in db_products.items()
+        if sku not in file_skus
+    ]
+    return {"new": new_items, "existing": existing_items, "missing": missing_items}
+
+
 @router.post("/products/import")
 def import_products(
-    file: UploadFile = File(...),
+    file:            UploadFile = File(...),
+    action_new:      str = Query("import",  pattern="^(import|skip)$"),
+    action_existing: str = Query("update",  pattern="^(update|skip)$"),
+    action_missing:  str = Query("nothing", pattern="^(nothing|hide)$"),
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin)),
@@ -505,56 +605,56 @@ def import_products(
         rows = _rows_from_upload(file)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Не вдалося прочитати файл: {exc}") from exc
-    created = updated = skipped = 0
-    for row in rows:
-        fields: dict = {}
-        for col, field in _IMPORT_COL_MAP.items():
-            val = (row.get(col) or "").strip()
-            if not val:
-                continue
-            if field == "categories":
-                fields[field] = [c.strip() for c in val.split(",") if c.strip()]
-            elif field in ("cost_price", "sale_price", "direct_cost"):
-                try:
-                    fields[field] = Decimal(val.replace(",", ".").replace(" ", ""))
-                except Exception:
-                    pass
-            else:
-                fields[field] = val
 
+    db_products = {
+        p.sku: p
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.is_active).all()
+    }
+    file_skus: set[str] = set()
+    all_cats: list[str] = []
+    created = updated = skipped = hidden = 0
+
+    for row in rows:
+        fields = _parse_product_fields(row)
         sku = fields.get("sku", "").strip()
         name = fields.get("name", "").strip()
         if not sku and not name:
             skipped += 1
             continue
+        if sku:
+            file_skus.add(sku)
+        all_cats.extend(fields.get("categories") or [])
 
-        existing = (
-            db.query(Product)
-            .filter(Product.organization_id == org.id, Product.sku == sku)
-            .first()
-            if sku else None
-        )
-
-        if existing:
-            for k, v in fields.items():
-                if k != "sku":
-                    setattr(existing, k, v)
-            existing.is_active = True
-            updated += 1
-        else:
-            if not name:
+        if sku and sku in db_products:
+            if action_existing == "update":
+                p = db_products[sku]
+                for k, v in fields.items():
+                    if k != "sku":
+                        setattr(p, k, v)
+                p.is_active = True
+                updated += 1
+            else:
                 skipped += 1
-                continue
-            p = Product(
-                organization_id=org.id,
-                created_by_id=user.id,
-                **fields,
-            )
-            db.add(p)
-            created += 1
+        else:
+            if action_new == "import":
+                if not name:
+                    skipped += 1
+                    continue
+                db.add(Product(organization_id=org.id, created_by_id=user.id, **fields))
+                created += 1
+            else:
+                skipped += 1
+
+    if action_missing == "hide":
+        for sku, p in db_products.items():
+            if sku not in file_skus:
+                p.is_active = False
+                hidden += 1
+
+    new_cats = _sync_categories(all_cats, org.id, db)
 
     db.commit()
-    return {"created": created, "updated": updated, "skipped": skipped}
+    return {"created": created, "updated": updated, "skipped": skipped, "hidden": hidden, "new_categories": new_cats}
 
 
 @router.get("/products/export")
