@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/Modal";
+import { CreateBatchModal, Batch } from "@/components/warehouse/CreateBatchModal";
+import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,8 +19,6 @@ const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
   { status: "done",   label: "Готово",      accent: "border-[var(--state-ok)]" },
 ];
 
-import { CreateBatchModal, Batch } from "@/components/warehouse/CreateBatchModal";
-
 // ── Batch card ────────────────────────────────────────────────────────────────
 
 function ProgressBar({ value }: { value: number }) {
@@ -29,9 +29,10 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function BatchCard({ batch, onStatusChange }: {
+function BatchCard({ batch, onStatusChange, onOpenCloseModal }: {
   batch: Batch;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
+  onOpenCloseModal: (b: Batch) => void;
 }) {
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.printed_qty - batch.good_qty;
@@ -80,7 +81,7 @@ function BatchCard({ batch, onStatusChange }: {
         </button>
       )}
       {batch.status === "active" && (
-        <button disabled={busy} onClick={() => move("done")}
+        <button disabled={busy} onClick={() => onOpenCloseModal(batch)}
           className="mt-3 w-full rounded-md border border-[rgba(34,197,94,.3)] py-1.5 text-xs text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.08)] disabled:opacity-50 ">
           ✓ Завершити
         </button>
@@ -95,6 +96,7 @@ export default function ProductionPage() {
   const [batches,   setBatches]   = useState<Batch[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [batchToClose, setBatchToClose] = useState<Batch | null>(null);
 
   const load = useCallback(async () => {
     try { setBatches(await api<Batch[]>("/api/warehouse/batches")); }
@@ -138,7 +140,7 @@ export default function ProductionPage() {
                     Порожньо
                   </div>
                 ) : (
-                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} />)
+                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} />)
                 )}
               </div>
             </div>
@@ -150,6 +152,13 @@ export default function ProductionPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(b) => setBatches((prev) => [b, ...prev])}
+      />
+
+      <CloseBatchModal
+        batch={batchToClose}
+        open={!!batchToClose}
+        onClose={() => setBatchToClose(null)}
+        onClosed={(b) => setBatches((prev) => prev.map((x) => x.id === b.id ? b : x))}
       />
     </div>
   );
