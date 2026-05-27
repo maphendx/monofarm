@@ -2,7 +2,10 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import csv
+import io
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -456,6 +459,121 @@ def create_product(
     db.commit()
     db.refresh(p)
     return ProductOut.model_validate(p)
+
+
+_IMPORT_COL_MAP = {
+    "Назва виробу":         "name",
+    "Категорії":            "categories",
+    "SKU":                  "sku",
+    "Одиниця виміру":       "unit",
+    "Середньозважена ціна": "cost_price",
+    "Роздрібна ціна":       "sale_price",
+    "Собівартість виробу":  "direct_cost",
+    "Опис":                 "description",
+}
+
+_EXPORT_HEADERS = [
+    "Назва виробу", "Категорії", "SKU", "Одиниця виміру",
+    "Середньозважена ціна", "Роздрібна ціна", "Собівартість виробу", "Опис",
+]
+
+
+@router.post("/products/import")
+def import_products(
+    file: UploadFile = File(...),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    raw = file.file.read()
+    text = raw.decode("utf-8-sig")
+    sample = text[:1024]
+    delimiter = "\t" if "\t" in sample else ","
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+    created = updated = skipped = 0
+    for row in reader:
+        fields: dict = {}
+        for col, field in _IMPORT_COL_MAP.items():
+            val = (row.get(col) or "").strip()
+            if not val:
+                continue
+            if field == "categories":
+                fields[field] = [c.strip() for c in val.split(",") if c.strip()]
+            elif field in ("cost_price", "sale_price", "direct_cost"):
+                try:
+                    fields[field] = Decimal(val.replace(",", ".").replace(" ", ""))
+                except Exception:
+                    pass
+            else:
+                fields[field] = val
+
+        sku = fields.get("sku", "").strip()
+        name = fields.get("name", "").strip()
+        if not sku and not name:
+            skipped += 1
+            continue
+
+        existing = (
+            db.query(Product)
+            .filter(Product.organization_id == org.id, Product.sku == sku)
+            .first()
+            if sku else None
+        )
+
+        if existing:
+            for k, v in fields.items():
+                if k != "sku":
+                    setattr(existing, k, v)
+            existing.is_active = True
+            updated += 1
+        else:
+            if not name:
+                skipped += 1
+                continue
+            p = Product(
+                organization_id=org.id,
+                created_by_id=user.id,
+                **fields,
+            )
+            db.add(p)
+            created += 1
+
+    db.commit()
+    return {"created": created, "updated": updated, "skipped": skipped}
+
+
+@router.get("/products/export")
+def export_products(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    rows = (
+        db.query(Product)
+        .filter(Product.organization_id == org.id, Product.is_active)
+        .order_by(Product.name)
+        .all()
+    )
+    buf = io.StringIO()
+    buf.write("﻿")  # UTF-8 BOM for Excel compatibility
+    writer = csv.writer(buf, delimiter="\t", lineterminator="\r\n")
+    writer.writerow(_EXPORT_HEADERS)
+    for p in rows:
+        writer.writerow([
+            p.name or "",
+            ", ".join(p.categories or []),
+            p.sku or "",
+            p.unit or "",
+            str(p.cost_price) if p.cost_price is not None else "",
+            str(p.sale_price) if p.sale_price is not None else "",
+            str(p.direct_cost) if p.direct_cost is not None else "",
+            p.description or "",
+        ])
+    return Response(
+        content=buf.getvalue().encode("utf-8"),
+        media_type="text/tab-separated-values; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=products.tsv"},
+    )
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)

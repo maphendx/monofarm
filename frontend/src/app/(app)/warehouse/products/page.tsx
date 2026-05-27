@@ -670,6 +670,9 @@ export default function ProductsPage() {
   // Modal state
   const [editProduct,  setEditProduct]  = useState<Product | null | "create">(null);
   const [specProduct,  setSpecProduct]  = useState<Product | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
+  const [importing,    setImporting]    = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -773,6 +776,46 @@ export default function ProductsPage() {
     });
   }
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const result = await api<{ created: number; updated: number; skipped: number }>(
+        "/api/warehouse/products/import",
+        { method: "POST", body },
+      );
+      setImportResult(result);
+      await load();
+    } catch {
+      alert("Помилка імпорту");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function handleExport() {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const a = document.createElement("a");
+    a.href = `/api/warehouse/products/export`;
+    // Pass auth via query param isn't ideal — use fetch + blob instead
+    fetch("/api/warehouse/products/export", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = "products.tsv";
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+  }
+
   if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   return (
@@ -817,11 +860,50 @@ export default function ProductsPage() {
             </div>
             <span className="text-sm text-[var(--text-faint)]">{filtered.length} позицій</span>
           </div>
-          <button onClick={() => setEditProduct("create")}
-            className="btn btn-primary">
-            + Номенклатура
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={importRef}
+              type="file"
+              accept=".tsv,.csv,.txt"
+              className="hidden"
+              onChange={handleImport}
+            />
+            <button
+              onClick={handleExport}
+              className="btn btn-ghost btn-sm"
+              title="Експорт TSV (Ordage)"
+            >
+              ↓ Експорт
+            </button>
+            <button
+              onClick={() => importRef.current?.click()}
+              disabled={importing}
+              className="btn btn-ghost btn-sm disabled:opacity-50"
+              title="Імпорт TSV/CSV (Ordage)"
+            >
+              {importing ? "…" : "↑ Імпорт"}
+            </button>
+            <button onClick={() => setEditProduct("create")}
+              className="btn btn-primary">
+              + Номенклатура
+            </button>
+          </div>
         </div>
+
+        {/* Import result banner */}
+        {importResult && (
+          <div className="flex items-center gap-3 rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-2.5">
+            <span className="text-sm text-[var(--state-ok)]">
+              Імпорт завершено: додано {importResult.created}, оновлено {importResult.updated}, пропущено {importResult.skipped}
+            </span>
+            <button
+              onClick={() => setImportResult(null)}
+              className="ml-auto text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Bulk bar */}
         {selected.size > 0 && (
