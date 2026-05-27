@@ -1375,17 +1375,27 @@ function PrintersSection() {
 
 // ── Profile section ────────────────────────────────────────────────────────
 
+const ROLE_LABEL: Record<string, string> = { admin: "Адмін", operator: "Оператор", manager: "Менеджер" };
+const PLAN_LABEL: Record<string, string> = { free: "Free", starter: "Starter", pro: "Pro", farm: "Farm" };
+
 function ProfileSection() {
   const user = useUser();
   const router = useRouter();
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [plan, setPlan] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const initials = user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  const roleLabel: Record<string, string> = { admin: "Адмін", operator: "Оператор", manager: "Менеджер" };
   const joinedDate = new Date(user.created_at).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" });
+  const memberSince = new Date(user.created_at).toLocaleDateString("uk-UA", { month: "long", year: "numeric" });
+
+  useEffect(() => {
+    api<{ plan: string }>("/api/billing/status")
+      .then((b) => setPlan(b.plan))
+      .catch(() => {});
+  }, []);
 
   const changed = name.trim() !== user.name && name.trim().length >= 2;
 
@@ -1413,77 +1423,121 @@ function ProfileSection() {
   }
 
   return (
-    <SectionCard>
-      <SectionTitle>Профіль</SectionTitle>
+    <div className="max-w-[860px] space-y-4">
 
-      {/* Avatar + info */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-xl font-semibold text-white">
-          {initials}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{user.name}</p>
-          <p className="truncate text-sm text-[var(--text-muted)]">{user.email}</p>
-          <span className="mt-1 inline-block rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
-            {roleLabel[user.role] ?? user.role}
-          </span>
+      {/* ── Header card ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+        <div className="flex items-start gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-xl font-bold text-white">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold">{user.name}</h2>
+              <span className="rounded-md border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+                {ROLE_LABEL[user.role] ?? user.role}
+              </span>
+              {plan && (
+                <span className="flex items-center gap-1 rounded-md border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">
+                  {PLAN_LABEL[plan] ?? plan}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-5 text-sm text-[var(--text-muted)]">
+              <span className="flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+                </svg>
+                {user.email}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                Joined {joinedDate}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Meta */}
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
-          <p className="text-[11px] text-[var(--text-faint)]">Зареєстровано</p>
-          <p className="mt-0.5 text-sm font-medium">{joinedDate}</p>
-        </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
-          <p className="text-[11px] text-[var(--text-faint)]">Telegram</p>
-          {user.telegram_chat_id ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-[var(--state-ok)]">
-              <span className="size-1.5 rounded-full bg-[var(--state-ok)]" />
-              Підключено
-            </p>
-          ) : (
-            <p className="mt-0.5 text-sm text-[var(--text-faint)]">Не підключено</p>
-          )}
-        </div>
-      </div>
-
-      {/* Edit name */}
-      <form onSubmit={saveName} className="mb-6 space-y-3">
-        <label className="block">
-          <span className="mb-1 block text-sm text-[var(--text-muted)]">Ім&apos;я</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={120}
-            className="input"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={!changed || saving}
-          className="btn btn-primary disabled:opacity-50"
-        >
-          {saved ? "✓ Збережено" : saving ? "…" : "Зберегти"}
-        </button>
-      </form>
-
-      {/* Logout */}
-      <div className="border-t border-[var(--border)] pt-5">
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 text-sm text-[var(--state-error)] hover:opacity-80"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
+      {/* ── Edit Profile card ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+        <div className="mb-5 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          Вийти
-        </button>
+          <h3 className="font-semibold">Редагувати профіль</h3>
+        </div>
+        <form onSubmit={saveName}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1.5 block text-sm text-[var(--text-muted)]">Повне ім&apos;я</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm text-[var(--text-muted)]">Email адреса</label>
+              <input
+                value={user.email}
+                readOnly
+                className="input cursor-default opacity-60"
+              />
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t border-[var(--border)] pt-4">
+            <button
+              type="button"
+              onClick={logout}
+              className="flex items-center gap-2 text-sm text-[var(--state-error)] hover:opacity-80"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Вийти
+            </button>
+            <button
+              type="submit"
+              disabled={!changed || saving}
+              className="btn btn-primary disabled:opacity-50"
+            >
+              {saved ? "✓ Збережено" : saving ? "…" : "Зберегти зміни"}
+            </button>
+          </div>
+        </form>
       </div>
-    </SectionCard>
+
+      {/* ── Subscription card ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+        <div className="mb-5 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+          </svg>
+          <h3 className="font-semibold">Підписка</h3>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">ПЛАН</p>
+            <p className="mt-1.5 text-lg font-semibold">{plan ? (PLAN_LABEL[plan] ?? plan) : "—"}</p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">РОЛЬ</p>
+            <p className="mt-1.5 text-lg font-semibold">{ROLE_LABEL[user.role] ?? user.role}</p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">УЧАСНИК З</p>
+            <p className="mt-1.5 text-lg font-semibold capitalize">{memberSince}</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
   );
 }
 
@@ -1576,31 +1630,30 @@ export default function SettingsPage() {
   const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   return (
-    <div className="flex gap-8">
-      {/* Left nav */}
-      <nav className="w-48 shrink-0">
-        <ul className="flex flex-col gap-0.5">
-          {visibleItems.map((item) => (
-            <li key={item.id}>
-              <button
-                onClick={() => setActive(item.id)}
-                className={[
-                  "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-                  active === item.id
-                    ? "bg-[rgba(56,189,248,.08)] font-medium text-[var(--accent)]"
-                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
-                ].join(" ")}
-              >
-                <NavIcon d={item.d} />
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
+    <div className="-mx-6 -mt-6">
 
-      {/* Content */}
-      <div className={`min-w-0 flex-1 ${active === "integrations" ? "" : "max-w-[720px]"}`}>
+      {/* ── Horizontal tab nav ── */}
+      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
+        <div className="flex overflow-x-auto px-4 scrollbar-none">
+          {visibleItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActive(item.id)}
+              className={[
+                "shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors",
+                active === item.id
+                  ? "border-b-2 border-[var(--accent)] font-medium text-[var(--accent)]"
+                  : "border-b-2 border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
+              ].join(" ")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <div className="px-6 py-5">
         {active === "profile" && <ProfileSection />}
         {active === "general" && <GeneralSection />}
         {active === "organization" && (
@@ -1621,6 +1674,7 @@ export default function SettingsPage() {
         )}
         {active === "billing" && <BillingSection />}
       </div>
+
     </div>
   );
 }
