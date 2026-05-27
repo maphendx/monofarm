@@ -70,11 +70,13 @@ export function PrinterCard({
 
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmClearBed, setConfirmClearBed] = useState(false);
 
   async function act(e: React.MouseEvent, action: string) {
     e.stopPropagation();
     if (busy) return;
     setConfirmCancel(false);
+    setConfirmClearBed(false);
     setBusy(action);
     try {
       await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
@@ -223,14 +225,34 @@ export function PrinterCard({
               </button>
             )}
             {isOperational && (
-              <button
-                type="button"
-                onClick={(e) => act(e, "clear-bed")}
-                disabled={busy !== null}
-                className="btn btn-sm flex-1 border-[rgba(34,197,94,.20)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40"
-              >
-                {busy === "clear-bed" ? "…" : "Стіл очищено"}
-              </button>
+              confirmClearBed ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => act(e, "clear-bed")}
+                    disabled={busy !== null}
+                    className="btn btn-sm flex-1 border-[rgba(34,197,94,.20)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40"
+                  >
+                    {busy === "clear-bed" ? "…" : "Підтвердити"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setConfirmClearBed(false); }}
+                    className="btn btn-sm disabled:opacity-40"
+                  >
+                    Ні
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setConfirmClearBed(true); }}
+                  disabled={busy !== null}
+                  className="btn btn-sm flex-1 border-[rgba(34,197,94,.20)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40"
+                >
+                  Стіл очищено
+                </button>
+              )
             )}
             {isPrinting && (
               <button

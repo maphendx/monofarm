@@ -494,6 +494,7 @@ function PrintStatusCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmClearBed, setConfirmClearBed] = useState(false);
 
   const tone = printerTone(printer);
   const isPrinting = printer.state === "printing";
@@ -508,6 +509,7 @@ function PrintStatusCard({
     setBusy(action);
     setErr(null);
     setConfirmCancel(false);
+    setConfirmClearBed(false);
     try {
       await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
       onUpdated();
@@ -622,11 +624,23 @@ function PrintStatusCard({
               )
             )}
             {isOperational && (
-              <button onClick={() => act("clear-bed")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                {busy === "clear-bed" ? "…" : "Стіл очищено"}
-              </button>
+              confirmClearBed ? (
+                <div className="flex items-center gap-2 rounded-md border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-3 py-2">
+                  <span className="text-xs text-[var(--state-ok)]">Стіл справді очищено?</span>
+                  <button onClick={() => act("clear-bed")} disabled={busy !== null}
+                    className="text-xs font-bold text-[var(--state-ok)] hover:underline disabled:opacity-40">
+                    {busy === "clear-bed" ? "…" : "Так"}
+                  </button>
+                  <span className="text-[var(--text-muted)]">·</span>
+                  <button onClick={() => setConfirmClearBed(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmClearBed(true)} disabled={busy !== null}
+                  className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Стіл очищено
+                </button>
+              )
             )}
             {isError && (
               <button onClick={() => act("clear-error")} disabled={busy !== null}

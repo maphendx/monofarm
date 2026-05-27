@@ -1167,6 +1167,7 @@ async def print_clear_error(
             await asyncio.to_thread(moonraker.send_gcode, row.moonraker_url, "FIRMWARE_RESTART")
         except Exception:
             pass
+        moonraker.invalidate_status(row.moonraker_url)
 
     else:
         row.manual_status = "idle"
