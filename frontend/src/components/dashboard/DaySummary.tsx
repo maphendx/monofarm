@@ -22,7 +22,7 @@ export function DaySummary() {
     Promise.all([
       api<PlanEntry[]>(`/api/plan?plan_date=${today}`),
       api<FarmTask[]>("/api/tasks/farm"),
-      api<Filament[]>("/api/filaments"),
+      api<Filament[]>("/api/materials"),
     ]).then(([entries, tasks, filaments]) => {
       setPlanTotal(entries.length);
       setPlanDone(entries.filter((e) => e.done).length);
@@ -79,7 +79,7 @@ export function DaySummary() {
 
       {lowFilament > 0 && (
         <Link
-          href="/filament"
+          href="/materials"
           className="flex items-center gap-2 rounded-xl border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3 shadow-sm hover:border-[var(--state-warn)]"
         >
           <span className="text-xl">⚠️</span>

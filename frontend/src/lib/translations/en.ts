@@ -1,10 +1,10 @@
 const en = {
   nav: {
     dashboard: "Dashboard",
-    plan: "Print Plan",
+    plan: "Print Queue",
     files: "Files",
     tasks: "Tasks",
-    filament: "Filament",
+    filament: "Materials",
     analytics: "Analytics",
     history: "History",
     printers: "Printers",

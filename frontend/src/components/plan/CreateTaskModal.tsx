@@ -39,7 +39,7 @@ export function CreateTaskModal({
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const task = await api<PrintTask>("/api/tasks/print", {
+      const task = await api<PrintTask>("/api/queue", {
         method: "POST",
         body: JSON.stringify({
           title: title.trim(),
@@ -56,7 +56,7 @@ export function CreateTaskModal({
       if (file) {
         const fd = new FormData();
         fd.append("file", file);
-        const resp = await fetch(`${API_URL}/api/tasks/print/${task.id}/file`, {
+        const resp = await fetch(`${API_URL}/api/queue/${task.id}/file`, {
           method: "POST",
           headers: { Authorization: `Bearer ${getToken()}` },
           body: fd,

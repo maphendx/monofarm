@@ -111,7 +111,7 @@ export function LabelGeneratorModal({
   useEffect(() => {
     if (!preview) return;
     setQr(null);
-    api<LabelData>(`/api/filaments/${preview.id}/label-data`)
+    api<LabelData>(`/api/materials/${preview.id}/label-data`)
       .then(d => setQr(d.qr_code_base64))
       .catch(() => {});
   }, [preview?.id]);
@@ -143,7 +143,7 @@ export function LabelGeneratorModal({
         show_label_id: fields.labelId,
       };
       if (template === "custom") { body.custom_w_mm = customW; body.custom_h_mm = customH; }
-      const resp = await fetch(`${API_URL}/api/filaments/labels/pdf`, {
+      const resp = await fetch(`${API_URL}/api/materials/labels/pdf`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),

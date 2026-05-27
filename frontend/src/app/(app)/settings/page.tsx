@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { PrintersManager } from "@/components/printers/PrintersManager";
+import { UsersSection } from "@/components/users/UsersSection";
 import { ApiError, api, clearToken, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
@@ -35,7 +36,7 @@ interface BillingStatus {
 
 type SectionId =
   | "profile" | "general"
-  | "organization" | "printers" | "filament"
+  | "organization" | "printers" | "users" | "filament"
   | "queue" | "notifications" | "maintenance" | "integrations" | "billing";
 
 // ── Nav config ─────────────────────────────────────────────────────────────
@@ -57,6 +58,11 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[]; adminOnly?: 
   {
     id: "printers", label: "Принтери",
     d: ["M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6", "M6 18h12v3H6z"],
+    adminOnly: true,
+  },
+  {
+    id: "users", label: "Користувачі",
+    d: ["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2", "M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0", "M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"],
     adminOnly: true,
   },
   {
@@ -1649,6 +1655,7 @@ export default function SettingsPage() {
           : <OrgSection settings={settings} onUpdate={setSettings} />
         )}
         {active === "printers" && <PrintersSection />}
+        {active === "users" && <UsersSection />}
         {active === "filament" && <ComingSoon label="Пластик" />}
         {active === "queue" && <ComingSoon label="Черга" />}
         {active === "notifications" && <ComingSoon label="Сповіщення" />}

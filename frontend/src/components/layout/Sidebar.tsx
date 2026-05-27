@@ -30,6 +30,7 @@ const ICONS: Record<string, string[]> = {
   analytics: ["M18 20V10M12 20V4M6 20v-6"],
   history:   ["M12 8v4l3 3", "M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"],
   filament:  ["M12 2a10 10 0 1 0 10 10", "M12 8a4 4 0 1 0 4 4", "M12 12h.01"],
+  printers:  ["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"],
   users:     ["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2", "M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0", "M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"],
   settings:  ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"],
   warehouse: ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z", "M3.27 6.96L12 12.01l8.73-5.05", "M12 22.08V12"],
@@ -40,24 +41,24 @@ const NAV_GROUPS = [
     label: null,
     items: [
       { href: "/dashboard", icon: "dashboard", tKey: "nav.dashboard" },
-      { href: "/plan",      icon: "plan",      tKey: "nav.plan" },
-      { href: "/tasks",     icon: "tasks",     tKey: "nav.tasks" },
-      { href: "/files",     icon: "files",     tKey: "nav.files" },
+      { href: "/queue",     icon: "plan",      tKey: "nav.plan" },
+      { href: "/history",   icon: "history",   tKey: "nav.history" },
     ],
   },
   {
-    label: "Аналіз",
+    label: "Друк",
     items: [
-      { href: "/analytics", icon: "analytics", tKey: "nav.analytics" },
-      { href: "/history",   icon: "history",   tKey: "nav.history" },
+      { href: "/materials",  icon: "filament",  tKey: "nav.filament" },
+      { href: "/files",     icon: "files",     tKey: "nav.files" },
+      { href: "/printers",  icon: "printers",  tKey: "nav.printers" },
     ],
   },
   {
     label: "Управління",
     items: [
-      { href: "/filament",  icon: "filament",  tKey: "nav.filament" },
+      { href: "/tasks",     icon: "tasks",     tKey: "nav.tasks" },
       { href: "/warehouse", icon: "warehouse", tKey: "nav.warehouse" },
-      { href: "/users",     icon: "users",     tKey: "nav.users", adminOnly: true },
+      { href: "/analytics", icon: "analytics", tKey: "nav.analytics" },
     ],
   },
 ] as const;

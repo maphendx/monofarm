@@ -1,10 +1,10 @@
 const uk = {
   nav: {
     dashboard: "Дашборд",
-    plan: "План друку",
+    plan: "Черга",
     files: "Файли",
     tasks: "Завдання",
-    filament: "Філаменти",
+    filament: "Матеріали",
     analytics: "Аналітика",
     history: "Історія",
     printers: "Принтери",

@@ -12,7 +12,7 @@ const ALL: Item[] = [
   { href: "/files",                 label: "Файли",            section: "Головне" },
   { href: "/analytics",             label: "Аналітика",        section: "Аналіз" },
   { href: "/history",               label: "Історія",          section: "Аналіз" },
-  { href: "/filament",              label: "Філамент",         section: "Управління" },
+  { href: "/materials",              label: "Матеріали",         section: "Управління" },
   { href: "/warehouse",             label: "Склад",            section: "Управління" },
   { href: "/warehouse/products",    label: "Товари",           section: "Склад" },
   { href: "/warehouse/stock",       label: "Залишки",          section: "Склад" },

@@ -213,7 +213,7 @@ function CompleteModal({ task, onClose, onDone }: {
     setDefectOther("");
     setSlotFilament({});
     setError(null);
-    api<Filament[]>("/api/filaments").then(setFilaments).catch(() => {});
+    api<Filament[]>("/api/materials").then(setFilaments).catch(() => {});
   }, [task]);
 
   if (!task) return null;
@@ -256,7 +256,7 @@ function CompleteModal({ task, onClose, onDone }: {
       if (validConsumptions.length > 0) {
         body.filament_consumptions = validConsumptions.map(c => ({ filament_id: c.filament_id!, grams: c.grams }));
       }
-      const updated = await api<PrintTask>(`/api/tasks/print/${task.id}`, {
+      const updated = await api<PrintTask>(`/api/queue/${task.id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
@@ -416,7 +416,7 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
   async function submit(e: React.FormEvent) {
     e.preventDefault(); if (!task) return; setBusy(true);
     try {
-      const saved = await api<PrintTask>(`/api/tasks/print/${task.id}`, {
+      const saved = await api<PrintTask>(`/api/queue/${task.id}`, {
         method: "PATCH",
         body: JSON.stringify({ title: title.trim(), quantity: qty, status, deadline: deadline || null, notes: notes.trim() || null }),
       });
@@ -470,7 +470,7 @@ function PrintTasksTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await api<PrintTask[]>("/api/tasks/print");
+      const all = await api<PrintTask[]>("/api/queue");
       setTasks(all);
     } catch { /* ignore */ }
     finally { setLoading(false); }
@@ -480,7 +480,7 @@ function PrintTasksTab() {
 
   async function remove(task: PrintTask) {
     if (!confirm(`Видалити "${task.title}"?`)) return;
-    await api(`/api/tasks/print/${task.id}`, { method: "DELETE" });
+    await api(`/api/queue/${task.id}`, { method: "DELETE" });
     setTasks(prev => prev.filter(t => t.id !== task.id));
   }
 

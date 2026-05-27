@@ -25,7 +25,7 @@ export function AmountStepper({
     onChange(v);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      api(`/api/tasks/print/${taskId}`, {
+      api(`/api/queue/${taskId}`, {
         method: "PATCH",
         body: JSON.stringify({ quantity: v }),
       }).catch(() => {});

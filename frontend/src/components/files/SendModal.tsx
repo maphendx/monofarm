@@ -168,7 +168,7 @@ export function SendModal({
     setBusy(true);
     setResult(null);
     try {
-      await api("/api/tasks/print/from-library", {
+      await api("/api/queue/from-library", {
         method: "POST",
         body: JSON.stringify({ gcode_file_id: file.id, quantity }),
       });

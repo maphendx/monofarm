@@ -17,7 +17,7 @@ from app.schemas.filament import (
 )
 
 
-router = APIRouter(prefix="/filaments", tags=["filaments"])
+router = APIRouter(prefix="/materials", tags=["materials"])
 
 _LABEL_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ23456789"
 

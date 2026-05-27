@@ -1089,7 +1089,7 @@ function LoadedFilamentsCard({
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    api<Filament[]>("/api/filaments").then(setInventory).catch(() => {});
+    api<Filament[]>("/api/materials").then(setInventory).catch(() => {});
   }, []);
 
   function addSlot() {

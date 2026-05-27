@@ -26,7 +26,7 @@ ALLOWED_EXTS = {".gcode", ".gco", ".g", ".3mf", ".bgcode"}
 MAX_FILE_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
-router = APIRouter(prefix="/tasks/print", tags=["tasks"])
+router = APIRouter(prefix="/queue", tags=["queue"])
 
 
 def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:

@@ -100,7 +100,7 @@ export function Topbar({ user }: { user: User | null }) {
     { href: "/plan",      label: t("nav.plan") },
     { href: "/files",     label: t("nav.files") },
     { href: "/tasks",     label: t("nav.tasks") },
-    { href: "/filament",  label: t("nav.filament") },
+    { href: "/materials",  label: t("nav.filament") },
     { href: "/analytics", label: t("nav.analytics") },
     { href: "/history",   label: t("nav.history") },
     { href: "/printers",  label: t("nav.printers"),  adminOnly: true },

@@ -19,7 +19,7 @@ from app.core.db import get_db
 from app.models.filament import Filament
 from app.models.organization import Organization
 
-router = APIRouter(prefix="/filaments", tags=["filament-labels"])
+router = APIRouter(prefix="/materials", tags=["filament-labels"])
 
 GRAMS_TOTAL = 1000
 
