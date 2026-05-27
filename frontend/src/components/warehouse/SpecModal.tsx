@@ -30,6 +30,10 @@ export type SpecModalProduct = {
   id: number; name: string; sku: string; sale_price?: string | null;
 };
 
+type CatalogItem = {
+  id: number; name: string; sku: string; unit: string; cost_price: string | null;
+};
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const OP_LABELS: Record<string, string> = {
@@ -54,6 +58,11 @@ export function SpecModal({
   const [loading,  setLoading]  = useState(true);
   const [cost,     setCost]     = useState<CostBreakdown | null>(null);
   const [costBusy, setCostBusy] = useState(false);
+
+  // catalog for material autocomplete
+  const [catalog,    setCatalog]    = useState<CatalogItem[]>([]);
+  const [cSearch,    setCSearch]    = useState("");
+  const [cDropOpen,  setCDropOpen]  = useState(false);
 
   // add component
   const [addComp, setAddComp] = useState(false);
@@ -91,6 +100,21 @@ export function SpecModal({
   }, [product.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (addComp && catalog.length === 0) {
+      api<CatalogItem[]>("/api/warehouse/products").then(setCatalog).catch(() => {});
+    }
+    if (!addComp) { setCSearch(""); setCDropOpen(false); }
+  }, [addComp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickCatalog(item: CatalogItem) {
+    setCName(item.name);
+    setCUnit(item.unit || "г");
+    if (item.cost_price) setCPrice(parseFloat(item.cost_price).toFixed(4));
+    setCSearch(item.name);
+    setCDropOpen(false);
+  }
 
   async function computeCost() {
     setCostBusy(true);
@@ -130,7 +154,7 @@ export function SpecModal({
         }),
       });
       setSpec(updated);
-      setCName(""); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0");
+      setCName(""); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0"); setCSearch("");
       setAddComp(false);
       setCost(null);
     } finally { setCBusy(false); }
@@ -239,11 +263,41 @@ export function SpecModal({
                       {/* inline add row */}
                       {addComp && (
                         <tr className="bg-[var(--bg)]">
-                          <td className="px-4 py-2">
-                            <input autoFocus value={cName} onChange={(e) => setCName(e.target.value)}
-                              placeholder="Назва матеріалу"
-                              onKeyDown={(e) => e.key === "Enter" && submitComponent(e as unknown as React.FormEvent)}
-                              className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]" />
+                          <td className="relative px-4 py-2">
+                            <input
+                              autoFocus
+                              value={cSearch}
+                              onChange={(e) => {
+                                setCSearch(e.target.value);
+                                setCName(e.target.value);
+                                setCDropOpen(true);
+                              }}
+                              onFocus={() => setCDropOpen(true)}
+                              onBlur={() => setTimeout(() => setCDropOpen(false), 150)}
+                              placeholder="Назва або SKU…"
+                              className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
+                            />
+                            {cDropOpen && cSearch.length > 0 && (() => {
+                              const q = cSearch.toLowerCase();
+                              const hits = catalog
+                                .filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q))
+                                .slice(0, 8);
+                              return hits.length > 0 ? (
+                                <div className="absolute left-4 top-full z-30 mt-0.5 w-72 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-lg">
+                                  {hits.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onMouseDown={() => pickCatalog(item)}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
+                                    >
+                                      <span className="flex-1 truncate">{item.name}</span>
+                                      <span className="shrink-0 font-mono text-[10px] text-[var(--text-faint)]">{item.sku}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()}
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" step="0.001" min="0" value={cQty} onChange={(e) => setCQty(e.target.value)}
