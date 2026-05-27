@@ -466,16 +466,17 @@ _IMPORT_COL_MAP = {
     "Назва виробу":         "name",
     "Категорії":            "categories",
     "SKU":                  "sku",
+    "Штрих-код":            "barcode",
     "Одиниця виміру":       "unit",
     "Середньозважена ціна": "cost_price",
     "Роздрібна ціна":       "sale_price",
-    "Собівартість виробу":  "direct_cost",
+    # "Собівартість виробу" intentionally excluded — Monofarm computes this from specs
     "Опис":                 "description",
 }
 
 _EXPORT_HEADERS = [
-    "Назва виробу", "Категорії", "SKU", "Одиниця виміру",
-    "Середньозважена ціна", "Роздрібна ціна", "Собівартість виробу", "Опис",
+    "Назва виробу", "Категорії", "SKU", "Штрих-код", "Одиниця виміру",
+    "Середньозважена ціна", "Роздрібна ціна", "Опис",
 ]
 
 
@@ -529,7 +530,7 @@ def _parse_product_fields(row: dict) -> dict:
     return fields
 
 
-_COMPARABLE_FIELDS = ["name", "unit", "sale_price", "cost_price", "direct_cost", "description", "categories"]
+_COMPARABLE_FIELDS = ["name", "barcode", "unit", "sale_price", "cost_price", "description", "categories"]
 
 
 @router.post("/products/import/preview")
@@ -602,7 +603,24 @@ def preview_import(
         for sku, p in db_products.items()
         if sku not in file_skus
     ]
-    return {"new": new_items, "existing": existing_items, "missing": missing_items}
+
+    headers = list(rows[0].keys()) if rows else []
+    raw_rows = [[str(row.get(h) or "") for h in headers] for row in rows]
+    mapping = {str(i): _IMPORT_COL_MAP.get(h) for i, h in enumerate(headers)}
+
+    return {
+        "headers": headers,
+        "rows": raw_rows,
+        "mapping": mapping,
+        "summary": {
+            "new": len(new_items),
+            "existing": len(existing_items),
+            "missing": len(missing_items),
+        },
+        "new": new_items,
+        "existing": existing_items,
+        "missing": missing_items,
+    }
 
 
 @router.post("/products/import")
@@ -691,10 +709,10 @@ def export_products(
             p.name or "",
             ", ".join(p.categories or []),
             p.sku or "",
+            p.barcode or "",
             p.unit or "",
             str(p.cost_price) if p.cost_price is not None else "",
             str(p.sale_price) if p.sale_price is not None else "",
-            str(p.direct_cost) if p.direct_cost is not None else "",
             p.description or "",
         ])
     return Response(

@@ -140,6 +140,7 @@ class Product(Base):
     organization_id: Mapped[int]  = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name:            Mapped[str]  = mapped_column(String(255))
     sku:             Mapped[str]  = mapped_column(String(80))
+    barcode:         Mapped[str | None] = mapped_column(String(80), nullable=True)
     categories:      Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     unit:            Mapped[str]  = mapped_column(String(20), default="шт")
     description:     Mapped[str | None]      = mapped_column(Text, nullable=True)

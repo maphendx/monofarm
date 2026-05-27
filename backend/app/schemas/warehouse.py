@@ -110,6 +110,7 @@ class CounterpartyBalanceAdjust(BaseModel):
 class ProductCreate(BaseModel):
     name:        str
     sku:         str
+    barcode:     str | None = None
     categories:  list[str] = []
     unit:        str = "шт"
     description: str | None = None
@@ -119,6 +120,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     name:        str | None = None
     sku:         str | None = None
+    barcode:     str | None = None
     categories:  list[str] | None = None
     unit:        str | None = None
     description: str | None = None
@@ -130,6 +132,7 @@ class ProductOut(BaseModel):
     id:          int
     name:        str
     sku:         str
+    barcode:     str | None
     categories:  list[str]
     unit:        str
     description: str | None

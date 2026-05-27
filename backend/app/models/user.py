@@ -30,3 +30,4 @@ class User(Base):
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True, index=True)
     telegram_link_code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     telegram_link_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

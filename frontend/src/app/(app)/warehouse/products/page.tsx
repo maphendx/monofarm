@@ -6,7 +6,7 @@ import { API_URL, api, getToken } from "@/lib/api";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Product = {
-  id: number; name: string; sku: string; categories: string[];
+  id: number; name: string; sku: string; barcode: string | null; categories: string[];
   unit: string; description: string | null; is_active: boolean;
   sale_price: string | null; cost_price: string | null;
   direct_cost: string | null; full_cost: string | null;
@@ -40,10 +40,12 @@ type CostBreakdown = {
 type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin";
 type SortDir = "asc" | "desc";
 
-type PreviewItem  = { name: string; sku: string; unit?: string; sale_price?: string; cost_price?: string };
-type ExistingItem = { id: number; name: string; sku: string; changes: Record<string, { from: string; to: string }> };
-type MissingItem  = { id: number; name: string; sku: string };
-type ImportPreview = { new: PreviewItem[]; existing: ExistingItem[]; missing: MissingItem[] };
+type ImportPreview = {
+  headers:  string[];
+  rows:     string[][];
+  mapping:  Record<string, string | null>;
+  summary:  { new: number; existing: number; missing: number };
+};
 type ActionNew      = "import" | "skip";
 type ActionExisting = "update"  | "skip";
 type ActionMissing  = "nothing" | "hide";
@@ -663,148 +665,169 @@ function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
 // ── Import preview helpers ────────────────────────────────────────────────────
 
 const FIELD_LABEL: Record<string, string> = {
-  name: "Назва", unit: "Одиниця", sale_price: "Роздрібна ціна",
-  cost_price: "Сер. ціна", direct_cost: "Собівартість",
+  name: "Назва", barcode: "Штрих-код", unit: "Одиниця",
+  sale_price: "Роздрібна ціна", cost_price: "Сер. ціна",
   description: "Опис", categories: "Категорії",
 };
 
-function ActionToggle<T extends string>({
-  options, value, onChange,
-}: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
-  return (
-    <div className="flex gap-1 shrink-0">
-      {options.map((o) => (
-        <button key={o.value} type="button" onClick={() => onChange(o.value)}
-          className={["rounded-md px-3 py-1 text-sm font-medium transition-colors",
-            value === o.value
-              ? "bg-[var(--accent)] text-white"
-              : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:text-[var(--text)]",
-          ].join(" ")}>
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PreviewSection<T extends string>({
-  title, subtitle, count, options, action, onAction, children,
-}: {
-  title: string; subtitle: string; count: number;
-  options: { value: T; label: string }[];
-  action: T; onAction: (v: T) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-[var(--border)]">
-      <div className="flex flex-wrap items-start justify-between gap-3 bg-[var(--bg-elevated)] px-4 py-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{title}</span>
-            <span className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 font-mono text-xs text-[var(--text-muted)]">{count}</span>
-          </div>
-          <div className="mt-0.5 text-xs text-[var(--text-faint)]">{subtitle}</div>
-        </div>
-        <ActionToggle options={options} value={action} onChange={onAction} />
-      </div>
-      {count > 0 && (
-        <details className="group">
-          <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 border-t border-[var(--border)] px-4 py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
-            <svg className="size-3.5 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
-            Показати список
-          </summary>
-          <div className="max-h-52 overflow-y-auto border-t border-[var(--border)]">{children}</div>
-        </details>
-      )}
-    </div>
-  );
-}
+const FIELD_OPTIONS: { value: string; label: string }[] = [
+  { value: "",            label: "Не імпортувати" },
+  { value: "name",        label: "Назва виробу" },
+  { value: "categories",  label: "Категорії" },
+  { value: "sku",         label: "Артикул" },
+  { value: "barcode",     label: "Штрих-код" },
+  { value: "unit",        label: "Одиниця виміру" },
+  { value: "cost_price",  label: "Середньозважена ціна" },
+  { value: "sale_price",  label: "Роздрібна ціна" },
+  { value: "description", label: "Опис" },
+];
 
 function ImportPreviewModal({
-  preview,
+  preview, filename,
+  colMapping, onColMappingChange,
   actionNew, setActionNew,
   actionExisting, setActionExisting,
   actionMissing, setActionMissing,
-  onConfirm, onClose, busy,
+  onImport, onLoadOther, onClose, busy,
 }: {
   preview: ImportPreview;
+  filename: string;
+  colMapping: Record<number, string>;
+  onColMappingChange: (idx: number, field: string) => void;
   actionNew: ActionNew; setActionNew: (v: ActionNew) => void;
   actionExisting: ActionExisting; setActionExisting: (v: ActionExisting) => void;
   actionMissing: ActionMissing; setActionMissing: (v: ActionMissing) => void;
-  onConfirm: () => void; onClose: () => void; busy: boolean;
+  onImport: () => void;
+  onLoadOther: () => void;
+  onClose: () => void;
+  busy: boolean;
 }) {
+  const { summary } = preview;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
-          <h2 className="font-semibold">Операції з товарами</h2>
-          <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">×</button>
-        </div>
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative flex w-full max-w-[1200px] max-h-[92vh] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
 
-        <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
-          <PreviewSection
-            title="Нові товари" subtitle="Товари з файлу, яких поки що немає на сайті"
-            count={preview.new.length}
-            options={[{ value: "import", label: "Імпортувати" }, { value: "skip", label: "Не імпортувати" }]}
-            action={actionNew} onAction={setActionNew}
-          >
-            {preview.new.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-sm last:border-0">
-                <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku || "—"}</span>
-                <span className="flex-1 truncate">{item.name}</span>
-                {item.sale_price && <span className="shrink-0 text-xs text-[var(--text-muted)]">{parseFloat(item.sale_price).toFixed(2)} ₴</span>}
-              </div>
-            ))}
-          </PreviewSection>
-
-          <PreviewSection
-            title="Існуючі товари" subtitle="Товари з файлу, які вже є на сайті"
-            count={preview.existing.length}
-            options={[{ value: "update", label: "Оновити" }, { value: "skip", label: "Не оновлювати" }]}
-            action={actionExisting} onAction={setActionExisting}
-          >
-            {preview.existing.map((item) => (
-              <div key={item.id} className="border-b border-[var(--border)] px-4 py-2 last:border-0">
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku}</span>
-                  <span className="flex-1 truncate">{item.name}</span>
-                  {Object.keys(item.changes).length > 0 && (
-                    <span className="shrink-0 text-xs text-[var(--state-warn)]">{Object.keys(item.changes).length} змін</span>
-                  )}
-                </div>
-                {Object.entries(item.changes).map(([field, { from, to }]) => (
-                  <div key={field} className="mt-1 flex items-center gap-1.5 pl-24 text-xs text-[var(--text-faint)]">
-                    <span className="text-[var(--text-muted)]">{FIELD_LABEL[field] ?? field}:</span>
-                    <span className="line-through opacity-60">{from || "—"}</span>
-                    <span>→</span>
-                    <span className="text-[var(--text)]">{to}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </PreviewSection>
-
-          <PreviewSection
-            title="Відсутні товари" subtitle="Товари на сайті, але відсутні у файлі"
-            count={preview.missing.length}
-            options={[{ value: "nothing", label: "Нічого не робити" }, { value: "hide", label: "Сховати товари" }]}
-            action={actionMissing} onAction={setActionMissing}
-          >
-            {preview.missing.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-2 text-sm last:border-0">
-                <span className="w-20 shrink-0 truncate font-mono text-xs text-[var(--text-faint)]">{item.sku || "—"}</span>
-                <span className="flex-1 truncate">{item.name}</span>
-              </div>
-            ))}
-          </PreviewSection>
-        </div>
-
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] px-6 py-4">
-          <button onClick={onClose} className="btn btn-ghost">Скасувати</button>
-          <button onClick={onConfirm} disabled={busy} className="btn btn-primary disabled:opacity-50">
-            {busy ? "Імпортуємо…" : "Підтвердити імпорт"}
+        {/* Header */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] px-6 py-3.5">
+          <h2 className="flex-1 text-base font-semibold">Попередній перегляд імпорту</h2>
+          <button onClick={onLoadOther} disabled={busy} className="btn btn-ghost btn-sm">↑ Інший файл</button>
+          <button onClick={onClose} disabled={busy} className="btn btn-ghost btn-sm">Скасувати</button>
+          <button onClick={onImport} disabled={busy} className="btn btn-primary btn-sm disabled:opacity-50">
+            {busy ? "Імпортуємо…" : "Імпортувати"}
           </button>
+        </div>
+
+        {/* File info */}
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[var(--border)] bg-[var(--bg)] px-6 py-2 text-xs">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--text-faint)]">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span className="font-mono text-[var(--text)]">{filename}</span>
+          <span className="text-[var(--border-strong)]">·</span>
+          <span className="text-[var(--text-muted)]">{preview.rows.length} рядків</span>
+          {summary.new > 0 && <><span className="text-[var(--border-strong)]">·</span><span className="text-[var(--state-ok)]">{summary.new} нових</span></>}
+          {summary.existing > 0 && <><span className="text-[var(--border-strong)]">·</span><span className="text-[var(--accent)]">{summary.existing} існуючих</span></>}
+          {summary.missing > 0 && <><span className="text-[var(--border-strong)]">·</span><span className="text-[var(--text-faint)]">{summary.missing} відсутніх</span></>}
+        </div>
+
+        {/* Action strip */}
+        <div className="flex shrink-0 flex-wrap items-center gap-4 border-b border-[var(--border)] bg-[var(--bg)] px-6 py-2.5">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[var(--state-ok)] text-xs">●</span>
+            <span className="text-xs text-[var(--text-muted)]">Нові:</span>
+            {(["import", "skip"] as ActionNew[]).map((v) => (
+              <button key={v} onClick={() => setActionNew(v)}
+                className={["rounded-md px-2.5 py-1 text-xs transition-colors",
+                  actionNew === v ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                ].join(" ")}>
+                {v === "import" ? "Додати" : "Пропустити"}
+              </button>
+            ))}
+          </div>
+          <span className="text-[var(--border-strong)] text-xs">|</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[var(--accent)] text-xs">●</span>
+            <span className="text-xs text-[var(--text-muted)]">Існуючі:</span>
+            {(["update", "skip"] as ActionExisting[]).map((v) => (
+              <button key={v} onClick={() => setActionExisting(v)}
+                className={["rounded-md px-2.5 py-1 text-xs transition-colors",
+                  actionExisting === v ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                ].join(" ")}>
+                {v === "update" ? "Оновити" : "Пропустити"}
+              </button>
+            ))}
+          </div>
+          <span className="text-[var(--border-strong)] text-xs">|</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[var(--text-faint)] text-xs">●</span>
+            <span className="text-xs text-[var(--text-muted)]">Відсутні у файлі:</span>
+            {(["nothing", "hide"] as ActionMissing[]).map((v) => (
+              <button key={v} onClick={() => setActionMissing(v)}
+                className={["rounded-md px-2.5 py-1 text-xs transition-colors",
+                  actionMissing === v ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                ].join(" ")}>
+                {v === "nothing" ? "Нічого" : "Приховати"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Scrollable table */}
+        <div className="flex-1 overflow-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead className="sticky top-0 z-10">
+              {/* Column mapping dropdowns */}
+              <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]">
+                <th className="w-9 border-r border-[var(--border)] px-2 py-1.5 text-xs text-[var(--text-faint)]">#</th>
+                {preview.headers.map((_, ci) => (
+                  <th key={ci} className="min-w-[120px] border-r border-[var(--border)] px-1.5 py-1.5 text-left font-normal last:border-r-0">
+                    <select
+                      value={colMapping[ci] ?? ""}
+                      onChange={(e) => onColMappingChange(ci, e.target.value)}
+                      className={[
+                        "w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-[var(--border-strong)]",
+                        colMapping[ci] ? "text-[var(--accent)] font-medium" : "text-[var(--text-faint)]",
+                      ].join(" ")}
+                    >
+                      {FIELD_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </th>
+                ))}
+              </tr>
+              {/* Column name headers */}
+              <tr className="border-b border-[var(--border)] bg-[var(--surface-hi)]">
+                <td className="border-r border-[var(--border)] px-2 py-1" />
+                {preview.headers.map((h, ci) => (
+                  <td key={ci} className={[
+                    "border-r border-[var(--border)] px-2 py-1 text-xs last:border-r-0 max-w-[200px] truncate",
+                    colMapping[ci] ? "text-[var(--text-muted)]" : "text-[var(--text-faint)] opacity-50",
+                  ].join(" ")} title={h}>
+                    {h}
+                  </td>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.rows.map((row, ri) => (
+                <tr key={ri} className="border-b border-[var(--border)] hover:bg-[var(--surface-hi)]">
+                  <td className="border-r border-[var(--border)] px-2 py-1.5 text-center text-xs text-[var(--text-faint)]">
+                    {ri + 1}
+                  </td>
+                  {row.map((cell, ci) => (
+                    <td key={ci} className={[
+                      "border-r border-[var(--border)] px-2 py-1.5 text-xs last:border-r-0 max-w-[200px] truncate",
+                      colMapping[ci] ? "" : "opacity-30",
+                    ].join(" ")} title={cell}>
+                      {cell || <span className="text-[var(--text-faint)]">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -836,6 +859,7 @@ export default function ProductsPage() {
   const [actionNew,      setActionNew]      = useState<ActionNew>("import");
   const [actionExisting, setActionExisting] = useState<ActionExisting>("update");
   const [actionMissing,  setActionMissing]  = useState<ActionMissing>("nothing");
+  const [colMapping,     setColMapping]     = useState<Record<number, string>>({});
   const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -955,6 +979,9 @@ export default function ProductsPage() {
       setActionNew("import");
       setActionExisting("update");
       setActionMissing("nothing");
+      const initMap: Record<number, string> = {};
+      Object.entries(preview.mapping).forEach(([k, v]) => { if (v) initMap[parseInt(k)] = v; });
+      setColMapping(initMap);
     } catch {
       alert("Помилка читання файлу");
     } finally {
@@ -1257,10 +1284,14 @@ export default function ProductsPage() {
       {importPreview && (
         <ImportPreviewModal
           preview={importPreview}
+          filename={importFile?.name ?? ""}
+          colMapping={colMapping}
+          onColMappingChange={(idx, field) => setColMapping((prev) => ({ ...prev, [idx]: field }))}
           actionNew={actionNew} setActionNew={setActionNew}
           actionExisting={actionExisting} setActionExisting={setActionExisting}
           actionMissing={actionMissing} setActionMissing={setActionMissing}
-          onConfirm={handleImportConfirm}
+          onImport={handleImportConfirm}
+          onLoadOther={() => importRef.current?.click()}
           onClose={() => { setImportPreview(null); setImportFile(null); }}
           busy={importing}
         />

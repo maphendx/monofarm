@@ -8,7 +8,8 @@
       "Bash(rm frontend/src/components/Topbar.tsx)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python3 -c \"import PIL; print\\('PIL', PIL.__version__\\)\")"
     ],
     "additionalDirectories": [
       "/Users/maphendx/Documents/monofarm/frontend/src/app/(app)/warehouse/products"
