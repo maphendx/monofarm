@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { API_URL, api, getToken } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -799,16 +799,14 @@ export default function ProductsPage() {
   }
 
   function handleExport() {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    const a = document.createElement("a");
-    a.href = `/api/warehouse/products/export`;
-    // Pass auth via query param isn't ideal — use fetch + blob instead
-    fetch("/api/warehouse/products/export", {
+    const token = getToken();
+    fetch(`${API_URL}/api/warehouse/products/export`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((r) => r.blob())
       .then((blob) => {
         const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
         a.href = url;
         a.download = "products.tsv";
         a.click();
@@ -864,7 +862,7 @@ export default function ProductsPage() {
             <input
               ref={importRef}
               type="file"
-              accept=".tsv,.csv,.txt"
+              accept=".tsv,.csv,.txt,.xlsx,.xls"
               className="hidden"
               onChange={handleImport}
             />

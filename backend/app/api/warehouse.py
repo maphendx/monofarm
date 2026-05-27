@@ -5,6 +5,7 @@ from decimal import Decimal
 import csv
 import io
 
+import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -478,6 +479,21 @@ _EXPORT_HEADERS = [
 ]
 
 
+def _rows_from_upload(file: UploadFile) -> list[dict]:
+    """Return list of dicts from TSV, CSV, or XLSX upload."""
+    raw = file.file.read()
+    fname = (file.filename or "").lower()
+    if fname.endswith(".xlsx") or fname.endswith(".xls"):
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        rows_iter = ws.iter_rows(values_only=True)
+        headers = [str(c).strip() if c is not None else "" for c in next(rows_iter, [])]
+        return [dict(zip(headers, (str(c).strip() if c is not None else "" for c in row))) for row in rows_iter]
+    text = raw.decode("utf-8-sig")
+    delimiter = "\t" if "\t" in text[:1024] else ","
+    return list(csv.DictReader(io.StringIO(text), delimiter=delimiter))
+
+
 @router.post("/products/import")
 def import_products(
     file: UploadFile = File(...),
@@ -485,14 +501,12 @@ def import_products(
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin)),
 ) -> dict:
-    raw = file.file.read()
-    text = raw.decode("utf-8-sig")
-    sample = text[:1024]
-    delimiter = "\t" if "\t" in sample else ","
-    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
-
+    try:
+        rows = _rows_from_upload(file)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Не вдалося прочитати файл: {exc}") from exc
     created = updated = skipped = 0
-    for row in reader:
+    for row in rows:
         fields: dict = {}
         for col, field in _IMPORT_COL_MAP.items():
             val = (row.get(col) or "").strip()
