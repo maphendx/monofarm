@@ -199,6 +199,8 @@ body {
 .btn-ghost:hover { background: var(--surface-hi); color: var(--text); }
 .btn-danger { color: var(--state-error); border-color: rgba(239,68,68,.30); }
 .btn-danger:hover { background: rgba(239,68,68,.10); }
+.btn-warn  { color: var(--state-warn);  border-color: rgba(245,158,11,.30); }
+.btn-warn:hover  { background: rgba(245,158,11,.08); }
 
 /* Badges */
 .badge {

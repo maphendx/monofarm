@@ -100,18 +100,13 @@ export function Sidebar({ user }: { user: User }) {
 
       {/* Brand */}
       <div className="flex h-14 shrink-0 items-center gap-3 overflow-hidden px-4">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden="true">
-          <g stroke="var(--accent)" strokeWidth="1.6" opacity="0.5" strokeLinecap="round">
-            <circle cx="5"  cy="5"  r="1.6"/>
-            <circle cx="12" cy="5"  r="1.6"/>
-            <circle cx="19" cy="5"  r="1.6"/>
-            <circle cx="5"  cy="12" r="1.6"/>
-            <circle cx="19" cy="12" r="1.6"/>
-            <circle cx="5"  cy="19" r="1.6"/>
-            <circle cx="12" cy="19" r="1.6"/>
-            <circle cx="19" cy="19" r="1.6"/>
+        <svg width="22" height="22" viewBox="0 0 64 64" fill="none" className="shrink-0" aria-hidden="true">
+          <g stroke="var(--accent)" strokeWidth="3" fill="none" opacity=".55">
+            <circle cx="14" cy="14" r="4"/><circle cx="32" cy="14" r="4"/><circle cx="50" cy="14" r="4"/>
+            <circle cx="14" cy="32" r="4"/>                                  <circle cx="50" cy="32" r="4"/>
+            <circle cx="14" cy="50" r="4"/><circle cx="32" cy="50" r="4"/><circle cx="50" cy="50" r="4"/>
           </g>
-          <circle cx="12" cy="12" r="2.6" fill="var(--accent)"/>
+          <circle cx="32" cy="32" r="7" fill="var(--accent)"/>
         </svg>
         <span className="whitespace-nowrap font-mono text-sm font-semibold tracking-[0.06em] uppercase opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
           MONO<span className="text-[var(--accent)] ">FARM</span>
