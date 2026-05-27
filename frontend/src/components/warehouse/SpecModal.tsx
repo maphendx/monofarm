@@ -185,6 +185,13 @@ export function SpecModal({
   const totalCost = cost ? parseFloat(cost.total) : null;
   const salePrice = product.sale_price ? parseFloat(product.sale_price) : null;
 
+  const catalogHits = cDropOpen && cSearch.trim().length > 0
+    ? (() => {
+        const q = cSearch.toLowerCase();
+        return catalog.filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q)).slice(0, 8);
+      })()
+    : [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -277,27 +284,21 @@ export function SpecModal({
                               placeholder="Назва або SKU…"
                               className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--accent)]"
                             />
-                            {cDropOpen && cSearch.length > 0 && (() => {
-                              const q = cSearch.toLowerCase();
-                              const hits = catalog
-                                .filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q))
-                                .slice(0, 8);
-                              return hits.length > 0 ? (
-                                <div className="absolute left-4 top-full z-30 mt-0.5 w-72 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-lg">
-                                  {hits.map((item) => (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      onMouseDown={() => pickCatalog(item)}
-                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
-                                    >
-                                      <span className="flex-1 truncate">{item.name}</span>
-                                      <span className="shrink-0 font-mono text-[10px] text-[var(--text-faint)]">{item.sku}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null;
-                            })()}
+                            {catalogHits.length > 0 && (
+                              <div className="absolute left-0 top-full z-30 mt-0.5 w-72 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-xl">
+                                {catalogHits.map((item) => (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onMouseDown={() => pickCatalog(item)}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
+                                  >
+                                    <span className="flex-1 truncate">{item.name}</span>
+                                    <span className="shrink-0 font-mono text-[10px] text-[var(--text-faint)]">{item.sku}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             <input type="number" step="0.001" min="0" value={cQty} onChange={(e) => setCQty(e.target.value)}
