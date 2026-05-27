@@ -325,14 +325,8 @@ export default function SpecsPage() {
                             onClick={() => setSpecProduct({ id: p.id, name: p.name, sku: p.sku, sale_price: p.sale_price })}
                             className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
                           >
-                            + Специфікація
+                            {hasSpec ? "Редагувати" : "+ Специфікація"}
                           </button>
-                          <Link
-                            href={`/warehouse/products/${p.id}`}
-                            className="rounded-md px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg)]"
-                          >
-                            →
-                          </Link>
                         </div>
                       </td>
                     </tr>
