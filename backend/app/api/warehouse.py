@@ -1088,7 +1088,7 @@ _SPEC_TSV_HEADER = "\t".join([
 ])
 
 
-@router.get("/specs/export-ordage")
+@router.get("/specs/export")
 def export_ordage_specs(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -1204,7 +1204,7 @@ class OrdageSpecImportResult(BaseModel):
     errors:  list[dict]
 
 
-@router.post("/specs/import-ordage", response_model=OrdageSpecImportResult)
+@router.post("/specs/import", response_model=OrdageSpecImportResult)
 def import_ordage_specs(
     file: UploadFile      = File(...),
     db:   Session         = Depends(get_db),

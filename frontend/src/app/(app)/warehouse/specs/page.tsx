@@ -67,7 +67,7 @@ export default function SpecsPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const result = await api<SpecImportResult>("/api/warehouse/specs/import-ordage", { method: "POST", body });
+      const result = await api<SpecImportResult>("/api/warehouse/specs/import", { method: "POST", body });
       setImportResult(result);
       await load();
     } catch {
@@ -79,7 +79,7 @@ export default function SpecsPage() {
 
   function handleExport() {
     const token = getToken();
-    const url   = `${API_URL}/api/warehouse/specs/export-ordage`;
+    const url   = `${API_URL}/api/warehouse/specs/export`;
     const a     = document.createElement("a");
     a.href      = token ? `${url}?token=${token}` : url;
 
