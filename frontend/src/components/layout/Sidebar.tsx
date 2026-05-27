@@ -1,25 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { api, clearToken } from "@/lib/api";
-import { useLocale, useT } from "@/lib/i18n";
+import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// ── Icons ──────────────────────────────────────────────────────────────────────
+// ── icons ─────────────────────────────────────────────────────────────────────
 
 function Icon({ d, className = "" }: { d: string | string[]; className?: string }) {
   const paths = Array.isArray(d) ? d : [d];
   return (
-    <svg
-      width="18" height="18" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="1.6"
-      strokeLinecap="round" strokeLinejoin="round"
-      className={`shrink-0 ${className}`}
-    >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      className={`shrink-0 ${className}`}>
       {paths.map((p, i) => <path key={i} d={p} />)}
     </svg>
   );
@@ -30,25 +27,13 @@ const ICONS: Record<string, string[]> = {
   files:     ["M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z", "M13 2v7h7"],
   tasks:     ["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"],
   plan:      ["M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"],
-  printers:  ["M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6", "M6 18h12v3H6z"],
   analytics: ["M18 20V10M12 20V4M6 20v-6"],
   history:   ["M12 8v4l3 3", "M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"],
   filament:  ["M12 2a10 10 0 1 0 10 10", "M12 8a4 4 0 1 0 4 4", "M12 12h.01"],
   users:     ["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2", "M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0", "M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"],
   settings:  ["M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"],
-  logout:    ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "M16 17l5-5-5-5", "M21 12H9"],
   warehouse: ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z", "M3.27 6.96L12 12.01l8.73-5.05", "M12 22.08V12"],
 };
-
-function initials(user: User): string {
-  if (user.name) {
-    const parts = user.name.trim().split(/\s+/);
-    return parts.length >= 2
-      ? (parts[0][0] + parts[1][0]).toUpperCase()
-      : parts[0].slice(0, 2).toUpperCase();
-  }
-  return user.email.slice(0, 2).toUpperCase();
-}
 
 const NAV_GROUPS = [
   {
@@ -77,7 +62,7 @@ const NAV_GROUPS = [
   },
 ] as const;
 
-// ── Sidebar ────────────────────────────────────────────────────────────────────
+// ── component ─────────────────────────────────────────────────────────────────
 
 export function Sidebar({
   user,
@@ -90,15 +75,11 @@ export function Sidebar({
   onPinToggle: () => void;
   onSearch: () => void;
 }) {
-  const pathname              = usePathname();
-  const router                = useRouter();
-  const t                     = useT();
-  const { locale, setLocale } = useLocale();
+  const pathname = usePathname();
+  const t        = useT();
 
-  const [settingsOpen,    setSettingsOpen]    = useState(true);
-  const [agentConnected,  setAgentConnected]  = useState<boolean | null>(null);
+  const [agentConnected, setAgentConnected] = useState<boolean | null>(null);
 
-  // Agent status — poll every 30 s
   useEffect(() => {
     async function check() {
       try {
@@ -113,11 +94,8 @@ export function Sidebar({
     return () => clearInterval(id);
   }, []);
 
-  function logout() { clearToken(); router.replace("/login"); }
-
   const isAdmin = user.role === "admin";
 
-  // When pinned, text is always visible; otherwise opacity-0 → show on hover
   const txt = pinned
     ? "opacity-100"
     : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100";
@@ -125,16 +103,12 @@ export function Sidebar({
   const linkCls = (href: string) =>
     ["nav-link h-9 overflow-hidden", pathname === href || pathname.startsWith(href + "/") ? "active" : ""].join(" ");
 
-  const agentColor = agentConnected === null
-    ? "bg-[var(--text-faint)]"
-    : agentConnected
-      ? "bg-[var(--state-ok)]"
-      : "bg-[var(--state-idle)]";
-  const agentLabel = agentConnected === null
-    ? "Агент: перевірка..."
-    : agentConnected
-      ? "Агент: підключено"
-      : "Агент: відключено";
+  const agentColor = agentConnected === null ? "bg-[var(--text-faint)]"
+    : agentConnected ? "bg-[var(--state-ok)]"
+    : "bg-[var(--state-idle)]";
+  const agentLabel = agentConnected === null ? "Агент: перевірка…"
+    : agentConnected ? "Агент: підключено"
+    : "Агент: відключено";
 
   return (
     <aside className={[
@@ -187,107 +161,76 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
-
-      {/* Settings section (collapsible) */}
-      <div className="flex flex-col overflow-hidden px-2 py-2">
-        <button
-          onClick={() => setSettingsOpen((v) => !v)}
-          className="nav-link h-9 w-full"
-          title="Налаштування"
-        >
-          <Icon d={ICONS.settings} />
-          <span className={`flex-1 whitespace-nowrap text-left ${txt}`}>Налаштування</span>
-          <svg
-            width="12" height="12" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            className={`shrink-0 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""} ${txt}`}
-          >
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
-
-        {settingsOpen && (
-          <div className="flex flex-col gap-0.5 overflow-hidden">
-            {isAdmin && (
-              <Link href="/settings" title="Системні налаштування" className={linkCls("/settings")}>
-                <Icon d={ICONS.settings} className="opacity-40" />
-                <span className={`whitespace-nowrap text-sm ${txt}`}>Системні</span>
-              </Link>
-            )}
-
-            {/* Profile */}
-            <div className="flex h-9 items-center gap-3 overflow-hidden rounded-lg px-2.5">
-              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[9px] font-bold text-[var(--text)]">
-                {initials(user)}
-              </div>
-              <div className={`flex min-w-0 flex-col items-start ${txt}`}>
-                <span className="w-full truncate text-xs font-medium text-[var(--text)]">{user.name || user.email}</span>
-                <span className="text-[10px] text-[var(--text-faint)]">{user.role}</span>
-              </div>
-            </div>
-
-            {/* Language */}
-            <div className="flex h-9 items-center gap-2 overflow-hidden rounded-lg px-2.5">
-              <button
-                onClick={() => setLocale(locale === "uk" ? "en" : "uk")}
-                title="Switch language"
-                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ${txt}`}
-              >
-                {locale === "uk" ? "EN" : "UA"}
-              </button>
-            </div>
-
-            {/* Logout */}
-            <button onClick={logout} title="Вийти" className="nav-link h-9 text-[var(--state-error)]">
-              <Icon d={ICONS.logout} />
-              <span className={`whitespace-nowrap ${txt}`}>Вийти</span>
-            </button>
+      {/* Settings link — admin only */}
+      {isAdmin && (
+        <>
+          <div className="mx-3 h-px bg-[var(--surface-hi)]" />
+          <div className="px-2 py-2">
+            <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
+              <Icon d={ICONS.settings} />
+              <span className={`whitespace-nowrap ${txt}`}>{t("nav.settings")}</span>
+            </Link>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Bottom toolbar: pin · theme · search · agent — always a horizontal icon row */}
-      <div className="flex items-center border-t border-[var(--border)] py-2.5 overflow-hidden">
+      {/* Bottom toolbar ──────────────────────────────────────────────────────
+          Pin arrow: always visible (w-14 = exact collapsed sidebar width).
+          Theme · search · agent: hidden when collapsed, shown on hover/pinned.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <div className="border-t border-[var(--border)] py-2">
+        <div className="flex items-center overflow-hidden">
 
-        {/* Pin / unpin */}
-        <button onClick={onPinToggle} title={pinned ? "Відкріпити сайдбар" : "Закріпити сайдбар"}
-          className="flex flex-1 items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
-          {pinned ? (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6"/>
-            </svg>
-          ) : (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6"/><polyline points="15 18 21 12 15 6"/>
-            </svg>
-          )}
-        </button>
-
-        {/* Theme */}
-        <div className="flex flex-1 items-center justify-center">
-          <ThemeToggle compact />
-        </div>
-
-        {/* Search */}
-        <button onClick={onSearch} title="Пошук (⌘K)"
-          className="flex flex-1 items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-        </button>
-
-        {/* Agent status */}
-        <div title={agentLabel} className="flex flex-1 items-center justify-center cursor-default">
-          <span className="relative flex items-center justify-center">
-            {agentConnected && (
-              <span className={`absolute size-2.5 rounded-full ${agentColor} animate-ping opacity-60`} />
+          {/* Pin / unpin — always visible */}
+          <button
+            onClick={onPinToggle}
+            title={pinned ? "Відкріпити сайдбар" : "Закріпити сайдбар"}
+            className="flex w-14 shrink-0 items-center justify-center py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+          >
+            {pinned ? (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6"/>
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/><polyline points="15 18 21 12 15 6"/>
+              </svg>
             )}
-            <span className={`size-2.5 rounded-full transition-colors duration-500 ${agentColor}`} />
-          </span>
-        </div>
+          </button>
 
+          {/* Theme · search · agent — appear only when sidebar is expanded */}
+          <div className={[
+            "flex flex-1 items-center overflow-hidden",
+            pinned ? "opacity-100" : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100",
+          ].join(" ")}>
+
+            <div className="flex flex-1 items-center justify-center">
+              <ThemeToggle compact />
+            </div>
+
+            <button
+              onClick={onSearch}
+              title="Пошук (⌘K)"
+              className="flex flex-1 items-center justify-center py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+            </button>
+
+            <div title={agentLabel} className="flex flex-1 items-center justify-center cursor-default py-1.5">
+              <span className="relative flex items-center justify-center">
+                {agentConnected && (
+                  <span className={`absolute size-2.5 rounded-full ${agentColor} animate-ping opacity-60`} />
+                )}
+                <span className={`size-2.5 rounded-full transition-colors duration-500 ${agentColor}`} />
+              </span>
+            </div>
+
+          </div>
+        </div>
       </div>
+
     </aside>
   );
 }

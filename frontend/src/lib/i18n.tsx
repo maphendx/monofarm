@@ -36,13 +36,13 @@ interface LocaleCtx {
 }
 
 const Ctx = createContext<LocaleCtx>({
-  locale: "en",
+  locale: "uk",
   setLocale: () => {},
   t: (k) => k,
 });
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
+  const [locale, setLocaleState] = useState<Locale>("uk");
 
   useEffect(() => {
     const saved = localStorage.getItem("locale") as Locale | null;
