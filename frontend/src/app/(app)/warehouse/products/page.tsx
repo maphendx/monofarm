@@ -1031,7 +1031,7 @@ export default function ProductsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return products.filter((p) => {
-      if (selectedCats.length > 0 && !selectedCats.some((c) => p.categories.includes(c))) return false;
+      if (selectedCats.length > 0 && !selectedCats.every((c) => p.categories.includes(c))) return false;
       if (barcodeFilter === "has"  && !p.barcode) return false;
       if (barcodeFilter === "none" &&  p.barcode) return false;
       if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;

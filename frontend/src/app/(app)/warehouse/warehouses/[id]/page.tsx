@@ -1,0 +1,402 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type WarehouseType = "raw" | "wip" | "finished" | "defect";
+type Warehouse = { id: number; name: string; type: WarehouseType; location: string | null; is_active: boolean };
+
+type Zone = { id: number; name: string; rows: number; cols: number; sort_order: number; cell_count: number };
+type CellStockItem = { product_id: number; product_name: string; product_sku: string; quantity: string };
+type Cell = { id: number; code: string; notes: string | null; stock: CellStockItem[] };
+type ZoneWithCells = Zone & { cells: Cell[] };
+
+type Product = { id: number; name: string; sku: string };
+
+const TYPE_LABEL: Record<WarehouseType, string> = {
+  finished: "Готова продукція", raw: "Сировина", wip: "В процесі", defect: "Брак",
+};
+
+// ── ZoneModal — create / edit ─────────────────────────────────────────────────
+
+function ZoneModal({
+  zone, onClose, onSaved,
+}: {
+  zone: Zone | null;
+  onClose: () => void;
+  onSaved: (z: Zone) => void;
+}) {
+  const params = useParams<{ id: string }>();
+  const [name,  setName]  = useState(zone?.name ?? "");
+  const [rows,  setRows]  = useState(zone?.rows  ?? 5);
+  const [cols,  setCols]  = useState(zone?.cols  ?? 5);
+  const [busy,  setBusy]  = useState(false);
+  const [err,   setErr]   = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    try {
+      const body = { name: name.trim(), rows, cols };
+      const saved = zone
+        ? await api<Zone>(`/api/warehouse/warehouses/${params.id}/zones/${zone.id}`, { method: "PATCH", body: JSON.stringify(body) })
+        : await api<Zone>(`/api/warehouse/warehouses/${params.id}/zones`, { method: "POST", body: JSON.stringify(body) });
+      onSaved(saved);
+      onClose();
+    } catch {
+      setErr("Помилка збереження");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl">
+        <h2 className="mb-4 font-semibold">{zone ? "Редагувати стелаж" : "Новий стелаж"}</h2>
+        <form onSubmit={save} className="space-y-4 text-sm">
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Назва</span>
+            <input required autoFocus value={name} onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]" />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">Рядки</span>
+              <input type="number" min={1} max={50} value={rows} onChange={(e) => setRows(parseInt(e.target.value) || 1)}
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">Стовпці</span>
+              <input type="number" min={1} max={50} value={cols} onChange={(e) => setCols(parseInt(e.target.value) || 1)}
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]" />
+            </label>
+          </div>
+          <p className="text-xs text-[var(--text-faint)]">
+            Буде згенеровано {rows * cols} комірок: A1…{String.fromCharCode(64 + cols)}{rows}
+            {zone && rows * cols !== zone.cell_count && (
+              <span className="ml-1 text-[var(--state-warn)]">— наявний вміст комірок буде видалено</span>
+            )}
+          </p>
+          {err && <p className="text-[var(--state-error)]">{err}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+            <button type="submit" disabled={busy || !name.trim()} className="btn btn-primary disabled:opacity-50">
+              {busy ? "Зберігаю…" : zone ? "Зберегти" : "Створити"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── CellModal — assign product ────────────────────────────────────────────────
+
+function CellModal({
+  cell, products, onClose, onSaved,
+}: {
+  cell: Cell;
+  products: Product[];
+  onClose: () => void;
+  onSaved: (cell: Cell) => void;
+}) {
+  const [productId, setProductId] = useState<number | "">(cell.stock[0]?.product_id ?? "");
+  const [quantity,  setQuantity]  = useState(cell.stock[0]?.quantity ?? "1");
+  const [busy,      setBusy]      = useState(false);
+  const [err,       setErr]       = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!productId) return;
+    setBusy(true); setErr(null);
+    try {
+      const updated = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/stock`, {
+        method: "PUT",
+        body: JSON.stringify({ product_id: productId, quantity: parseFloat(quantity) }),
+      });
+      onSaved({ ...cell, stock: [updated] });
+      onClose();
+    } catch {
+      setErr("Помилка збереження");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    if (!cell.stock[0]) { onClose(); return; }
+    setBusy(true);
+    try {
+      await api(`/api/warehouse/cells/${cell.id}/stock/${cell.stock[0].product_id}`, { method: "DELETE" });
+      onSaved({ ...cell, stock: [] });
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl">
+        <h2 className="mb-1 font-semibold">Комірка {cell.code}</h2>
+        {cell.notes && <p className="mb-3 text-xs text-[var(--text-faint)]">{cell.notes}</p>}
+        <form onSubmit={save} className="space-y-4 text-sm">
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Товар</span>
+            <select
+              value={productId}
+              onChange={(e) => setProductId(e.target.value ? parseInt(e.target.value) : "")}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]"
+            >
+              <option value="">— не обрано —</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
+            <input type="number" min={0} step="0.01" value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]" />
+          </label>
+          {err && <p className="text-[var(--state-error)]">{err}</p>}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {cell.stock.length > 0 ? (
+              <button type="button" onClick={clear} disabled={busy}
+                className="text-xs text-[var(--state-error)] hover:underline">Очистити</button>
+            ) : <span />}
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+              <button type="submit" disabled={busy || !productId} className="btn btn-primary disabled:opacity-50">
+                {busy ? "…" : "Зберегти"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── ZoneAccordion ─────────────────────────────────────────────────────────────
+
+function ZoneAccordion({
+  zone: initialZone, products,
+  onEdit, onDelete,
+}: {
+  zone: Zone;
+  products: Product[];
+  onEdit: (z: Zone) => void;
+  onDelete: (id: number) => void;
+}) {
+  const [open,       setOpen]       = useState(false);
+  const [zoneData,   setZoneData]   = useState<ZoneWithCells | null>(null);
+  const [loading,    setLoading]    = useState(false);
+  const [activeCell, setActiveCell] = useState<Cell | null>(null);
+
+  async function load() {
+    if (zoneData) return;
+    setLoading(true);
+    try {
+      const data = await api<ZoneWithCells>(`/api/warehouse/zones/${initialZone.id}/cells`);
+      setZoneData(data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggle() {
+    if (!open) load();
+    setOpen((v) => !v);
+  }
+
+  function handleCellSaved(updated: Cell) {
+    setZoneData((prev) => prev
+      ? { ...prev, cells: prev.cells.map((c) => c.id === updated.id ? updated : c) }
+      : prev
+    );
+  }
+
+  const cells = zoneData?.cells ?? [];
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-3.5">
+        <button onClick={toggle} className="flex flex-1 items-center gap-3 text-left">
+          <span className={["text-xs transition-transform", open ? "rotate-90" : ""].join(" ")}>▶</span>
+          <span className="font-medium">{initialZone.name}</span>
+          <span className="text-xs text-[var(--text-faint)]">{initialZone.rows} × {initialZone.cols} = {initialZone.cell_count} комірок</span>
+        </button>
+        <button onClick={() => onEdit(initialZone)} title="Редагувати"
+          className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button onClick={() => onDelete(initialZone.id)} title="Видалити"
+          className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Grid */}
+      {open && (
+        <div className="border-t border-[var(--border)] p-4">
+          {loading ? (
+            <p className="text-sm text-[var(--text-faint)]">Завантаження…</p>
+          ) : (
+            <div
+              className="grid gap-1.5"
+              style={{ gridTemplateColumns: `repeat(${initialZone.cols}, minmax(0, 1fr))` }}
+            >
+              {cells.map((cell) => {
+                const item = cell.stock[0];
+                return (
+                  <button
+                    key={cell.id}
+                    onClick={() => setActiveCell(cell)}
+                    className={[
+                      "group relative flex min-h-[56px] flex-col items-start justify-between rounded-lg border p-2 text-left transition-colors",
+                      item
+                        ? "border-[var(--accent)] bg-[rgba(34,211,238,.06)] hover:bg-[rgba(34,211,238,.10)]"
+                        : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                    ].join(" ")}
+                  >
+                    <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
+                    {item ? (
+                      <div className="w-full min-w-0">
+                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">{item.product_name}</p>
+                        <p className="font-mono text-[10px] text-[var(--accent)]">{parseFloat(item.quantity)} шт</p>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeCell && (
+        <CellModal
+          cell={activeCell}
+          products={products}
+          onClose={() => setActiveCell(null)}
+          onSaved={(updated) => { handleCellSaved(updated); setActiveCell(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function WarehouseDetailPage() {
+  const params  = useParams<{ id: string }>();
+  const router  = useRouter();
+  const whId    = parseInt(params.id);
+
+  const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
+  const [zones,     setZones]     = useState<Zone[]>([]);
+  const [products,  setProducts]  = useState<Product[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [zoneModal, setZoneModal] = useState<Zone | null | "create">(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [whs, zs, prods] = await Promise.all([
+        api<Warehouse[]>("/api/warehouse/warehouses"),
+        api<Zone[]>(`/api/warehouse/warehouses/${whId}/zones`),
+        api<Product[]>("/api/warehouse/products"),
+      ]);
+      setWarehouse(whs.find((w) => w.id === whId) ?? null);
+      setZones(zs);
+      setProducts(prods);
+    } finally {
+      setLoading(false);
+    }
+  }, [whId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function deleteZone(id: number) {
+    if (!window.confirm("Видалити стелаж і всі його комірки?")) return;
+    await api(`/api/warehouse/warehouses/${whId}/zones/${id}`, { method: "DELETE" });
+    setZones((prev) => prev.filter((z) => z.id !== id));
+  }
+
+  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (!warehouse) return <div className="text-sm text-[var(--state-error)]">Склад не знайдено</div>;
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={() => router.back()}
+          className="flex size-8 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+          ←
+        </button>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-lg font-semibold truncate">{warehouse.name}</h1>
+          <p className="text-xs text-[var(--text-faint)]">
+            {TYPE_LABEL[warehouse.type]}{warehouse.location ? ` · ${warehouse.location}` : ""}
+          </p>
+        </div>
+        <button onClick={() => setZoneModal("create")} className="btn btn-primary">
+          + Стелаж
+        </button>
+      </div>
+
+      {/* Zones */}
+      {zones.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center">
+          <p className="text-sm text-[var(--text-muted)]">Стелажів ще немає</p>
+          <button onClick={() => setZoneModal("create")}
+            className="mt-3 btn btn-primary">
+            Додати перший стелаж
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {zones.map((z) => (
+            <ZoneAccordion
+              key={z.id}
+              zone={z}
+              products={products}
+              onEdit={(zone) => setZoneModal(zone)}
+              onDelete={deleteZone}
+            />
+          ))}
+        </div>
+      )}
+
+      {zoneModal !== null && (
+        <ZoneModal
+          zone={zoneModal === "create" ? null : zoneModal}
+          onClose={() => setZoneModal(null)}
+          onSaved={(saved) => {
+            setZones((prev) => {
+              const idx = prev.findIndex((z) => z.id === saved.id);
+              return idx >= 0 ? prev.map((z) => z.id === saved.id ? saved : z) : [...prev, saved];
+            });
+            setZoneModal(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}

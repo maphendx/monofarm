@@ -293,6 +293,40 @@ class OrderItem(Base):
     total_price:  Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
 
 
+# ── Warehouse zones & cells ───────────────────────────────────────────────────
+
+class WarehouseZone(Base):
+    __tablename__ = "wh_zones"
+
+    id:              Mapped[int]      = mapped_column(primary_key=True)
+    organization_id: Mapped[int]      = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    warehouse_id:    Mapped[int]      = mapped_column(Integer, ForeignKey("wh_warehouses.id", ondelete="CASCADE"), nullable=False, index=True)
+    name:            Mapped[str]      = mapped_column(String(120))
+    rows:            Mapped[int]      = mapped_column(Integer, default=5)
+    cols:            Mapped[int]      = mapped_column(Integer, default=5)
+    sort_order:      Mapped[int]      = mapped_column(Integer, default=0)
+    created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WarehouseCell(Base):
+    __tablename__ = "wh_cells"
+
+    id:         Mapped[int]           = mapped_column(primary_key=True)
+    zone_id:    Mapped[int]           = mapped_column(Integer, ForeignKey("wh_zones.id", ondelete="CASCADE"), nullable=False, index=True)
+    code:       Mapped[str]           = mapped_column(String(20))   # e.g. A1, B3
+    notes:      Mapped[str | None]    = mapped_column(String(500), nullable=True)
+
+
+class CellStock(Base):
+    __tablename__ = "wh_cell_stock"
+
+    id:         Mapped[int]     = mapped_column(primary_key=True)
+    cell_id:    Mapped[int]     = mapped_column(Integer, ForeignKey("wh_cells.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id: Mapped[int]     = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="CASCADE"), nullable=False, index=True)
+    quantity:   Mapped[Decimal] = mapped_column(Numeric(12, 4), default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
 
 class CashTransaction(Base):

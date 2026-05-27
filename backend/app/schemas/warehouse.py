@@ -431,3 +431,61 @@ class CashFlowSummary(BaseModel):
     total_expense: Decimal
     net:           Decimal
     by_category:   list[dict]  # [{category, type, total}]
+
+
+# ── Zones & cells ─────────────────────────────────────────────────────────────
+
+class ZoneCreate(BaseModel):
+    name:       str
+    rows:       int = 5
+    cols:       int = 5
+    sort_order: int = 0
+
+
+class ZoneUpdate(BaseModel):
+    name:       str | None = None
+    rows:       int | None = None
+    cols:       int | None = None
+    sort_order: int | None = None
+
+
+class CellStockSet(BaseModel):
+    product_id: int
+    quantity:   Decimal
+
+
+class CellStockOut(BaseModel):
+    product_id:   int
+    product_name: str
+    product_sku:  str
+    quantity:     Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class CellOut(BaseModel):
+    id:    int
+    code:  str
+    notes: str | None
+    stock: list[CellStockOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ZoneOut(BaseModel):
+    id:         int
+    name:       str
+    rows:       int
+    cols:       int
+    sort_order: int
+    cell_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ZoneWithCellsOut(ZoneOut):
+    cells: list[CellOut] = []

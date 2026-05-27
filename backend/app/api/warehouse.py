@@ -17,13 +17,15 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
-    Counterparty, MovementType, Order, OrderItem,
+    CellStock, Counterparty, MovementType, Order, OrderItem,
     OrderStatus, ProductCategory, ProductionBatch, SpecComponent, SpecOperation,
-    Specification, StockEntry, Warehouse, WarehouseMovement, Product,
+    Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
+    WarehouseZone, Product,
 )
 from app.schemas.warehouse import (
     BatchClose, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
+    CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementOut,
@@ -32,6 +34,7 @@ from app.schemas.warehouse import (
     ProductCreate, ProductOut, ProductUpdate, ReserveRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
     StockEntryOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
+    ZoneCreate, ZoneOut, ZoneUpdate, ZoneWithCellsOut,
 )
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
@@ -341,6 +344,220 @@ def update_warehouse(
     db.commit()
     db.refresh(wh)
     return WarehouseOut.model_validate(wh)
+
+
+@router.delete("/warehouses/{wh_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_warehouse(
+    wh_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    wh = _get_warehouse(wh_id, org, db)
+    db.delete(wh)
+    db.commit()
+
+
+# ── Zones ─────────────────────────────────────────────────────────────────────
+
+def _col_letter(n: int) -> str:
+    """0-based column index → Excel-style letter(s): 0→A, 25→Z, 26→AA …"""
+    result = ""
+    n += 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        result = chr(65 + r) + result
+    return result
+
+
+def _generate_cells(zone: WarehouseZone) -> list[WarehouseCell]:
+    cells = []
+    for r in range(zone.rows):
+        for c in range(zone.cols):
+            code = f"{_col_letter(c)}{r + 1}"
+            cells.append(WarehouseCell(zone_id=zone.id, code=code))
+    return cells
+
+
+def _zone_out(zone: WarehouseZone, db: Session) -> ZoneOut:
+    count = db.query(WarehouseCell).filter(WarehouseCell.zone_id == zone.id).count()
+    return ZoneOut(
+        id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
+        sort_order=zone.sort_order, cell_count=count, created_at=zone.created_at,
+    )
+
+
+@router.get("/warehouses/{wh_id}/zones", response_model=list[ZoneOut])
+def list_zones(
+    wh_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ZoneOut]:
+    _get_warehouse(wh_id, org, db)
+    zones = (db.query(WarehouseZone)
+               .filter(WarehouseZone.warehouse_id == wh_id, WarehouseZone.organization_id == org.id)
+               .order_by(WarehouseZone.sort_order, WarehouseZone.id)
+               .all())
+    return [_zone_out(z, db) for z in zones]
+
+
+@router.post("/warehouses/{wh_id}/zones", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
+def create_zone(
+    wh_id:   int,
+    payload: ZoneCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ZoneOut:
+    _get_warehouse(wh_id, org, db)
+    zone = WarehouseZone(**payload.model_dump(), warehouse_id=wh_id, organization_id=org.id)
+    db.add(zone)
+    db.flush()
+    for cell in _generate_cells(zone):
+        db.add(cell)
+    db.commit()
+    db.refresh(zone)
+    return _zone_out(zone, db)
+
+
+@router.patch("/warehouses/{wh_id}/zones/{zone_id}", response_model=ZoneOut)
+def update_zone(
+    wh_id:   int,
+    zone_id: int,
+    payload: ZoneUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ZoneOut:
+    _get_warehouse(wh_id, org, db)
+    zone = db.query(WarehouseZone).filter(
+        WarehouseZone.id == zone_id, WarehouseZone.warehouse_id == wh_id,
+        WarehouseZone.organization_id == org.id,
+    ).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    data = payload.model_dump(exclude_unset=True)
+    resize = "rows" in data or "cols" in data
+    for k, v in data.items():
+        setattr(zone, k, v)
+    if resize:
+        db.query(WarehouseCell).filter(WarehouseCell.zone_id == zone.id).delete()
+        for cell in _generate_cells(zone):
+            db.add(cell)
+    db.commit()
+    db.refresh(zone)
+    return _zone_out(zone, db)
+
+
+@router.delete("/warehouses/{wh_id}/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_zone(
+    wh_id:   int,
+    zone_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    _get_warehouse(wh_id, org, db)
+    zone = db.query(WarehouseZone).filter(
+        WarehouseZone.id == zone_id, WarehouseZone.warehouse_id == wh_id,
+        WarehouseZone.organization_id == org.id,
+    ).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    db.delete(zone)
+    db.commit()
+
+
+# ── Cells ─────────────────────────────────────────────────────────────────────
+
+def _cell_stock_out(cs: CellStock) -> CellStockOut:
+    return CellStockOut(
+        product_id=cs.product_id,
+        product_name=cs.product.name,
+        product_sku=cs.product.sku,
+        quantity=cs.quantity,
+    )
+
+
+@router.get("/zones/{zone_id}/cells", response_model=ZoneWithCellsOut)
+def get_zone_cells(
+    zone_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> ZoneWithCellsOut:
+    zone = db.query(WarehouseZone).filter(
+        WarehouseZone.id == zone_id, WarehouseZone.organization_id == org.id,
+    ).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    cells = (db.query(WarehouseCell)
+               .filter(WarehouseCell.zone_id == zone_id)
+               .order_by(WarehouseCell.code)
+               .all())
+    cells_out = []
+    for cell in cells:
+        stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
+        cells_out.append(CellOut(
+            id=cell.id, code=cell.code, notes=cell.notes,
+            stock=[_cell_stock_out(cs) for cs in stock_rows],
+        ))
+    count = len(cells)
+    return ZoneWithCellsOut(
+        id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
+        sort_order=zone.sort_order, cell_count=count, created_at=zone.created_at,
+        cells=cells_out,
+    )
+
+
+@router.put("/cells/{cell_id}/stock", response_model=CellStockOut)
+def set_cell_stock(
+    cell_id: int,
+    payload: CellStockSet,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CellStockOut:
+    cell = db.query(WarehouseCell).join(WarehouseZone).filter(
+        WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id,
+    ).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    product = db.query(Product).filter(
+        Product.id == payload.product_id, Product.organization_id == org.id,
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    cs = db.query(CellStock).filter(
+        CellStock.cell_id == cell_id, CellStock.product_id == payload.product_id,
+    ).first()
+    if cs:
+        cs.quantity = payload.quantity
+    else:
+        cs = CellStock(cell_id=cell_id, product_id=payload.product_id, quantity=payload.quantity)
+        db.add(cs)
+    db.commit()
+    db.refresh(cs)
+    cs.product = product
+    return _cell_stock_out(cs)
+
+
+@router.delete("/cells/{cell_id}/stock/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_cell_stock(
+    cell_id:    int,
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    cell = db.query(WarehouseCell).join(WarehouseZone).filter(
+        WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id,
+    ).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    db.query(CellStock).filter(
+        CellStock.cell_id == cell_id, CellStock.product_id == product_id,
+    ).delete()
+    db.commit()
 
 
 # ── Counterparties ────────────────────────────────────────────────────────────
