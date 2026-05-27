@@ -569,8 +569,22 @@ def preview_import(
                 if new_val is None:
                     continue
                 old_val = getattr(p, field, None)
-                new_str = str(new_val) if not isinstance(new_val, list) else ", ".join(new_val)
-                old_str = str(old_val) if not isinstance(old_val, list) else ", ".join(old_val or [])
+                if field in ("cost_price", "sale_price", "direct_cost"):
+                    try:
+                        new_dec = Decimal(str(new_val)).normalize()
+                        old_dec = Decimal(str(old_val)).normalize() if old_val is not None else None
+                        if new_dec == old_dec:
+                            continue
+                        new_str = str(new_dec)
+                        old_str = str(old_dec) if old_dec is not None else ""
+                    except Exception:
+                        new_str, old_str = str(new_val), str(old_val) if old_val is not None else ""
+                elif isinstance(new_val, list):
+                    new_str = ", ".join(new_val)
+                    old_str = ", ".join(old_val or [])
+                else:
+                    new_str = str(new_val).strip()
+                    old_str = str(old_val).strip() if old_val is not None else ""
                 if new_str != old_str:
                     changes[field] = {"from": old_str, "to": new_str}
             existing_items.append({"id": p.id, "name": p.name, "sku": p.sku, "changes": changes})
