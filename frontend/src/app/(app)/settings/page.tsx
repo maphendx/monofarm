@@ -96,14 +96,14 @@ const inputCls = "input";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8 shadow-sm">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-10 shadow-sm">
       {children}
     </div>
   );
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="mb-6 text-lg font-semibold">{children}</h2>;
+  return <h2 className="mb-6 text-xl font-semibold">{children}</h2>;
 }
 
 function ComingSoon({ label }: { label: string }) {
@@ -1421,35 +1421,35 @@ function ProfileSection() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
 
       {/* ── Header card ── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex size-16 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-xl font-bold text-white">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8">
+        <div className="flex items-start gap-5">
+          <div className="flex size-20 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-2xl font-bold text-white">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold">{user.name}</h2>
-              <span className="rounded-md border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-2xl font-semibold">{user.name}</h2>
+              <span className="rounded-md border border-[var(--border)] px-2.5 py-0.5 text-sm text-[var(--text-muted)]">
                 {ROLE_LABEL[user.role] ?? user.role}
               </span>
               {plan && (
-                <span className="flex items-center gap-1 rounded-md border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">
+                <span className="flex items-center gap-1 rounded-md border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.08)] px-2.5 py-0.5 text-sm font-medium text-[var(--state-ok)]">
                   {PLAN_LABEL[plan] ?? plan}
                 </span>
               )}
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-5 text-sm text-[var(--text-muted)]">
-              <span className="flex items-center gap-1.5">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <div className="mt-3 flex flex-wrap items-center gap-6 text-base text-[var(--text-muted)]">
+              <span className="flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
                 </svg>
                 {user.email}
               </span>
-              <span className="flex items-center gap-1.5">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <span className="flex items-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
                 </svg>
                 Joined {joinedDate}
@@ -1460,51 +1460,34 @@ function ProfileSection() {
       </div>
 
       {/* ── Edit Profile card ── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8">
+        <div className="mb-6 flex items-center gap-2.5">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
           </svg>
-          <h3 className="font-semibold">Редагувати профіль</h3>
+          <h3 className="text-lg font-semibold">Редагувати профіль</h3>
         </div>
         <form onSubmit={saveName}>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="mb-1.5 block text-sm text-[var(--text-muted)]">Повне ім&apos;я</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={120}
-                className="input"
-              />
+              <label className="mb-2 block text-base text-[var(--text-muted)]">Повне ім&apos;я</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className="input" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm text-[var(--text-muted)]">Email адреса</label>
-              <input
-                value={user.email}
-                readOnly
-                className="input cursor-default opacity-60"
-              />
+              <label className="mb-2 block text-base text-[var(--text-muted)]">Email адреса</label>
+              <input value={user.email} readOnly className="input cursor-default opacity-60" />
             </div>
           </div>
-          <div className="mt-5 flex items-center justify-between border-t border-[var(--border)] pt-4">
-            <button
-              type="button"
-              onClick={logout}
-              className="flex items-center gap-2 text-sm text-[var(--state-error)] hover:opacity-80"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-5">
+            <button type="button" onClick={logout} className="flex items-center gap-2 text-base text-[var(--state-error)] hover:opacity-80">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
               Вийти
             </button>
-            <button
-              type="submit"
-              disabled={!changed || saving}
-              className="btn btn-primary disabled:opacity-50"
-            >
+            <button type="submit" disabled={!changed || saving} className="btn btn-primary disabled:opacity-50">
               {saved ? "✓ Збережено" : saving ? "…" : "Зберегти зміни"}
             </button>
           </div>
@@ -1512,25 +1495,25 @@ function ProfileSection() {
       </div>
 
       {/* ── Subscription card ── */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
-        <div className="mb-5 flex items-center gap-2">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8">
+        <div className="mb-6 flex items-center gap-2.5">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)]">
             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
           </svg>
-          <h3 className="font-semibold">Підписка</h3>
+          <h3 className="text-lg font-semibold">Підписка</h3>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">ПЛАН</p>
-            <p className="mt-1.5 text-lg font-semibold">{plan ? (PLAN_LABEL[plan] ?? plan) : "—"}</p>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">ПЛАН</p>
+            <p className="mt-2 text-xl font-semibold">{plan ? (PLAN_LABEL[plan] ?? plan) : "—"}</p>
           </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">РОЛЬ</p>
-            <p className="mt-1.5 text-lg font-semibold">{ROLE_LABEL[user.role] ?? user.role}</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">РОЛЬ</p>
+            <p className="mt-2 text-xl font-semibold">{ROLE_LABEL[user.role] ?? user.role}</p>
           </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">УЧАСНИК З</p>
-            <p className="mt-1.5 text-lg font-semibold capitalize">{memberSince}</p>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-5 py-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">УЧАСНИК З</p>
+            <p className="mt-2 text-xl font-semibold capitalize">{memberSince}</p>
           </div>
         </div>
       </div>
