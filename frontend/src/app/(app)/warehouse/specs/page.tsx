@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "@/lib/api";
+import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export default function SpecsPage() {
   const [filter,       setFilter]       = useState<"all" | "has" | "none">("all");
   const [importing,    setImporting]    = useState(false);
   const [importResult, setImportResult] = useState<SpecImportResult | null>(null);
+  const [specProduct,  setSpecProduct]  = useState<SpecModalProduct | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -318,12 +320,20 @@ export default function SpecsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/warehouse/products/${p.id}`}
-                          className="invisible rounded-md px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg)] group-hover:visible"
-                        >
-                          Редагувати →
-                        </Link>
+                        <div className="invisible flex items-center justify-end gap-1 group-hover:visible">
+                          <button
+                            onClick={() => setSpecProduct({ id: p.id, name: p.name, sku: p.sku, sale_price: p.sale_price })}
+                            className="rounded-md bg-[var(--accent)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+                          >
+                            + Специфікація
+                          </button>
+                          <Link
+                            href={`/warehouse/products/${p.id}`}
+                            className="rounded-md px-2.5 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg)]"
+                          >
+                            →
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -333,6 +343,13 @@ export default function SpecsPage() {
           </table>
         </div>
       </div>
+
+      {specProduct && (
+        <SpecModal
+          product={specProduct}
+          onClose={() => { setSpecProduct(null); load(); }}
+        />
+      )}
     </div>
   );
 }
