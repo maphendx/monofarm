@@ -29,10 +29,11 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function BatchCard({ batch, onStatusChange, onOpenCloseModal }: {
+function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
   batch: Batch;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
   onOpenCloseModal: (b: Batch) => void;
+  onDelete: (id: number) => Promise<void>;
 }) {
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.printed_qty - batch.good_qty;
@@ -44,16 +45,28 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal }: {
     finally { setBusy(false); }
   }
 
+  async function handleDelete() {
+    if (!confirm("Видалити цю партію?")) return;
+    setBusy(true);
+    try { await onDelete(batch.id); }
+    catch { setBusy(false); }
+  }
+
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
       <div className="mb-1 flex items-start justify-between gap-2">
         <span className="font-medium leading-tight">{batch.product_name}</span>
-        {batch.status === "active" && (
-          <span className="shrink-0 rounded-full bg-[rgba(56,189,248,.08)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">● live</span>
-        )}
-        {batch.status === "done" && (
-          <span className="shrink-0 rounded-full bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">✓</span>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {batch.status === "active" && (
+            <span className="rounded-full bg-[rgba(56,189,248,.08)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">● live</span>
+          )}
+          {batch.status === "done" && (
+            <span className="rounded-full bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">✓</span>
+          )}
+          <button disabled={busy} onClick={handleDelete} title="Видалити партію" className="text-[var(--text-faint)] hover:text-red-500 disabled:opacity-50 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+        </div>
       </div>
 
       {batch.status !== "draft" ? (
@@ -110,6 +123,11 @@ export default function ProductionPage() {
     setBatches((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus } : b));
   }
 
+  async function deleteBatch(id: number) {
+    await api(`/api/warehouse/batches/${id}`, { method: "DELETE" });
+    setBatches((prev) => prev.filter((b) => b.id !== id));
+  }
+
   if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
 
   const byStatus = (s: BatchStatus) => batches.filter((b) => b.status === s);
@@ -140,7 +158,7 @@ export default function ProductionPage() {
                     Порожньо
                   </div>
                 ) : (
-                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} />)
+                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} onDelete={deleteBatch} />)
                 )}
               </div>
             </div>
