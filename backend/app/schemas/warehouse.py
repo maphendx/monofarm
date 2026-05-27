@@ -245,17 +245,26 @@ class CostBreakdown(BaseModel):
 
 # ── Stock ─────────────────────────────────────────────────────────────────────
 
+class CellLocationOut(BaseModel):
+    name: str
+    quantity: Decimal
+
 class StockEntryOut(BaseModel):
     id:             int
     product_id:     int
     product_name:   str
     product_sku:    str
+    product_barcode: str | None
+    product_categories: list[str] = []
     product_unit:   str
     warehouse_id:   int
     warehouse_name: str
+    locations:      list[CellLocationOut] = []
     quantity:       Decimal
     reserved_qty:   Decimal
     available:      Decimal
+    total_stock:    Decimal
+    full_cost:      Decimal | None
     min_stock:      int | None
     desired_stock:  int | None
     box_limit:      int | None

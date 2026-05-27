@@ -2,25 +2,37 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import Link from "next/link";
+import { CreateMovementModal, Movement, MovementType } from "@/components/warehouse/MovementModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type CellLocation = {
+  name: string;
+  quantity: string;
+};
+
 type StockEntry = {
-  id:             number;
-  product_id:     number;
-  product_name:   string;
-  product_sku:    string;
-  product_unit:   string;
-  warehouse_id:   number;
-  warehouse_name: string;
-  quantity:       string;
-  reserved_qty:   string;
-  available:      string;
-  min_stock:      number | null;
-  desired_stock:  number | null;
-  box_limit:      number | null;
-  boxes_to_order: number | null;
-  updated_at:     string;
+  id:                 number;
+  product_id:         number;
+  product_name:       string;
+  product_sku:        string;
+  product_barcode:    string | null;
+  product_categories: string[];
+  product_unit:       string;
+  warehouse_id:       number;
+  warehouse_name:     string;
+  locations:          CellLocation[];
+  quantity:           string;
+  reserved_qty:       string;
+  available:          string;
+  total_stock:        string;
+  full_cost:          string | null;
+  min_stock:          number | null;
+  desired_stock:      number | null;
+  box_limit:          number | null;
+  boxes_to_order:     number | null;
+  updated_at:         string;
 };
 
 type StockStatus = "out" | "low" | "ok" | "desired";
@@ -113,6 +125,14 @@ function StockBar({ avail, min, desired }: { avail: number; min: number | null; 
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmt(n: string | number | null): string {
+  if (n == null) return "—";
+  const v = typeof n === "string" ? parseFloat(n) : n;
+  return isNaN(v) ? "—" : v.toLocaleString("uk-UA", { maximumFractionDigits: 2 });
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type FilterMode = "all" | "out" | "low" | "order";
@@ -123,6 +143,10 @@ export default function StockPage() {
   const [whFilter, setWhFilter] = useState("Всі");
   const [mode,     setMode]     = useState<FilterMode>("all");
   const [search,   setSearch]   = useState("");
+  
+  // Movement Modal state
+  const [movementOpen, setMovementOpen] = useState(false);
+  const [movementType, setMovementType] = useState<MovementType>("PURCHASE_IN");
 
   const load = useCallback(async () => {
     try { setStock(await api<StockEntry[]>("/api/warehouse/stock")); }
@@ -135,6 +159,11 @@ export default function StockPage() {
     setStock((prev) => prev.map((e) =>
       e.product_id === pid ? { ...e, [field]: val } : e,
     ));
+  }
+
+  function openMovement(type: MovementType) {
+    setMovementType(type);
+    setMovementOpen(true);
   }
 
   const warehouses = ["Всі", ...Array.from(new Set(stock.map((s) => s.warehouse_name)))];
@@ -150,7 +179,9 @@ export default function StockPage() {
     if (mode === "order" && e.boxes_to_order == null) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!e.product_name.toLowerCase().includes(q) && !e.product_sku.toLowerCase().includes(q)) return false;
+      if (!e.product_name.toLowerCase().includes(q) && 
+          !e.product_sku.toLowerCase().includes(q) &&
+          !(e.product_barcode || "").toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -159,6 +190,25 @@ export default function StockPage() {
 
   return (
     <div className="space-y-4">
+
+      {/* Top Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-xl font-bold">Залишки на складі</h1>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => openMovement("PURCHASE_IN")} className="btn btn-primary btn-sm">
+            + Отримання
+          </button>
+          <button onClick={() => openMovement("SALE_OUT")} className="btn btn-primary btn-sm">
+            + Продаж
+          </button>
+          <button onClick={() => openMovement("DEFECT")} className="btn btn-primary btn-sm bg-[var(--state-error)] hover:bg-red-600 border-none text-white">
+            + Списання
+          </button>
+          <button onClick={() => openMovement("TRANSFER")} className="btn btn-primary btn-sm bg-[var(--state-warn)] hover:bg-amber-600 border-none text-white">
+            + Переміщення
+          </button>
+        </div>
+      </div>
 
       {/* Summary alert strip */}
       {(outCount > 0 || lowCount > 0 || orderCount > 0) && (
@@ -206,9 +256,9 @@ export default function StockPage() {
             width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
-          <input type="search" placeholder="Назва або артикул…" value={search}
+          <input type="search" placeholder="Назва або код…" value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]" />
+            className="h-8 w-64 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]" />
         </div>
         <div className="flex gap-1">
           {warehouses.map((w) => (
@@ -238,54 +288,137 @@ export default function StockPage() {
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-max text-sm">
             <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-faint)]">
               <tr>
-                <th className="px-4 py-3 font-medium">Товар</th>
+                <th className="px-3 py-3 font-medium">
+                  <input type="checkbox" className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]" />
+                </th>
+                <th className="px-3 py-3 font-medium">Назва</th>
+                <th className="px-3 py-3 font-medium">Код</th>
+                <th className="px-2 py-3 font-medium" title="Історія рухів">Іст.</th>
+                <th className="px-3 py-3 font-medium">Категорії</th>
                 <th className="px-3 py-3 font-medium">Склад</th>
-                <th className="px-3 py-3 text-right font-medium">Залишок</th>
+                <th className="px-3 py-3 font-medium">Локація</th>
+                <th className="px-3 py-3 text-right font-medium">В наявності</th>
+                <th className="px-3 py-3 text-right font-medium">Вартість</th>
                 <th className="px-3 py-3 text-right font-medium">Резерв</th>
+                <th className="px-3 py-3 text-right font-medium">Доступний залишок</th>
+                <th className="px-3 py-3 text-right font-medium">Загальний залишок</th>
+                <th className="px-3 py-3 text-right font-medium">Собівартість за одиницю</th>
+                
+                {/* Threshold columns (kept from previous implementation) */}
                 <th className="px-3 py-3 text-right font-medium text-[var(--state-warn)]">Мін ✎</th>
                 <th className="px-3 py-3 text-right font-medium text-[var(--state-ok)]">Бажаний ✎</th>
                 <th className="px-3 py-3 text-right font-medium text-[var(--accent)]">Коробка ✎</th>
                 <th className="px-3 py-3 text-right font-medium">Замовити</th>
-                <th className="px-3 py-3 font-medium">Статус</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
+                <tr><td colSpan={17} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
                   {search || mode !== "all" || whFilter !== "Всі" ? "Нічого не знайдено" : "Залишків немає"}
                 </td></tr>
               ) : filtered.map((e) => {
                 const avail  = parseFloat(e.available);
                 const status = getStatus(e);
                 const meta   = STATUS_META[status];
+                const totalCost = e.full_cost ? parseFloat(e.quantity) * parseFloat(e.full_cost) : null;
+                
                 return (
                   <tr key={e.id} className={["transition-colors hover:bg-[var(--surface-hi)]", meta.row].join(" ")}>
-                    <td className="px-4 py-2.5">
+                    <td className="px-3 py-2.5">
+                      <input type="checkbox" className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]" />
+                    </td>
+                    <td className="px-3 py-2.5">
                       <p className="font-medium leading-tight">{e.product_name}</p>
                       <p className="font-mono text-xs text-[var(--text-faint)]">{e.product_sku}</p>
                       <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} />
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs">
-                        {e.warehouse_name}
-                      </span>
+                      {e.product_barcode ? (
+                        <div className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+                          </svg>
+                          #{e.product_barcode}
+                        </div>
+                      ) : (
+                        <span className="text-[var(--text-faint)] text-xs">—</span>
+                      )}
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-2 py-2.5 text-center">
+                      <Link href={`/warehouse/movements?search=${encodeURIComponent(e.product_sku)}`}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] transition-colors"
+                        title="Історія рухів">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                          <path d="M3 3v5h5" />
+                          <path d="M12 7v5l4 2" />
+                        </svg>
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1 max-w-[140px]">
+                        {e.product_categories && e.product_categories.length > 0 ? (
+                          e.product_categories.map((cat, i) => (
+                            <span key={i} className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] whitespace-nowrap">
+                              {cat}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[var(--text-faint)]">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-sm font-medium">{e.warehouse_name}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {e.locations && e.locations.length > 0 ? (
+                          e.locations.map((loc, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-hi)] border border-[var(--border)] px-1.5 py-0.5 text-[10px] font-mono whitespace-nowrap">
+                              <span className="text-[var(--text-muted)]">{loc.name}</span>
+                              <span className="font-bold">{fmt(loc.quantity)} {e.product_unit}</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[var(--text-faint)]">—</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <span className={["font-mono text-sm font-semibold tabular-nums",
-                        status === "out" ? "text-[var(--state-error)]"
-                          : status === "low" ? "text-[var(--state-warn)]"
-                          : "text-[var(--text)]",
+                        status === "out" ? "text-[var(--state-error)]" : status === "low" ? "text-[var(--state-warn)]" : "text-[var(--text)]",
                       ].join(" ")}>
-                        {Math.round(avail)}
+                        {fmt(e.quantity)}
                       </span>
                       <span className="ml-1 text-[10px] text-[var(--text-faint)]">{e.product_unit}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-xs text-[var(--text-faint)]">
-                      {parseFloat(e.reserved_qty) > 0 ? Math.round(parseFloat(e.reserved_qty)) : "—"}
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
+                      {totalCost != null ? fmt(totalCost) : "—"}
                     </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-[var(--text-faint)] whitespace-nowrap">
+                      {parseFloat(e.reserved_qty) > 0 ? fmt(e.reserved_qty) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <span className="font-mono text-sm font-semibold tabular-nums text-[var(--text)]">
+                        {fmt(e.available)}
+                      </span>
+                      <span className="ml-1 text-[10px] text-[var(--text-faint)]">{e.product_unit}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <span className="font-mono text-sm font-semibold tabular-nums text-[var(--text-muted)]">
+                        {fmt(e.total_stock)}
+                      </span>
+                      <span className="ml-1 text-[10px] text-[var(--text-faint)]">{e.product_unit}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
+                      {e.full_cost != null ? fmt(e.full_cost) : "—"}
+                    </td>
+                    
+                    {/* Extra Threshold Columns */}
                     <td className="px-3 py-2.5 text-right">
                       <ThresholdCell value={e.min_stock} productId={e.product_id}
                         field="min_stock" onSaved={updateThreshold} />
@@ -306,12 +439,6 @@ export default function StockPage() {
                         </span>
                       ) : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
-                    <td className="px-3 py-2.5">
-                      <span className="flex items-center gap-1.5">
-                        <span className={["size-2 shrink-0 rounded-full", meta.dot].join(" ")} />
-                        <span className="text-xs">{meta.label}</span>
-                      </span>
-                    </td>
                   </tr>
                 );
               })}
@@ -323,6 +450,15 @@ export default function StockPage() {
       <p className="text-xs text-[var(--text-faint)]">
         ✎ Клікніть Мін / Бажаний / Коробка щоб редагувати прямо в таблиці · «Замовити» = кількість коробок до бажаного рівня
       </p>
+      
+      <CreateMovementModal
+        open={movementOpen}
+        onClose={() => setMovementOpen(false)}
+        initialType={movementType}
+        onCreated={() => {
+          load(); // Reload stock after new movement
+        }}
+      />
     </div>
   );
 }

@@ -1339,7 +1339,44 @@ def list_stock(
     if product_id:
         q = q.filter(StockEntry.product_id == product_id)
     rows = q.order_by(Product.name).all()
+    
     import math
+    import collections
+    from sqlalchemy import func
+    from app.models.warehouse import CellStock, WarehouseCell
+
+    product_ids = {p.id for _, p, _ in rows}
+    warehouse_ids = {wh.id for _, _, wh in rows}
+
+    total_stock_map = {}
+    if product_ids:
+        totals = db.query(
+            StockEntry.product_id,
+            func.sum(StockEntry.quantity).label("total")
+        ).filter(
+            StockEntry.organization_id == org.id,
+            StockEntry.product_id.in_(product_ids)
+        ).group_by(StockEntry.product_id).all()
+        total_stock_map = {pid: tot for pid, tot in totals}
+
+    cell_stock_map = collections.defaultdict(list)
+    if product_ids and warehouse_ids:
+        cell_stocks = db.query(
+            CellStock.product_id,
+            WarehouseCell.warehouse_id,
+            WarehouseCell.name,
+            CellStock.quantity
+        ).join(
+            WarehouseCell, WarehouseCell.id == CellStock.cell_id
+        ).filter(
+            WarehouseCell.organization_id == org.id,
+            CellStock.product_id.in_(product_ids),
+            WarehouseCell.warehouse_id.in_(warehouse_ids),
+            CellStock.quantity > 0
+        ).all()
+        for pid, wid, cell_name, qty in cell_stocks:
+            cell_stock_map[(pid, wid)].append({"name": cell_name, "quantity": qty})
+
     result = []
     for e, p, wh in rows:
         avail = e.quantity - e.reserved_qty
@@ -1347,17 +1384,26 @@ def list_stock(
         if (p.desired_stock is not None and p.box_limit and p.box_limit > 0
                 and avail < p.desired_stock):
             boxes_to_order = math.ceil((p.desired_stock - float(avail)) / p.box_limit)
+            
+        total_stock = total_stock_map.get(e.product_id, Decimal(0))
+        locations = cell_stock_map.get((e.product_id, e.warehouse_id), [])
+
         result.append(StockEntryOut(
             id=e.id,
             product_id=e.product_id,
             product_name=p.name,
             product_sku=p.sku,
+            product_barcode=p.barcode,
+            product_categories=p.categories or [],
             product_unit=p.unit,
             warehouse_id=e.warehouse_id,
             warehouse_name=wh.name,
+            locations=locations,
             quantity=e.quantity,
             reserved_qty=e.reserved_qty,
             available=avail,
+            total_stock=total_stock,
+            full_cost=p.full_cost,
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,
             box_limit=p.box_limit,
