@@ -27,6 +27,8 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+.obsidian/
+.cursor/
 
 # Claude Code — personal project notes (optional)
 CLAUDE.local.md
