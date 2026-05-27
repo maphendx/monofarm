@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 interface HistoryEntry {
   id: number;
@@ -38,6 +39,7 @@ function dur(min: number | null): string {
 }
 
 export default function HistoryPage() {
+  usePageTitle("nav.history");
   const t = useT();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);

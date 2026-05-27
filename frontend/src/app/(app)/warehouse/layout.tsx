@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { usePageTitle } from "@/lib/usePageTitle";
+
 const NAV_GROUPS = [
   {
     label: null,
@@ -73,6 +75,7 @@ function NavTab({ href, label, exact }: { href: string; label: string; exact?: b
 }
 
 export default function WarehouseLayout({ children }: { children: React.ReactNode }) {
+  usePageTitle("nav.warehouse");
   return (
     <div className="-mx-6 -mt-6">
 

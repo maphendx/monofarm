@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -549,6 +550,7 @@ function RootDropZone({ isDragOver, onDragOver, onDragLeave, onDrop }: {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FilesPage() {
+  usePageTitle("nav.files");
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator" || user.role === "manager";
   const searchParams = useSearchParams();

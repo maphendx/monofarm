@@ -18,6 +18,7 @@ import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { FarmTask, FarmTaskStatus, Filament, PrintTask, PrintTaskStatus } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 // ════════════════════════════════════════════════════════════════════════
 // FARM TASKS (kanban)
@@ -613,6 +614,7 @@ function PrintTasksTab() {
 // ════════════════════════════════════════════════════════════════════════
 
 export default function TasksPage() {
+  usePageTitle("nav.tasks");
   const t = useT();
   useUser();
   const [tab, setTab] = useState<"farm" | "print">("farm");

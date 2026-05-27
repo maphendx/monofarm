@@ -7,6 +7,7 @@ import { ApiError, api, clearToken, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1595,6 +1596,7 @@ function defaultSection(): SectionId {
 }
 
 export default function SettingsPage() {
+  usePageTitle("nav.settings");
   const user = useUser();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);

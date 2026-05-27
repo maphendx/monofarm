@@ -9,6 +9,7 @@ import { ApiError, api } from "@/lib/api";
 import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, PrintTask, Printer } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,7 @@ function PrinterCell({
 // ── main page ─────────────────────────────────────────────────────────────
 
 export default function PlanPage() {
+  usePageTitle("nav.plan");
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
 

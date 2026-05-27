@@ -14,6 +14,7 @@ import {
 
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 interface Summary {
   tasks: { queued: number; in_progress: number; done: number; cancelled: number };
@@ -77,6 +78,7 @@ function materialColor(m: string) {
 }
 
 export default function AnalyticsPage() {
+  usePageTitle("nav.analytics");
   const t = useT();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [daily, setDaily] = useState<DailyPoint[]>([]);

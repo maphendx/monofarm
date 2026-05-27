@@ -17,6 +17,7 @@ import {
   stateLabel,
 } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── StatusCard ────────────────────────────────────────────────────────────────
 
@@ -373,6 +374,7 @@ function CompactSelect<T extends string>({
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  usePageTitle("nav.dashboard");
   const user = useUser();
   const router = useRouter();
   const t = useT();

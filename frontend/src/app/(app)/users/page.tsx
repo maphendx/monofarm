@@ -8,6 +8,7 @@ import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Адмін",
@@ -148,6 +149,7 @@ function UserFormModal({
 }
 
 export default function UsersPage() {
+  usePageTitle("nav.users");
   const t = useT();
   const me = useUser();
   const [users, setUsers] = useState<AdminUser[]>([]);

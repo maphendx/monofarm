@@ -8,6 +8,7 @@ import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, FilamentColor } from "@/lib/types";
+import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -641,6 +642,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function FilamentPage() {
+  usePageTitle("nav.filament");
   const t = useT();
   const me = useUser();
   const isAdmin = me.role === "admin";
