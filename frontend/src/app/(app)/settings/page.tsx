@@ -170,141 +170,149 @@ function BillingSection() {
     api<BillingStatus>("/api/billing/status").then((b) => {
       setBilling(b);
       setExtraSlots(b.extra_slots ?? 0);
-    }).catch(() => { });
+    }).catch(() => {});
   }, []);
 
   async function saveExtraSlots() {
     if (savingSlots) return;
     setSavingSlots(true);
     try {
-      await api("/api/orgs/me/extra-printer-slots", {
-        method: "POST",
-        body: JSON.stringify({ slots: extraSlots }),
-      });
+      await api("/api/orgs/me/extra-printer-slots", { method: "POST", body: JSON.stringify({ slots: extraSlots }) });
       const updated = await api<BillingStatus>("/api/billing/status");
-      setBilling(updated);
-      setExtraSlots(updated.extra_slots ?? 0);
-    } catch {
-      // ignore
-    } finally {
-      setSavingSlots(false);
-    }
+      setBilling(updated); setExtraSlots(updated.extra_slots ?? 0);
+    } catch { } finally { setSavingSlots(false); }
   }
 
   async function upgrade(plan: string) {
     if (inFlight.current) return;
-    inFlight.current = true;
-    setUpgrading(plan);
+    inFlight.current = true; setUpgrading(plan);
     try {
-      await api("/api/billing/upgrade-free", {
-        method: "POST",
-        body: JSON.stringify({ plan }),
-      });
-      const updated = await api<BillingStatus>("/api/billing/status");
-      setBilling(updated);
-    } catch {
-      // ignore
-    } finally {
-      setUpgrading(null);
-      inFlight.current = false;
-    }
+      await api("/api/billing/upgrade-free", { method: "POST", body: JSON.stringify({ plan }) });
+      setBilling(await api<BillingStatus>("/api/billing/status"));
+    } catch { } finally { setUpgrading(null); inFlight.current = false; }
   }
 
   async function cancelSub() {
     if (inFlight.current) return;
-    inFlight.current = true;
-    setCancelling(true);
+    inFlight.current = true; setCancelling(true);
     try {
       await api("/api/billing/cancel", { method: "POST" });
-      const updated = await api<BillingStatus>("/api/billing/status");
-      setBilling(updated);
+      setBilling(await api<BillingStatus>("/api/billing/status"));
       setConfirmCancel(false);
-    } catch {
-      // ignore
-    } finally {
-      setCancelling(false);
-      inFlight.current = false;
-    }
+    } catch { } finally { setCancelling(false); inFlight.current = false; }
   }
 
   if (!billing) return null;
 
+  const currentIdx = billing.plans.findIndex((p) => p.key === billing.plan);
+
   return (
-    <SectionCard>
-      <div className="mb-5 flex items-center justify-between">
-        <SectionTitle>Білінг</SectionTitle>
-        <span className="rounded-full bg-[var(--accent)] px-3 py-0.5 text-xs font-medium text-white  ">
-          {PLAN_LABELS[billing.plan]} {billing.price_usd > 0 ? `$${billing.price_usd}/міс` : "Безкоштовно"}
-        </span>
-      </div>
+    <div className="space-y-4">
 
       {billingMsg === "success" && (
-        <div className="mb-4 rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
+        <div className="rounded-xl border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-4 py-3 text-sm text-[var(--state-ok)]">
           Підписку оформлено! Ваш план оновлено.
         </div>
       )}
       {billingMsg === "cancel" && (
-        <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3 text-sm text-[var(--text-muted)]  ">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3 text-sm text-[var(--text-muted)]">
           Оплата скасована — план не змінено.
         </div>
       )}
 
-      <div className="mb-6 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-4 py-4  ">
-        <UsageBar used={billing.usage.printers} limit={billing.limits.printers} label="Принтери" />
-        <UsageBar used={billing.usage.users} limit={billing.limits.users} label="Користувачі" />
+      {/* ── Current plan ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+        <h3 className="mb-4 font-semibold">Підписка</h3>
+        <div className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-5 py-4">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs text-[var(--text-faint)]">Поточний план</p>
+            <p className="font-semibold">{PLAN_LABELS[billing.plan]}</p>
+          </div>
+          <span className="text-sm font-medium text-[var(--text-muted)]">
+            {billing.price_usd > 0 ? `$${billing.price_usd}/міс` : "Безкоштовно"}
+          </span>
+        </div>
+        <div className="mt-4 space-y-3">
+          <UsageBar used={billing.usage.printers} limit={billing.limits.printers} label="Принтери" />
+          <UsageBar used={billing.usage.users} limit={billing.limits.users} label="Користувачі" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {billing.plans.map((p) => {
-          const isCurrent = p.key === billing.plan;
-          const isUpgrade = billing.plans.findIndex(x => x.key === billing.plan) < billing.plans.findIndex(x => x.key === p.key);
-          return (
-            <div key={p.key}
-              className={`rounded-xl border p-4 transition ${isCurrent
-                ? "border-[var(--border-strong)] bg-[var(--bg)]  "
-                : "border-[var(--border)] "}`}
-            >
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-medium">{PLAN_LABELS[p.key]}</span>
-                {isCurrent && (
-                  <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[10px] text-white  ">
-                    Поточний
-                  </span>
-                )}
+      {/* ── Plans grid ── */}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+        <h3 className="mb-4 font-semibold">Змінити план</h3>
+        <div className="grid grid-cols-4 gap-3">
+          {billing.plans.map((p, idx) => {
+            const isCurrent = p.key === billing.plan;
+            const isUpgrade = currentIdx < idx;
+            return (
+              <div
+                key={p.key}
+                className={[
+                  "flex flex-col rounded-xl border p-4 transition",
+                  isCurrent
+                    ? "border-[var(--accent)] bg-[rgba(56,189,248,.05)]"
+                    : "border-[var(--border)] bg-[var(--bg)]",
+                ].join(" ")}
+              >
+                <div className="mb-3 flex items-start justify-between gap-1">
+                  <span className="font-medium">{PLAN_LABELS[p.key]}</span>
+                  {isCurrent && (
+                    <span className="rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      Активний
+                    </span>
+                  )}
+                </div>
+                <p className="mb-1 text-xl font-bold">
+                  {p.price_usd === 0 ? "Free" : `$${p.price_usd}`}
+                  {p.price_usd > 0 && <span className="text-xs font-normal text-[var(--text-faint)]">/міс</span>}
+                </p>
+                <p className="mb-3 text-xs text-[var(--text-muted)]">{PLAN_DESC[p.key]}</p>
+                <p className="mb-4 text-xs text-[var(--text-faint)]">
+                  до {p.limits.printers} принтерів
+                </p>
+                <div className="mt-auto">
+                  {isCurrent ? (
+                    <div className="rounded-lg border border-[var(--accent)] py-1.5 text-center text-xs font-medium text-[var(--accent)]">
+                      Поточний
+                    </div>
+                  ) : isUpgrade ? (
+                    <button
+                      onClick={() => upgrade(p.key)}
+                      disabled={upgrading !== null}
+                      className="w-full rounded-lg bg-[var(--accent)] py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {upgrading === p.key ? "…" : "Upgrade"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => upgrade(p.key)}
+                      disabled={upgrading !== null}
+                      className="w-full rounded-lg border border-[var(--border)] py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] disabled:opacity-50"
+                    >
+                      {upgrading === p.key ? "…" : "Перейти"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="mb-1 text-[11px] text-[var(--text-muted)]">{PLAN_DESC[p.key]}</p>
-              <p className="mb-3 text-xs text-[var(--text-muted)] ">
-                до {p.limits.printers} принтерів · {p.limits.users === 999 ? "∞" : p.limits.users} користувач{p.limits.users === 1 ? "" : "ів"}
-              </p>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold">
-                  {p.price_usd === 0 ? "Free" : `$${p.price_usd}/міс`}
-                </span>
-                {!isCurrent && isUpgrade && (
-                  <button
-                    onClick={() => upgrade(p.key)}
-                    disabled={upgrading !== null}
-                    className="btn btn-primary btn-sm disabled:opacity-50"
-                  >
-                    {upgrading === p.key ? "…" : "Upgrade"}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Extra printer slots ── */}
       {billing.extra_price_usd != null && (
-        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4  ">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Додаткові принтери</p>
-              <p className="text-xs text-[var(--text-muted)]">
-                ${billing.extra_price_usd}/принтер/міс · база {billing.limits.printers - (billing.extra_slots ?? 0)} +{" "}
-                {billing.extra_slots ?? 0} extra
-                {billing.max_printers != null && ` · макс ${billing.max_printers}`}
+              <h3 className="font-semibold">Додаткові принтери</h3>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                ${billing.extra_price_usd}/принтер/міс · база {billing.limits.printers - (billing.extra_slots ?? 0)}{billing.max_printers != null && ` · макс ${billing.max_printers}`}
               </p>
             </div>
             <span className="text-sm font-semibold">
@@ -312,59 +320,49 @@ function BillingSection() {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]  ">
-              <button
-                onClick={() => setExtraSlots((n) => Math.max(0, n - 1))}
-                className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]   rounded-l-lg"
-              >−</button>
+            <div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+              <button onClick={() => setExtraSlots((n) => Math.max(0, n - 1))} className="px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] rounded-l-lg">−</button>
               <span className="w-8 text-center text-sm font-semibold">{extraSlots}</span>
-              <button
-                onClick={() => setExtraSlots((n) => {
-                  const base = billing.limits.printers - (billing.extra_slots ?? 0);
-                  const maxExtra = billing.max_printers != null ? billing.max_printers - base : 999;
-                  return Math.min(maxExtra, n + 1);
-                })}
-                className="px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]   rounded-r-lg"
-              >+</button>
+              <button onClick={() => setExtraSlots((n) => {
+                const base = billing.limits.printers - (billing.extra_slots ?? 0);
+                const max = billing.max_printers != null ? billing.max_printers - base : 999;
+                return Math.min(max, n + 1);
+              })} className="px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] rounded-r-lg">+</button>
             </div>
-            <button
-              onClick={saveExtraSlots}
-              disabled={savingSlots || extraSlots === (billing.extra_slots ?? 0)}
-              className="btn btn-primary disabled:opacity-50"
-            >
+            <button onClick={saveExtraSlots} disabled={savingSlots || extraSlots === (billing.extra_slots ?? 0)} className="btn btn-primary disabled:opacity-50">
               {savingSlots ? "…" : "Зберегти"}
             </button>
-            {extraSlots !== (billing.extra_slots ?? 0) && (
-              <span className="text-xs text-[var(--text-faint)]">
-                {extraSlots > (billing.extra_slots ?? 0) ? "+" : ""}{extraSlots - (billing.extra_slots ?? 0)} слот{Math.abs(extraSlots - (billing.extra_slots ?? 0)) === 1 ? "" : "и"}
-              </span>
-            )}
           </div>
         </div>
       )}
 
+      {/* ── Cancel ── */}
       {billing.plan !== "free" && (
-        <div className="mt-4 border-t border-[var(--border)] pt-4 ">
+        <div className="rounded-2xl border border-[rgba(239,68,68,.2)] bg-[var(--bg-elevated)] p-6">
+          <h3 className="mb-1.5 font-semibold text-[var(--state-error)]">Скасувати підписку</h3>
+          <p className="mb-4 text-sm text-[var(--text-muted)]">
+            Після скасування план повернеться до Free. Ваші дані залишаться.
+          </p>
           {confirmCancel ? (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-[var(--text-muted)] ">Скасувати підписку? (план стане Free)</span>
+            <div className="flex items-center gap-3">
               <button onClick={cancelSub} disabled={cancelling}
-                className="text-[var(--state-error)] hover:underline disabled:opacity-50">
+                className="rounded-lg border border-[rgba(239,68,68,.3)] bg-[rgba(239,68,68,.08)] px-4 py-2 text-sm font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.14)] disabled:opacity-50">
                 {cancelling ? "…" : "Так, скасувати"}
               </button>
-              <button onClick={() => setConfirmCancel(false)} className="text-[var(--text-muted)] hover:underline">
-                Ні
+              <button onClick={() => setConfirmCancel(false)} className="text-sm text-[var(--text-muted)] hover:underline">
+                Назад
               </button>
             </div>
           ) : (
             <button onClick={() => setConfirmCancel(true)}
-              className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] ">
-              Скасувати підписку
+              className="rounded-lg border border-[rgba(239,68,68,.3)] px-4 py-2 text-sm text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]">
+              Скасувати підписку →
             </button>
           )}
         </div>
       )}
-    </SectionCard>
+
+    </div>
   );
 }
 
@@ -1640,12 +1638,15 @@ export default function SettingsPage() {
               key={item.id}
               onClick={() => setActive(item.id)}
               className={[
-                "shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors",
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm transition-colors",
                 active === item.id
                   ? "border-b-2 border-[var(--accent)] font-medium text-[var(--accent)]"
                   : "border-b-2 border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
               ].join(" ")}
             >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                {item.d.map((p, i) => <path key={i} d={p} />)}
+              </svg>
               {item.label}
             </button>
           ))}
@@ -1654,7 +1655,6 @@ export default function SettingsPage() {
 
       {/* ── Content ── */}
       <div className="px-6 py-5">
-        <div className="mx-auto max-w-4xl">
         {active === "profile" && <ProfileSection />}
         {active === "general" && <GeneralSection />}
         {active === "organization" && (
@@ -1674,7 +1674,6 @@ export default function SettingsPage() {
           </div>
         )}
         {active === "billing" && <BillingSection />}
-        </div>
       </div>
 
 
