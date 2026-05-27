@@ -1151,6 +1151,7 @@ export default function ProductsPage() {
                   </th>
                   <Th col="name"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>
                   <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>
+                  <th className="px-4 py-3 font-medium">Штрих-код</th>
                   <th className="px-4 py-3 font-medium">Категорія</th>
                   <th className="px-4 py-3 font-medium">Од.</th>
                   <Th col="stock"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>
@@ -1162,7 +1163,7 @@ export default function ProductsPage() {
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
+                  <tr><td colSpan={11} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
                     {search || category !== "Всі" ? "Нічого не знайдено" : "Номенклатури ще немає"}
                   </td></tr>
                 ) : paginated.map((p) => {
@@ -1183,6 +1184,9 @@ export default function ProductsPage() {
                         </button>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
+                        {p.barcode || <span className="opacity-30">—</span>}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {p.categories.map((c) => {
