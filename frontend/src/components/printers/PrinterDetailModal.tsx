@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { FilamentSwatches } from "@/components/FilamentSwatches";
-import { Modal } from "@/components/Modal";
+import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
+import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {

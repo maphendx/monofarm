@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintersManager } from "@/components/PrintersManager";
+import { PrintersManager } from "@/components/printers/PrintersManager";
 import { ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useEffect, useRef, useState } from "react";

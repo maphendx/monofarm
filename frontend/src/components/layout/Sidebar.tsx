@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { clearToken } from "@/lib/api";
 import { useLocale, useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";

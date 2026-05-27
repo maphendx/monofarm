@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { SendModal } from "@/components/SendModal";
+import { SendModal } from "@/components/files/SendModal";
 import { api } from "@/lib/api";
 import type { GcodeFile, Printer } from "@/lib/types";
 

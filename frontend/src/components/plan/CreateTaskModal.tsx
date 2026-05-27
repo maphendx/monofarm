@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { ApiError, api, getToken } from "@/lib/api";
 import type { PrintTask } from "@/lib/types";
 

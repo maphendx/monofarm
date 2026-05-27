@@ -6,7 +6,7 @@ import {
   Settings, Trash2, Upload, X, Zap,
 } from "lucide-react";
 import { Icon } from "@/components/ui/Icon";
-import { StateIcon } from "@/components/StateIcon";
+import { StateIcon } from "@/components/printers/StateIcon";
 
 /* ── FarmGrid logo mark (inline SVG) ─────────────────────────── */
 function FarmGrid({ size = 22 }: { size?: number }) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AmountStepper } from "@/components/queue/AmountStepper";
 import { CreateTaskModal } from "@/components/plan/CreateTaskModal";
-import { SendModal } from "@/components/SendModal";
+import { SendModal } from "@/components/files/SendModal";
 import { ApiError, api } from "@/lib/api";
 import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";

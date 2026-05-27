@@ -3,7 +3,7 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useRef, useState } from "react";
 
-import { FilamentSwatches } from "@/components/FilamentSwatches";
+import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { ApiError, api } from "@/lib/api";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { PlanEntry, Printer } from "@/lib/types";

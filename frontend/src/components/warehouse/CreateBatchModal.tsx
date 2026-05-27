@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 
 type BatchStatus = "draft" | "active" | "paused" | "done" | "cancelled";
 

@@ -12,7 +12,7 @@ import {
   printerTone,
   stateLabel,
 } from "@/lib/printerLabels";
-import { StateIcon } from "@/components/StateIcon";
+import { StateIcon } from "@/components/printers/StateIcon";
 import type { Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────

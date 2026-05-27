@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { FilamentSwatches } from "@/components/FilamentSwatches";
+import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
@@ -11,7 +11,7 @@ import {
   printerTone,
   stateLabel,
 } from "@/lib/printerLabels";
-import { StateIcon } from "@/components/StateIcon";
+import { StateIcon } from "@/components/printers/StateIcon";
 import type { Printer } from "@/lib/types";
 
 // Maps printerTone → .printer-card state modifier class (also used for .pc-status)

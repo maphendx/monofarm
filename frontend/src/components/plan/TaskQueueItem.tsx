@@ -3,7 +3,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
-import { FilamentSwatches } from "@/components/FilamentSwatches";
+import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import type { PrintTask } from "@/lib/types";
 
 function formatEta(min: number | null) {

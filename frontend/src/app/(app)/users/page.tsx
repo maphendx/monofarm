@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Modal } from "@/components/Modal";
-import { TelegramLinkModal } from "@/components/TelegramLinkModal";
+import { Modal } from "@/components/ui/Modal";
+import { TelegramLinkModal } from "@/components/users/TelegramLinkModal";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";

@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { DashboardPet } from "@/components/DashboardPet";
-import { PrinterCard } from "@/components/PrinterCard";
-import { PrinterDetailModal } from "@/components/PrinterDetailModal";
-import { PrinterGroupsModal } from "@/components/PrinterGroupsModal";
-import { StartPrintModal } from "@/components/StartPrintModal";
+import { DashboardPet } from "@/components/dashboard/DashboardPet";
+import { PrinterCard } from "@/components/printers/PrinterCard";
+import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
+import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
+import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useT } from "@/lib/i18n";

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { API_URL, api, getToken } from "@/lib/api";
 import type { Filament } from "@/lib/types";
 import {

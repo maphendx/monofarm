@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";

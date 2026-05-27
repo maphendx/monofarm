@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { DynamicFavicon } from "@/components/DynamicFavicon";
-import { Sidebar } from "@/components/Sidebar";
+import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
+import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
 import { useT } from "@/lib/i18n";

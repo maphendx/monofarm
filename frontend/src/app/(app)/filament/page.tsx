@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { LabelGeneratorModal } from "@/components/labels/LabelGeneratorModal";
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";

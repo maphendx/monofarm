@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { Batch } from "./CreateBatchModal";
 
 type Warehouse = { id: number; name: string; type: string };

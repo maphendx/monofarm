@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { Modal } from "@/components/Modal";
+import { Modal } from "@/components/ui/Modal";
 import { CreateBatchModal, Batch } from "@/components/warehouse/CreateBatchModal";
 import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
 
