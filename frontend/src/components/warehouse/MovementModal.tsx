@@ -27,12 +27,14 @@ type Product   = { id: number; name: string; sku: string };
 type Warehouse = { id: number; name: string; type: string };
 
 export function CreateMovementModal({
-  open, onClose, onCreated, initialType = "PURCHASE_IN"
+  open, onClose, onCreated, initialType = "PURCHASE_IN", initialProductId, initialQuantity
 }: { 
   open: boolean; 
   onClose: () => void; 
   onCreated: (m: Movement) => void;
   initialType?: MovementType;
+  initialProductId?: string;
+  initialQuantity?: string;
 }) {
   const [products,    setProducts]   = useState<Product[]>([]);
   const [warehouses,  setWarehouses] = useState<Warehouse[]>([]);
@@ -50,13 +52,13 @@ export function CreateMovementModal({
 
   useEffect(() => {
     if (!open) return;
-    setMType(initialType); setProductId(""); setWhFromId(""); setWhToId("");
-    setQuantity("1"); setUnit("шт"); setUnitCost(""); setReason(""); setError(null);
+    setMType(initialType); setProductId(initialProductId || ""); setWhFromId(""); setWhToId("");
+    setQuantity(initialQuantity || "1"); setUnit("шт"); setUnitCost(""); setReason(""); setError(null);
     Promise.all([
       api<Product[]>("/api/warehouse/products"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
     ]).then(([p, w]) => { setProducts(p); setWarehouses(w); }).catch(() => {});
-  }, [open, initialType]);
+  }, [open, initialType, initialProductId, initialQuantity]);
 
   const meta = TYPE_META[mType];
 

@@ -148,6 +148,8 @@ export default function StockPage() {
   // Movement Modal state
   const [movementOpen, setMovementOpen] = useState(false);
   const [movementType, setMovementType] = useState<MovementType>("PURCHASE_IN");
+  const [movementProductId, setMovementProductId] = useState<string | null>(null);
+  const [movementQuantity, setMovementQuantity] = useState<string | null>(null);
   const [batchProductId, setBatchProductId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -436,10 +438,19 @@ export default function StockPage() {
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-3">
                         {e.boxes_to_order != null ? (
-                          <span className="inline-flex items-center gap-1 font-mono text-sm font-bold text-[var(--accent)] tabular-nums" title="Рекомендовано замовити (коробок)">
+                          <button
+                            onClick={() => {
+                              setMovementProductId(e.product_id.toString());
+                              setMovementQuantity((e.boxes_to_order! * (e.box_limit || 1)).toString());
+                              setMovementType("PURCHASE_IN");
+                              setMovementOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 font-mono text-sm font-bold text-[var(--accent)] tabular-nums hover:underline"
+                            title="Створити рух 'Отримання' на цю кількість"
+                          >
                             {e.boxes_to_order}
                             <span className="text-base">📦</span>
-                          </span>
+                          </button>
                         ) : <span className="text-[var(--text-faint)] w-8 text-center">—</span>}
                         <button
                           onClick={() => setBatchProductId(e.product_id.toString())}
@@ -464,8 +475,14 @@ export default function StockPage() {
       
       <CreateMovementModal
         open={movementOpen}
-        onClose={() => setMovementOpen(false)}
+        onClose={() => {
+          setMovementOpen(false);
+          setMovementProductId(null);
+          setMovementQuantity(null);
+        }}
         initialType={movementType}
+        initialProductId={movementProductId ?? undefined}
+        initialQuantity={movementQuantity ?? undefined}
         onCreated={() => {
           load(); // Reload stock after new movement
         }}
