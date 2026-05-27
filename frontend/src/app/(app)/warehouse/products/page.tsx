@@ -211,6 +211,14 @@ function ProductModal({
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--text-faint)]">₴</span>
               </div>
             </FormRow>
+            {isEdit && product!.cost_price && (
+              <FormRow label="Сер. ціна">
+                <div className="flex items-center gap-2 py-2 text-sm text-[var(--text-muted)]">
+                  <span className="tabular-nums">{parseFloat(product!.cost_price).toFixed(2)} ₴</span>
+                  <span className="text-xs text-[var(--text-faint)]">(середньозважена з рухів/імпорту)</span>
+                </div>
+              </FormRow>
+            )}
             {isEdit && product!.full_cost && (
               <FormRow label="Собівартість">
                 <div className="flex items-center gap-2 py-2 text-sm text-[var(--text-muted)]">
@@ -1168,7 +1176,7 @@ export default function ProductsPage() {
                   </td></tr>
                 ) : paginated.map((p) => {
                   const avail  = stockByProduct.get(p.id) ?? 0;
-                  const margin = calcMargin(p.sale_price, p.full_cost);
+                  const margin = calcMargin(p.sale_price, p.full_cost ?? p.cost_price);
                   const isOut  = avail === 0 && stock.some((s) => s.product_id === p.id);
                   return (
                     <tr key={p.id}
@@ -1215,7 +1223,13 @@ export default function ProductsPage() {
                             : "text-[var(--text)] ",
                         ].join(" ")}>{Math.round(avail)}</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums">
+                        {p.full_cost
+                          ? <span className="text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</span>
+                          : p.cost_price
+                            ? <span className="text-[var(--text-faint)]" title="Середньозважена ціна (зі специфікації немає)">{fmtPrice(p.cost_price)}</span>
+                            : <span className="text-[var(--text-faint)]">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
                       <td className="px-4 py-3 text-right text-sm">
                         {margin !== null ? (
