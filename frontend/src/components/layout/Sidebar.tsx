@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { clearToken } from "@/lib/api";
+import { api, clearToken } from "@/lib/api";
 import { useLocale, useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// ── SVG icons ──────────────────────────────────────────────────────────────
+// ── Icons ──────────────────────────────────────────────────────────────────────
 
 function Icon({ d, className = "" }: { d: string | string[]; className?: string }) {
   const paths = Array.isArray(d) ? d : [d];
@@ -70,33 +70,79 @@ const NAV_GROUPS = [
   {
     label: "Управління",
     items: [
-      { href: "/filament",   icon: "filament",   tKey: "nav.filament" },
-      { href: "/warehouse",  icon: "warehouse",  tKey: "nav.warehouse" },
-      { href: "/users",      icon: "users",      tKey: "nav.users", adminOnly: true },
+      { href: "/filament",  icon: "filament",  tKey: "nav.filament" },
+      { href: "/warehouse", icon: "warehouse", tKey: "nav.warehouse" },
+      { href: "/users",     icon: "users",     tKey: "nav.users", adminOnly: true },
     ],
   },
 ] as const;
 
-export function Sidebar({ user }: { user: User }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const t = useT();
-  const { locale, setLocale } = useLocale();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+// ── Sidebar ────────────────────────────────────────────────────────────────────
 
-  function logout() {
-    clearToken();
-    router.replace("/login");
-  }
+export function Sidebar({
+  user,
+  pinned,
+  onPinToggle,
+  onSearch,
+}: {
+  user: User;
+  pinned: boolean;
+  onPinToggle: () => void;
+  onSearch: () => void;
+}) {
+  const pathname              = usePathname();
+  const router                = useRouter();
+  const t                     = useT();
+  const { locale, setLocale } = useLocale();
+
+  const [settingsOpen,    setSettingsOpen]    = useState(true);
+  const [agentConnected,  setAgentConnected]  = useState<boolean | null>(null);
+
+  // Agent status — poll every 30 s
+  useEffect(() => {
+    async function check() {
+      try {
+        const d = await api<{ connected: boolean }>("/api/agent/status");
+        setAgentConnected(d.connected);
+      } catch {
+        setAgentConnected(false);
+      }
+    }
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  function logout() { clearToken(); router.replace("/login"); }
 
   const isAdmin = user.role === "admin";
+
+  // When pinned, text is always visible; otherwise opacity-0 → show on hover
+  const txt = pinned
+    ? "opacity-100"
+    : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100";
 
   const linkCls = (href: string) =>
     ["nav-link h-9 overflow-hidden", pathname === href || pathname.startsWith(href + "/") ? "active" : ""].join(" ");
 
+  const agentColor = agentConnected === null
+    ? "bg-[var(--text-faint)]"
+    : agentConnected
+      ? "bg-[var(--state-ok)]"
+      : "bg-[var(--state-idle)]";
+  const agentLabel = agentConnected === null
+    ? "Агент: перевірка..."
+    : agentConnected
+      ? "Агент: підключено"
+      : "Агент: відключено";
+
   return (
-    <aside className="group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[var(--border)] bg-[var(--bg-elevated)] transition-[width] duration-200 ease-out w-14 hover:w-[220px]  ">
+    <aside className={[
+      "group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col",
+      "border-r border-[var(--border)] bg-[var(--bg-elevated)]",
+      "transition-[width] duration-200 ease-out",
+      pinned ? "w-[220px]" : "w-14 hover:w-[220px]",
+    ].join(" ")}>
 
       {/* Brand */}
       <div className="flex h-14 shrink-0 items-center gap-3 overflow-hidden px-4">
@@ -108,19 +154,19 @@ export function Sidebar({ user }: { user: User }) {
           </g>
           <circle cx="32" cy="32" r="7" fill="var(--accent)"/>
         </svg>
-        <span className="whitespace-nowrap font-mono text-sm font-semibold tracking-[0.06em] uppercase opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-          MONO<span className="text-[var(--accent)] ">FARM</span>
+        <span className={`whitespace-nowrap font-mono text-sm font-semibold tracking-[0.06em] uppercase ${txt}`}>
+          MONO<span className="text-[var(--accent)]">FARM</span>
         </span>
       </div>
 
-      <div className="mx-3 h-px bg-[var(--surface-hi)] " />
+      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
 
-      {/* Nav */}
+      {/* Main nav */}
       <nav className="flex flex-1 flex-col overflow-hidden px-2 py-3">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? "mt-1" : ""}>
             {group.label && (
-              <p className="mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)]  opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+              <p className={`mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)] ${txt}`}>
                 {group.label}
               </p>
             )}
@@ -132,9 +178,7 @@ export function Sidebar({ user }: { user: User }) {
                   return (
                     <Link key={item.href} href={item.href} title={label} className={linkCls(item.href)}>
                       <Icon d={ICONS[item.icon]} />
-                      <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                        {label}
-                      </span>
+                      <span className={`whitespace-nowrap ${txt}`}>{label}</span>
                     </Link>
                   );
                 })}
@@ -143,66 +187,106 @@ export function Sidebar({ user }: { user: User }) {
         ))}
       </nav>
 
-      <div className="mx-3 h-px bg-[var(--surface-hi)] " />
+      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
 
-      {/* Footer */}
-      <div className="flex flex-col gap-0.5 overflow-hidden px-2 py-3">
+      {/* Settings section (collapsible) */}
+      <div className="flex flex-col overflow-hidden px-2 py-2">
+        <button
+          onClick={() => setSettingsOpen((v) => !v)}
+          className="nav-link h-9 w-full"
+          title="Налаштування"
+        >
+          <Icon d={ICONS.settings} />
+          <span className={`flex-1 whitespace-nowrap text-left ${txt}`}>Налаштування</span>
+          <svg
+            width="12" height="12" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            className={`shrink-0 transition-transform duration-150 ${settingsOpen ? "rotate-180" : ""} ${txt}`}
+          >
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
 
-        {isAdmin && (
-          <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
-            <Icon d={ICONS.settings} />
-            <span className="whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-              {t("nav.settings")}
-            </span>
-          </Link>
-        )}
+        {settingsOpen && (
+          <div className="flex flex-col gap-0.5 overflow-hidden">
+            {isAdmin && (
+              <Link href="/settings" title="Системні налаштування" className={linkCls("/settings")}>
+                <Icon d={ICONS.settings} className="opacity-40" />
+                <span className={`whitespace-nowrap text-sm ${txt}`}>Системні</span>
+              </Link>
+            )}
 
-        {/* User row + theme toggle */}
-        <div ref={menuRef} className="relative">
-          <div className="flex h-9 items-center overflow-hidden rounded-lg px-2.5 hover:bg-[var(--surface-hi)]  transition-colors">
-            <button
-              onClick={() => setUserMenuOpen((v) => !v)}
-              title={user.name || user.email}
-              className="flex min-w-0 flex-1 items-center gap-3"
-            >
-              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[9px] font-bold text-[var(--text)]  ">
+            {/* Profile */}
+            <div className="flex h-9 items-center gap-3 overflow-hidden rounded-lg px-2.5">
+              <div className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[9px] font-bold text-[var(--text)]">
                 {initials(user)}
               </div>
-              <div className="flex min-w-0 flex-col items-start opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                <span className="w-full truncate text-xs font-medium text-[var(--text)] ">
-                  {user.name || user.email}
-                </span>
-                <span className="text-xs text-[var(--text-faint)]">{user.role}</span>
+              <div className={`flex min-w-0 flex-col items-start ${txt}`}>
+                <span className="w-full truncate text-xs font-medium text-[var(--text)]">{user.name || user.email}</span>
+                <span className="text-[10px] text-[var(--text-faint)]">{user.role}</span>
               </div>
-            </button>
-            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+            </div>
+
+            {/* Theme + language */}
+            <div className="flex h-9 items-center gap-2 overflow-hidden rounded-lg px-2.5">
+              <ThemeToggle compact />
               <button
                 onClick={() => setLocale(locale === "uk" ? "en" : "uk")}
                 title="Switch language"
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  "
+                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ${txt}`}
               >
                 {locale === "uk" ? "EN" : "UA"}
               </button>
-              <ThemeToggle compact />
             </div>
-          </div>
 
-          {userMenuOpen && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-lg  ">
-              <div className="border-b border-[var(--border)] px-3 py-2 ">
-                <p className="truncate text-xs font-medium text-[var(--text)] ">{user.name || user.email}</p>
-                <p className="truncate text-xs text-[var(--text-faint)]">{user.email}</p>
-              </div>
-              <button
-                onClick={logout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-xs text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
-              >
-                <Icon d={ICONS.logout} className="size-3.5" />
-                {t("auth.logout")}
-              </button>
-            </div>
+            {/* Logout */}
+            <button onClick={logout} title="Вийти" className="nav-link h-9 text-[var(--state-error)]">
+              <Icon d={ICONS.logout} />
+              <span className={`whitespace-nowrap ${txt}`}>Вийти</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
+
+      {/* Bottom toolbar: search, pin, agent */}
+      <div className="flex flex-col gap-0.5 px-2 py-3">
+
+        {/* Search */}
+        <button onClick={onSearch} title="Пошук (⌘K)" className="nav-link h-9">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <span className={`flex-1 whitespace-nowrap ${txt}`}>Пошук</span>
+          <kbd className={`text-[10px] text-[var(--text-faint)] border border-[var(--border)] rounded px-1 py-0.5 ${txt}`}>⌘K</kbd>
+        </button>
+
+        {/* Pin / unpin */}
+        <button onClick={onPinToggle} title={pinned ? "Відкріпити сайдбар" : "Закріпити сайдбар"} className="nav-link h-9">
+          {pinned ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6"/>
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="9 18 15 12 9 6"/><polyline points="15 18 21 12 15 6"/>
+            </svg>
           )}
+          <span className={`whitespace-nowrap ${txt}`}>{pinned ? "Згорнути" : "Закріпити"}</span>
+        </button>
+
+        {/* Agent status */}
+        <div className="nav-link h-9 cursor-default" title={agentLabel}>
+          <span className="relative flex size-[18px] shrink-0 items-center justify-center">
+            {agentConnected && (
+              <span className={`absolute size-2.5 rounded-full ${agentColor} animate-ping opacity-60`} />
+            )}
+            <span className={`size-2.5 rounded-full transition-colors duration-500 ${agentColor}`} />
+          </span>
+          <span className={`whitespace-nowrap text-xs text-[var(--text-muted)] ${txt}`}>{agentLabel}</span>
         </div>
+
       </div>
     </aside>
   );

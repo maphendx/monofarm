@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
+import { SearchModal } from "@/components/ui/SearchModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
@@ -12,26 +13,43 @@ import type { User } from "@/lib/types";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const t = useT();
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  const t      = useT();
+
+  const [user,        setUser]        = useState<User | null>(null);
+  const [ready,       setReady]       = useState(false);
+  const [pinned,      setPinned]      = useState(false);
+  const [searchOpen,  setSearchOpen]  = useState(false);
+
+  // Restore pinned state from localStorage after mount
+  useEffect(() => {
+    setPinned(localStorage.getItem("sidebar-pinned") === "true");
+  }, []);
+
+  // ⌘K / Ctrl+K — open search from anywhere
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  function togglePin() {
+    const next = !pinned;
+    setPinned(next);
+    localStorage.setItem("sidebar-pinned", String(next));
+  }
 
   useEffect(() => {
-    if (!getToken()) {
-      router.replace("/login");
-      return;
-    }
+    if (!getToken()) { router.replace("/login"); return; }
     api<User>("/api/auth/me")
-      .then((u) => {
-        setUser(u);
-        setReady(true);
-      })
+      .then((u) => { setUser(u); setReady(true); })
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.replace("/login");
-        } else {
-          setReady(true);
-        }
+        if (err instanceof ApiError && err.status === 401) router.replace("/login");
+        else setReady(true);
       });
   }, [router]);
 
@@ -47,14 +65,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AuthProvider user={user}>
       <DynamicFavicon />
       <div className="flex min-h-screen">
-        <Sidebar user={user} />
-        {/* pl-14 = collapsed sidebar width; sidebar expands on hover over itself only */}
-        <main className="flex-1 min-w-0 pl-14">
+        <Sidebar
+          user={user}
+          pinned={pinned}
+          onPinToggle={togglePin}
+          onSearch={() => setSearchOpen(true)}
+        />
+        <main className={[
+          "flex-1 min-w-0 transition-[padding-left] duration-200 ease-out",
+          pinned ? "pl-[220px]" : "pl-14",
+        ].join(" ")}>
           <div className="px-6 py-6">
             {children}
           </div>
         </main>
       </div>
+
+      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
     </AuthProvider>
   );
 }
