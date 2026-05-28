@@ -192,7 +192,7 @@ function ProductModal({
 
   const [name,         setName]         = useState(src?.name    ?? "");
   const [sku,          setSku]          = useState(src?.sku     ?? "");
-  const [barcode,      setBarcode]      = useState("");  // never copy barcode
+  const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
   const [cats,         setCats]         = useState<string[]>(src?.categories ?? []);
   const [unit,         setUnit]         = useState(src?.unit    ?? "шт");
   const [price,        setPrice]        = useState(src?.sale_price ? parseFloat(src.sale_price).toString() : "");

@@ -32,6 +32,8 @@ type Movement = {
   created_at:      string;
 };
 
+type MovementListOut = { items: Movement[]; next_cursor: string | null };
+
 const TYPE_META: Record<string, { label: string; cls: string }> = {
   PRODUCTION_IN:  { label: "Виробництво +", cls: "badge badge-ok" },
   PRODUCTION_OUT: { label: "Сировина −",    cls: "badge badge-print" },
@@ -80,11 +82,11 @@ export default function WarehouseDashboard() {
       const [s, b, m] = await Promise.all([
         api<StockEntry[]>("/api/warehouse/stock"),
         api<Batch[]>("/api/warehouse/batches"),
-        api<Movement[]>("/api/warehouse/movements?limit=5"),
+        api<MovementListOut>("/api/warehouse/movements?limit=5"),
       ]);
       setStock(s);
       setBatches(b);
-      setMovements(m);
+      setMovements(m.items);
     } finally {
       setLoading(false);
     }
