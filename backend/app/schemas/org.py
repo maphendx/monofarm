@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -24,6 +26,8 @@ class OrgSettingsUpdate(BaseModel):
     bambu_refresh_token: str | None = None
     bambu_region: str | None = None
     tg_bot_token: str | None = None
+    electricity_rate: Decimal | None = None
+    labor_rate: Decimal | None = None
 
 
 class OrgSettingsOut(BaseModel):
@@ -35,6 +39,8 @@ class OrgSettingsOut(BaseModel):
     bambu_configured: bool
     tg_configured: bool
     tg_bot_username: str | None
+    electricity_rate: Decimal
+    labor_rate: Decimal
 
     class Config:
         from_attributes = True

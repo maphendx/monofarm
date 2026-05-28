@@ -32,7 +32,6 @@ const NAV_GROUPS = [
     items: [
       { href: "/warehouse/movements",  label: "Рухи" },
       { href: "/warehouse/production", label: "Виробництво" },
-      { href: "/warehouse/assembly",   label: "Збірка" },
     ],
   },
   {

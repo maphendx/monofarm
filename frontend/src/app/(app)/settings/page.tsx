@@ -13,6 +13,8 @@ import { usePageTitle } from "@/lib/usePageTitle";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface OrgSettings {
+  electricity_rate: string;
+  labor_rate: string;
   id: number;
   name: string;
   slug: string;
@@ -1296,7 +1298,65 @@ function OrgSection({
           </form>
         )}
       </SectionCard>
+
+      {/* Costing rates */}
+      <CostingRatesCard settings={settings} onUpdate={onUpdate} />
     </div>
+  );
+}
+
+function CostingRatesCard({ settings, onUpdate }: { settings: OrgSettings; onUpdate: (s: OrgSettings) => void }) {
+  const [elRate,   setElRate]   = useState(parseFloat(settings.electricity_rate || "4.5").toString());
+  const [labRate,  setLabRate]  = useState(parseFloat(settings.labor_rate || "150").toString());
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const inFlight = useRef(false);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      const updated = await api<OrgSettings>("/api/orgs/me/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          electricity_rate: parseFloat(elRate) || 4.5,
+          labor_rate:       parseFloat(labRate) || 150,
+        }),
+      });
+      onUpdate(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally { inFlight.current = false; setSaving(false); }
+  }
+
+  return (
+    <SectionCard>
+      <h2 className="mb-4 font-semibold">Тарифи для розрахунку собівартості</h2>
+      <form onSubmit={save} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-sm text-[var(--text-muted)]">Електрика (₴/кВт·год)</span>
+            <input type="number" step="0.01" min="0" value={elRate}
+              onChange={e => setElRate(e.target.value)}
+              className="input w-full" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm text-[var(--text-muted)]">Ставка праці (₴/год)</span>
+            <input type="number" step="1" min="0" value={labRate}
+              onChange={e => setLabRate(e.target.value)}
+              className="input w-full" />
+          </label>
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={saving} className="btn btn-primary disabled:opacity-50">
+            {saving ? "Зберігаю…" : "Зберегти"}
+          </button>
+          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+        </div>
+      </form>
+    </SectionCard>
   );
 }
 

@@ -1,8 +1,9 @@
 import enum
 import re
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -80,3 +81,7 @@ class Organization(Base):
     # KeyCRM integration
     keycrm_api_key:        Mapped[str] = mapped_column(String(255), default="", server_default="")
     keycrm_webhook_secret: Mapped[str] = mapped_column(String(255), default="", server_default="")
+
+    # Costing rates for spec cost calculations
+    electricity_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("4.5"), server_default="4.5")
+    labor_rate:       Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("150"), server_default="150")

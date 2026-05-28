@@ -29,6 +29,7 @@ router = APIRouter(prefix="/orgs", tags=["orgs"])
 
 
 def _org_settings_out(org: Organization) -> OrgSettingsOut:
+    from decimal import Decimal
     return OrgSettingsOut(
         id=org.id,
         name=org.name,
@@ -38,6 +39,8 @@ def _org_settings_out(org: Organization) -> OrgSettingsOut:
         bambu_configured=bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
         tg_configured=bool(org.tg_bot_token),
         tg_bot_username=org.tg_bot_username or None,
+        electricity_rate=org.electricity_rate or Decimal("4.5"),
+        labor_rate=org.labor_rate or Decimal("150"),
     )
 
 
@@ -105,6 +108,11 @@ async def update_org_settings(
         org.bambu_refresh_token = encrypt(payload.bambu_refresh_token)
     if payload.bambu_region is not None:
         org.bambu_region = payload.bambu_region
+
+    if payload.electricity_rate is not None:
+        org.electricity_rate = payload.electricity_rate
+    if payload.labor_rate is not None:
+        org.labor_rate = payload.labor_rate
 
     tg_token_changed = payload.tg_bot_token is not None
     if tg_token_changed:

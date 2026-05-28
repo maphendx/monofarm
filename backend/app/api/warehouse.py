@@ -169,7 +169,12 @@ def _spec_to_out(spec: Specification, db: Session) -> SpecOut:
     return SpecOut.model_validate({**spec.__dict__, "components": components, "operations": operations})
 
 
-def _calc_cost(spec: Specification, db: Session) -> CostBreakdown:
+def _calc_cost(
+    spec: Specification,
+    db: Session,
+    electricity_rate: Decimal = _ELECTRICITY_RATE,
+    labor_rate: Decimal = _LABOR_RATE,
+) -> CostBreakdown:
     components = db.query(SpecComponent).filter(SpecComponent.specification_id == spec.id).all()
     operations = db.query(SpecOperation).filter(SpecOperation.specification_id == spec.id).all()
 
@@ -188,10 +193,10 @@ def _calc_cost(spec: Specification, db: Session) -> CostBreakdown:
         if op.type.value == "print" and op.print_time_min:
             hours = op.print_time_min / 60
             kwh   = Decimal(op.power_watts or _PRINTER_WATTS) * hours / 1000
-            electricity_cost += kwh * _ELECTRICITY_RATE
+            electricity_cost += kwh * electricity_rate
             print_time_min   += op.print_time_min
         if op.labor_minutes:
-            rate       = op.labor_rate_per_hour or _LABOR_RATE
+            rate       = op.labor_rate_per_hour or labor_rate
             labor_cost += (op.labor_minutes / 60) * rate
         if op.explicit_cost:
             other_cost += op.explicit_cost
@@ -1564,7 +1569,7 @@ def import_ordage_specs(
             ))
 
         db.flush()
-        cost = _calc_cost(spec, db)
+        cost = _calc_cost(spec, db, electricity_rate=org.electricity_rate or _ELECTRICITY_RATE, labor_rate=org.labor_rate or _LABOR_RATE)
         product.direct_cost = cost.material_cost + cost.electricity_cost
         product.full_cost   = cost.total
         db.commit()
@@ -1673,7 +1678,7 @@ def compute_cost(
     )
     if not spec:
         raise HTTPException(status_code=404, detail="No default specification")
-    cost = _calc_cost(spec, db)
+    cost = _calc_cost(spec, db, electricity_rate=org.electricity_rate or _ELECTRICITY_RATE, labor_rate=org.labor_rate or _LABOR_RATE)
     p = db.get(Product, product_id)
     if p:
         p.direct_cost = cost.material_cost + cost.electricity_cost
@@ -2382,10 +2387,11 @@ def ship_order(
             entry.quantity     -= item.quantity
             entry.reserved_qty -= min(entry.reserved_qty, Decimal(item.quantity))
 
-        # Create audit movement
-        cost_price = db.get(Product, item.product_id)
-        unit_cost  = cost_price.cost_price if cost_price else None
-        total_cost = (unit_cost * item.quantity) if unit_cost else None
+        # Create audit movement — store both cost (COGS) and price (revenue) separately
+        prod       = db.get(Product, item.product_id)
+        unit_cost  = prod.cost_price if prod else None
+        unit_price = Decimal(str(item.unit_price)) if item.unit_price else None
+        qty        = Decimal(item.quantity)
 
         m = WarehouseMovement(
             organization_id=org.id,
@@ -2393,10 +2399,12 @@ def ship_order(
             type=MovementType.SALE_OUT,
             product_id=item.product_id,
             warehouse_from_id=item.warehouse_id,
-            quantity=Decimal(item.quantity),
+            quantity=qty,
             unit="шт",
             unit_cost=unit_cost,
-            total_cost=total_cost,
+            total_cost=(unit_cost * qty) if unit_cost else None,
+            unit_price=unit_price,
+            total_revenue=(unit_price * qty) if unit_price else None,
             order_id=o.id,
         )
         db.add(m)
@@ -2664,8 +2672,9 @@ def get_analytics(
     prod_out  = _mvmt(MovementType.PRODUCTION_OUT)
     purchases = _mvmt(MovementType.PURCHASE_IN)
 
-    revenue      = sum((m.total_cost or Decimal("0")) for m in sales)
-    cogs         = sum((m.total_cost or Decimal("0")) for m in prod_out)
+    # Revenue = sum of sale prices (total_revenue); COGS = sum of cost prices (total_cost on SALE_OUT)
+    revenue      = sum((m.total_revenue or m.total_cost or Decimal("0")) for m in sales)
+    cogs         = sum((m.total_cost    or Decimal("0")) for m in sales)
     gross_profit = revenue - cogs
     margin_pct   = (gross_profit / revenue * 100) if revenue > 0 else Decimal("0")
 
@@ -2712,6 +2721,27 @@ def get_analytics(
         for n, c in sorted(mat.items(), key=lambda x: x[1], reverse=True)[:5]
     ]
 
+    # Explicit cash-flow direction per movement type:
+    #   inflow  = money received  (SALE_OUT: use total_revenue)
+    #   outflow = money spent     (PURCHASE_IN: cost of goods; PRODUCTION_OUT: component consumption)
+    #   ignore  = internal moves  (PRODUCTION_IN, TRANSFER, ADJUSTMENT, DEFECT)
+    _CF_DIRECTION: dict[MovementType, str] = {
+        MovementType.SALE_OUT:       "inflow",
+        MovementType.PURCHASE_IN:    "outflow",
+        MovementType.PRODUCTION_OUT: "outflow",
+        MovementType.PRODUCTION_IN:  "ignore",
+        MovementType.TRANSFER:       "ignore",
+        MovementType.ADJUSTMENT:     "ignore",
+        MovementType.DEFECT:         "ignore",
+    }
+
+    def _cf_value(m: WarehouseMovement) -> Decimal:
+        if m.type == MovementType.SALE_OUT:
+            return m.total_revenue or m.total_cost or Decimal("0")
+        return m.total_cost or Decimal("0")
+
+    all_mvmts = sales + prod_out + purchases + _mvmt(MovementType.TRANSFER) + _mvmt(MovementType.ADJUSTMENT)
+
     month_names = ["Січ","Лют","Бер","Квіт","Трав","Черв","Лип","Серп","Вер","Жовт","Лист","Груд"]
     cash_flow: list[CashFlowBucket] = []
 
@@ -2719,21 +2749,31 @@ def get_analytics(
         week = start
         while week <= end:
             w_end = min(week + timedelta(days=6), end)
-            label   = f"{week.day}–{w_end.day} {week.strftime('%b')}"
-            inflow  = sum((m.total_cost or Decimal("0")) for m in (sales + purchases) if week <= m.created_at.date() <= w_end)
-            outflow = sum((m.total_cost or Decimal("0")) for m in prod_out             if week <= m.created_at.date() <= w_end)
+            label = f"{week.day}–{w_end.day} {week.strftime('%b')}"
+            inflow = outflow = Decimal("0")
+            for m in all_mvmts:
+                if not (week <= m.created_at.date() <= w_end):
+                    continue
+                direction = _CF_DIRECTION.get(m.type, "ignore")
+                if direction == "inflow":
+                    inflow  += _cf_value(m)
+                elif direction == "outflow":
+                    outflow += _cf_value(m)
             cash_flow.append(CashFlowBucket(label=label, inflow=inflow, outflow=outflow))
             week = w_end + timedelta(days=1)
     else:
         buckets: dict[str, tuple[Decimal, Decimal]] = {}
-        for m in (sales + purchases):
+        for m in all_mvmts:
+            direction = _CF_DIRECTION.get(m.type, "ignore")
+            if direction == "ignore":
+                continue
             k = m.created_at.strftime("%Y-%m")
             i, o_val = buckets.get(k, (Decimal("0"), Decimal("0")))
-            buckets[k] = (i + (m.total_cost or Decimal("0")), o_val)
-        for m in prod_out:
-            k = m.created_at.strftime("%Y-%m")
-            i, o_val = buckets.get(k, (Decimal("0"), Decimal("0")))
-            buckets[k] = (i, o_val + (m.total_cost or Decimal("0")))
+            val = _cf_value(m)
+            if direction == "inflow":
+                buckets[k] = (i + val, o_val)
+            else:
+                buckets[k] = (i, o_val + val)
         for k in sorted(buckets):
             mo = int(k[5:])
             i, o_val = buckets[k]

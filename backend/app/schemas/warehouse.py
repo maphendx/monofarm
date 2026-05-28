@@ -327,6 +327,8 @@ class MovementOut(BaseModel):
     unit:              str
     unit_cost:         Decimal | None
     total_cost:        Decimal | None
+    unit_price:        Decimal | None = None
+    total_revenue:     Decimal | None = None
     reason:            str | None
     batch_id:          int | None
     order_id:          int | None

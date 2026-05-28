@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean, Date, DateTime, Enum, ForeignKey,
-    Integer, Numeric, String, Text, func,
+    Integer, Numeric, String, Text, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -135,6 +135,7 @@ class Counterparty(Base):
 
 class Product(Base):
     __tablename__ = "wh_products"
+    __table_args__ = (UniqueConstraint("organization_id", "sku", name="uq_wh_products_org_sku"),)
 
     id:              Mapped[int]  = mapped_column(primary_key=True)
     organization_id: Mapped[int]  = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -248,6 +249,8 @@ class WarehouseMovement(Base):
     unit:              Mapped[str]         = mapped_column(String(10), default="шт")
     unit_cost:         Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     total_cost:        Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    unit_price:        Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    total_revenue:     Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     batch_id:          Mapped[int | None]     = mapped_column(Integer, ForeignKey("wh_batches.id", ondelete="SET NULL"), nullable=True)
     order_id:          Mapped[int | None]     = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="SET NULL"), nullable=True)
     reason:            Mapped[str | None]     = mapped_column(String(255), nullable=True)
