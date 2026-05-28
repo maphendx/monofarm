@@ -412,6 +412,8 @@ export default function CashFlowPage() {
         cols={colVis.cols}
         hidden={colVis.hidden}
         setVisibility={colVis.setVisibility}
+        orderedCols={colVis.orderedCols}
+        setOrder={colVis.setOrder}
       />
     </div>
   );

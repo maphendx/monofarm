@@ -1528,22 +1528,28 @@ export default function ProductsPage() {
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[780px] text-sm">
-              <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
+              <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
                 <tr>
                   <th className="w-10 px-4 py-3">
                     <input type="checkbox" checked={allPageSelected} onChange={toggleAll}
-                      className="rounded border-[var(--border-strong)] " />
+                      className="rounded border-[var(--border-strong)]" />
                   </th>
-                  {colVis.isVisible("image") && <th className="w-12 px-2 py-3" />}
-                  <Th col="name"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>
-                  {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>}
-                  {colVis.isVisible("barcode")    && <th className="px-4 py-3 font-medium">Штрих-код</th>}
-                  {colVis.isVisible("categories") && <th className="px-4 py-3 font-medium">Категорія</th>}
-                  {colVis.isVisible("unit")       && <th className="px-4 py-3 font-medium">Од.</th>}
-                  {colVis.isVisible("stock")      && <Th col="stock"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>}
-                  {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>}
-                  {colVis.isVisible("sale_price") && <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>}
-                  {colVis.isVisible("margin")     && <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>}
+                  {colVis.orderedCols.map((col) => {
+                    if (!colVis.isVisible(col.key)) return null;
+                    switch (col.key) {
+                      case "image":      return <th key="image" className="w-12 px-2 py-3" />;
+                      case "name":       return <Th key="name" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>;
+                      case "sku":        return <Th key="sku" col="sku" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>;
+                      case "barcode":    return <th key="barcode" className="px-4 py-3 font-medium">Штрих-код</th>;
+                      case "categories": return <th key="categories" className="px-4 py-3 font-medium">Категорія</th>;
+                      case "unit":       return <th key="unit" className="px-4 py-3 font-medium">Од.</th>;
+                      case "stock":      return <Th key="stock" col="stock" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>;
+                      case "full_cost":  return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>;
+                      case "sale_price": return <Th key="sale_price" col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>;
+                      case "margin":     return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>;
+                      default: return null;
+                    }
+                  })}
                   <th className="w-20 px-3 py-3" />
                 </tr>
               </thead>
@@ -1561,90 +1567,96 @@ export default function ProductsPage() {
                       className={selected.has(p.id) ? "bg-[var(--accent-soft)]/50 " : "hover:bg-[var(--surface-hi)]/80 "}>
                       <td className="px-4 py-3">
                         <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
-                          className="rounded border-[var(--border-strong)] " />
+                          className="rounded border-[var(--border-strong)]" />
                       </td>
-                      {colVis.isVisible("image") && (
-                        <td className="px-2 py-2">
-                          <button onClick={() => setEditProduct(p)}
-                            className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
-                            {p.image_url
-                              ? <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
-                              : <span className="flex size-full items-center justify-center text-[10px] text-[var(--text-faint)]">—</span>
-                            }
-                          </button>
-                        </td>
-                      )}
-                      <td className="px-4 py-3">
-                        <button onClick={() => setEditProduct(p)}
-                          className="text-left font-medium text-[var(--text-hi)] hover:text-[var(--accent)] ">
-                          {p.name}
-                        </button>
-                      </td>
-                      {colVis.isVisible("sku") && (
-                        <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
-                      )}
-                      {colVis.isVisible("barcode") && (
-                        <td className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
-                          {p.barcode || <span className="opacity-30">—</span>}
-                        </td>
-                      )}
-                      {colVis.isVisible("categories") && (
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {p.categories.map((c) => {
-                              const color = catColorMap.get(c);
-                              return (
-                                <span
-                                  key={c}
-                                  onClick={() => setSelectedCats((prev) => prev.includes(c) ? prev : [...prev, c])}
-                                  className={color
-                                    ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
-                                    : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)] transition-opacity"}
-                                  style={color ? { background: color, color: "#111" } : undefined}
-                                >
-                                  {c}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      )}
-                      {colVis.isVisible("unit") && (
-                        <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
-                      )}
-                      {colVis.isVisible("stock") && (
-                        <td className="px-4 py-3 text-right">
-                          <span className={[
-                            "font-mono text-sm tabular-nums",
-                            isOut ? "font-semibold text-[var(--state-error)]"
-                              : avail < 5 ? "text-[var(--state-warn)]"
-                              : "text-[var(--text)]",
-                          ].join(" ")}>{Math.round(avail)}</span>
-                        </td>
-                      )}
-                      {colVis.isVisible("full_cost") && (
-                        <td className="px-4 py-3 text-right text-sm tabular-nums">
-                          {p.full_cost
-                            ? <span className="text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</span>
-                            : p.cost_price
-                              ? <span className="text-[var(--text-faint)]" title="Середньозважена ціна (зі специфікації немає)">{fmtPrice(p.cost_price)}</span>
-                              : <span className="text-[var(--text-faint)]">—</span>}
-                        </td>
-                      )}
-                      {colVis.isVisible("sale_price") && (
-                        <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
-                      )}
-                      {colVis.isVisible("margin") && (
-                        <td className="px-4 py-3 text-right text-sm">
-                          {margin !== null ? (
-                            <span className={["font-medium tabular-nums",
-                              margin >= 50 ? "text-[var(--state-ok)]"
-                                : margin >= 20 ? "text-[var(--state-warn)]"
-                                : "text-[var(--state-error)]",
-                            ].join(" ")}>{margin.toFixed(0)}%</span>
-                          ) : "—"}
-                        </td>
-                      )}
+                      {colVis.orderedCols.map((col) => {
+                        if (!colVis.isVisible(col.key)) return null;
+                        switch (col.key) {
+                          case "image": return (
+                            <td key="image" className="px-2 py-2">
+                              <button onClick={() => setEditProduct(p)}
+                                className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                                {p.image_url
+                                  ? <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
+                                  : <span className="flex size-full items-center justify-center text-[10px] text-[var(--text-faint)]">—</span>}
+                              </button>
+                            </td>
+                          );
+                          case "name": return (
+                            <td key="name" className="px-4 py-3">
+                              <button onClick={() => setEditProduct(p)}
+                                className="text-left font-medium text-[var(--text-hi)] hover:text-[var(--accent)]">
+                                {p.name}
+                              </button>
+                            </td>
+                          );
+                          case "sku": return (
+                            <td key="sku" className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
+                          );
+                          case "barcode": return (
+                            <td key="barcode" className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
+                              {p.barcode || <span className="opacity-30">—</span>}
+                            </td>
+                          );
+                          case "categories": return (
+                            <td key="categories" className="px-4 py-3">
+                              <div className="flex flex-wrap gap-1">
+                                {p.categories.map((c) => {
+                                  const color = catColorMap.get(c);
+                                  return (
+                                    <span key={c}
+                                      onClick={() => setSelectedCats((prev) => prev.includes(c) ? prev : [...prev, c])}
+                                      className={color
+                                        ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
+                                        : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)] transition-opacity"}
+                                      style={color ? { background: color, color: "#111" } : undefined}>
+                                      {c}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          );
+                          case "unit": return (
+                            <td key="unit" className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
+                          );
+                          case "stock": return (
+                            <td key="stock" className="px-4 py-3 text-right">
+                              <span className={["font-mono text-sm tabular-nums",
+                                isOut ? "font-semibold text-[var(--state-error)]"
+                                  : avail < 5 ? "text-[var(--state-warn)]"
+                                  : "text-[var(--text)]"].join(" ")}>
+                                {Math.round(avail)}
+                              </span>
+                            </td>
+                          );
+                          case "full_cost": return (
+                            <td key="full_cost" className="px-4 py-3 text-right text-sm tabular-nums">
+                              {p.full_cost
+                                ? <span className="text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</span>
+                                : p.cost_price
+                                  ? <span className="text-[var(--text-faint)]" title="Середньозважена ціна">{fmtPrice(p.cost_price)}</span>
+                                  : <span className="text-[var(--text-faint)]">—</span>}
+                            </td>
+                          );
+                          case "sale_price": return (
+                            <td key="sale_price" className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
+                          );
+                          case "margin": return (
+                            <td key="margin" className="px-4 py-3 text-right text-sm">
+                              {margin !== null
+                                ? <span className={["font-medium tabular-nums",
+                                    margin >= 50 ? "text-[var(--state-ok)]"
+                                      : margin >= 20 ? "text-[var(--state-warn)]"
+                                      : "text-[var(--state-error)]"].join(" ")}>
+                                    {margin.toFixed(0)}%
+                                  </span>
+                                : "—"}
+                            </td>
+                          );
+                          default: return null;
+                        }
+                      })}
                       {/* Row actions */}
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1 justify-end">
@@ -1772,6 +1784,8 @@ export default function ProductsPage() {
         cols={colVis.cols}
         hidden={colVis.hidden}
         setVisibility={colVis.setVisibility}
+        orderedCols={colVis.orderedCols}
+        setOrder={colVis.setOrder}
       />
 
       <BulkActionBar

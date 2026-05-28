@@ -312,6 +312,8 @@ export default function CategoriesPage() {
         cols={colVis.cols}
         hidden={colVis.hidden}
         setVisibility={colVis.setVisibility}
+        orderedCols={colVis.orderedCols}
+        setOrder={colVis.setOrder}
       />
     </div>
   );
