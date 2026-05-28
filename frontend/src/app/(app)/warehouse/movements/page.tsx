@@ -145,8 +145,11 @@ export default function MovementsPage() {
             ) : items.length === 0 ? (
               <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає записів</td></tr>
             ) : items.map(m => {
-              const meta = TYPE_META[m.type];
-              const qty  = parseFloat(m.quantity);
+              const meta    = TYPE_META[m.type];
+              const qty     = parseFloat(m.quantity);
+              const isOut   = meta.needsFrom && !meta.needsTo;
+              const isXfer  = meta.needsFrom && meta.needsTo;
+              const signed  = isOut ? -qty : qty;
               return (
                 <tr key={m.id} className="hover:bg-[var(--surface-hi)]">
                   {colVis.isVisible("date") && (
@@ -163,8 +166,11 @@ export default function MovementsPage() {
                     <td className="px-4 py-3 font-medium">{m.product_name}</td>
                   )}
                   {colVis.isVisible("qty") && (
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {qty > 0 ? "+" : ""}{qty.toFixed(0)} {m.unit}
+                    <td className={[
+                      "px-4 py-3 text-right tabular-nums font-medium",
+                      isOut  ? "text-[var(--state-error)]" : isXfer ? "text-[var(--state-warn)]" : "text-[var(--state-ok)]",
+                    ].join(" ")}>
+                      {isXfer ? "⇄ " : signed > 0 ? "+" : ""}{signed.toFixed(0)} {m.unit}
                     </td>
                   )}
                   {colVis.isVisible("amount") && (
