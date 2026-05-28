@@ -440,6 +440,23 @@ def delete_warehouse(
     _:   User         = Depends(require_roles(UserRole.admin)),
 ) -> None:
     wh = _get_warehouse(wh_id, org, db)
+    has_stock = db.query(func.count(StockEntry.id)).filter(
+        StockEntry.warehouse_id == wh_id,
+        StockEntry.quantity > 0,
+    ).scalar() or 0
+    if has_stock:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не можна видалити склад — {has_stock} позицій мають ненульовий залишок. Спочатку перемістіть або спишіть товари.",
+        )
+    has_movements = db.query(func.count(WarehouseMovement.id)).filter(
+        (WarehouseMovement.warehouse_from_id == wh_id) | (WarehouseMovement.warehouse_to_id == wh_id)
+    ).scalar() or 0
+    if has_movements:
+        raise HTTPException(
+            status_code=400,
+            detail="Не можна видалити склад — є рухи складу з цим складом. Деактивуйте склад замість видалення.",
+        )
     db.delete(wh)
     db.commit()
 

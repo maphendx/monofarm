@@ -211,8 +211,12 @@ export default function WarehousesPage() {
                   <button
                     onClick={async () => {
                       if (!window.confirm(`Видалити склад «${w.name}»?`)) return;
-                      await api(`/api/warehouse/warehouses/${w.id}`, { method: "DELETE" });
-                      setWarehouses((prev) => prev.filter((x) => x.id !== w.id));
+                      try {
+                        await api(`/api/warehouse/warehouses/${w.id}`, { method: "DELETE" });
+                        setWarehouses((prev) => prev.filter((x) => x.id !== w.id));
+                      } catch (e: unknown) {
+                        alert(e instanceof Error ? e.message : "Помилка видалення");
+                      }
                     }}
                     title="Видалити"
                     className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]"
