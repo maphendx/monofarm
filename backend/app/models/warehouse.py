@@ -42,6 +42,15 @@ class MovementType(str, enum.Enum):
     TRANSFER       = "TRANSFER"
     ADJUSTMENT     = "ADJUSTMENT"
     DEFECT         = "DEFECT"
+    RETURN_IN      = "RETURN_IN"
+    WRITE_OFF      = "WRITE_OFF"
+
+
+class CellMoveKind(str, enum.Enum):
+    putaway  = "putaway"    # unassigned (floor) → cell
+    relocate = "relocate"   # cell → cell within the same warehouse
+    pick     = "pick"       # cell → out (consumed by an outbound ledger movement)
+    adjust   = "adjust"     # manual correction of a cell's quantity
 
 
 class BatchStatus(str, enum.Enum):
@@ -360,6 +369,27 @@ class CellStock(Base):
     product_id: Mapped[int]     = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="CASCADE"), nullable=False, index=True)
     quantity:   Mapped[Decimal] = mapped_column(Numeric(12, 4), default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class CellMovement(Base):
+    """Audit log of physical relocations between cells / the unassigned pool.
+
+    These never change a warehouse's total stock — they only record where
+    inside the warehouse a product physically moved. cell_from_id/cell_to_id
+    are NULL when the counterpart is the unassigned (floor) pool.
+    """
+    __tablename__ = "wh_cell_movements"
+
+    id:              Mapped[int]          = mapped_column(primary_key=True)
+    organization_id: Mapped[int]          = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id:      Mapped[int]          = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="CASCADE"), nullable=False, index=True)
+    cell_from_id:    Mapped[int | None]   = mapped_column(Integer, ForeignKey("wh_cells.id", ondelete="SET NULL"), nullable=True)
+    cell_to_id:      Mapped[int | None]   = mapped_column(Integer, ForeignKey("wh_cells.id", ondelete="SET NULL"), nullable=True)
+    quantity:        Mapped[Decimal]      = mapped_column(Numeric(12, 4), nullable=False)
+    kind:            Mapped[CellMoveKind] = mapped_column(Enum(CellMoveKind), nullable=False, index=True)
+    movement_id:     Mapped[int | None]   = mapped_column(Integer, ForeignKey("wh_movements.id", ondelete="SET NULL"), nullable=True)
+    created_by_id:   Mapped[int | None]   = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 # ── Cash Flow ─────────────────────────────────────────────────────────────────

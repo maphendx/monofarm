@@ -44,6 +44,13 @@ type StockRow = {
   min_stock: number | null; desired_stock: number | null;
 };
 
+type ProductCell = { cell_id: number; zone_name: string; code: string; quantity: string };
+type WarehouseLocation = {
+  warehouse_id: number; warehouse_name: string;
+  cells: ProductCell[]; unassigned: string; total: string;
+};
+type ProductLocations = { product_id: number; warehouses: WarehouseLocation[] };
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const OP_ICONS: Record<string, string> = { print: "🖨", manual: "✋", postprocess: "🎨" };
@@ -302,6 +309,7 @@ export default function ProductDetailPage() {
   const [spec,     setSpec]     = useState<Spec | null>(null);
   const [cost,     setCost]     = useState<CostBreakdown | null>(null);
   const [stock,    setStock]    = useState<StockRow[]>([]);
+  const [locations, setLocations] = useState<ProductLocations | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [costBusy, setCostBusy] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -329,6 +337,7 @@ export default function ProductDetailPage() {
     if (tab === "stock" && !stockLoaded.current) {
       stockLoaded.current = true;
       api<StockRow[]>(`/api/warehouse/stock?product_id=${id}`).then(setStock).catch(() => {});
+      api<ProductLocations>(`/api/warehouse/products/${id}/locations`).then(setLocations).catch(() => {});
     }
   }, [tab, id]);
 
@@ -735,6 +744,34 @@ export default function ProductDetailPage() {
             </table>
           </div>
         )
+      )}
+
+      {tab === "stock" && locations && locations.warehouses.some((w) => w.cells.length > 0 || parseFloat(w.unassigned) > 0) && (
+        <div className="mt-4 space-y-3">
+          <h3 className="text-sm font-semibold text-[var(--text-muted)]">Розташування по комірках</h3>
+          {locations.warehouses.map((w) => (
+            <div key={w.warehouse_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-medium">{w.warehouse_name}</span>
+                <span className="font-mono text-xs text-[var(--text-faint)]">всього {parseFloat(w.total).toFixed(0)} {product.unit}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {w.cells.map((c) => (
+                  <span key={c.cell_id}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)] bg-[rgba(34,211,238,.06)] px-2 py-0.5 text-[11px] font-mono">
+                    <span className="text-[var(--text-muted)]">{c.zone_name} {c.code}</span>
+                    <span className="font-bold text-[var(--accent)]">{parseFloat(c.quantity).toFixed(0)}</span>
+                  </span>
+                ))}
+                {parseFloat(w.unassigned) > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[rgba(245,158,11,.4)] bg-[rgba(245,158,11,.10)] px-2 py-0.5 text-[11px] font-mono text-[var(--state-warn)]">
+                    нерозкладено {parseFloat(w.unassigned).toFixed(0)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {tab === "history" && (

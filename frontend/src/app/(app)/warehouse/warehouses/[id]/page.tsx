@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -14,11 +14,14 @@ type CellStockItem = { product_id: number; product_name: string; product_sku: st
 type Cell = { id: number; code: string; notes: string | null; stock: CellStockItem[] };
 type ZoneWithCells = Zone & { cells: Cell[] };
 
-type Product = { id: number; name: string; sku: string };
+type Unassigned = { product_id: number; product_name: string; product_sku: string; unit: string; unassigned: string };
+type FlatCell = { id: number; label: string };
 
 const TYPE_LABEL: Record<WarehouseType, string> = {
   finished: "Готова продукція", raw: "Сировина", wip: "В процесі", defect: "Брак",
 };
+
+const num = (s: string) => parseFloat(s) || 0;
 
 // ── ZoneModal — create / edit ─────────────────────────────────────────────────
 
@@ -27,7 +30,7 @@ function ZoneModal({
 }: {
   zone: Zone | null;
   onClose: () => void;
-  onSaved: (z: Zone) => void;
+  onSaved: () => void;
 }) {
   const params = useParams<{ id: string }>();
   const [name,  setName]  = useState(zone?.name ?? "");
@@ -36,15 +39,20 @@ function ZoneModal({
   const [busy,  setBusy]  = useState(false);
   const [err,   setErr]   = useState<string | null>(null);
 
+  const willResize = zone && (rows !== zone.rows || cols !== zone.cols);
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setErr(null);
     try {
-      const body = { name: name.trim(), rows, cols };
-      const saved = zone
-        ? await api<Zone>(`/api/warehouse/warehouses/${params.id}/zones/${zone.id}`, { method: "PATCH", body: JSON.stringify(body) })
-        : await api<Zone>(`/api/warehouse/warehouses/${params.id}/zones`, { method: "POST", body: JSON.stringify(body) });
-      onSaved(saved);
+      // Only send rows/cols when they actually change, so renaming a zone with
+      // stocked cells isn't blocked and cell notes aren't wiped.
+      const body: Record<string, unknown> = { name: name.trim() };
+      if (!zone || willResize) { body.rows = rows; body.cols = cols; }
+      await (zone
+        ? api(`/api/warehouse/warehouses/${params.id}/zones/${zone.id}`, { method: "PATCH", body: JSON.stringify(body) })
+        : api(`/api/warehouse/warehouses/${params.id}/zones`, { method: "POST", body: JSON.stringify(body) }));
+      onSaved();
       onClose();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Помилка збереження");
@@ -52,8 +60,6 @@ function ZoneModal({
       setBusy(false);
     }
   }
-
-  const willResize = zone && (rows !== zone.rows || cols !== zone.cols);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -99,44 +105,193 @@ function ZoneModal({
   );
 }
 
-// ── CellModal — multi-product per cell ────────────────────────────────────────
+// ── PutawayModal — assign unassigned floor stock into a cell ───────────────────
+
+function PutawayModal({
+  item, cells, onClose, onDone,
+}: {
+  item: Unassigned;
+  cells: FlatCell[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [cellId, setCellId] = useState<string>(cells[0] ? String(cells[0].id) : "");
+  const [qty,    setQty]    = useState(item.unassigned);
+  const [busy,   setBusy]   = useState(false);
+  const [err,    setErr]    = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const max = num(item.unassigned);
+
+  async function save() {
+    if (inFlight.current || !cellId) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    try {
+      await api(`/api/warehouse/cells/${cellId}/putaway`, {
+        method: "POST",
+        body: JSON.stringify({ product_id: item.product_id, quantity: num(qty) }),
+      });
+      onDone(); onClose();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка");
+    } finally { inFlight.current = false; setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl space-y-4 text-sm">
+        <div>
+          <h2 className="font-semibold">Розкласти товар</h2>
+          <p className="text-xs text-[var(--text-faint)]">{item.product_name} · нерозкладено {item.unassigned} {item.unit}</p>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Комірка</span>
+          <select value={cellId} onChange={(e) => setCellId(e.target.value)}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]">
+            {cells.length === 0 && <option value="">— немає комірок —</option>}
+            {cells.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
+          <input type="number" min="0" max={max} step="0.01" value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-right font-mono outline-none focus:border-[var(--border-strong)]" />
+        </label>
+        {err && <p className="text-[var(--state-error)]">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+          <button onClick={save} disabled={busy || !cellId || num(qty) <= 0 || num(qty) > max}
+            className="btn btn-primary disabled:opacity-50">{busy ? "…" : "Розкласти"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RelocateModal — move a product between cells ───────────────────────────────
+
+function RelocateModal({
+  productId, productName, fromCellId, available, cells, onClose, onDone,
+}: {
+  productId: number;
+  productName: string;
+  fromCellId: number;
+  available: number;
+  cells: FlatCell[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const targets = cells.filter((c) => c.id !== fromCellId);
+  const [toId, setToId] = useState<string>(targets[0] ? String(targets[0].id) : "");
+  const [qty,  setQty]  = useState(String(available));
+  const [busy, setBusy] = useState(false);
+  const [err,  setErr]  = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  async function save() {
+    if (inFlight.current || !toId) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    try {
+      await api(`/api/warehouse/cells/relocate`, {
+        method: "POST",
+        body: JSON.stringify({ product_id: productId, from_cell_id: fromCellId, to_cell_id: parseInt(toId), quantity: num(qty) }),
+      });
+      onDone(); onClose();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка");
+    } finally { inFlight.current = false; setBusy(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl space-y-4 text-sm">
+        <div>
+          <h2 className="font-semibold">Перемістити в іншу комірку</h2>
+          <p className="text-xs text-[var(--text-faint)]">{productName} · у комірці {available}</p>
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Куди</span>
+          <select value={toId} onChange={(e) => setToId(e.target.value)}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]">
+            {targets.length === 0 && <option value="">— немає інших комірок —</option>}
+            {targets.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
+          <input type="number" min="0" max={available} step="0.01" value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-right font-mono outline-none focus:border-[var(--border-strong)]" />
+        </label>
+        {err && <p className="text-[var(--state-error)]">{err}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+          <button onClick={save} disabled={busy || !toId || num(qty) <= 0 || num(qty) > available}
+            className="btn btn-primary disabled:opacity-50">{busy ? "…" : "Перемістити"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CellModal — manage stock inside one cell ───────────────────────────────────
 
 function CellModal({
-  cell, products, onClose, onSaved,
+  cell, unassigned, flatCells, onClose, onChanged,
 }: {
   cell: Cell;
-  products: Product[];
+  unassigned: Unassigned[];
+  flatCells: FlatCell[];
   onClose: () => void;
-  onSaved: (cell: Cell) => void;
+  onChanged: () => void;
 }) {
   const [stock,      setStock]      = useState<CellStockItem[]>(cell.stock);
   const [addPid,     setAddPid]     = useState<string>("");
   const [addQty,     setAddQty]     = useState("1");
   const [busy,       setBusy]       = useState(false);
   const [removeBusy, setRemoveBusy] = useState<number | null>(null);
+  const [relocate,   setRelocate]   = useState<CellStockItem | null>(null);
   const [err,        setErr]        = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const usedIds = new Set(stock.map((s) => s.product_id));
-  const available = products.filter((p) => !usedIds.has(p.id));
+  const addable = unassigned.filter((u) => num(u.unassigned) > 0 && !usedIds.has(u.product_id));
+  const addCap  = addPid ? num(unassigned.find((u) => u.product_id === parseInt(addPid))?.unassigned ?? "0") : 0;
 
-  async function addOrUpdate(pid: number, qty: number) {
+  function setQty(pid: number, qty: number) {
     if (inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true); setErr(null);
-    try {
-      const updated = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/stock`, {
-        method: "PUT",
-        body: JSON.stringify({ product_id: pid, quantity: qty }),
-      });
+    inFlight.current = true; setBusy(true); setErr(null);
+    api<CellStockItem>(`/api/warehouse/cells/${cell.id}/stock`, {
+      method: "PUT",
+      body: JSON.stringify({ product_id: pid, quantity: qty }),
+    }).then((updated) => {
+      setStock((prev) => qty <= 0
+        ? prev.filter((s) => s.product_id !== pid)
+        : prev.map((s) => s.product_id === pid ? updated : s));
+      onChanged();
+    }).catch((e: unknown) => {
+      setErr(e instanceof Error ? e.message : "Помилка");
+    }).finally(() => { inFlight.current = false; setBusy(false); });
+  }
+
+  function addProduct(pid: number, qty: number) {
+    if (inFlight.current || !pid) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    api<CellStockItem>(`/api/warehouse/cells/${cell.id}/putaway`, {
+      method: "POST",
+      body: JSON.stringify({ product_id: pid, quantity: qty }),
+    }).then((updated) => {
       setStock((prev) => {
         const idx = prev.findIndex((s) => s.product_id === pid);
         return idx >= 0 ? prev.map((s, i) => i === idx ? updated : s) : [...prev, updated];
       });
       setAddPid(""); setAddQty("1");
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Помилка збереження");
-    } finally { inFlight.current = false; setBusy(false); }
+      onChanged();
+    }).catch((e: unknown) => {
+      setErr(e instanceof Error ? e.message : "Помилка");
+    }).finally(() => { inFlight.current = false; setBusy(false); });
   }
 
   async function removeProduct(pid: number) {
@@ -144,17 +299,13 @@ function CellModal({
     try {
       await api(`/api/warehouse/cells/${cell.id}/stock/${pid}`, { method: "DELETE" });
       setStock((prev) => prev.filter((s) => s.product_id !== pid));
+      onChanged();
     } finally { setRemoveBusy(null); }
-  }
-
-  function handleClose() {
-    onSaved({ ...cell, stock });
-    onClose();
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
 
         {/* Header */}
@@ -163,7 +314,7 @@ function CellModal({
             <h2 className="font-semibold">Комірка {cell.code}</h2>
             {cell.notes && <p className="text-xs text-[var(--text-faint)]">{cell.notes}</p>}
           </div>
-          <button onClick={handleClose}
+          <button onClick={onClose}
             className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
         </div>
 
@@ -181,16 +332,23 @@ function CellModal({
                   </div>
                   <input
                     type="number" min="0" step="0.01"
-                    defaultValue={parseFloat(s.quantity)}
+                    defaultValue={num(s.quantity)}
                     onBlur={(e) => {
                       const v = parseFloat(e.target.value);
-                      if (!isNaN(v) && v !== parseFloat(s.quantity)) addOrUpdate(s.product_id, v);
+                      if (!isNaN(v) && v !== num(s.quantity)) setQty(s.product_id, v);
                     }}
                     className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
+                    onClick={() => setRelocate(s)} title="Перемістити в іншу комірку"
+                    className="flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                    </svg>
+                  </button>
+                  <button
                     onClick={() => removeProduct(s.product_id)}
-                    disabled={removeBusy === s.product_id}
+                    disabled={removeBusy === s.product_id} title="Прибрати (повернути в нерозкладене)"
                     className="flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-40">
                     {removeBusy === s.product_id ? "…" : "×"}
                   </button>
@@ -199,43 +357,59 @@ function CellModal({
             </div>
           )}
 
-          {/* Add product */}
-          {available.length > 0 && (
+          {/* Add from the unassigned pool */}
+          {addable.length > 0 ? (
             <div className="flex gap-2 pt-1">
               <select
                 value={addPid}
-                onChange={(e) => setAddPid(e.target.value)}
+                onChange={(e) => { setAddPid(e.target.value); setAddQty("1"); }}
                 className="flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]">
-                <option value="">+ Додати товар…</option>
-                {available.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                <option value="">+ Розкласти сюди…</option>
+                {addable.map((u) => (
+                  <option key={u.product_id} value={u.product_id}>{u.product_name} ({u.unassigned})</option>
                 ))}
               </select>
               {addPid && (
                 <>
                   <input
-                    type="number" min="0" step="0.01" value={addQty}
+                    type="number" min="0" max={addCap} step="0.01" value={addQty}
                     onChange={(e) => setAddQty(e.target.value)}
                     className="w-20 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
-                    onClick={() => addOrUpdate(parseInt(addPid), parseFloat(addQty) || 0)}
-                    disabled={busy}
+                    onClick={() => addProduct(parseInt(addPid), num(addQty))}
+                    disabled={busy || num(addQty) <= 0 || num(addQty) > addCap}
                     className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50">
                     {busy ? "…" : "OK"}
                   </button>
                 </>
               )}
             </div>
+          ) : (
+            <p className="pt-1 text-xs text-[var(--text-faint)]">
+              Немає нерозкладеного товару на цьому складі — спершу зробіть «Отримання».
+            </p>
           )}
 
           {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}
         </div>
 
         <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
-          <button onClick={handleClose} className="btn btn-primary">Готово</button>
+          <button onClick={onClose} className="btn btn-primary">Готово</button>
         </div>
       </div>
+
+      {relocate && (
+        <RelocateModal
+          productId={relocate.product_id}
+          productName={relocate.product_name}
+          fromCellId={cell.id}
+          available={num(relocate.quantity)}
+          cells={flatCells}
+          onClose={() => setRelocate(null)}
+          onDone={() => { setRelocate(null); onChanged(); onClose(); }}
+        />
+      )}
     </div>
   );
 }
@@ -243,44 +417,20 @@ function CellModal({
 // ── ZoneAccordion ─────────────────────────────────────────────────────────────
 
 function ZoneAccordion({
-  zone: initialZone, products,
-  onEdit, onDelete,
+  zone, unassigned, flatCells, onEdit, onDelete, onChanged,
 }: {
-  zone: Zone;
-  products: Product[];
+  zone: ZoneWithCells;
+  unassigned: Unassigned[];
+  flatCells: FlatCell[];
   onEdit: (z: Zone) => void;
   onDelete: (id: number) => void;
+  onChanged: () => void;
 }) {
   const [open,       setOpen]       = useState(false);
-  const [zoneData,   setZoneData]   = useState<ZoneWithCells | null>(null);
-  const [loading,    setLoading]    = useState(false);
   const [activeCell, setActiveCell] = useState<Cell | null>(null);
   const [search,     setSearch]     = useState("");
 
-  async function load() {
-    if (zoneData) return;
-    setLoading(true);
-    try {
-      const data = await api<ZoneWithCells>(`/api/warehouse/zones/${initialZone.id}/cells`);
-      setZoneData(data);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function toggle() {
-    if (!open) load();
-    setOpen((v) => !v);
-  }
-
-  function handleCellSaved(updated: Cell) {
-    setZoneData((prev) => prev
-      ? { ...prev, cells: prev.cells.map((c) => c.id === updated.id ? updated : c) }
-      : prev
-    );
-  }
-
-  const cells = zoneData?.cells ?? [];
+  const cells = zone.cells;
   const q = search.trim().toLowerCase();
 
   function cellMatches(cell: Cell) {
@@ -297,21 +447,21 @@ function ZoneAccordion({
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-5 py-3.5">
-        <button onClick={toggle} className="flex flex-1 items-center gap-3 text-left">
+        <button onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-3 text-left">
           <span className={["text-xs transition-transform", open ? "rotate-90" : ""].join(" ")}>▶</span>
-          <span className="font-medium">{initialZone.name}</span>
+          <span className="font-medium">{zone.name}</span>
           <span className="text-xs text-[var(--text-faint)]">
-            {initialZone.rows} × {initialZone.cols} = {initialZone.cell_count} комірок
+            {zone.rows} × {zone.cols} = {zone.cell_count} комірок
           </span>
         </button>
-        <button onClick={() => onEdit(initialZone)} title="Редагувати"
+        <button onClick={() => onEdit(zone)} title="Редагувати"
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
         </button>
-        <button onClick={() => onDelete(initialZone.id)} title="Видалити"
+        <button onClick={() => onDelete(zone.id)} title="Видалити"
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
@@ -343,70 +493,108 @@ function ZoneAccordion({
             )}
           </div>
 
-          {loading ? (
-            <p className="text-sm text-[var(--text-faint)]">Завантаження…</p>
-          ) : (
-            <div
-              className="grid gap-1.5"
-              style={{ gridTemplateColumns: `repeat(${initialZone.cols}, minmax(0, 1fr))` }}
-            >
-              {cells.map((cell) => {
-                const matched = hasSearch && cellMatches(cell);
-                const dimmed  = hasSearch && !matched;
-                const filled  = cell.stock.length > 0;
-                const multi   = cell.stock.length > 1;
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${zone.cols}, minmax(0, 1fr))` }}
+          >
+            {cells.map((cell) => {
+              const matched = hasSearch && cellMatches(cell);
+              const dimmed  = hasSearch && !matched;
+              const filled  = cell.stock.length > 0;
+              const multi   = cell.stock.length > 1;
 
-                return (
-                  <button
-                    key={cell.id}
-                    onClick={() => setActiveCell(cell)}
-                    className={[
-                      "group relative flex min-h-[56px] flex-col items-start justify-between rounded-lg border p-2 text-left transition-all",
-                      matched
-                        ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] ring-1 ring-[var(--state-ok)]"
-                        : filled
-                          ? "border-[var(--accent)] bg-[rgba(34,211,238,.06)] hover:bg-[rgba(34,211,238,.10)]"
-                          : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
-                      dimmed ? "opacity-30" : "",
-                    ].join(" ")}
-                  >
-                    <div className="flex w-full items-start justify-between">
-                      <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
-                      {multi && (
-                        <span className="rounded-full bg-[var(--accent)] px-1.5 text-[9px] font-bold text-white leading-4">
-                          {cell.stock.length}
-                        </span>
-                      )}
-                    </div>
-                    {filled ? (
-                      <div className="w-full min-w-0">
-                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
-                          {cell.stock[0].product_name}
-                          {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
-                        </p>
-                        <p className="font-mono text-[10px] text-[var(--accent)]">
-                          {cell.stock.reduce((s, i) => s + parseFloat(i.quantity), 0)} шт
-                        </p>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
+              return (
+                <button
+                  key={cell.id}
+                  onClick={() => setActiveCell(cell)}
+                  className={[
+                    "group relative flex min-h-[56px] flex-col items-start justify-between rounded-lg border p-2 text-left transition-all",
+                    matched
+                      ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] ring-1 ring-[var(--state-ok)]"
+                      : filled
+                        ? "border-[var(--accent)] bg-[rgba(34,211,238,.06)] hover:bg-[rgba(34,211,238,.10)]"
+                        : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                    dimmed ? "opacity-30" : "",
+                  ].join(" ")}
+                >
+                  <div className="flex w-full items-start justify-between">
+                    <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
+                    {multi && (
+                      <span className="rounded-full bg-[var(--accent)] px-1.5 text-[9px] font-bold text-white leading-4">
+                        {cell.stock.length}
+                      </span>
                     )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                  </div>
+                  {filled ? (
+                    <div className="w-full min-w-0">
+                      <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
+                        {cell.stock[0].product_name}
+                        {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
+                      </p>
+                      <p className="font-mono text-[10px] text-[var(--accent)]">
+                        {cell.stock.reduce((s, i) => s + num(i.quantity), 0)} шт
+                      </p>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {activeCell && (
         <CellModal
           cell={activeCell}
-          products={products}
+          unassigned={unassigned}
+          flatCells={flatCells}
           onClose={() => setActiveCell(null)}
-          onSaved={(updated) => { handleCellSaved(updated); setActiveCell(null); }}
+          onChanged={onChanged}
         />
       )}
+    </div>
+  );
+}
+
+// ── UnassignedPanel ────────────────────────────────────────────────────────────
+
+function UnassignedPanel({
+  items, cells, onPutaway,
+}: {
+  items: Unassigned[];
+  cells: FlatCell[];
+  onPutaway: (item: Unassigned) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-[rgba(245,158,11,.3)] bg-[rgba(245,158,11,.05)] p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="flex size-5 items-center justify-center rounded-full bg-[var(--state-warn)] text-[10px] font-bold text-black">
+          {items.length}
+        </span>
+        <h2 className="text-sm font-semibold">Нерозкладено на складі</h2>
+        <span className="text-xs text-[var(--text-faint)]">потребує розкладки по комірках</span>
+      </div>
+      <div className="space-y-1">
+        {items.map((it) => (
+          <div key={it.product_id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2">
+            <div className="flex-1 min-w-0">
+              <p className="truncate text-sm font-medium">{it.product_name}</p>
+              <p className="font-mono text-xs text-[var(--text-faint)]">{it.product_sku}</p>
+            </div>
+            <span className="font-mono text-sm font-semibold tabular-nums">{it.unassigned} {it.unit}</span>
+            <button
+              onClick={() => onPutaway(it)}
+              disabled={cells.length === 0}
+              className="btn btn-ghost text-xs disabled:opacity-40"
+              title={cells.length === 0 ? "Спершу створіть стелаж" : undefined}>
+              Розкласти
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -418,28 +606,44 @@ export default function WarehouseDetailPage() {
   const router  = useRouter();
   const whId    = parseInt(params.id);
 
-  const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
-  const [zones,     setZones]     = useState<Zone[]>([]);
-  const [products,  setProducts]  = useState<Product[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [zoneModal, setZoneModal] = useState<Zone | null | "create">(null);
+  const [warehouse,  setWarehouse]  = useState<Warehouse | null>(null);
+  const [zones,      setZones]      = useState<ZoneWithCells[]>([]);
+  const [unassigned, setUnassigned] = useState<Unassigned[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [zoneModal,  setZoneModal]  = useState<Zone | null | "create">(null);
+  const [putaway,    setPutaway]    = useState<Unassigned | null>(null);
+
+  const loadZones = useCallback(async () => {
+    const zs = await api<Zone[]>(`/api/warehouse/warehouses/${whId}/zones`);
+    const full = await Promise.all(
+      zs.map((z) => api<ZoneWithCells>(`/api/warehouse/zones/${z.id}/cells`))
+    );
+    setZones(full);
+  }, [whId]);
+
+  const loadUnassigned = useCallback(async () => {
+    setUnassigned(await api<Unassigned[]>(`/api/warehouse/warehouses/${whId}/unassigned`));
+  }, [whId]);
 
   const load = useCallback(async () => {
     try {
-      const [whs, zs, prods] = await Promise.all([
-        api<Warehouse[]>("/api/warehouse/warehouses"),
-        api<Zone[]>(`/api/warehouse/warehouses/${whId}/zones`),
-        api<Product[]>("/api/warehouse/products"),
-      ]);
+      const whs = await api<Warehouse[]>("/api/warehouse/warehouses");
       setWarehouse(whs.find((w) => w.id === whId) ?? null);
-      setZones(zs);
-      setProducts(prods);
+      await Promise.all([loadZones(), loadUnassigned()]);
     } finally {
       setLoading(false);
     }
-  }, [whId]);
+  }, [whId, loadZones, loadUnassigned]);
 
   useEffect(() => { load(); }, [load]);
+
+  // After any cell change, refresh cell quantities and the unassigned pool.
+  const refresh = useCallback(() => { loadZones(); loadUnassigned(); }, [loadZones, loadUnassigned]);
+
+  const flatCells: FlatCell[] = useMemo(
+    () => zones.flatMap((z) => z.cells.map((c) => ({ id: c.id, label: `${z.name} ${c.code}` }))),
+    [zones]
+  );
 
   async function deleteZone(id: number) {
     if (!window.confirm("Видалити стелаж і всі його комірки?")) return;
@@ -473,6 +677,8 @@ export default function WarehouseDetailPage() {
         </button>
       </div>
 
+      <UnassignedPanel items={unassigned} cells={flatCells} onPutaway={(it) => setPutaway(it)} />
+
       {/* Zones */}
       {zones.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center">
@@ -487,9 +693,11 @@ export default function WarehouseDetailPage() {
             <ZoneAccordion
               key={z.id}
               zone={z}
-              products={products}
+              unassigned={unassigned}
+              flatCells={flatCells}
               onEdit={(zone) => setZoneModal(zone)}
               onDelete={deleteZone}
+              onChanged={refresh}
             />
           ))}
         </div>
@@ -499,13 +707,16 @@ export default function WarehouseDetailPage() {
         <ZoneModal
           zone={zoneModal === "create" ? null : zoneModal}
           onClose={() => setZoneModal(null)}
-          onSaved={(saved) => {
-            setZones((prev) => {
-              const idx = prev.findIndex((z) => z.id === saved.id);
-              return idx >= 0 ? prev.map((z) => z.id === saved.id ? saved : z) : [...prev, saved];
-            });
-            setZoneModal(null);
-          }}
+          onSaved={() => { loadZones(); }}
+        />
+      )}
+
+      {putaway && (
+        <PutawayModal
+          item={putaway}
+          cells={flatCells}
+          onClose={() => setPutaway(null)}
+          onDone={refresh}
         />
       )}
     </div>

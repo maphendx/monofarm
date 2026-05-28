@@ -29,6 +29,7 @@ export type Movement = {
 type Product      = { id: number; name: string; sku: string; unit: string; sale_price: string | null; cost_price: string | null };
 type Warehouse    = { id: number; name: string; type: string };
 type Counterparty = { id: number; name: string; type: string };
+type FlatCell     = { id: number; label: string };
 
 type LineItem = {
   _key:      string;
@@ -137,6 +138,8 @@ export function CreateMovementModal({
   const [counterpartyId, setCounterpartyId] = useState("");
   const [lines,         setLines]         = useState<LineItem[]>([newLine()]);
   const [reason,        setReason]        = useState("");
+  const [cellId,        setCellId]        = useState("");
+  const [cells,         setCells]         = useState<FlatCell[]>([]);
   const [busy,          setBusy]          = useState(false);
   const [error,         setError]         = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -167,6 +170,27 @@ export function CreateMovementModal({
   }, [open, initialType, initialProductId, initialQuantity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const meta = TYPE_META[mType];
+
+  // Optional bin picker, only meaningful for a single product line. Prefer the
+  // destination warehouse (put away) for inbound/transfer, else the source.
+  const cellWh    = meta.needsTo ? whToId : (meta.needsFrom ? whFromId : "");
+  const cellField = meta.needsTo ? "cell_to_id" : "cell_from_id";
+  const showCell  = !!cellWh && lines.length === 1;
+
+  useEffect(() => {
+    if (!cellWh) return;
+    let cancelled = false;
+    api<{ id: number }[]>(`/api/warehouse/warehouses/${cellWh}/zones`)
+      .then((zones) => Promise.all(
+        zones.map((z) =>
+          api<{ name: string; cells: { id: number; code: string }[] }>(`/api/warehouse/zones/${z.id}/cells`)
+            .then((zc) => zc.cells.map((c) => ({ id: c.id, label: `${zc.name} ${c.code}` })))
+        )
+      ))
+      .then((perZone) => { if (!cancelled) setCells(perZone.flat()); })
+      .catch(() => { if (!cancelled) setCells([]); });
+    return () => { cancelled = true; };
+  }, [cellWh]);
 
   function setLine(key: string, patch: Partial<LineItem>) {
     setLines((prev) => prev.map((l) => l._key === key ? { ...l, ...patch } : l));
@@ -217,6 +241,7 @@ export function CreateMovementModal({
         };
         if (meta.needsFrom && whFromId)      body.warehouse_from_id = parseInt(whFromId);
         if (meta.needsTo   && whToId)        body.warehouse_to_id   = parseInt(whToId);
+        if (showCell && cellId)              body[cellField]        = parseInt(cellId);
         if (l.unitCost)                      body.unit_cost         = parseFloat(l.unitCost);
         if (counterpartyId)                  body.counterparty_id   = parseInt(counterpartyId);
         if (reason.trim())                   body.reason            = reason.trim();
@@ -259,7 +284,7 @@ export function CreateMovementModal({
         {/* Type tabs */}
         <div className="flex flex-wrap gap-1">
           {(Object.keys(TYPE_META) as MovementType[]).map((t) => (
-            <button key={t} type="button" onClick={() => setMType(t)}
+            <button key={t} type="button" onClick={() => { setMType(t); setCellId(""); }}
               className={[
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 mType === t
@@ -276,7 +301,7 @@ export function CreateMovementModal({
           {meta.needsFrom && (
             <label className="block">
               <span className="mb-1 block text-[var(--text-muted)]">Звідки</span>
-              <select value={whFromId} onChange={(e) => setWhFromId(e.target.value)} className="input">
+              <select value={whFromId} onChange={(e) => { setWhFromId(e.target.value); setCellId(""); }} className="input">
                 <option value="">— склад —</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
@@ -288,13 +313,27 @@ export function CreateMovementModal({
           {meta.needsTo && (
             <label className="block">
               <span className="mb-1 block text-[var(--text-muted)]">Куди</span>
-              <select value={whToId} onChange={(e) => setWhToId(e.target.value)} className="input">
+              <select value={whToId} onChange={(e) => { setWhToId(e.target.value); setCellId(""); }} className="input">
                 <option value="">— склад —</option>
                 {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </label>
           )}
         </div>
+
+        {/* Optional bin (single line only) */}
+        {showCell && cells.length > 0 && (
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">
+              {meta.needsTo ? "Розкласти в комірку" : "Відібрати з комірки"}
+              <span className="ml-1 text-[var(--text-faint)]">— опційно</span>
+            </span>
+            <select value={cellId} onChange={(e) => setCellId(e.target.value)} className="input">
+              <option value="">— автоматично —</option>
+              {cells.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+        )}
 
         {/* Counterparty */}
         {showCounterparty && filteredCp.length > 0 && (

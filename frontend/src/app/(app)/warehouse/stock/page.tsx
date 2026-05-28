@@ -27,6 +27,8 @@ type StockEntry = {
   warehouse_id:       number;
   warehouse_name:     string;
   locations:          CellLocation[];
+  assigned_qty:       string;
+  unassigned_qty:     string;
   quantity:           string;
   reserved_qty:       string;
   available:          string;
@@ -607,14 +609,21 @@ export default function StockPage() {
                     {colVis.isVisible("location") && (
                       <td className="px-3 py-2.5">
                         <div className="flex flex-wrap gap-1">
-                          {e.locations && e.locations.length > 0 ? (
+                          {e.locations && e.locations.length > 0 && (
                             e.locations.map((loc, i) => (
                               <span key={i} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-hi)] border border-[var(--border)] px-1.5 py-0.5 text-[10px] font-mono whitespace-nowrap">
                                 <span className="text-[var(--text-muted)]">{loc.name}</span>
                                 <span className="font-bold">{fmt(loc.quantity)} {e.product_unit}</span>
                               </span>
                             ))
-                          ) : (
+                          )}
+                          {parseFloat(e.unassigned_qty) > 0 && (
+                            <span title="Нерозкладено по комірках"
+                              className="inline-flex items-center gap-1 rounded-full border border-[rgba(245,158,11,.4)] bg-[rgba(245,158,11,.10)] px-1.5 py-0.5 text-[10px] font-mono whitespace-nowrap text-[var(--state-warn)]">
+                              нерозкладено {fmt(e.unassigned_qty)}
+                            </span>
+                          )}
+                          {(!e.locations || e.locations.length === 0) && parseFloat(e.unassigned_qty) <= 0 && (
                             <span className="text-[var(--text-faint)]">—</span>
                           )}
                         </div>

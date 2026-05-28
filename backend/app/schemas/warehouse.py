@@ -286,6 +286,8 @@ class StockEntryOut(BaseModel):
     warehouse_id:   int
     warehouse_name: str
     locations:      list[CellLocationOut] = []
+    assigned_qty:   Decimal = Decimal(0)    # sum allocated to cells in this warehouse
+    unassigned_qty: Decimal = Decimal(0)    # quantity - assigned_qty (floor stock awaiting putaway)
     quantity:       Decimal
     reserved_qty:   Decimal
     available:      Decimal
@@ -314,6 +316,8 @@ class MovementCreate(BaseModel):
     reason:            str | None = None
     batch_id:          int | None = None
     order_id:          int | None = None
+    cell_from_id:      int | None = None   # optional bin to pick out of (outbound / transfer)
+    cell_to_id:        int | None = None   # optional bin to put away into (inbound / transfer)
 
 
 _MOVEMENT_DIRECTION: dict[str, str] = {
@@ -585,3 +589,59 @@ class ZoneOut(BaseModel):
 
 class ZoneWithCellsOut(ZoneOut):
     cells: list[CellOut] = []
+
+
+# ── Bin operations ──────────────────────────────────────────────────────────
+
+class PutawayRequest(BaseModel):
+    product_id: int
+    quantity:   Decimal
+
+
+class RelocateRequest(BaseModel):
+    product_id:   int
+    from_cell_id: int
+    to_cell_id:   int
+    quantity:     Decimal
+
+
+class UnassignedItemOut(BaseModel):
+    product_id:   int
+    product_name: str
+    product_sku:  str
+    unit:         str
+    unassigned:   Decimal
+
+
+class ProductCellLocationOut(BaseModel):
+    cell_id:   int
+    zone_name: str
+    code:      str
+    quantity:  Decimal
+
+
+class ProductWarehouseLocationOut(BaseModel):
+    warehouse_id:   int
+    warehouse_name: str
+    cells:          list[ProductCellLocationOut] = []
+    unassigned:     Decimal
+    total:          Decimal
+
+
+class ProductLocationsOut(BaseModel):
+    product_id: int
+    warehouses: list[ProductWarehouseLocationOut] = []
+
+
+class CellMovementOut(BaseModel):
+    id:            int
+    product_id:    int
+    product_name:  str
+    quantity:      Decimal
+    kind:          str
+    cell_from:     str | None    # "Zone A1" or None for the unassigned pool
+    cell_to:       str | None
+    created_at:    datetime
+
+    class Config:
+        from_attributes = True

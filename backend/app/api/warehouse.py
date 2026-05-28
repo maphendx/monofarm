@@ -19,7 +19,7 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
-    CellStock, Counterparty, MovementType, Order, OrderItem, OrderPayment,
+    CellMoveKind, CellMovement, CellStock, Counterparty, MovementType, Order, OrderItem, OrderPayment,
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseZone, Product,
@@ -27,15 +27,17 @@ from app.models.warehouse import (
 from app.schemas.warehouse import (
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
-    CellOut, CellStockOut, CellStockSet,
+    CellMovementOut, CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
     OrderCreate, OrderItemOut, OrderOut, OrderPaymentCreate, OrderPaymentOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
-    ProductCreate, ProductImageOut, ProductOut, ProductUpdate, ReserveRequest,
+    ProductCreate, ProductImageOut, ProductOut, ProductUpdate,
+    ProductCellLocationOut, ProductLocationsOut, ProductWarehouseLocationOut,
+    PutawayRequest, RelocateRequest, ReserveRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
-    StockEntryOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
+    StockEntryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneUpdate, ZoneWithCellsOut,
 )
 
@@ -249,11 +251,137 @@ def _update_avco(product_id: int, incoming_qty: Decimal, incoming_cost: Decimal,
     product.cost_price = new_cost.quantize(Decimal("0.0001"))
 
 
+# ── Bin (cell) reconciliation ───────────────────────────────────────────────
+#
+# StockEntry stays the source of truth for totals. Cells are a physical
+# allocation underneath it, bounded by the invariant:
+#
+#     for each (product, warehouse):  sum(CellStock) <= StockEntry.quantity
+#
+# The difference is "unassigned" (floor) stock. Every stock decrease runs
+# through _clamp_cells_to_stock, so cell allocations can never drift above the
+# real total — even for callers (orders, batches, auto-replenish) that know
+# nothing about cells.
+
+def _get_cell(cell_id: int, org: Organization, db: Session, warehouse_id: int | None = None) -> WarehouseCell:
+    cell = (
+        db.query(WarehouseCell)
+        .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+        .filter(WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id)
+        .first()
+    )
+    if not cell:
+        raise HTTPException(status_code=404, detail="Cell not found")
+    if warehouse_id is not None:
+        zone = db.get(WarehouseZone, cell.zone_id)
+        if not zone or zone.warehouse_id != warehouse_id:
+            raise HTTPException(status_code=400, detail="Комірка не належить цьому складу")
+    return cell
+
+
+def _cell_warehouse_id(cell: WarehouseCell, db: Session) -> int:
+    zone = db.get(WarehouseZone, cell.zone_id)
+    return zone.warehouse_id  # type: ignore[union-attr]
+
+
+def _cells_in_warehouse(product_id: int, warehouse_id: int, db: Session) -> list[CellStock]:
+    """CellStock rows for a product in one warehouse, oldest first (FIFO)."""
+    return (
+        db.query(CellStock)
+        .join(WarehouseCell, WarehouseCell.id == CellStock.cell_id)
+        .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+        .filter(
+            WarehouseZone.warehouse_id == warehouse_id,
+            CellStock.product_id == product_id,
+            CellStock.quantity > 0,
+        )
+        .order_by(CellStock.updated_at, CellStock.id)
+        .all()
+    )
+
+
+def _cell_assigned(product_id: int, warehouse_id: int, db: Session) -> Decimal:
+    return sum((cs.quantity for cs in _cells_in_warehouse(product_id, warehouse_id, db)), Decimal("0"))
+
+
+def _unassigned_qty(product_id: int, warehouse_id: int, db: Session) -> Decimal:
+    entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+    total = entry.quantity if entry else Decimal("0")
+    return max(Decimal("0"), total - _cell_assigned(product_id, warehouse_id, db))
+
+
+def _log_cell_move(
+    db: Session, *, org_id: int, product_id: int, quantity: Decimal, kind: CellMoveKind,
+    cell_from_id: int | None = None, cell_to_id: int | None = None,
+    movement_id: int | None = None, created_by_id: int | None = None,
+) -> None:
+    if quantity <= 0:
+        return
+    db.add(CellMovement(
+        organization_id=org_id, product_id=product_id, quantity=quantity, kind=kind,
+        cell_from_id=cell_from_id, cell_to_id=cell_to_id,
+        movement_id=movement_id, created_by_id=created_by_id,
+    ))
+
+
+def _putaway(
+    cell: WarehouseCell, product_id: int, qty: Decimal, org_id: int, db: Session,
+    *, kind: CellMoveKind = CellMoveKind.putaway, movement_id: int | None = None, created_by_id: int | None = None,
+) -> None:
+    """Assign qty from the unassigned pool into a cell. Caller must cap qty to availability."""
+    if qty <= 0:
+        return
+    cs = db.query(CellStock).filter_by(cell_id=cell.id, product_id=product_id).first()
+    if cs:
+        cs.quantity += qty
+    else:
+        db.add(CellStock(cell_id=cell.id, product_id=product_id, quantity=qty))
+    _log_cell_move(db, org_id=org_id, product_id=product_id, quantity=qty, kind=kind,
+                   cell_to_id=cell.id, movement_id=movement_id, created_by_id=created_by_id)
+
+
+def _pick_from_cell(
+    cell: WarehouseCell, product_id: int, qty: Decimal, org_id: int, db: Session,
+    *, kind: CellMoveKind = CellMoveKind.pick, movement_id: int | None = None, created_by_id: int | None = None,
+) -> Decimal:
+    """Remove up to qty from a cell. Returns the amount actually removed."""
+    cs = db.query(CellStock).filter_by(cell_id=cell.id, product_id=product_id).first()
+    take = min(cs.quantity, qty) if cs else Decimal("0")
+    if take > 0:
+        cs.quantity -= take
+        _log_cell_move(db, org_id=org_id, product_id=product_id, quantity=take, kind=kind,
+                       cell_from_id=cell.id, movement_id=movement_id, created_by_id=created_by_id)
+        if cs.quantity <= 0:
+            db.delete(cs)
+    return take
+
+
+def _clamp_cells_to_stock(
+    product_id: int, warehouse_id: int, org_id: int, db: Session,
+    *, movement_id: int | None = None, created_by_id: int | None = None,
+) -> None:
+    """Reduce cell allocations FIFO until sum(cells) <= StockEntry.quantity."""
+    entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+    total = entry.quantity if entry else Decimal("0")
+    cells = _cells_in_warehouse(product_id, warehouse_id, db)
+    excess = sum((c.quantity for c in cells), Decimal("0")) - total
+    if excess <= 0:
+        return
+    for cs in cells:
+        if excess <= 0:
+            break
+        cell = db.get(WarehouseCell, cs.cell_id)
+        take = _pick_from_cell(cell, product_id, min(cs.quantity, excess), org_id, db,
+                               movement_id=movement_id, created_by_id=created_by_id)
+        excess -= take
+
+
 def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
     """Update StockEntry rows to reflect a committed movement.
 
     For PURCHASE_IN, updates AVCO on the product BEFORE adding stock so
-    the formula uses the quantity currently on hand.
+    the formula uses the quantity currently on hand. After applying, clamps
+    cell allocations in any touched warehouse back within the new totals.
     """
     q   = movement.quantity
     mt  = movement.type
@@ -279,7 +407,7 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
             _update_avco(pid, q, movement.unit_cost, db)
         _entry(pid, movement.warehouse_to_id).quantity += q
 
-    elif mt == MovementType.PRODUCTION_IN and movement.warehouse_to_id:
+    elif mt in (MovementType.PRODUCTION_IN, MovementType.RETURN_IN) and movement.warehouse_to_id:
         _entry(pid, movement.warehouse_to_id).quantity += q
 
     elif mt == MovementType.DEFECT and movement.warehouse_from_id:
@@ -287,7 +415,7 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
         if movement.warehouse_to_id:
             _entry(pid, movement.warehouse_to_id).quantity += q
 
-    elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT) and movement.warehouse_from_id:
+    elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.WRITE_OFF) and movement.warehouse_from_id:
         _entry(pid, movement.warehouse_from_id).quantity -= q
 
     elif mt == MovementType.ADJUSTMENT:
@@ -298,6 +426,14 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
     elif mt == MovementType.TRANSFER and movement.warehouse_from_id and movement.warehouse_to_id:
         _entry(pid, movement.warehouse_from_id).quantity -= q
         _entry(pid, movement.warehouse_to_id).quantity   += q
+
+    # Keep cell allocations within the new totals for every touched warehouse.
+    # Clamping a warehouse whose stock only increased is a harmless no-op.
+    db.flush()
+    for wh_id in {movement.warehouse_from_id, movement.warehouse_to_id}:
+        if wh_id:
+            _clamp_cells_to_stock(pid, wh_id, movement.organization_id, db,
+                                  movement_id=movement.id, created_by_id=movement.created_by_id)
 
 
 def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
@@ -545,7 +681,9 @@ def update_zone(
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
     data = payload.model_dump(exclude_unset=True)
-    resize = "rows" in data or "cols" in data
+    # Only a real change in dimensions counts as a resize; renaming a zone whose
+    # rows/cols are re-sent unchanged must not wipe and regenerate its cells.
+    resize = data.get("rows", zone.rows) != zone.rows or data.get("cols", zone.cols) != zone.cols
     if resize:
         occupied = (
             db.query(func.count(CellStock.id))
@@ -644,51 +782,241 @@ def get_zone_cells(
 def set_cell_stock(
     cell_id: int,
     payload: CellStockSet,
-    db:  Session      = Depends(get_db),
-    org: Organization = Depends(get_current_org),
-    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> CellStockOut:
-    cell = db.query(WarehouseCell).join(WarehouseZone).filter(
-        WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id,
-    ).first()
-    if not cell:
-        raise HTTPException(status_code=404, detail="Cell not found")
+    """Set the absolute quantity of a product in a cell.
+
+    The delta is drawn from / returned to the warehouse's unassigned pool so the
+    invariant sum(cells) <= StockEntry.quantity always holds. Raising a cell
+    above the unassigned amount is rejected.
+    """
+    cell = _get_cell(cell_id, org, db)
     product = db.query(Product).filter(
         Product.id == payload.product_id, Product.organization_id == org.id,
     ).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    cs = db.query(CellStock).filter(
-        CellStock.cell_id == cell_id, CellStock.product_id == payload.product_id,
-    ).first()
-    if cs:
-        cs.quantity = payload.quantity
-    else:
-        cs = CellStock(cell_id=cell_id, product_id=payload.product_id, quantity=payload.quantity)
-        db.add(cs)
+
+    wh_id   = _cell_warehouse_id(cell, db)
+    cs      = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
+    current = cs.quantity if cs else Decimal("0")
+    delta   = payload.quantity - current
+
+    if delta > 0:
+        avail = _unassigned_qty(payload.product_id, wh_id, db)
+        if delta > avail:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Нерозкладено лише {avail} {product.unit} на цьому складі",
+            )
+        _putaway(cell, payload.product_id, delta, org.id, db,
+                 kind=CellMoveKind.adjust, created_by_id=user.id)
+    elif delta < 0:
+        _pick_from_cell(cell, payload.product_id, -delta, org.id, db,
+                        kind=CellMoveKind.adjust, created_by_id=user.id)
+
     db.commit()
-    db.refresh(cs)
-    cs.product = product
-    return _cell_stock_out(cs)
+    return CellStockOut(
+        product_id=payload.product_id, product_name=product.name,
+        product_sku=product.sku, quantity=payload.quantity,
+    )
 
 
 @router.delete("/cells/{cell_id}/stock/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_cell_stock(
     cell_id:    int,
     product_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    """Empty a cell — the quantity returns to the warehouse's unassigned pool."""
+    cell = _get_cell(cell_id, org, db)
+    cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=product_id).first()
+    if cs:
+        _pick_from_cell(cell, product_id, cs.quantity, org.id, db,
+                        kind=CellMoveKind.adjust, created_by_id=user.id)
+    db.commit()
+
+
+# ── Putaway / relocate / locations ────────────────────────────────────────────
+
+@router.get("/warehouses/{wh_id}/unassigned", response_model=list[UnassignedItemOut])
+def list_unassigned(
+    wh_id: int,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
-    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
-) -> None:
-    cell = db.query(WarehouseCell).join(WarehouseZone).filter(
-        WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id,
-    ).first()
-    if not cell:
-        raise HTTPException(status_code=404, detail="Cell not found")
-    db.query(CellStock).filter(
-        CellStock.cell_id == cell_id, CellStock.product_id == product_id,
-    ).delete()
+) -> list[UnassignedItemOut]:
+    """Products with floor stock not yet put away into a cell in this warehouse."""
+    _get_warehouse(wh_id, org, db)
+    entries = (
+        db.query(StockEntry, Product)
+        .join(Product, Product.id == StockEntry.product_id)
+        .filter(StockEntry.organization_id == org.id,
+                StockEntry.warehouse_id == wh_id,
+                StockEntry.quantity > 0)
+        .order_by(Product.name)
+        .all()
+    )
+    out: list[UnassignedItemOut] = []
+    for e, p in entries:
+        unassigned = e.quantity - _cell_assigned(p.id, wh_id, db)
+        if unassigned > 0:
+            out.append(UnassignedItemOut(
+                product_id=p.id, product_name=p.name, product_sku=p.sku,
+                unit=p.unit, unassigned=unassigned,
+            ))
+    return out
+
+
+@router.post("/cells/{cell_id}/putaway", response_model=CellStockOut)
+def putaway_to_cell(
+    cell_id: int,
+    payload: PutawayRequest,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CellStockOut:
+    """Move quantity from the unassigned pool into a cell."""
+    cell = _get_cell(cell_id, org, db)
+    product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Кількість має бути більшою за 0")
+
+    wh_id = _cell_warehouse_id(cell, db)
+    avail = _unassigned_qty(payload.product_id, wh_id, db)
+    if payload.quantity > avail:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Нерозкладено лише {avail} {product.unit} на цьому складі",
+        )
+    _putaway(cell, payload.product_id, payload.quantity, org.id, db, created_by_id=user.id)
     db.commit()
+
+    cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
+    return CellStockOut(
+        product_id=payload.product_id, product_name=product.name,
+        product_sku=product.sku, quantity=cs.quantity if cs else Decimal("0"),
+    )
+
+
+@router.post("/cells/relocate", status_code=status.HTTP_204_NO_CONTENT)
+def relocate_between_cells(
+    payload: RelocateRequest,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    """Move quantity from one cell to another within the same warehouse."""
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Кількість має бути більшою за 0")
+    if payload.from_cell_id == payload.to_cell_id:
+        raise HTTPException(status_code=400, detail="Комірки збігаються")
+    src = _get_cell(payload.from_cell_id, org, db)
+    dst = _get_cell(payload.to_cell_id, org, db)
+    if _cell_warehouse_id(src, db) != _cell_warehouse_id(dst, db):
+        raise HTTPException(status_code=400, detail="Переміщення можливе лише в межах одного складу")
+
+    src_cs = db.query(CellStock).filter_by(cell_id=src.id, product_id=payload.product_id).first()
+    if not src_cs or src_cs.quantity < payload.quantity:
+        have = src_cs.quantity if src_cs else Decimal("0")
+        raise HTTPException(status_code=400, detail=f"У комірці лише {have}")
+
+    src_cs.quantity -= payload.quantity
+    if src_cs.quantity <= 0:
+        db.delete(src_cs)
+    dst_cs = db.query(CellStock).filter_by(cell_id=dst.id, product_id=payload.product_id).first()
+    if dst_cs:
+        dst_cs.quantity += payload.quantity
+    else:
+        db.add(CellStock(cell_id=dst.id, product_id=payload.product_id, quantity=payload.quantity))
+    _log_cell_move(db, org_id=org.id, product_id=payload.product_id, quantity=payload.quantity,
+                   kind=CellMoveKind.relocate, cell_from_id=src.id, cell_to_id=dst.id,
+                   created_by_id=user.id)
+    db.commit()
+
+
+@router.get("/products/{product_id}/locations", response_model=ProductLocationsOut)
+def product_locations(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> ProductLocationsOut:
+    """Where a product physically sits: cells + unassigned pool, per warehouse."""
+    _get_product(product_id, org, db)
+    entries = (
+        db.query(StockEntry, Warehouse)
+        .join(Warehouse, Warehouse.id == StockEntry.warehouse_id)
+        .filter(StockEntry.organization_id == org.id,
+                StockEntry.product_id == product_id,
+                StockEntry.quantity > 0)
+        .order_by(Warehouse.name)
+        .all()
+    )
+    warehouses: list[ProductWarehouseLocationOut] = []
+    for e, wh in entries:
+        rows = (
+            db.query(CellStock, WarehouseCell, WarehouseZone)
+            .join(WarehouseCell, WarehouseCell.id == CellStock.cell_id)
+            .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+            .filter(WarehouseZone.warehouse_id == wh.id,
+                    CellStock.product_id == product_id,
+                    CellStock.quantity > 0)
+            .order_by(WarehouseZone.name, WarehouseCell.code)
+            .all()
+        )
+        cells = [
+            ProductCellLocationOut(cell_id=c.id, zone_name=z.name, code=c.code, quantity=cs.quantity)
+            for cs, c, z in rows
+        ]
+        assigned = sum((c.quantity for c in cells), Decimal("0"))
+        warehouses.append(ProductWarehouseLocationOut(
+            warehouse_id=wh.id, warehouse_name=wh.name, cells=cells,
+            unassigned=e.quantity - assigned, total=e.quantity,
+        ))
+    return ProductLocationsOut(product_id=product_id, warehouses=warehouses)
+
+
+@router.get("/products/{product_id}/cell-history", response_model=list[CellMovementOut])
+def product_cell_history(
+    product_id: int,
+    limit: int = Query(50, le=200),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[CellMovementOut]:
+    """Audit trail of bin relocations for a product (newest first)."""
+    _get_product(product_id, org, db)
+    rows = (
+        db.query(CellMovement)
+        .filter(CellMovement.organization_id == org.id, CellMovement.product_id == product_id)
+        .order_by(CellMovement.created_at.desc(), CellMovement.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    def _label(cell_id: int | None) -> str | None:
+        if not cell_id:
+            return None
+        cell = db.get(WarehouseCell, cell_id)
+        if not cell:
+            return None
+        zone = db.get(WarehouseZone, cell.zone_id)
+        return f"{zone.name} {cell.code}" if zone else cell.code
+
+    p = db.get(Product, product_id)
+    return [
+        CellMovementOut(
+            id=r.id, product_id=r.product_id, product_name=p.name if p else "",
+            quantity=r.quantity, kind=r.kind.value,
+            cell_from=_label(r.cell_from_id), cell_to=_label(r.cell_to_id),
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
 
 
 # ── Counterparties ────────────────────────────────────────────────────────────
@@ -1822,6 +2150,7 @@ def list_stock(
 
         total_stock = total_stock_map.get(e.product_id, Decimal(0))
         locations = cell_stock_map.get((e.product_id, e.warehouse_id), [])
+        assigned = sum((Decimal(str(loc["quantity"])) for loc in locations), Decimal(0))
 
         result.append(StockEntryOut(
             id=e.id,
@@ -1834,6 +2163,8 @@ def list_stock(
             warehouse_id=e.warehouse_id,
             warehouse_name=wh.name,
             locations=locations,
+            assigned_qty=assigned,
+            unassigned_qty=max(Decimal(0), e.quantity - assigned),
             quantity=e.quantity,
             reserved_qty=e.reserved_qty,
             available=avail,
@@ -2113,15 +2444,33 @@ def create_movement(
                 ),
             )
     total = (payload.quantity * payload.unit_cost) if payload.unit_cost else None
+    data = payload.model_dump()
+    cell_from_id = data.pop("cell_from_id", None)   # not WarehouseMovement columns
+    cell_to_id   = data.pop("cell_to_id", None)
     m = WarehouseMovement(
         organization_id=org.id,
         created_by_id=user.id,
         total_cost=total,
-        **payload.model_dump(),
+        **data,
     )
     db.add(m)
     db.flush()
+
+    # Honor an explicit source bin BEFORE the stock change so the FIFO clamp
+    # inside _apply_movement leaves it alone (the cell is already drawn down).
+    if cell_from_id and m.warehouse_from_id:
+        src = _get_cell(cell_from_id, org, db, warehouse_id=m.warehouse_from_id)
+        _pick_from_cell(src, m.product_id, m.quantity, org.id, db,
+                        movement_id=m.id, created_by_id=user.id)
+
     _apply_movement(m, db)
+
+    # Honor an explicit target bin AFTER stock increased (cap to what's unassigned).
+    if cell_to_id and m.warehouse_to_id:
+        dst = _get_cell(cell_to_id, org, db, warehouse_id=m.warehouse_to_id)
+        avail = _unassigned_qty(m.product_id, m.warehouse_to_id, db)
+        _putaway(dst, m.product_id, min(m.quantity, avail), org.id, db,
+                 movement_id=m.id, created_by_id=user.id)
 
     if payload.type in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.DEFECT, MovementType.TRANSFER):
         _check_and_auto_replenish(m.product_id, org.id, db)
@@ -2596,6 +2945,10 @@ def ship_order(
             order_id=o.id,
         )
         db.add(m)
+        db.flush()
+        # Pick the shipped quantity out of cells (FIFO) so locations stay in sync
+        _clamp_cells_to_stock(item.product_id, item.warehouse_id, org.id, db,
+                              movement_id=m.id, created_by_id=user.id)
 
     # Update counterparty balance (outstanding debt)
     if o.counterparty_id:
