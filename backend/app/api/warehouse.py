@@ -2045,6 +2045,27 @@ def create_movement(
     _get_product(payload.product_id, org, db)
     if payload.type == MovementType.PURCHASE_IN and not payload.unit_cost:
         raise HTTPException(status_code=400, detail="Закупка потребує ціну за одиницю (unit_cost)")
+    if payload.type == MovementType.RETURN_IN and payload.order_id:
+        item = db.query(OrderItem).filter_by(
+            order_id=payload.order_id, product_id=payload.product_id
+        ).first()
+        if not item:
+            raise HTTPException(status_code=400, detail="Товар не входив у це замовлення")
+        already_returned: Decimal = db.query(
+            func.coalesce(func.sum(WarehouseMovement.quantity), 0)
+        ).filter_by(
+            order_id=payload.order_id,
+            product_id=payload.product_id,
+            type=MovementType.RETURN_IN,
+        ).scalar() or Decimal("0")
+        if already_returned + payload.quantity > item.quantity:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Не можна повернути більше, ніж відвантажено "
+                    f"(відвантажено {item.quantity}, вже повернуто {already_returned})"
+                ),
+            )
     total = (payload.quantity * payload.unit_cost) if payload.unit_cost else None
     m = WarehouseMovement(
         organization_id=org.id,
@@ -2194,8 +2215,11 @@ def delete_batch(
     b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Batch not found")
-    if b.status == BatchStatus.done:
-        raise HTTPException(status_code=400, detail="Не можна видалити закриту партію — вона вже записала рухи складу")
+    if b.status != BatchStatus.draft:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Видалити можна лише чернеткову партію (зараз: {b.status}). Активні та закриті партії не видаляються.",
+        )
     db.delete(b)
     db.commit()
 

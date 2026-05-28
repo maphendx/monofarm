@@ -484,6 +484,11 @@ function ReturnModal({ open, onClose, order, onReturned }: {
     if (inFlight.current || !order) return;
     const lines = order.items.filter((it) => parseInt(qtys[it.id] ?? "0") > 0);
     if (lines.length === 0) return;
+    const overLimit = lines.find((it) => parseInt(qtys[it.id] ?? "0") > it.quantity);
+    if (overLimit) {
+      setError(`Кількість повернення «${overLimit.product_name}» перевищує відвантажену (${overLimit.quantity})`);
+      return;
+    }
     inFlight.current = true;
     setBusy(true); setError(null);
     try {
@@ -523,6 +528,9 @@ function ReturnModal({ open, onClose, order, onReturned }: {
         <p className="text-[var(--text-muted)]">
           Вкажіть кількість одиниць що повертаються по кожній позиції.
         </p>
+        <div className="rounded-lg border border-[rgba(245,158,11,.3)] bg-[rgba(245,158,11,.06)] px-3 py-2.5 text-xs text-[var(--state-warn)]">
+          Оформлює лише складський рух (RETURN_IN). Повернення коштів або коригування боргу контрагента — окремо через розділ «Фінанси» або «Контрагенти».
+        </div>
         <div className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
           {order?.items.map((it) => (
             <div key={it.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
