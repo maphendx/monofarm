@@ -316,9 +316,23 @@ class MovementCreate(BaseModel):
     order_id:          int | None = None
 
 
+_MOVEMENT_DIRECTION: dict[str, str] = {
+    "PURCHASE_IN":    "in",
+    "PRODUCTION_IN":  "in",
+    "RETURN_IN":      "in",
+    "ADJUSTMENT":     "in",
+    "SALE_OUT":       "out",
+    "PRODUCTION_OUT": "out",
+    "DEFECT":         "out",
+    "WRITE_OFF":      "out",
+    "TRANSFER":       "transfer",
+}
+
+
 class MovementOut(BaseModel):
     id:                int
     type:              MovementType
+    direction:         str           # "in" | "out" | "transfer" — canonical sign from backend
     product_id:        int
     product_name:      str
     warehouse_from_id: int | None

@@ -145,11 +145,11 @@ export default function MovementsPage() {
             ) : items.length === 0 ? (
               <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає записів</td></tr>
             ) : items.map(m => {
-              const meta    = TYPE_META[m.type];
-              const qty     = parseFloat(m.quantity);
-              const isOut   = meta.needsFrom && !meta.needsTo;
-              const isXfer  = meta.needsFrom && meta.needsTo;
-              const signed  = isOut ? -qty : qty;
+              const meta   = TYPE_META[m.type];
+              const qty    = parseFloat(m.quantity);
+              const isOut  = m.direction === "out";
+              const isXfer = m.direction === "transfer";
+              const signed = isOut ? -qty : qty;
               return (
                 <tr key={m.id} className="hover:bg-[var(--surface-hi)]">
                   {colVis.isVisible("date") && (

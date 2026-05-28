@@ -19,7 +19,8 @@ export const TYPE_META: Record<MovementType, { label: string; cls: string; needs
 };
 
 export type Movement = {
-  id: number; type: MovementType; product_name: string;
+  id: number; type: MovementType; direction: "in" | "out" | "transfer";
+  product_name: string;
   quantity: string; unit: string; unit_cost: string | null; total_cost: string | null;
   warehouse_from_id: number | null; warehouse_to_id: number | null;
   reason: string | null; created_at: string;

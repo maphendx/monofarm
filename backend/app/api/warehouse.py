@@ -30,7 +30,7 @@ from app.schemas.warehouse import (
     CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
-    MovementCreate, MovementListOut, MovementOut,
+    MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
     OrderCreate, OrderItemOut, OrderOut, OrderPaymentCreate, OrderPaymentOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
     ProductCreate, ProductImageOut, ProductOut, ProductUpdate, ReserveRequest,
@@ -2061,6 +2061,7 @@ def list_movements(
     items = [
         MovementOut(
             id=m.id, type=m.type,
+            direction=_MOVEMENT_DIRECTION.get(m.type, "in"),
             product_id=m.product_id, product_name=products.get(m.product_id, ""),
             warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
             quantity=m.quantity, unit=m.unit,
@@ -2125,6 +2126,7 @@ def create_movement(
     p = db.get(Product, m.product_id)
     return MovementOut(
         id=m.id, type=m.type,
+        direction=_MOVEMENT_DIRECTION.get(m.type, "in"),
         product_id=m.product_id, product_name=p.name if p else "",  # type: ignore[union-attr]
         warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
         quantity=m.quantity, unit=m.unit,
