@@ -131,3 +131,167 @@ def test_cell_history_logged(setup, client, auth_headers):
     hist = client.get(f"/api/warehouse/products/{p['id']}/cell-history", headers=auth_headers).json()
     kinds = [h["kind"] for h in hist]
     assert "putaway" in kinds and "relocate" in kinds
+
+
+def test_relocate_does_not_change_stock_entry(setup, client, auth_headers):
+    """Relocating between cells must not alter StockEntry.quantity or reserved_qty."""
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=50, unit_cost=5)
+    client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 50}, headers=auth_headers)
+
+    s_before = _stock(client, auth_headers, wh["id"], p["id"])
+
+    r = client.post("/api/warehouse/cells/relocate",
+                    json={"product_id": p["id"], "from_cell_id": cells[0]["id"],
+                          "to_cell_id": cells[1]["id"], "quantity": 20}, headers=auth_headers)
+    assert r.status_code == 204
+
+    s_after = _stock(client, auth_headers, wh["id"], p["id"])
+    assert float(s_after["quantity"]) == float(s_before["quantity"])
+    assert float(s_after["reserved_qty"]) == float(s_before["reserved_qty"])
+    assert float(s_after["assigned_qty"]) == float(s_before["assigned_qty"])
+    assert float(s_after["unassigned_qty"]) == float(s_before["unassigned_qty"])
+
+
+def test_ship_order_clamps_cells(setup, client, auth_headers):
+    """Shipping an order (confirmed → shipped) must clamp cell allocations."""
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+
+    # 1. Stock up and put into cell
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=100, unit_cost=10)
+    client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 80}, headers=auth_headers)
+
+    # 2. Create order for 60 items
+    order = client.post("/api/warehouse/orders", json={
+        "customer_name": "Test Buyer",
+        "items": [{"product_id": p["id"], "quantity": 60, "unit_price": 20}],
+    }, headers=auth_headers).json()
+
+    # 3. Reserve
+    r = client.post(f"/api/warehouse/orders/{order['id']}/reserve",
+                    json={"warehouse_id": wh["id"]}, headers=auth_headers)
+    assert r.status_code == 200
+
+    s = _stock(client, auth_headers, wh["id"], p["id"])
+    assert float(s["reserved_qty"]) == 60
+    assert float(s["assigned_qty"]) == 80  # cells untouched by reserve
+
+    # 4. Ship — this triggers _clamp_cells_to_stock
+    r = client.post(f"/api/warehouse/orders/{order['id']}/ship", headers=auth_headers)
+    assert r.status_code == 200, r.text
+
+    s = _stock(client, auth_headers, wh["id"], p["id"])
+    assert float(s["quantity"]) == 40       # 100 - 60
+    assert float(s["reserved_qty"]) == 0    # released
+    # Cells must be clamped: was 80, total now 40, so max in cells = 40
+    assert float(s["assigned_qty"]) <= 40
+    assert float(s["unassigned_qty"]) >= 0
+    # Invariant
+    assert float(s["assigned_qty"]) + float(s["unassigned_qty"]) == float(s["quantity"])
+
+
+def test_reserved_qty_and_cells_coexist(setup, client, auth_headers):
+    """reserved_qty is orthogonal to cell allocation: reserving stock doesn't affect cells."""
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=50, unit_cost=5)
+    # Put 40 into cell, 10 unassigned
+    client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 40}, headers=auth_headers)
+
+    # Reserve 30 via an order — should not touch cell allocation
+    order = client.post("/api/warehouse/orders", json={
+        "customer_name": "Reservation Test",
+        "items": [{"product_id": p["id"], "quantity": 30, "unit_price": 10}],
+    }, headers=auth_headers).json()
+    r = client.post(f"/api/warehouse/orders/{order['id']}/reserve",
+                    json={"warehouse_id": wh["id"]}, headers=auth_headers)
+    assert r.status_code == 200
+
+    s = _stock(client, auth_headers, wh["id"], p["id"])
+    assert float(s["quantity"]) == 50       # unchanged
+    assert float(s["reserved_qty"]) == 30
+    assert float(s["available"]) == 20
+    assert float(s["assigned_qty"]) == 40   # cells untouched
+    assert float(s["unassigned_qty"]) == 10
+
+    # Putaway the remaining 10 into another cell — should still work
+    r = client.post(f"/api/warehouse/cells/{cells[1]['id']}/putaway",
+                    json={"product_id": p["id"], "quantity": 10}, headers=auth_headers)
+    assert r.status_code == 200
+
+    s = _stock(client, auth_headers, wh["id"], p["id"])
+    assert float(s["assigned_qty"]) == 50
+    assert float(s["unassigned_qty"]) == 0
+
+
+def test_full_lifecycle_invariant(setup, client, auth_headers):
+    """End-to-end: purchase → putaway → sale → return → write_off,
+    checking sum(cells) <= StockEntry at every step."""
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+
+    def invariant():
+        s = _stock(client, auth_headers, wh["id"], p["id"])
+        if s is None:
+            return  # no stock yet — invariant trivially holds
+        assigned = float(s["assigned_qty"])
+        unassigned = float(s["unassigned_qty"])
+        total = float(s["quantity"])
+        assert assigned + unassigned == total, f"drift: assigned={assigned}+unassigned={unassigned} != total={total}"
+        assert assigned >= 0 and unassigned >= 0
+        return s
+
+    # Step 1: Purchase 100
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=100, unit_cost=5)
+    s = invariant()
+    assert float(s["quantity"]) == 100
+
+    # Step 2: Putaway 70 into cell A, 20 into cell B → 10 unassigned
+    client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 70}, headers=auth_headers)
+    client.post(f"/api/warehouse/cells/{cells[1]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 20}, headers=auth_headers)
+    s = invariant()
+    assert float(s["assigned_qty"]) == 90
+    assert float(s["unassigned_qty"]) == 10
+
+    # Step 3: Order 40, reserve, ship → total drops to 60, cells clamped
+    order = client.post("/api/warehouse/orders", json={
+        "customer_name": "E2E Buyer",
+        "items": [{"product_id": p["id"], "quantity": 40, "unit_price": 15}],
+    }, headers=auth_headers).json()
+    client.post(f"/api/warehouse/orders/{order['id']}/reserve",
+                json={"warehouse_id": wh["id"]}, headers=auth_headers)
+    invariant()  # reserve doesn't change totals or cells
+    client.post(f"/api/warehouse/orders/{order['id']}/ship", headers=auth_headers)
+    s = invariant()
+    assert float(s["quantity"]) == 60
+
+    # Step 4: Return 5
+    _move(client, auth_headers, type="RETURN_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=5)
+    s = invariant()
+    assert float(s["quantity"]) == 65
+
+    # Step 5: Write off 10
+    _move(client, auth_headers, type="WRITE_OFF", product_id=p["id"],
+          warehouse_from_id=wh["id"], quantity=10)
+    s = invariant()
+    assert float(s["quantity"]) == 55
+
+    # Step 6: Transfer 15 to a second warehouse
+    wh2 = client.post("/api/warehouse/warehouses",
+                      json={"name": "Secondary", "type": "raw"}, headers=auth_headers).json()
+    _move(client, auth_headers, type="TRANSFER", product_id=p["id"],
+          warehouse_from_id=wh["id"], warehouse_to_id=wh2["id"], quantity=15)
+    s = invariant()
+    assert float(s["quantity"]) == 40
+
+    # Final: assigned must not exceed 40
+    assert float(s["assigned_qty"]) <= 40

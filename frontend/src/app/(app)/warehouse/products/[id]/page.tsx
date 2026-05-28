@@ -748,7 +748,10 @@ export default function ProductDetailPage() {
 
       {tab === "stock" && locations && locations.warehouses.some((w) => w.cells.length > 0 || parseFloat(w.unassigned) > 0) && (
         <div className="mt-4 space-y-3">
-          <h3 className="text-sm font-semibold text-[var(--text-muted)]">Розташування по комірках</h3>
+          <h3 className="text-sm font-semibold text-[var(--text-muted)]" title="Після відвантажень розташування орієнтовне — точне після впровадження pick-list">
+            Розташування по комірках
+            <span className="ml-1 text-[10px] font-normal text-[var(--text-faint)]">≈ орієнтовне</span>
+          </h3>
           {locations.warehouses.map((w) => (
             <div key={w.warehouse_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
               <div className="mb-2 flex items-center justify-between">
