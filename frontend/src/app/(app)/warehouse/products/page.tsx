@@ -146,24 +146,26 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
 // ── ProductModal ──────────────────────────────────────────────────────────────
 
 function ProductModal({
-  product, onClose, onSaved,
+  product, prefill, onClose, onSaved,
 }: {
   product: Product | null;  // null = create mode
+  prefill?: Partial<Product> | null;
   onClose: () => void;
   onSaved: (p: Product) => void;
 }) {
   const isEdit = product !== null;
+  const src = product ?? prefill;  // for field defaults
 
-  const [name,         setName]         = useState(product?.name    ?? "");
-  const [sku,          setSku]          = useState(product?.sku     ?? "");
-  const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
-  const [cats,         setCats]         = useState<string[]>(product?.categories ?? []);
-  const [unit,         setUnit]         = useState(product?.unit    ?? "шт");
-  const [price,        setPrice]        = useState(product?.sale_price ? parseFloat(product.sale_price).toString() : "");
-  const [desc,         setDesc]         = useState(product?.description ?? "");
-  const [minStock,     setMinStock]     = useState(product?.min_stock?.toString() ?? "");
-  const [desiredStock, setDesiredStock] = useState(product?.desired_stock?.toString() ?? "");
-  const [boxLimit,     setBoxLimit]     = useState(product?.box_limit?.toString() ?? "");
+  const [name,         setName]         = useState(src?.name    ?? "");
+  const [sku,          setSku]          = useState(src?.sku     ?? "");
+  const [barcode,      setBarcode]      = useState("");  // never copy barcode
+  const [cats,         setCats]         = useState<string[]>(src?.categories ?? []);
+  const [unit,         setUnit]         = useState(src?.unit    ?? "шт");
+  const [price,        setPrice]        = useState(src?.sale_price ? parseFloat(src.sale_price).toString() : "");
+  const [desc,         setDesc]         = useState(src?.description ?? "");
+  const [minStock,     setMinStock]     = useState(src?.min_stock?.toString() ?? "");
+  const [desiredStock, setDesiredStock] = useState(src?.desired_stock?.toString() ?? "");
+  const [boxLimit,     setBoxLimit]     = useState(src?.box_limit?.toString() ?? "");
   const [busy,      setBusy]      = useState(false);
   const [err,       setErr]       = useState<string | null>(null);
   const [images,    setImages]    = useState<ProductImage[]>([]);
@@ -1194,7 +1196,8 @@ export default function ProductsPage() {
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   // Modal state
-  const [editProduct,  setEditProduct]  = useState<Product | null | "create">(null);
+  const [editProduct,   setEditProduct]   = useState<Product | null | "create">(null);
+  const [copyTemplate,  setCopyTemplate]  = useState<Partial<Product> | null>(null);
   const [specProduct,  setSpecProduct]  = useState<Product | null>(null);
   const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; hidden: number; new_categories: number } | null>(null);
   const [importing,    setImporting]    = useState(false);
@@ -1346,15 +1349,9 @@ export default function ProductsPage() {
     setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
   }
 
-  async function copyOne(id: number) {
-    const copy = await api<Product>(`/api/warehouse/products/${id}/copy`, { method: "POST" });
-    setProducts((prev) => {
-      const idx = prev.findIndex((x) => x.id === id);
-      const next = [...prev];
-      next.splice(idx + 1, 0, copy);
-      return next;
-    });
-    setEditProduct(copy);
+  function copyOne(p: Product) {
+    setCopyTemplate({ name: p.name + " (копія)", sku: p.sku + "-copy", categories: p.categories, unit: p.unit, description: p.description, sale_price: p.sale_price, min_stock: p.min_stock, desired_stock: p.desired_stock, box_limit: p.box_limit });
+    setEditProduct("create");
   }
 
   async function hardDeleteOne(id: number, name: string) {
@@ -1644,7 +1641,7 @@ export default function ProductsPage() {
                         <div className="flex items-center justify-end gap-1">
                           {!showArchive && (
                             <button
-                              onClick={() => copyOne(p.id)}
+                              onClick={() => copyOne(p)}
                               title="Створити копію"
                               className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--accent)] transition-opacity"
                             >
@@ -1853,7 +1850,8 @@ export default function ProductsPage() {
       {editProduct !== null && (
         <ProductModal
           product={editProduct === "create" ? null : editProduct}
-          onClose={() => setEditProduct(null)}
+          prefill={editProduct === "create" ? copyTemplate : null}
+          onClose={() => { setEditProduct(null); setCopyTemplate(null); }}
           onSaved={handleSaved}
         />
       )}
