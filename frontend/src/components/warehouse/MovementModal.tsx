@@ -96,7 +96,7 @@ export function CreateMovementModal({
           Скасувати
         </button>
         <button type="submit" form="movement-form"
-          disabled={busy || !productId || parseFloat(quantity) <= 0}
+          disabled={busy || !productId || parseFloat(quantity) <= 0 || (mType === "PURCHASE_IN" && !unitCost)}
           className="btn btn-primary disabled:opacity-50">
           {busy ? "Зберігаю…" : "Зафіксувати"}
         </button>
@@ -164,10 +164,13 @@ export function CreateMovementModal({
             </select>
           </label>
           <label className="block col-span-1">
-            <span className="mb-1 block text-[var(--text-muted)]">Ціна/од.</span>
+            <span className="mb-1 block text-[var(--text-muted)]">
+              Ціна/од.{mType === "PURCHASE_IN" && <span className="ml-0.5 text-[var(--state-error)]">*</span>}
+            </span>
             <input type="number" min={0} step="0.01" value={unitCost}
               onChange={(e) => setUnitCost(e.target.value)}
-              placeholder="₴ (опц.)"
+              required={mType === "PURCHASE_IN"}
+              placeholder={mType === "PURCHASE_IN" ? "₴" : "₴ (опц.)"}
               className={inputCls} />
           </label>
         </div>

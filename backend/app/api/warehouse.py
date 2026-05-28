@@ -1965,6 +1965,8 @@ def create_movement(
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> MovementOut:
     _get_product(payload.product_id, org, db)
+    if payload.type == MovementType.PURCHASE_IN and not payload.unit_cost:
+        raise HTTPException(status_code=400, detail="Закупка потребує ціну за одиницю (unit_cost)")
     total = (payload.quantity * payload.unit_cost) if payload.unit_cost else None
     m = WarehouseMovement(
         organization_id=org.id,
