@@ -97,7 +97,7 @@ export function SearchModal({ onClose }: { onClose: () => void }) {
     debounceRef.current = setTimeout(async () => {
       try {
         const data = await api<{ products: Omit<ProductItem, "kind">[]; filaments: Omit<FilamentItem, "kind">[] }>(
-          `/search?q=${encodeURIComponent(q)}`,
+          `/api/search?q=${encodeURIComponent(q)}`,
         );
         const products: ProductItem[] = data.products.map((p) => ({ ...p, kind: "product" }));
         const filaments: FilamentItem[] = data.filaments.map((f) => ({ ...f, kind: "filament" }));
