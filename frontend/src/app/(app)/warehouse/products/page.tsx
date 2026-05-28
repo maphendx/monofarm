@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API_URL, api, getToken } from "@/lib/api";
+import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -1028,8 +1029,9 @@ export default function ProductsPage() {
   const [sortDir,  setSortDir]  = useState<SortDir>("asc");
   const [pageSize, setPageSize] = useState<number>(25);
   const [page,     setPage]     = useState(1);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [deleting, setDeleting] = useState(false);
+  const [selected,    setSelected]    = useState<Set<number>>(new Set());
+  const [deleting,    setDeleting]    = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
 
   const colVis = useColumnVisibility("products", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
@@ -1050,10 +1052,10 @@ export default function ProductsPage() {
   const [specImporting,    setSpecImporting]    = useState(false);
   const [specImportResult, setSpecImportResult] = useState<SpecImportResult | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (archived: boolean) => {
     try {
       const [prods, stk, cs] = await Promise.all([
-        api<Product[]>("/api/warehouse/products"),
+        api<Product[]>(`/api/warehouse/products${archived ? "?archived=true" : ""}`),
         api<StockEntry[]>("/api/warehouse/stock"),
         api<ProductCat[]>("/api/warehouse/categories"),
       ]);
@@ -1063,7 +1065,7 @@ export default function ProductsPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(showArchive); }, [load, showArchive]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<number, number>();
@@ -1137,14 +1139,65 @@ export default function ProductsPage() {
     setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  async function deleteSelected() {
-    if (!window.confirm(`Деактивувати ${selected.size} позицій?`)) return;
+  async function archiveSelected() {
+    if (!window.confirm(`Архівувати ${selected.size} позицій?`)) return;
     setDeleting(true);
     try {
-      await Promise.all([...selected].map((id) => api(`/api/warehouse/products/${id}`, { method: "DELETE" })));
+      await Promise.all([...selected].map((id) => api(`/api/warehouse/products/${id}/archive`, { method: "POST" })));
       setProducts((prev) => prev.filter((p) => !selected.has(p.id)));
       setSelected(new Set());
     } finally { setDeleting(false); }
+  }
+
+  async function restoreSelected() {
+    setDeleting(true);
+    try {
+      await Promise.all([...selected].map((id) => api(`/api/warehouse/products/${id}/restore`, { method: "POST" })));
+      setProducts((prev) => prev.filter((p) => !selected.has(p.id)));
+      setSelected(new Set());
+    } finally { setDeleting(false); }
+  }
+
+  async function hardDeleteSelected() {
+    if (!window.confirm(`Видалити ${selected.size} позицій назавжди? Дію не можна скасувати.`)) return;
+    setDeleting(true);
+    const failed: string[] = [];
+    try {
+      await Promise.all([...selected].map(async (id) => {
+        try {
+          await api(`/api/warehouse/products/${id}`, { method: "DELETE" });
+        } catch (e) {
+          const p = products.find((x) => x.id === id);
+          failed.push(p?.name ?? String(id));
+        }
+      }));
+      setProducts((prev) => prev.filter((p) => !selected.has(p.id) || failed.includes(p.name)));
+      setSelected(new Set());
+      if (failed.length) alert(`Не вдалося видалити: ${failed.join(", ")}. Є рухи або замовлення — заархівуйте їх.`);
+    } finally { setDeleting(false); }
+  }
+
+  async function archiveOne(id: number) {
+    await api(`/api/warehouse/products/${id}/archive`, { method: "POST" });
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+  }
+
+  async function restoreOne(id: number) {
+    await api(`/api/warehouse/products/${id}/restore`, { method: "POST" });
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+  }
+
+  async function hardDeleteOne(id: number, name: string) {
+    if (!window.confirm(`Видалити «${name}» назавжди?`)) return;
+    try {
+      await api(`/api/warehouse/products/${id}`, { method: "DELETE" });
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) alert(e.message);
+    }
   }
 
   function handleSaved(p: Product) {
@@ -1193,7 +1246,7 @@ export default function ProductsPage() {
       setImportResult(result);
       setImportPreview(null);
       setImportFile(null);
-      await load();
+      await load(showArchive);
     } catch {
       alert("Помилка імпорту");
     } finally {
@@ -1212,7 +1265,7 @@ export default function ProductsPage() {
       body.append("file", file);
       const result = await api<SpecImportResult>("/api/warehouse/specs/import-ordage", { method: "POST", body });
       setSpecImportResult(result);
-      await load();
+      await load(showArchive);
     } catch {
       alert("Помилка імпорту специфікацій");
     } finally {
@@ -1319,10 +1372,18 @@ export default function ProductsPage() {
               {specImporting ? "…" : "↑ Специфікації"}
             </button>
             <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
-            <button onClick={() => setEditProduct("create")}
-              className="btn btn-primary">
-              + Номенклатура
+            <button
+              onClick={() => { setShowArchive((v) => !v); setSelected(new Set()); }}
+              className={["btn btn-sm", showArchive ? "btn-primary" : "btn-ghost"].join(" ")}
+              title="Показати архів"
+            >
+              {showArchive ? "← Активні" : "Архів"}
             </button>
+            {!showArchive && (
+              <button onClick={() => setEditProduct("create")} className="btn btn-primary">
+                + Номенклатура
+              </button>
+            )}
           </div>
         </div>
 
@@ -1369,22 +1430,6 @@ export default function ProductsPage() {
           </div>
         )}
 
-        {/* Bulk bar */}
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-2.5  ">
-            <span className="text-sm font-medium text-[var(--state-warn)]">Вибрано {selected.size}</span>
-            <button onClick={() => setSelected(new Set())}
-              className="text-sm text-[var(--state-warn)] underline underline-offset-2 hover:text-[var(--state-warn)] dark:text-[var(--state-warn)]">
-              Скасувати
-            </button>
-            <div className="ml-auto">
-              <button onClick={deleteSelected} disabled={deleting}
-                className="rounded-md bg-[var(--state-error)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50">
-                {deleting ? "Деактивую…" : "Деактивувати"}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
@@ -1498,21 +1543,44 @@ export default function ProductsPage() {
                       {/* Row actions */}
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1 justify-end">
-                          {/* Edit product */}
-                          <button onClick={() => setEditProduct(p)} title="Редагувати"
-                            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  ">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                            </svg>
-                          </button>
-                          {/* Spec */}
-                          <button onClick={() => setSpecProduct(p)} title="Специфікація"
-                            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  ">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
-                            </svg>
-                          </button>
+                          {showArchive ? (
+                            <>
+                              <button onClick={() => restoreOne(p.id)} title="Відновити"
+                                className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-ok)]">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+                                </svg>
+                              </button>
+                              <button onClick={() => hardDeleteOne(p.id, p.name)} title="Видалити назавжди"
+                                className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/>
+                                </svg>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => setEditProduct(p)} title="Редагувати"
+                                className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                              </button>
+                              <button onClick={() => setSpecProduct(p)} title="Специфікація"
+                                className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+                                </svg>
+                              </button>
+                              <button onClick={() => archiveOne(p.id)} title="Архівувати"
+                                className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-warn)]">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>
+                                </svg>
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1599,6 +1667,18 @@ export default function ProductsPage() {
         cols={colVis.cols}
         hidden={colVis.hidden}
         setVisibility={colVis.setVisibility}
+      />
+
+      <BulkActionBar
+        count={selected.size}
+        onClear={() => setSelected(new Set())}
+        actions={showArchive ? [
+          { label: "Відновити",        onClick: restoreSelected,    disabled: deleting, variant: "default" },
+          { label: "Видалити назавжди", onClick: hardDeleteSelected, disabled: deleting, variant: "danger"  },
+        ] : [
+          { label: "Архівувати",  onClick: archiveSelected,    disabled: deleting, variant: "ghost"  },
+          { label: "Видалити",    onClick: hardDeleteSelected,  disabled: deleting, variant: "danger"  },
+        ]}
       />
     </>
   );

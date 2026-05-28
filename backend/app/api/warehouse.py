@@ -703,10 +703,14 @@ def adjust_balance(
 def list_products(
     search:   str | None = Query(None),
     category: str | None = Query(None),
+    archived: bool = Query(False),
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[ProductOut]:
-    q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
+    q = db.query(Product).filter(
+        Product.organization_id == org.id,
+        Product.is_active.is_(not archived),
+    )
     if search:
         q = q.filter(Product.name.ilike(f"%{search}%") | Product.sku.ilike(f"%{search}%"))
     if category:
@@ -1014,6 +1018,34 @@ def update_product(
     return ProductOut.model_validate(p)
 
 
+@router.post("/products/{product_id}/archive", response_model=ProductOut)
+def archive_product(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> ProductOut:
+    p = _get_product(product_id, org, db)
+    p.is_active = False
+    db.commit()
+    db.refresh(p)
+    return ProductOut.model_validate(p)
+
+
+@router.post("/products/{product_id}/restore", response_model=ProductOut)
+def restore_product(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> ProductOut:
+    p = _get_product(product_id, org, db)
+    p.is_active = True
+    db.commit()
+    db.refresh(p)
+    return ProductOut.model_validate(p)
+
+
 @router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
     product_id: int,
@@ -1022,7 +1054,19 @@ def delete_product(
     _:   User         = Depends(require_roles(UserRole.admin)),
 ) -> None:
     p = _get_product(product_id, org, db)
-    p.is_active = False
+    movements  = db.query(func.count(WarehouseMovement.id)).filter_by(product_id=product_id).scalar() or 0
+    order_items = db.query(func.count(OrderItem.id)).filter_by(product_id=product_id).scalar() or 0
+    batches    = db.query(func.count(ProductionBatch.id)).filter_by(product_id=product_id).scalar() or 0
+    if movements or order_items or batches:
+        parts = []
+        if movements:   parts.append(f"{movements} рухів")
+        if order_items: parts.append(f"{order_items} замовлень")
+        if batches:     parts.append(f"{batches} партій")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Товар задіяний у {', '.join(parts)}. Заархівуйте замість видалення.",
+        )
+    db.delete(p)
     db.commit()
 
 
