@@ -156,6 +156,178 @@ function fmt(n: string | number | null): string {
   return isNaN(v) ? "—" : v.toLocaleString("uk-UA", { maximumFractionDigits: 2 });
 }
 
+// ── Replenishment ─────────────────────────────────────────────────────────────
+
+type ReplenishItem = {
+  product_id:       number;
+  product_name:     string;
+  product_sku:      string;
+  unit:             string;
+  available:        number;
+  min_stock:        number;
+  desired_stock:    number | null;
+  qty_needed:       number;
+  kind:             "batch" | "purchase";
+  specification_id: number | null;
+  warehouse_id:     number | null;
+  warehouse_name:   string | null;
+};
+
+function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [items,    setItems]    = useState<ReplenishItem[]>([]);
+  const [qtys,     setQtys]     = useState<Record<number, string>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [loading,  setLoading]  = useState(true);
+  const [busy,     setBusy]     = useState(false);
+  const [result,   setResult]   = useState<{ batches: number; movements: number } | null>(null);
+
+  useEffect(() => {
+    api<ReplenishItem[]>("/api/warehouse/stock/replenish-preview")
+      .then((data) => {
+        setItems(data);
+        const initQtys: Record<number, string> = {};
+        const initSel = new Set<number>();
+        data.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
+        setQtys(initQtys);
+        setSelected(initSel);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function confirm() {
+    setBusy(true);
+    try {
+      const payload = items
+        .filter((it) => selected.has(it.product_id))
+        .map((it) => ({
+          product_id:       it.product_id,
+          qty:              parseInt(qtys[it.product_id] ?? "0") || 0,
+          kind:             it.kind,
+          warehouse_id:     it.warehouse_id,
+          specification_id: it.specification_id,
+        }))
+        .filter((it) => it.qty > 0);
+      const res = await api<{ batches: number; movements: number }>("/api/warehouse/stock/replenish", { method: "POST", body: JSON.stringify({ items: payload }) });
+      setResult(res);
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedItems = items.filter((it) => selected.has(it.product_id));
+  const batchCount    = selectedItems.filter((it) => it.kind === "batch").length;
+  const purchaseCount = selectedItems.filter((it) => it.kind === "purchase").length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <div>
+            <h2 className="font-semibold text-[var(--text-hi)]">Поповнення запасів</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">Товари нижче мінімального залишку</p>
+          </div>
+          <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="px-6 py-12 text-center text-sm text-[var(--text-faint)]">Завантаження…</div>
+          ) : items.length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-[var(--text-faint)]">Всі залишки в нормі 🎉</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-[var(--bg)] text-xs uppercase tracking-wider text-[var(--text-faint)]">
+                <tr>
+                  <th className="w-9 px-4 py-3">
+                    <input type="checkbox"
+                      checked={selected.size === items.length && items.length > 0}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(items.map((i) => i.product_id)) : new Set())}
+                      className="rounded accent-[var(--accent)]" />
+                  </th>
+                  <th className="px-3 py-3 text-left font-medium">Товар</th>
+                  <th className="px-3 py-3 text-right font-medium">Наявно</th>
+                  <th className="px-3 py-3 text-right font-medium">Мін / Бажаний</th>
+                  <th className="px-3 py-3 text-right font-medium">Замовити</th>
+                  <th className="px-3 py-3 text-center font-medium">Тип</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {items.map((it) => (
+                  <tr key={it.product_id} className={selected.has(it.product_id) ? "bg-[var(--accent)]/5" : "opacity-40"}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(it.product_id)}
+                        onChange={(e) => setSelected((prev) => { const n = new Set(prev); e.target.checked ? n.add(it.product_id) : n.delete(it.product_id); return n; })}
+                        className="rounded accent-[var(--accent)]" />
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-[var(--text-hi)]">{it.product_name}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{it.product_sku}{it.warehouse_name ? ` · ${it.warehouse_name}` : ""}</p>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <span className={["font-mono tabular-nums text-xs", it.available <= 0 ? "text-[var(--state-error)]" : "text-[var(--state-warn)]"].join(" ")}>
+                        {it.available.toFixed(0)} {it.unit}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-xs text-[var(--text-muted)]">
+                      {it.min_stock}{it.desired_stock ? ` / ${it.desired_stock}` : ""}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <input
+                        type="number" min="1" step="1"
+                        value={qtys[it.product_id] ?? ""}
+                        onChange={(e) => setQtys((prev) => ({ ...prev, [it.product_id]: e.target.value }))}
+                        className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={["rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        it.kind === "batch" ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "bg-[var(--state-ok)]/10 text-[var(--state-ok)]",
+                      ].join(" ")}>
+                        {it.kind === "batch" ? "Партія" : "Прихід"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        {items.length > 0 && (
+          <div className="flex shrink-0 items-center justify-between border-t border-[var(--border)] px-6 py-4">
+            <p className="text-xs text-[var(--text-muted)]">
+              {selected.size} обрано
+              {batchCount > 0 && <> · {batchCount} партій</>}
+              {purchaseCount > 0 && <> · {purchaseCount} приходів</>}
+            </p>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="btn btn-ghost btn-sm">Скасувати</button>
+              <button onClick={confirm} disabled={busy || selected.size === 0} className="btn btn-primary btn-sm disabled:opacity-50">
+                {busy ? "Створюю…" : "Створити все"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {result && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-[var(--border)] bg-[rgba(34,197,94,.06)] px-6 py-3">
+            <span className="text-sm text-[var(--state-ok)]">
+              Створено: {result.batches} партій, {result.movements} приходів
+            </span>
+            <button onClick={onClose} className="btn btn-ghost btn-sm">Закрити</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type FilterMode = "all" | "out" | "low" | "order";
@@ -173,6 +345,7 @@ export default function StockPage() {
   const [movementQuantity,  setMovementQuantity]  = useState<string | null>(null);
   const [batchProductId,    setBatchProductId]    = useState<string | null>(null);
   const [colSettingsOpen,   setColSettingsOpen]   = useState(false);
+  const [replenishOpen,     setReplenishOpen]     = useState(false);
 
   const colVis = useColumnVisibility("stock", COLS);
 
@@ -223,6 +396,17 @@ export default function StockPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Залишки на складі</h1>
         <div className="flex flex-wrap gap-2">
+          <button onClick={() => setReplenishOpen(true)} className="btn btn-ghost btn-sm flex items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v20M2 12h20"/><path d="M17 7 12 2l-5 5"/>
+            </svg>
+            Поповнити запаси
+            {(outCount + lowCount) > 0 && (
+              <span className="flex size-4 items-center justify-center rounded-full bg-[var(--state-warn)] text-[9px] font-bold text-white leading-none">
+                {outCount + lowCount}
+              </span>
+            )}
+          </button>
           <button onClick={() => openMovement("PURCHASE_IN")} className="btn btn-primary btn-sm">+ Отримання</button>
           <button onClick={() => openMovement("SALE_OUT")} className="btn btn-primary btn-sm">+ Продаж</button>
           <button onClick={() => openMovement("DEFECT")} className="btn btn-primary btn-sm bg-[var(--state-error)] hover:bg-red-600 border-none text-white">+ Списання</button>
@@ -539,6 +723,13 @@ export default function StockPage() {
         orderedCols={colVis.orderedCols}
         setOrder={colVis.setOrder}
       />
+
+      {replenishOpen && (
+        <ReplenishModal
+          onClose={() => setReplenishOpen(false)}
+          onDone={() => { setReplenishOpen(false); load(); }}
+        />
+      )}
     </div>
   );
 }

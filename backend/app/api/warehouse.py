@@ -1780,6 +1780,138 @@ def list_stock(
     return result
 
 
+# ── Replenishment ─────────────────────────────────────────────────────────────
+
+class _ReplenishPreviewItem(BaseModel):
+    product_id:       int
+    product_name:     str
+    product_sku:      str
+    unit:             str
+    available:        float
+    min_stock:        int
+    desired_stock:    int | None
+    qty_needed:       int
+    kind:             str         # "batch" | "purchase"
+    specification_id: int | None
+    warehouse_id:     int | None
+    warehouse_name:   str | None
+
+
+class _ReplenishItem(BaseModel):
+    product_id:       int
+    qty:              int
+    kind:             str         # "batch" | "purchase"
+    warehouse_id:     int | None = None
+    specification_id: int | None = None
+
+
+class _ReplenishRequest(BaseModel):
+    items: list[_ReplenishItem]
+
+
+@router.get("/stock/replenish-preview", response_model=list[_ReplenishPreviewItem])
+def replenish_preview(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[_ReplenishPreviewItem]:
+    rows = (
+        db.query(StockEntry, Product, Warehouse)
+        .join(Product,   Product.id   == StockEntry.product_id)
+        .join(Warehouse, Warehouse.id == StockEntry.warehouse_id)
+        .filter(
+            StockEntry.organization_id == org.id,
+            Product.is_active.is_(True),
+            Product.min_stock.isnot(None),
+            StockEntry.quantity - StockEntry.reserved_qty < Product.min_stock,
+        )
+        .order_by(Product.name)
+        .all()
+    )
+    if not rows:
+        return []
+
+    product_ids = list({p.id for _, p, _ in rows})
+    default_specs = {
+        s.product_id: s
+        for s in db.query(Specification)
+        .filter(
+            Specification.organization_id == org.id,
+            Specification.product_id.in_(product_ids),
+            Specification.is_default.is_(True),
+        )
+        .all()
+    }
+
+    seen: set[int] = set()
+    result: list[_ReplenishPreviewItem] = []
+    for e, p, wh in rows:
+        if p.id in seen:
+            continue
+        seen.add(p.id)
+        avail = float(e.quantity - e.reserved_qty)
+        target = p.desired_stock if p.desired_stock else p.min_stock
+        qty_needed = max(1, int(target - avail))
+        spec = default_specs.get(p.id)
+        result.append(_ReplenishPreviewItem(
+            product_id=p.id,
+            product_name=p.name,
+            product_sku=p.sku,
+            unit=p.unit,
+            available=avail,
+            min_stock=p.min_stock,
+            desired_stock=p.desired_stock,
+            qty_needed=qty_needed,
+            kind="batch" if spec else "purchase",
+            specification_id=spec.id if spec else None,
+            warehouse_id=wh.id,
+            warehouse_name=wh.name,
+        ))
+    return result
+
+
+@router.post("/stock/replenish")
+def replenish_stock(
+    payload: _ReplenishRequest,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    batches_created = 0
+    movements_created = 0
+    for item in payload.items:
+        if item.qty <= 0:
+            continue
+        _get_product(item.product_id, org, db)
+        if item.kind == "batch":
+            b = ProductionBatch(
+                organization_id=org.id,
+                product_id=item.product_id,
+                specification_id=item.specification_id,
+                target_qty=item.qty,
+                status=BatchStatus.open,
+                created_by_id=user.id,
+            )
+            db.add(b)
+            batches_created += 1
+        elif item.kind == "purchase" and item.warehouse_id:
+            p = db.get(Product, item.product_id)
+            m = WarehouseMovement(
+                organization_id=org.id,
+                product_id=item.product_id,
+                type=MovementType.PURCHASE_IN,
+                warehouse_to_id=item.warehouse_id,
+                quantity=Decimal(str(item.qty)),
+                unit=p.unit,  # type: ignore[union-attr]
+                created_by_id=user.id,
+            )
+            db.add(m)
+            db.flush()
+            _apply_movement(m, db)
+            movements_created += 1
+    db.commit()
+    return {"batches": batches_created, "movements": movements_created}
+
+
 # ── Movements ─────────────────────────────────────────────────────────────────
 
 @router.get("/movements", response_model=list[MovementOut])
