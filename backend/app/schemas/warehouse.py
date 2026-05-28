@@ -150,6 +150,7 @@ class ProductOut(BaseModel):
     min_stock:     int | None
     desired_stock: int | None
     box_limit:     int | None
+    image_url:     str | None = None
     created_at:    datetime
 
     class Config:

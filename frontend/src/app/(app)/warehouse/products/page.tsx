@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
+import { AuthImage } from "@/components/ui/AuthImage";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -18,6 +19,7 @@ type Product = {
   sale_price: string | null; cost_price: string | null;
   direct_cost: string | null; full_cost: string | null;
   min_stock: number | null; desired_stock: number | null; box_limit: number | null;
+  image_url: string | null;
 };
 
 type StockEntry = { product_id: number; available: string };
@@ -62,6 +64,7 @@ type SpecImportResult = { updated: number; skipped: number; errors: { sku: strin
 const PAGE_SIZES = [25, 50, 100] as const;
 
 const COLS: ColDef[] = [
+  { key: "image",      label: "Фото" },
   { key: "name",       label: "Назва",        required: true },
   { key: "sku",        label: "Артикул" },
   { key: "barcode",    label: "Штрих-код" },
@@ -160,8 +163,41 @@ function ProductModal({
   const [minStock,     setMinStock]     = useState(product?.min_stock?.toString() ?? "");
   const [desiredStock, setDesiredStock] = useState(product?.desired_stock?.toString() ?? "");
   const [boxLimit,     setBoxLimit]     = useState(product?.box_limit?.toString() ?? "");
-  const [busy,  setBusy]  = useState(false);
-  const [err,   setErr]   = useState<string | null>(null);
+  const [busy,       setBusy]       = useState(false);
+  const [err,        setErr]        = useState<string | null>(null);
+  const [imageUrl,   setImageUrl]   = useState<string | null>(product?.image_url ?? null);
+  const [imageBusy,  setImageBusy]  = useState(false);
+  const [dragOver,   setDragOver]   = useState(false);
+  const imageRef = useRef<HTMLInputElement>(null);
+
+  async function uploadImage(file: File) {
+    if (!product) return;
+    setImageBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const updated = await api<Product>(`/api/warehouse/products/${product.id}/image`, { method: "POST", body: form });
+      setImageUrl(updated.image_url);
+      onSaved(updated);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Помилка завантаження";
+      alert(msg);
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  async function removeImage() {
+    if (!product || !window.confirm("Видалити фото?")) return;
+    setImageBusy(true);
+    try {
+      const updated = await api<Product>(`/api/warehouse/products/${product.id}/image`, { method: "DELETE" });
+      setImageUrl(null);
+      onSaved(updated);
+    } finally {
+      setImageBusy(false);
+    }
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -206,6 +242,63 @@ function ProductModal({
 
         {/* Body */}
         <form id="product-form" onSubmit={save} className="flex-1 overflow-y-auto">
+
+          {/* Image upload — edit mode only */}
+          {isEdit && (
+            <>
+              <div className={SEC}>
+                <input
+                  ref={imageRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }}
+                />
+                <div
+                  className={[
+                    "relative flex items-center gap-4 rounded-xl border-2 border-dashed p-3 transition-colors cursor-pointer",
+                    dragOver ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+                    imageBusy ? "opacity-60 pointer-events-none" : "",
+                  ].join(" ")}
+                  onClick={() => imageRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadImage(f); }}
+                >
+                  {/* Preview */}
+                  <div className="size-20 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                    {imageUrl
+                      ? <AuthImage src={imageUrl} alt={name} className="size-full object-cover" />
+                      : <div className="flex size-full flex-col items-center justify-center gap-1">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-faint)]">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                            <path d="m21 15-5-5L5 21"/>
+                          </svg>
+                        </div>
+                    }
+                  </div>
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--text)]">
+                      {imageBusy ? "Завантажую…" : imageUrl ? "Змінити фото" : "Додати фото"}
+                    </p>
+                    <p className="text-xs text-[var(--text-faint)]">JPEG, PNG або WebP · макс. 8 МБ · перетягніть або клікніть</p>
+                  </div>
+                  {/* Remove button */}
+                  {imageUrl && !imageBusy && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); removeImage(); }}
+                      className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
+                    >
+                      Видалити
+                    </button>
+                  )}
+                </div>
+              </div>
+              <hr className={HR} />
+            </>
+          )}
 
           {/* Section 1: identification */}
           <div className={SEC}>
@@ -1441,6 +1534,7 @@ export default function ProductsPage() {
                     <input type="checkbox" checked={allPageSelected} onChange={toggleAll}
                       className="rounded border-[var(--border-strong)] " />
                   </th>
+                  {colVis.isVisible("image") && <th className="w-12 px-2 py-3" />}
                   <Th col="name"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>
                   {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>}
                   {colVis.isVisible("barcode")    && <th className="px-4 py-3 font-medium">Штрих-код</th>}
@@ -1469,6 +1563,17 @@ export default function ProductsPage() {
                         <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
                           className="rounded border-[var(--border-strong)] " />
                       </td>
+                      {colVis.isVisible("image") && (
+                        <td className="px-2 py-2">
+                          <button onClick={() => setEditProduct(p)}
+                            className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                            {p.image_url
+                              ? <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
+                              : <span className="flex size-full items-center justify-center text-[10px] text-[var(--text-faint)]">—</span>
+                            }
+                          </button>
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <button onClick={() => setEditProduct(p)}
                           className="text-left font-medium text-[var(--text-hi)] hover:text-[var(--accent)] ">

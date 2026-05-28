@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import csv
 import io
+import uuid
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
@@ -39,9 +40,26 @@ from app.schemas.warehouse import (
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
-_ELECTRICITY_RATE = Decimal("4.5")   # ₴/кВт·год
-_LABOR_RATE       = Decimal("150")   # ₴/год
-_PRINTER_WATTS    = 200              # Вт
+_ELECTRICITY_RATE  = Decimal("4.5")   # ₴/кВт·год
+_LABOR_RATE        = Decimal("150")   # ₴/год
+_PRINTER_WATTS     = 200              # Вт
+_IMAGE_PREFIX      = "product-images"
+_IMAGE_MIME_EXT    = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+_IMAGE_MAX_BYTES   = 8 * 1024 * 1024  # 8 MB
+
+
+def _product_image_url(p: Product, org_id: int) -> str | None:
+    if not p.image_key:
+        return None
+    from app.services import storage as storage_svc
+    url = storage_svc.presigned_url(p.image_key, org_id, prefix=_IMAGE_PREFIX, expires=86400)
+    return url or f"/api/warehouse/products/{p.id}/image"
+
+
+def _make_product_out(p: Product, org_id: int) -> ProductOut:
+    out = ProductOut.model_validate(p)
+    out.image_url = _product_image_url(p, org_id)
+    return out
 
 
 # ── Product categories ────────────────────────────────────────────────────────
@@ -716,7 +734,7 @@ def list_products(
     if category:
         q = q.filter(Product.categories.contains([category]))
     rows = q.order_by(Product.name).all()
-    return [ProductOut.model_validate(r) for r in rows]
+    return [_make_product_out(r, org.id) for r in rows]
 
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
@@ -999,7 +1017,7 @@ def get_product(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> ProductOut:
-    return ProductOut.model_validate(_get_product(product_id, org, db))
+    return _make_product_out(_get_product(product_id, org, db), org.id)
 
 
 @router.patch("/products/{product_id}", response_model=ProductOut)
@@ -1015,7 +1033,7 @@ def update_product(
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
-    return ProductOut.model_validate(p)
+    return _make_product_out(p, org.id)
 
 
 @router.post("/products/{product_id}/archive", response_model=ProductOut)
@@ -1043,7 +1061,72 @@ def restore_product(
     p.is_active = True
     db.commit()
     db.refresh(p)
-    return ProductOut.model_validate(p)
+    return _make_product_out(p, org.id)
+
+
+# ── Product image ─────────────────────────────────────────────────────────────
+
+@router.post("/products/{product_id}/image", response_model=ProductOut)
+async def upload_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ProductOut:
+    from app.services import storage as storage_svc
+    if file.content_type not in _IMAGE_MIME_EXT:
+        raise HTTPException(status_code=400, detail="Підтримуються тільки JPEG, PNG, WebP.")
+    data = await file.read()
+    if len(data) > _IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Файл занадто великий (макс. 8 МБ).")
+    p = _get_product(product_id, org, db)
+    if p.image_key:
+        storage_svc.delete(p.image_key, org.id, prefix=_IMAGE_PREFIX)
+    ext = _IMAGE_MIME_EXT[file.content_type]
+    key = f"{uuid.uuid4().hex}.{ext}"
+    storage_svc.put(key, data, org.id, prefix=_IMAGE_PREFIX)
+    p.image_key = key
+    db.commit()
+    db.refresh(p)
+    return _make_product_out(p, org.id)
+
+
+@router.delete("/products/{product_id}/image", response_model=ProductOut)
+def delete_product_image(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ProductOut:
+    from app.services import storage as storage_svc
+    p = _get_product(product_id, org, db)
+    if p.image_key:
+        storage_svc.delete(p.image_key, org.id, prefix=_IMAGE_PREFIX)
+        p.image_key = None
+        db.commit()
+        db.refresh(p)
+    return _make_product_out(p, org.id)
+
+
+@router.get("/products/{product_id}/image")
+def serve_product_image(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    """Serve image bytes for local-storage mode (S3 mode returns presigned URL instead)."""
+    from app.services import storage as storage_svc
+    p = _get_product(product_id, org, db)
+    if not p.image_key:
+        raise HTTPException(status_code=404, detail="No image")
+    try:
+        data = storage_svc.get_bytes(p.image_key, org.id, prefix=_IMAGE_PREFIX)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Image file not found")
+    ext = p.image_key.rsplit(".", 1)[-1].lower()
+    mime = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+    return Response(content=data, media_type=mime)
 
 
 @router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

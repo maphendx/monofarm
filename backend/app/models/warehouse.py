@@ -155,6 +155,7 @@ class Product(Base):
     min_stock:       Mapped[int | None]      = mapped_column(Integer, nullable=True)
     desired_stock:   Mapped[int | None]      = mapped_column(Integer, nullable=True)
     box_limit:       Mapped[int | None]      = mapped_column(Integer, nullable=True)  # items per physical box/cell
+    image_key:       Mapped[str | None]      = mapped_column(String(120), nullable=True)
     created_by_id:   Mapped[int | None]      = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

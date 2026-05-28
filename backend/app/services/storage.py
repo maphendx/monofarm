@@ -1,7 +1,7 @@
 """File storage: local disk or S3-compatible (Cloudflare R2 / AWS S3).
 
-When S3_BUCKET is set → S3 backend, key pattern: orgs/{org_id}/gcodes/{stored_name}.
-Otherwise → local disk at data/gcodes/{stored_name} (same as legacy behaviour).
+S3 key pattern: orgs/{org_id}/{prefix}/{stored_name}
+Local pattern:  data/{prefix}/{stored_name}
 
 All functions are sync; call from async via asyncio.to_thread where needed.
 """
@@ -15,8 +15,13 @@ from typing import Generator
 
 log = logging.getLogger(__name__)
 
-LOCAL_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes"
-LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+_BASE = Path(__file__).resolve().parent.parent.parent / "data"
+
+
+def _local_dir(prefix: str) -> Path:
+    d = _BASE / prefix
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def is_s3() -> bool:
@@ -24,8 +29,8 @@ def is_s3() -> bool:
     return bool(settings.S3_BUCKET)
 
 
-def _s3_key(stored_name: str, org_id: int) -> str:
-    return f"orgs/{org_id}/gcodes/{stored_name}"
+def _s3_key(stored_name: str, org_id: int, prefix: str) -> str:
+    return f"orgs/{org_id}/{prefix}/{stored_name}"
 
 
 def _client():
@@ -41,75 +46,75 @@ def _client():
     )
 
 
-def put(stored_name: str, data: bytes, org_id: int) -> None:
+def put(stored_name: str, data: bytes, org_id: int, prefix: str = "gcodes") -> None:
     if is_s3():
         from app.core.config import settings
         _client().put_object(
             Bucket=settings.S3_BUCKET,
-            Key=_s3_key(stored_name, org_id),
+            Key=_s3_key(stored_name, org_id, prefix),
             Body=data,
         )
     else:
-        (LOCAL_DIR / stored_name).write_bytes(data)
+        (_local_dir(prefix) / stored_name).write_bytes(data)
 
 
-def exists(stored_name: str, org_id: int) -> bool:
+def exists(stored_name: str, org_id: int, prefix: str = "gcodes") -> bool:
     if is_s3():
         from app.core.config import settings
         try:
-            _client().head_object(Bucket=settings.S3_BUCKET, Key=_s3_key(stored_name, org_id))
+            _client().head_object(Bucket=settings.S3_BUCKET, Key=_s3_key(stored_name, org_id, prefix))
             return True
         except Exception:
             return False
-    return (LOCAL_DIR / stored_name).exists()
+    return (_local_dir(prefix) / stored_name).exists()
 
 
-def get_bytes(stored_name: str, org_id: int) -> bytes:
+def get_bytes(stored_name: str, org_id: int, prefix: str = "gcodes") -> bytes:
     if is_s3():
         from app.core.config import settings
         obj = _client().get_object(
             Bucket=settings.S3_BUCKET,
-            Key=_s3_key(stored_name, org_id),
+            Key=_s3_key(stored_name, org_id, prefix),
         )
         return obj["Body"].read()
-    path = LOCAL_DIR / stored_name
+    path = _local_dir(prefix) / stored_name
     if not path.exists():
         raise FileNotFoundError(stored_name)
     return path.read_bytes()
 
 
-def delete(stored_name: str, org_id: int) -> None:
+def delete(stored_name: str, org_id: int, prefix: str = "gcodes") -> None:
     if is_s3():
         from app.core.config import settings
         _client().delete_object(
             Bucket=settings.S3_BUCKET,
-            Key=_s3_key(stored_name, org_id),
+            Key=_s3_key(stored_name, org_id, prefix),
         )
     else:
-        (LOCAL_DIR / stored_name).unlink(missing_ok=True)
+        (_local_dir(prefix) / stored_name).unlink(missing_ok=True)
 
 
-def presigned_url(stored_name: str, org_id: int, expires: int = 3600) -> str | None:
+def presigned_url(stored_name: str, org_id: int, prefix: str = "gcodes", expires: int = 3600) -> str | None:
     """Return a presigned download URL (S3 only). Returns None for local backend."""
     if not is_s3():
         return None
     from app.core.config import settings
     return _client().generate_presigned_url(
         "get_object",
-        Params={"Bucket": settings.S3_BUCKET, "Key": _s3_key(stored_name, org_id)},
+        Params={"Bucket": settings.S3_BUCKET, "Key": _s3_key(stored_name, org_id, prefix)},
         ExpiresIn=expires,
     )
 
 
 @contextmanager
-def local_path_for(stored_name: str, org_id: int) -> Generator[Path, None, None]:
+def local_path_for(stored_name: str, org_id: int, prefix: str = "gcodes") -> Generator[Path, None, None]:
     """Yield a local Path to the file.
 
     Local backend: yields the stored path directly (no copy, no cleanup).
     S3 backend: downloads to a temp file, yields that path, then cleans up.
     """
     if not is_s3():
-        path = LOCAL_DIR / stored_name
+        path = _local_dir(prefix) / stored_name
         if not path.exists():
             raise FileNotFoundError(stored_name)
         yield path
@@ -117,7 +122,7 @@ def local_path_for(stored_name: str, org_id: int) -> Generator[Path, None, None]
 
     suffix = "".join(Path(stored_name).suffixes) or Path(stored_name).suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(get_bytes(stored_name, org_id))
+        tmp.write(get_bytes(stored_name, org_id, prefix))
         tmp_path = Path(tmp.name)
     try:
         yield tmp_path
