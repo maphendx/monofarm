@@ -77,6 +77,33 @@ const COLS: ColDef[] = [
   { key: "margin",     label: "Маржа" },
 ];
 
+// ── PhotoPreview ──────────────────────────────────────────────────────────────
+
+function PhotoPreview({ src, alt, children }: { src: string; alt: string; children: React.ReactNode }) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  return (
+    <div
+      onMouseEnter={(e) => setRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setRect(null)}
+    >
+      {children}
+      {rect && (
+        <div
+          className="pointer-events-none fixed z-[9999] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
+          style={{
+            left: rect.right + 12,
+            top:  rect.top + rect.height / 2,
+            transform: "translateY(-50%)",
+          }}
+        >
+          <AuthImage src={src} alt={alt} className="size-52 object-contain" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtPrice(v: string | null) {
@@ -1659,12 +1686,19 @@ export default function ProductsPage() {
                         switch (col.key) {
                           case "image": return (
                             <td key="image" className="px-2 py-2">
-                              <button onClick={() => setEditProduct(p)}
-                                className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
-                                {p.image_url
-                                  ? <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
-                                  : <span className="flex size-full items-center justify-center text-[10px] text-[var(--text-faint)]">—</span>}
-                              </button>
+                              {p.image_url ? (
+                                <PhotoPreview src={p.image_url} alt={p.name}>
+                                  <button onClick={() => setEditProduct(p)}
+                                    className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                                    <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
+                                  </button>
+                                </PhotoPreview>
+                              ) : (
+                                <button onClick={() => setEditProduct(p)}
+                                  className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                                  <span className="flex size-full items-center justify-center text-[10px] text-[var(--text-faint)]">—</span>
+                                </button>
+                              )}
                             </td>
                           );
                           case "name": return (
