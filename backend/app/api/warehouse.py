@@ -2160,6 +2160,27 @@ def update_batch(
     return _batch_to_out(b, db)
 
 
+@router.patch("/batches/{batch_id}/progress", response_model=BatchOut)
+def update_progress(
+    batch_id:   int,
+    printed_qty: int = Query(..., ge=0),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BatchOut:
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if b.status != BatchStatus.active:
+        raise HTTPException(status_code=400, detail="Прогрес можна оновлювати лише в активній партії")
+    if printed_qty > b.target_qty:
+        raise HTTPException(status_code=400, detail=f"Кількість не може перевищувати ціль ({b.target_qty})")
+    b.printed_qty = printed_qty
+    db.commit()
+    db.refresh(b)
+    return _batch_to_out(b, db)
+
+
 @router.post("/batches/{batch_id}/close", response_model=BatchOut)
 def close_batch(
     batch_id: int,

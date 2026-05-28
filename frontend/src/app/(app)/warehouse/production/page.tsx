@@ -57,11 +57,71 @@ function BomRow({ c }: { c: BatchComponent }) {
   );
 }
 
-function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
+function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Batch) => void }) {
+  const [printed, setPrinted] = useState(batch.printed_qty);
+  const [inputVal, setInputVal] = useState(String(batch.printed_qty));
+  const inFlight = useRef(false);
+
+  async function bump(delta: number) {
+    const next = Math.min(Math.max(printed + delta, 0), batch.target_qty);
+    if (next === printed) return;
+    const prev = printed;
+    setPrinted(next);
+    setInputVal(String(next));
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const updated = await api<Batch>(`/api/warehouse/batches/${batch.id}/progress?printed_qty=${next}`, { method: "PATCH" });
+      onUpdate(updated);
+    } catch {
+      setPrinted(prev);
+      setInputVal(String(prev));
+    } finally { inFlight.current = false; }
+  }
+
+  async function commitInput() {
+    const val = Math.min(Math.max(parseInt(inputVal) || 0, 0), batch.target_qty);
+    setInputVal(String(val));
+    if (val === printed) return;
+    const prev = printed;
+    setPrinted(val);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const updated = await api<Batch>(`/api/warehouse/batches/${batch.id}/progress?printed_qty=${val}`, { method: "PATCH" });
+      onUpdate(updated);
+    } catch {
+      setPrinted(prev);
+      setInputVal(String(prev));
+    } finally { inFlight.current = false; }
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-1.5">
+      <button onClick={() => bump(-1)}
+        className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">−1</button>
+      <input
+        type="number" min={0} max={batch.target_qty}
+        value={inputVal}
+        onChange={e => setInputVal(e.target.value)}
+        onBlur={commitInput}
+        onKeyDown={e => e.key === "Enter" && commitInput()}
+        className="w-14 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-center text-xs outline-none focus:border-[var(--accent)]"
+      />
+      <button onClick={() => bump(1)}
+        className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">+1</button>
+      <button onClick={() => bump(5)}
+        className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">+5</button>
+    </div>
+  );
+}
+
+function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgressUpdate }: {
   batch: Batch;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
   onOpenCloseModal: (b: Batch) => void;
   onDelete: (id: number) => Promise<void>;
+  onProgressUpdate: (b: Batch) => void;
 }) {
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.printed_qty - batch.good_qty;
@@ -105,6 +165,9 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
             {batch.printed_qty}/{batch.target_qty} надруковано · {pct.toFixed(0)}%
             {defects > 0 && <span className="ml-1.5 text-[var(--state-error)]">{defects} брак</span>}
           </p>
+          {batch.status === "active" && (
+            <ProgressControls batch={batch} onUpdate={onProgressUpdate} />
+          )}
         </>
       ) : (
         <p className="text-xs text-[var(--text-faint)]">Ціль: {batch.target_qty} шт</p>
@@ -215,7 +278,7 @@ export default function ProductionPage() {
                     Порожньо
                   </div>
                 ) : (
-                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} onDelete={deleteBatch} />)
+                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} onDelete={deleteBatch} onProgressUpdate={(updated) => setBatches(prev => prev.map(x => x.id === updated.id ? updated : x))} />)
                 )}
               </div>
             </div>
