@@ -17,6 +17,10 @@ log = logging.getLogger(__name__)
 
 _BASE = Path(__file__).resolve().parent.parent.parent / "data"
 
+# Legacy alias kept for files.py backward compatibility
+LOCAL_DIR = _BASE / "gcodes"
+LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def _local_dir(prefix: str) -> Path:
     d = _BASE / prefix
