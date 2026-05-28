@@ -1,5 +1,6 @@
 """Warehouse module — counterparties, products, specifications, stock, movements, batches, orders."""
-from datetime import date, timedelta
+import base64
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import csv
@@ -29,7 +30,7 @@ from app.schemas.warehouse import (
     CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
-    MovementCreate, MovementOut,
+    MovementCreate, MovementListOut, MovementOut,
     OrderCreate, OrderItemOut, OrderOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
     ProductCreate, ProductImageOut, ProductOut, ProductUpdate, ReserveRequest,
@@ -1919,42 +1920,95 @@ def replenish_stock(
 
 # ── Movements ─────────────────────────────────────────────────────────────────
 
-@router.get("/movements", response_model=list[MovementOut])
+def _encode_cursor(created_at: datetime, row_id: int) -> str:
+    raw = f"{created_at.isoformat()}|{row_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, int]:
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    created_iso, id_str = raw.rsplit("|", 1)
+    return datetime.fromisoformat(created_iso), int(id_str)
+
+
+@router.get("/movements", response_model=MovementListOut)
 def list_movements(
     movement_type: MovementType | None = Query(None),
     product_id:    int | None          = Query(None),
     batch_id:      int | None          = Query(None),
     order_id:      int | None          = Query(None),
-    limit:         int                 = Query(100, le=500),
+    cursor:        str | None          = Query(None),
+    limit:         int                 = Query(50, ge=1, le=200),
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
-) -> list[MovementOut]:
-    q = (
-        db.query(WarehouseMovement, Product)
-        .join(Product, Product.id == WarehouseMovement.product_id)
-        .filter(WarehouseMovement.organization_id == org.id)
-    )
-    if movement_type:
-        q = q.filter(WarehouseMovement.type == movement_type)
-    if product_id:
-        q = q.filter(WarehouseMovement.product_id == product_id)
-    if batch_id:
-        q = q.filter(WarehouseMovement.batch_id == batch_id)
-    if order_id:
-        q = q.filter(WarehouseMovement.order_id == order_id)
-    rows = q.order_by(WarehouseMovement.created_at.desc()).limit(limit).all()
-    return [
+) -> MovementListOut:
+    from sqlalchemy import and_, or_, select, func as safunc
+
+    def _base_filter(q):
+        q = q.where(WarehouseMovement.organization_id == org.id)
+        if movement_type:
+            q = q.where(WarehouseMovement.type == movement_type)
+        if product_id:
+            q = q.where(WarehouseMovement.product_id == product_id)
+        if batch_id:
+            q = q.where(WarehouseMovement.batch_id == batch_id)
+        if order_id:
+            q = q.where(WarehouseMovement.order_id == order_id)
+        return q
+
+    # total count — only on first page, with same filters (no cursor)
+    total: int | None = None
+    if cursor is None:
+        count_q = _base_filter(select(safunc.count(WarehouseMovement.id)))
+        total = db.execute(count_q).scalar_one()
+
+    # data query with keyset cursor
+    data_q = _base_filter(select(WarehouseMovement))
+    if cursor:
+        try:
+            c_at, c_id = _decode_cursor(cursor)
+            data_q = data_q.where(
+                or_(
+                    WarehouseMovement.created_at < c_at,
+                    and_(
+                        WarehouseMovement.created_at == c_at,
+                        WarehouseMovement.id < c_id,
+                    ),
+                )
+            )
+        except Exception:
+            pass  # bad cursor → ignore, return from start
+
+    data_q = data_q.order_by(
+        WarehouseMovement.created_at.desc(),
+        WarehouseMovement.id.desc(),
+    ).limit(limit + 1)
+
+    rows = db.execute(data_q).scalars().all()
+    has_more = len(rows) > limit
+    rows = list(rows[:limit])
+
+    next_cursor = _encode_cursor(rows[-1].created_at, rows[-1].id) if has_more else None
+
+    # build product name map in one query
+    pids = {r.product_id for r in rows}
+    products = {p.id: p.name for p in db.query(Product).filter(Product.id.in_(pids)).all()} if pids else {}
+
+    items = [
         MovementOut(
             id=m.id, type=m.type,
-            product_id=m.product_id, product_name=p.name,
+            product_id=m.product_id, product_name=products.get(m.product_id, ""),
             warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
             quantity=m.quantity, unit=m.unit,
             unit_cost=m.unit_cost, total_cost=m.total_cost,
+            unit_price=m.unit_price, total_revenue=m.total_revenue,
             reason=m.reason, batch_id=m.batch_id, order_id=m.order_id,
             created_at=m.created_at,
         )
-        for m, p in rows
+        for m in rows
     ]
+
+    return MovementListOut(items=items, next_cursor=next_cursor, has_more=has_more, total=total)
 
 
 @router.post("/movements", response_model=MovementOut, status_code=status.HTTP_201_CREATED)

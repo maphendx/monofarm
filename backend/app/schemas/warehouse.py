@@ -338,6 +338,13 @@ class MovementOut(BaseModel):
         from_attributes = True
 
 
+class MovementListOut(BaseModel):
+    items:       list[MovementOut]
+    next_cursor: str | None
+    has_more:    bool
+    total:       int | None  # only on first page (cursor is None)
+
+
 # ── ProductionBatch ───────────────────────────────────────────────────────────
 
 class BatchCreate(BaseModel):

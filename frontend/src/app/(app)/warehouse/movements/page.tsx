@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { CreateMovementModal, Movement, MovementType, TYPE_META } from "@/components/warehouse/MovementModal";
 import {
@@ -13,7 +13,7 @@ import {
 const TYPE_FILTERS = ["Всі", "Виробництво", "Продаж", "Закупка", "Брак", "Переміщення", "Коригування"] as const;
 type TFilter = typeof TYPE_FILTERS[number];
 const FILTER_MAP: Record<TFilter, MovementType[] | null> = {
-  "Всі": null,
+  "Всі":         null,
   "Виробництво": ["PRODUCTION_IN", "PRODUCTION_OUT"],
   "Продаж":      ["SALE_OUT"],
   "Закупка":     ["PURCHASE_IN"],
@@ -23,43 +23,85 @@ const FILTER_MAP: Record<TFilter, MovementType[] | null> = {
 };
 
 const COLS: ColDef[] = [
-  { key: "date",    label: "Дата",      required: true },
+  { key: "date",    label: "Дата",   required: true },
   { key: "type",    label: "Тип" },
-  { key: "product", label: "Товар",     required: true },
+  { key: "product", label: "Товар",  required: true },
   { key: "qty",     label: "К-сть" },
   { key: "amount",  label: "Сума" },
   { key: "reason",  label: "Причина" },
 ];
 
+const PAGE_SIZE = 50;
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MovementsPage() {
-  const [movements,      setMovements]      = useState<Movement[]>([]);
-  const [loading,        setLoading]        = useState(true);
+  const [items,          setItems]          = useState<Movement[]>([]);
+  const [nextCursor,     setNextCursor]     = useState<string | null>(null);
+  const [hasMore,        setHasMore]        = useState(false);
+  const [total,          setTotal]          = useState<number | null>(null);
   const [filter,         setFilter]         = useState<TFilter>("Всі");
+  const [loading,        setLoading]        = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [createOpen,     setCreateOpen]     = useState(false);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
-  const colVis = useColumnVisibility("movements", COLS);
+  const colVis   = useColumnVisibility("movements", COLS);
+  const inFlight = useRef(false);
 
-  const load = useCallback(async () => {
-    try { setMovements(await api<Movement[]>("/api/warehouse/movements?limit=200")); }
-    finally { setLoading(false); }
+  function buildParams(cursor: string | null) {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    const types  = FILTER_MAP[filter];
+    if (types?.length === 1) params.set("movement_type", types[0]);
+    if (cursor) params.set("cursor", cursor);
+    return params.toString();
+  }
+
+  const loadFirst = useCallback(async (f: TFilter) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setInitialLoading(true);
+    try {
+      const types  = FILTER_MAP[f];
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+      if (types?.length === 1) params.set("movement_type", types[0]);
+      const res = await api<{ items: Movement[]; next_cursor: string | null; has_more: boolean; total: number | null }>(
+        `/api/warehouse/movements?${params}`,
+      );
+      setItems(res.items);
+      setNextCursor(res.next_cursor);
+      setHasMore(res.has_more);
+      if (res.total != null) setTotal(res.total);
+    } finally { inFlight.current = false; setInitialLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  async function loadMore() {
+    if (inFlight.current || !nextCursor) return;
+    inFlight.current = true;
+    setLoading(true);
+    try {
+      const res = await api<{ items: Movement[]; next_cursor: string | null; has_more: boolean; total: number | null }>(
+        `/api/warehouse/movements?${buildParams(nextCursor)}`,
+      );
+      setItems(prev => [...prev, ...res.items]);
+      setNextCursor(res.next_cursor);
+      setHasMore(res.has_more);
+    } finally { inFlight.current = false; setLoading(false); }
+  }
 
-  const allowed  = FILTER_MAP[filter];
-  const filtered = allowed ? movements.filter((m) => allowed.includes(m.type)) : movements;
-  const colSpan  = COLS.filter((c) => colVis.isVisible(c.key)).length;
+  // reset on filter change
+  useEffect(() => {
+    setItems([]); setNextCursor(null); setHasMore(false); setTotal(null);
+    loadFirst(filter);
+  }, [filter, loadFirst]);
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  const colSpan = COLS.filter(c => colVis.isVisible(c.key)).length;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">
-          {TYPE_FILTERS.map((f) => (
+          {TYPE_FILTERS.map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
                 filter === f
@@ -70,9 +112,15 @@ export default function MovementsPage() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {total != null && (
+            <span className="text-xs text-[var(--text-faint)]">
+              {items.length} з {total}
+            </span>
+          )}
           <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
-          <button onClick={load} className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]">↻</button>
+          <button onClick={() => loadFirst(filter)}
+            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]">↻</button>
           <button onClick={() => setCreateOpen(true)} className="btn btn-primary btn-sm">
             + Рух
           </button>
@@ -92,9 +140,11 @@ export default function MovementsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
-            {filtered.length === 0 ? (
+            {initialLoading ? (
+              <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Завантаження…</td></tr>
+            ) : items.length === 0 ? (
               <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає записів</td></tr>
-            ) : filtered.map((m) => {
+            ) : items.map(m => {
               const meta = TYPE_META[m.type];
               const qty  = parseFloat(m.quantity);
               return (
@@ -132,10 +182,19 @@ export default function MovementsPage() {
         </table>
       </div>
 
+      {hasMore && (
+        <div className="flex justify-center">
+          <button onClick={loadMore} disabled={loading}
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50">
+            {loading ? "Завантаження…" : "Завантажити ще"}
+          </button>
+        </div>
+      )}
+
       <CreateMovementModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(m) => { setMovements((prev) => [m, ...prev]); }}
+        onCreated={m => { setItems(prev => [m, ...prev]); setTotal(t => t != null ? t + 1 : null); }}
       />
 
       <ColumnSettingsModal
