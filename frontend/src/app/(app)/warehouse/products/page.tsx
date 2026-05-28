@@ -22,6 +22,7 @@ type Product = {
   image_url: string | null;
 };
 
+type ProductImage = { id: number; image_url: string; is_primary: boolean; sort_order: number };
 type StockEntry = { product_id: number; available: string };
 type ProductCat = { id: number; name: string; color: string | null };
 
@@ -163,39 +164,62 @@ function ProductModal({
   const [minStock,     setMinStock]     = useState(product?.min_stock?.toString() ?? "");
   const [desiredStock, setDesiredStock] = useState(product?.desired_stock?.toString() ?? "");
   const [boxLimit,     setBoxLimit]     = useState(product?.box_limit?.toString() ?? "");
-  const [busy,       setBusy]       = useState(false);
-  const [err,        setErr]        = useState<string | null>(null);
-  const [imageUrl,   setImageUrl]   = useState<string | null>(product?.image_url ?? null);
-  const [imageBusy,  setImageBusy]  = useState(false);
-  const [dragOver,   setDragOver]   = useState(false);
+  const [busy,      setBusy]      = useState(false);
+  const [err,       setErr]       = useState<string | null>(null);
+  const [images,    setImages]    = useState<ProductImage[]>([]);
+  const [imgBusy,   setImgBusy]   = useState(false);
+  const [dragOver,  setDragOver]  = useState(false);
   const imageRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!product) return;
+    api<ProductImage[]>(`/api/warehouse/products/${product.id}/images`)
+      .then(setImages).catch(() => {});
+  }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function refreshProduct() {
+    if (!product) return;
+    const updated = await api<Product>(`/api/warehouse/products/${product.id}`);
+    onSaved(updated);
+  }
 
   async function uploadImage(file: File) {
     if (!product) return;
-    setImageBusy(true);
+    setImgBusy(true);
     try {
       const form = new FormData();
       form.append("file", file);
-      const updated = await api<Product>(`/api/warehouse/products/${product.id}/image`, { method: "POST", body: form });
-      setImageUrl(updated.image_url);
-      onSaved(updated);
+      const list = await api<ProductImage[]>(`/api/warehouse/products/${product.id}/images`, { method: "POST", body: form });
+      setImages(list);
+      await refreshProduct();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Помилка завантаження";
-      alert(msg);
+      alert(e instanceof Error ? e.message : "Помилка завантаження");
     } finally {
-      setImageBusy(false);
+      setImgBusy(false);
     }
   }
 
-  async function removeImage() {
+  async function deleteImage(imgId: number) {
     if (!product || !window.confirm("Видалити фото?")) return;
-    setImageBusy(true);
+    setImgBusy(true);
     try {
-      const updated = await api<Product>(`/api/warehouse/products/${product.id}/image`, { method: "DELETE" });
-      setImageUrl(null);
-      onSaved(updated);
+      await api(`/api/warehouse/products/${product.id}/images/${imgId}`, { method: "DELETE" });
+      setImages((prev) => prev.filter((i) => i.id !== imgId));
+      await refreshProduct();
     } finally {
-      setImageBusy(false);
+      setImgBusy(false);
+    }
+  }
+
+  async function setPrimary(imgId: number) {
+    if (!product) return;
+    setImgBusy(true);
+    try {
+      const list = await api<ProductImage[]>(`/api/warehouse/products/${product.id}/images/${imgId}/set-primary`, { method: "PATCH" });
+      setImages(list);
+      await refreshProduct();
+    } finally {
+      setImgBusy(false);
     }
   }
 
@@ -243,7 +267,7 @@ function ProductModal({
         {/* Body */}
         <form id="product-form" onSubmit={save} className="flex-1 overflow-y-auto">
 
-          {/* Image upload — edit mode only */}
+          {/* Photo gallery — edit mode only */}
           {isEdit && (
             <>
               <div className={SEC}>
@@ -251,49 +275,89 @@ function ProductModal({
                   ref={imageRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
+                  multiple
                   className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ""; }}
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    files.forEach((f) => uploadImage(f));
+                  }}
                 />
+
                 <div
                   className={[
-                    "relative flex items-center gap-4 rounded-xl border-2 border-dashed p-3 transition-colors cursor-pointer",
-                    dragOver ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border)] hover:border-[var(--border-strong)]",
-                    imageBusy ? "opacity-60 pointer-events-none" : "",
+                    "rounded-xl border-2 border-dashed p-3 transition-colors",
+                    dragOver ? "border-[var(--accent)] bg-[var(--accent)]/5" : "border-[var(--border)]",
+                    imgBusy ? "opacity-60 pointer-events-none" : "",
                   ].join(" ")}
-                  onClick={() => imageRef.current?.click()}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) uploadImage(f); }}
+                  onDrop={(e) => {
+                    e.preventDefault(); setDragOver(false);
+                    Array.from(e.dataTransfer.files).forEach((f) => uploadImage(f));
+                  }}
                 >
-                  {/* Preview */}
-                  <div className="size-20 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
-                    {imageUrl
-                      ? <AuthImage src={imageUrl} alt={name} className="size-full object-cover" />
-                      : <div className="flex size-full flex-col items-center justify-center gap-1">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-faint)]">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
-                            <path d="m21 15-5-5L5 21"/>
-                          </svg>
+                  {/* Grid of thumbnails */}
+                  <div className="flex flex-wrap gap-2">
+                    {images.map((img) => (
+                      <div key={img.id} className="group relative size-20 shrink-0">
+                        <div className="size-full overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]">
+                          <AuthImage src={img.image_url} alt="" className="size-full object-cover" />
                         </div>
-                    }
-                  </div>
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text)]">
-                      {imageBusy ? "Завантажую…" : imageUrl ? "Змінити фото" : "Додати фото"}
-                    </p>
-                    <p className="text-xs text-[var(--text-faint)]">JPEG, PNG або WebP · макс. 8 МБ · перетягніть або клікніть</p>
-                  </div>
-                  {/* Remove button */}
-                  {imageUrl && !imageBusy && (
+                        {/* Primary badge */}
+                        {img.is_primary && (
+                          <span className="absolute left-1 top-1 rounded bg-[var(--accent)] px-1 py-0.5 text-[9px] font-bold leading-none text-white">
+                            ★
+                          </span>
+                        )}
+                        {/* Hover actions */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-lg bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                          {!img.is_primary && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimary(img.id)}
+                              title="Зробити головним"
+                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-white bg-[var(--accent)]/80 hover:bg-[var(--accent)]"
+                            >
+                              ★ головне
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteImage(img.id)}
+                            title="Видалити"
+                            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-white bg-[rgba(239,68,68,.7)] hover:bg-[var(--state-error)]"
+                          >
+                            × видалити
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Upload tile */}
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); removeImage(); }}
-                      className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--state-error)] hover:bg-[var(--surface-hi)]"
+                      onClick={() => imageRef.current?.click()}
+                      className="flex size-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-[var(--border)] text-[var(--text-faint)] hover:border-[var(--border-strong)] hover:text-[var(--text-muted)] transition-colors"
                     >
-                      Видалити
+                      {imgBusy
+                        ? <span className="text-xs">…</span>
+                        : <>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 5v14M5 12h14"/>
+                            </svg>
+                            <span className="text-[10px]">фото</span>
+                          </>
+                      }
                     </button>
+                  </div>
+
+                  {images.length === 0 && !imgBusy && (
+                    <p className="mt-2 text-center text-xs text-[var(--text-faint)]">
+                      Перетягніть або клікніть «+» щоб додати фото
+                    </p>
                   )}
+                  <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">JPEG, PNG або WebP · макс. 8 МБ · можна кілька</p>
                 </div>
               </div>
               <hr className={HR} />

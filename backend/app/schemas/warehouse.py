@@ -157,6 +157,16 @@ class ProductOut(BaseModel):
         from_attributes = True
 
 
+class ProductImageOut(BaseModel):
+    id:         int
+    image_url:  str
+    is_primary: bool
+    sort_order: int
+
+    class Config:
+        from_attributes = True
+
+
 # ── Specification ─────────────────────────────────────────────────────────────
 
 class SpecComponentCreate(BaseModel):

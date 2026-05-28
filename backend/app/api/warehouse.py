@@ -19,7 +19,7 @@ from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
     CellStock, Counterparty, MovementType, Order, OrderItem,
-    OrderStatus, ProductCategory, ProductionBatch, SpecComponent, SpecOperation,
+    OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseZone, Product,
 )
@@ -32,7 +32,7 @@ from app.schemas.warehouse import (
     MovementCreate, MovementOut,
     OrderCreate, OrderItemOut, OrderOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
-    ProductCreate, ProductOut, ProductUpdate, ReserveRequest,
+    ProductCreate, ProductImageOut, ProductOut, ProductUpdate, ReserveRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
     StockEntryOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneUpdate, ZoneWithCellsOut,
@@ -48,12 +48,16 @@ _IMAGE_MIME_EXT    = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "we
 _IMAGE_MAX_BYTES   = 8 * 1024 * 1024  # 8 MB
 
 
+def _image_url(key: str, product_id: int, org_id: int) -> str:
+    from app.services import storage as storage_svc
+    url = storage_svc.presigned_url(key, org_id, prefix=_IMAGE_PREFIX, expires=86400)
+    return url or f"/api/warehouse/products/{product_id}/images/{key}"
+
+
 def _product_image_url(p: Product, org_id: int) -> str | None:
     if not p.image_key:
         return None
-    from app.services import storage as storage_svc
-    url = storage_svc.presigned_url(p.image_key, org_id, prefix=_IMAGE_PREFIX, expires=86400)
-    return url or f"/api/warehouse/products/{p.id}/image"
+    return _image_url(p.image_key, p.id, org_id)
 
 
 def _make_product_out(p: Product, org_id: int) -> ProductOut:
@@ -1125,6 +1129,132 @@ def serve_product_image(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Image file not found")
     ext = p.image_key.rsplit(".", 1)[-1].lower()
+    mime = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+    return Response(content=data, media_type=mime)
+
+
+# ── Product images (multi-photo) ──────────────────────────────────────────────
+
+@router.get("/products/{product_id}/images", response_model=list[ProductImageOut])
+def list_product_images(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ProductImageOut]:
+    _get_product(product_id, org, db)  # 404 guard
+    rows = (
+        db.query(ProductImage)
+        .filter_by(product_id=product_id, organization_id=org.id)
+        .order_by(ProductImage.is_primary.desc(), ProductImage.sort_order, ProductImage.id)
+        .all()
+    )
+    return [
+        ProductImageOut(
+            id=img.id,
+            image_url=_image_url(img.image_key, product_id, org.id),
+            is_primary=img.is_primary,
+            sort_order=img.sort_order,
+        )
+        for img in rows
+    ]
+
+
+@router.post("/products/{product_id}/images", response_model=list[ProductImageOut], status_code=201)
+async def add_product_image(
+    product_id: int,
+    file: UploadFile = File(...),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> list[ProductImageOut]:
+    from app.services import storage as storage_svc
+    if file.content_type not in _IMAGE_MIME_EXT:
+        raise HTTPException(status_code=400, detail="Підтримуються тільки JPEG, PNG, WebP.")
+    data = await file.read()
+    if len(data) > _IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="Файл занадто великий (макс. 8 МБ).")
+    p = _get_product(product_id, org, db)
+    ext = _IMAGE_MIME_EXT[file.content_type]
+    key = f"{uuid.uuid4().hex}.{ext}"
+    storage_svc.put(key, data, org.id, prefix=_IMAGE_PREFIX)
+    existing_count = db.query(func.count(ProductImage.id)).filter_by(product_id=product_id, organization_id=org.id).scalar() or 0
+    is_primary = existing_count == 0
+    img = ProductImage(product_id=product_id, organization_id=org.id, image_key=key, is_primary=is_primary, sort_order=existing_count)
+    db.add(img)
+    if is_primary:
+        p.image_key = key
+    db.commit()
+    return list_product_images(product_id, db, org)
+
+
+@router.delete("/products/{product_id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product_image_by_id(
+    product_id: int,
+    image_id:   int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    from app.services import storage as storage_svc
+    img = db.query(ProductImage).filter_by(id=image_id, product_id=product_id, organization_id=org.id).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="Зображення не знайдено")
+    was_primary = img.is_primary
+    storage_svc.delete(img.image_key, org.id, prefix=_IMAGE_PREFIX)
+    db.delete(img)
+    db.flush()
+    if was_primary:
+        next_img = (
+            db.query(ProductImage)
+            .filter_by(product_id=product_id, organization_id=org.id)
+            .order_by(ProductImage.sort_order, ProductImage.id)
+            .first()
+        )
+        p = _get_product(product_id, org, db)
+        if next_img:
+            next_img.is_primary = True
+            p.image_key = next_img.image_key
+        else:
+            p.image_key = None
+    db.commit()
+
+
+@router.patch("/products/{product_id}/images/{image_id}/set-primary", response_model=list[ProductImageOut])
+def set_primary_product_image(
+    product_id: int,
+    image_id:   int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> list[ProductImageOut]:
+    img = db.query(ProductImage).filter_by(id=image_id, product_id=product_id, organization_id=org.id).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="Зображення не знайдено")
+    db.query(ProductImage).filter_by(product_id=product_id, organization_id=org.id).update({"is_primary": False})
+    img.is_primary = True
+    p = _get_product(product_id, org, db)
+    p.image_key = img.image_key
+    db.commit()
+    return list_product_images(product_id, db, org)
+
+
+@router.get("/products/{product_id}/images/{image_key}")
+def serve_product_image_by_key(
+    product_id: int,
+    image_key:  str,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    """Serve image bytes for local-storage mode."""
+    from app.services import storage as storage_svc
+    img = db.query(ProductImage).filter_by(image_key=image_key, product_id=product_id, organization_id=org.id).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="Image not found")
+    try:
+        data = storage_svc.get_bytes(image_key, org.id, prefix=_IMAGE_PREFIX)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Image file not found")
+    ext = image_key.rsplit(".", 1)[-1].lower()
     mime = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
     return Response(content=data, media_type=mime)
 

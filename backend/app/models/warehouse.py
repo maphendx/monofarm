@@ -155,10 +155,22 @@ class Product(Base):
     min_stock:       Mapped[int | None]      = mapped_column(Integer, nullable=True)
     desired_stock:   Mapped[int | None]      = mapped_column(Integer, nullable=True)
     box_limit:       Mapped[int | None]      = mapped_column(Integer, nullable=True)  # items per physical box/cell
-    image_key:       Mapped[str | None]      = mapped_column(String(120), nullable=True)
+    image_key:       Mapped[str | None]      = mapped_column(String(120), nullable=True)  # primary image cache
     created_by_id:   Mapped[int | None]      = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ProductImage(Base):
+    __tablename__ = "wh_product_images"
+
+    id:              Mapped[int]  = mapped_column(primary_key=True)
+    product_id:      Mapped[int]  = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="CASCADE"), nullable=False, index=True)
+    organization_id: Mapped[int]  = mapped_column(Integer, nullable=False, index=True)
+    image_key:       Mapped[str]  = mapped_column(String(120), nullable=False)
+    is_primary:      Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sort_order:      Mapped[int]  = mapped_column(Integer, default=0, nullable=False)
+    created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # ── Specification ─────────────────────────────────────────────────────────────
