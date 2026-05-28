@@ -323,7 +323,7 @@ _MOVEMENT_DIRECTION: dict[str, str] = {
     "ADJUSTMENT":     "in",
     "SALE_OUT":       "out",
     "PRODUCTION_OUT": "out",
-    "DEFECT":         "out",
+    "DEFECT":         "transfer",
     "WRITE_OFF":      "out",
     "TRANSFER":       "transfer",
 }

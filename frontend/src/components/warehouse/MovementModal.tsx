@@ -11,7 +11,7 @@ export const TYPE_META: Record<MovementType, { label: string; cls: string; needs
   SALE_OUT:       { label: "Продаж",       cls: "bg-[rgba(56,189,248,.08)] text-[var(--accent)]",              needsFrom: true,  needsTo: false, needsPrice: false },
   TRANSFER:       { label: "Переміщення",  cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]",          needsFrom: true,  needsTo: true,  needsPrice: false },
   ADJUSTMENT:     { label: "Коригування",  cls: "bg-[var(--surface-hi)] text-[var(--text-muted)]",             needsFrom: false, needsTo: true,  needsPrice: false },
-  DEFECT:         { label: "Брак",         cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",          needsFrom: true,  needsTo: false, needsPrice: false },
+  DEFECT:         { label: "Брак",         cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",          needsFrom: true,  needsTo: true,  needsPrice: false },
   WRITE_OFF:      { label: "Списання",     cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",          needsFrom: true,  needsTo: false, needsPrice: false },
   RETURN_IN:      { label: "Повернення",   cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]",          needsFrom: false, needsTo: true,  needsPrice: false },
   PRODUCTION_IN:  { label: "Виробництво+", cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]",             needsFrom: false, needsTo: true,  needsPrice: false },

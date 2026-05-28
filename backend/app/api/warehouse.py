@@ -282,7 +282,12 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
     elif mt == MovementType.PRODUCTION_IN and movement.warehouse_to_id:
         _entry(pid, movement.warehouse_to_id).quantity += q
 
-    elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.DEFECT) and movement.warehouse_from_id:
+    elif mt == MovementType.DEFECT and movement.warehouse_from_id:
+        _entry(pid, movement.warehouse_from_id).quantity -= q
+        if movement.warehouse_to_id:
+            _entry(pid, movement.warehouse_to_id).quantity += q
+
+    elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT) and movement.warehouse_from_id:
         _entry(pid, movement.warehouse_from_id).quantity -= q
 
     elif mt == MovementType.ADJUSTMENT:
