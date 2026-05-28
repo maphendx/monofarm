@@ -29,6 +29,7 @@ from app.api.tasks import router as tasks_router
 from app.api.users import router as users_router
 from app.api.warehouse import router as warehouse_router
 from app.api.keycrm import router as keycrm_router
+from app.api.search import router as search_router
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.organization import Organization
@@ -142,3 +143,4 @@ app.include_router(history_router, prefix="/api")
 app.include_router(billing_router)
 app.include_router(warehouse_router, prefix="/api")
 app.include_router(keycrm_router, prefix="/api")
+app.include_router(search_router, prefix="/api")
