@@ -16,7 +16,7 @@ type Product = {
 type SpecComponent = {
   id: number; name: string; quantity: string; unit: string;
   unit_price: string | null; waste_pct: string; sort_order: number;
-  material_id: number | null;
+  material_id: number | null; product_id: number | null; product_name: string | null;
 };
 
 type SpecOperation = {
@@ -67,22 +67,31 @@ function CostBar({ pct, cls }: { pct: number; cls: string }) {
 
 // ── AddComponentForm ──────────────────────────────────────────────────────────
 
+type WProduct = { id: number; name: string; sku: string };
+
 function AddComponentForm({
   specId, onAdded, nextOrder,
 }: {
   specId: number; onAdded: (s: Spec) => void; nextOrder: number;
 }) {
-  const [open, setOpen]   = useState(false);
-  const [name, setName]   = useState("");
-  const [qty,  setQty]    = useState("1");
-  const [unit, setUnit]   = useState("g");
-  const [price, setPrice] = useState("");
-  const [waste, setWaste] = useState("0");
-  const [busy, setBusy]   = useState(false);
+  const [open, setOpen]         = useState(false);
+  const [name, setName]         = useState("");
+  const [qty,  setQty]          = useState("1");
+  const [unit, setUnit]         = useState("g");
+  const [price, setPrice]       = useState("");
+  const [waste, setWaste]       = useState("0");
+  const [productId, setProductId] = useState("");
+  const [products, setProducts] = useState<WProduct[]>([]);
+  const [busy, setBusy]         = useState(false);
+
+  function handleOpen() {
+    setOpen(true);
+    api<WProduct[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+  }
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)}
+      <button onClick={handleOpen}
         className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent)] hover:bg-[rgba(34,211,238,.08)]">
         <span className="text-sm">+</span> Матеріал
       </button>
@@ -98,6 +107,7 @@ function AddComponentForm({
         method: "POST",
         body: JSON.stringify({
           name: name.trim(),
+          product_id: productId ? parseInt(productId) : null,
           quantity: parseFloat(qty) || 0,
           unit,
           unit_price: price ? parseFloat(price) : null,
@@ -106,7 +116,7 @@ function AddComponentForm({
         }),
       });
       onAdded(spec);
-      setName(""); setQty("1"); setPrice(""); setWaste("0");
+      setName(""); setQty("1"); setPrice(""); setWaste("0"); setProductId("");
       setOpen(false);
     } finally { setBusy(false); }
   }
@@ -146,6 +156,16 @@ function AddComponentForm({
         <input type="number" step="0.1" min="0" value={waste} onChange={e => setWaste(e.target.value)}
           className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]" />
       </label>
+      {products.length > 0 && (
+        <label className="flex-1 min-w-[160px]">
+          <span className="mb-0.5 block text-[10px] text-[var(--text-faint)]">Продукт на складі</span>
+          <select value={productId} onChange={e => setProductId(e.target.value)}
+            className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs">
+            <option value="">— не прив'язано —</option>
+            {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+      )}
       <div className="flex gap-1">
         <button type="submit" disabled={busy || !name.trim()}
           className="rounded bg-[var(--accent)] px-2.5 py-1.5 text-xs font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50">

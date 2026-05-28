@@ -192,6 +192,7 @@ class SpecComponent(Base):
 
     id:               Mapped[int]  = mapped_column(primary_key=True)
     specification_id: Mapped[int]  = mapped_column(Integer, ForeignKey("wh_specifications.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id:       Mapped[int | None] = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="SET NULL"), nullable=True, index=True)
     material_id:      Mapped[int | None] = mapped_column(ForeignKey("filaments.id", ondelete="SET NULL"), nullable=True)
     name:             Mapped[str]        = mapped_column(String(120))
     quantity:         Mapped[Decimal]    = mapped_column(Numeric(12, 3), default=0)

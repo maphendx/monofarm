@@ -171,6 +171,7 @@ class ProductImageOut(BaseModel):
 
 class SpecComponentCreate(BaseModel):
     name:        str
+    product_id:  int | None = None
     material_id: int | None = None
     quantity:    Decimal
     unit:        str = "g"
@@ -180,17 +181,31 @@ class SpecComponentCreate(BaseModel):
 
 
 class SpecComponentOut(BaseModel):
-    id:          int
-    name:        str
-    material_id: int | None
-    quantity:    Decimal
-    unit:        str
-    unit_price:  Decimal | None
-    waste_pct:   Decimal
-    sort_order:  int
+    id:           int
+    name:         str
+    product_id:   int | None = None
+    product_name: str | None = None
+    material_id:  int | None
+    quantity:     Decimal
+    unit:         str
+    unit_price:   Decimal | None
+    waste_pct:    Decimal
+    sort_order:   int
 
     class Config:
         from_attributes = True
+
+
+class BatchComponentOut(BaseModel):
+    id:              int
+    name:            str
+    product_id:      int | None
+    product_name:    str | None
+    quantity:        Decimal
+    unit:            str
+    total_qty:       Decimal
+    available_stock: Decimal | None
+    is_sufficient:   bool
 
 
 class SpecOperationCreate(BaseModel):
@@ -359,6 +374,7 @@ class BatchOut(BaseModel):
     due_date:         date | None
     order_id:         int | None
     notes:            str | None
+    components:       list[BatchComponentOut] = []
     created_at:       datetime
     updated_at:       datetime
 

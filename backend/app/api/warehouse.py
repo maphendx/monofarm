@@ -24,7 +24,7 @@ from app.models.warehouse import (
     WarehouseZone, Product,
 )
 from app.schemas.warehouse import (
-    BatchClose, BatchCreate, BatchOut, BatchUpdate,
+    BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
     CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
@@ -1992,6 +1992,39 @@ def create_movement(
 
 def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
     p = db.get(Product, b.product_id)
+
+    components: list[BatchComponentOut] = []
+    if b.specification_id:
+        spec_comps = (
+            db.query(SpecComponent)
+            .filter_by(specification_id=b.specification_id)
+            .order_by(SpecComponent.sort_order)
+            .all()
+        )
+        for c in spec_comps:
+            total_qty = c.quantity * b.target_qty
+            available_stock: Decimal | None = None
+            product_name: str | None = None
+            if c.product_id:
+                cp = db.get(Product, c.product_id)
+                product_name = cp.name if cp else None
+                entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
+                available_stock = sum(
+                    (max(Decimal("0"), e.quantity - e.reserved_qty) for e in entries),
+                    Decimal("0"),
+                )
+            components.append(BatchComponentOut(
+                id=c.id,
+                name=c.name,
+                product_id=c.product_id,
+                product_name=product_name,
+                quantity=c.quantity,
+                unit=c.unit,
+                total_qty=total_qty,
+                available_stock=available_stock,
+                is_sufficient=available_stock is None or available_stock >= total_qty,
+            ))
+
     return BatchOut(
         id=b.id, product_id=b.product_id,
         product_name=p.name if p else "",  # type: ignore[union-attr]
@@ -2000,6 +2033,7 @@ def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
         good_qty=b.good_qty, defect_qty=b.defect_qty,
         status=b.status, due_date=b.due_date,
         order_id=b.order_id, notes=b.notes,
+        components=components,
         created_at=b.created_at, updated_at=b.updated_at,
     )
 
@@ -2108,6 +2142,32 @@ def close_batch(
         db.add(m_def)
         db.flush()
         _apply_movement(m_def, db)
+
+    # Deduct spec components from stock for every good unit assembled
+    if b.specification_id and payload.good_qty > 0:
+        spec_comps = db.query(SpecComponent).filter_by(specification_id=b.specification_id).all()
+        for c in spec_comps:
+            if not c.product_id:
+                continue
+            qty_needed = c.quantity * Decimal(payload.good_qty)
+            # Pick the warehouse with the most available stock
+            entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
+            entries.sort(key=lambda e: float(e.quantity - e.reserved_qty), reverse=True)
+            best = entries[0] if entries and (entries[0].quantity - entries[0].reserved_qty) > 0 else None
+            if not best:
+                continue
+            m_out = WarehouseMovement(
+                organization_id=org.id, created_by_id=user.id,
+                type=MovementType.PRODUCTION_OUT,
+                product_id=c.product_id,
+                warehouse_from_id=best.warehouse_id,
+                quantity=qty_needed,
+                unit=c.unit,
+                batch_id=b.id,
+            )
+            db.add(m_out)
+            db.flush()
+            _apply_movement(m_out, db)
 
     db.commit()
     db.refresh(b)

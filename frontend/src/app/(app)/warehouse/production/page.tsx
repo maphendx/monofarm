@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
-import { CreateBatchModal, Batch } from "@/components/warehouse/CreateBatchModal";
+import { CreateBatchModal, Batch, BatchComponent } from "@/components/warehouse/CreateBatchModal";
 import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -29,6 +29,34 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+function BomRow({ c }: { c: BatchComponent }) {
+  const needed = parseFloat(c.total_qty);
+  const avail  = c.available_stock != null ? parseFloat(c.available_stock) : null;
+  const ok     = c.is_sufficient;
+  return (
+    <tr className="border-t border-[var(--border)]">
+      <td className="py-1.5 pr-2 text-xs">
+        {c.product_name ?? c.name}
+        {c.product_name && c.name !== c.product_name && (
+          <span className="ml-1 text-[10px] text-[var(--text-faint)]">({c.name})</span>
+        )}
+      </td>
+      <td className="py-1.5 pr-2 text-right text-xs tabular-nums text-[var(--text-muted)]">
+        {needed} {c.unit}
+      </td>
+      <td className="py-1.5 text-right text-xs tabular-nums">
+        {avail == null ? (
+          <span className="text-[var(--text-faint)]">—</span>
+        ) : (
+          <span className={ok ? "text-[var(--state-ok)]" : "text-[var(--state-warn)]"}>
+            {avail} {c.unit}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
   batch: Batch;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
@@ -37,7 +65,8 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
 }) {
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.printed_qty - batch.good_qty;
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy]       = useState(false);
+  const [bomOpen, setBomOpen] = useState(false);
 
   async function move(newStatus: BatchStatus) {
     setBusy(true);
@@ -86,6 +115,34 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete }: {
       <div className="mt-2 flex gap-3 text-xs text-[var(--text-faint)]">
         {batch.due_date && <span>📅 {new Date(batch.due_date).toLocaleDateString("uk-UA")}</span>}
       </div>
+
+      {batch.components.length > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setBomOpen(v => !v)}
+            className="flex w-full items-center justify-between text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)]"
+          >
+            <span>
+              Компоненти ({batch.components.filter(c => c.is_sufficient).length}/{batch.components.length} є на складі)
+            </span>
+            <span>{bomOpen ? "▲" : "▼"}</span>
+          </button>
+          {bomOpen && (
+            <table className="mt-1.5 w-full">
+              <thead>
+                <tr>
+                  <th className="pb-1 text-left text-[10px] font-medium text-[var(--text-faint)]">Компонент</th>
+                  <th className="pb-1 text-right text-[10px] font-medium text-[var(--text-faint)]">Потрібно</th>
+                  <th className="pb-1 text-right text-[10px] font-medium text-[var(--text-faint)]">Є</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batch.components.map(c => <BomRow key={c.id} c={c} />)}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {batch.status === "draft" && (
         <button disabled={busy} onClick={() => move("active")}

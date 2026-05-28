@@ -6,10 +6,20 @@ import { Modal } from "@/components/ui/Modal";
 
 type BatchStatus = "draft" | "active" | "paused" | "done" | "cancelled";
 
+export type BatchComponent = {
+  id: number; name: string;
+  product_id: number | null; product_name: string | null;
+  quantity: string; unit: string;
+  total_qty: string;
+  available_stock: string | null;
+  is_sufficient: boolean;
+};
+
 export type Batch = {
-  id: number; product_name: string;
+  id: number; product_name: string; specification_id: number | null;
   target_qty: number; printed_qty: number; good_qty: number; defect_qty: number;
   status: BatchStatus; due_date: string | null; notes: string | null;
+  components: BatchComponent[];
 };
 
 type Product = { id: number; name: string; sku: string };

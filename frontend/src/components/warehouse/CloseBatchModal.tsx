@@ -34,14 +34,8 @@ export function CloseBatchModal({
     api<Warehouse[]>("/api/warehouse/warehouses").then((w) => {
       setWarehouses(w);
       if (w.length > 0) {
-        // Try to pick a finished goods warehouse
-        const fg = w.find(x => x.type === "finished");
-        if (fg) setWhGoodId(fg.id.toString());
-        else setWhGoodId(w[0].id.toString());
-        
-        // Try to pick a defect warehouse
-        const df = w.find(x => x.type === "defect");
-        if (df) setWhDefectId(df.id.toString());
+        const physical = w.find(x => x.type === "physical") ?? w[0];
+        setWhGoodId(physical.id.toString());
       }
     }).catch(() => {});
   }, [open, batch]);
