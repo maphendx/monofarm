@@ -28,7 +28,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 type OrderItem = {
-  id: number; product_name: string; quantity: number;
+  id: number; product_id: number; product_name: string; quantity: number;
   unit_price: string; total_price: string; warehouse_id: number | null;
 };
 
@@ -160,37 +160,26 @@ function CreateOrderModal({ open, onClose, onCreated }: {
               {counterparties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          {!counterpartyId && (
-            <label className="block">
-              <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (вільний текст)</span>
-              <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Ім'я або компанія" className={inputCls} />
-            </label>
-          )}
-          {counterpartyId && (
-            <label className="block">
-              <span className="mb-1 block text-[var(--text-muted)] ">Джерело</span>
-              <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
-                {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </label>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {!counterpartyId && (
-            <label className="block">
-              <span className="mb-1 block text-[var(--text-muted)] ">Джерело</span>
-              <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
-                {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </label>
-          )}
           <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
+            <span className="mb-1 block text-[var(--text-muted)] ">Джерело</span>
+            <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
+              {Object.entries(SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
           </label>
         </div>
+
+        {!counterpartyId && (
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (вільний текст)</span>
+            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Ім'я або компанія" className={inputCls} />
+          </label>
+        )}
+
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
+        </label>
 
         {/* Line items */}
         <div>
@@ -318,26 +307,6 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
               {counterparties.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          {!counterpartyId && (
-            <label className="block">
-              <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (текст)</span>
-              <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Ім'я або компанія" className={inputCls} />
-            </label>
-          )}
-          {counterpartyId && (
-            <label className="block">
-              <span className="mb-1 block text-[var(--text-muted)] ">Статус</span>
-              <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)} className={inputCls}>
-                {EDITABLE_STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_META[s].label}</option>
-                ))}
-              </select>
-            </label>
-          )}
-        </div>
-
-        {!counterpartyId && (
           <label className="block">
             <span className="mb-1 block text-[var(--text-muted)] ">Статус</span>
             <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)} className={inputCls}>
@@ -345,6 +314,14 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
                 <option key={s} value={s}>{STATUS_META[s].label}</option>
               ))}
             </select>
+          </label>
+        </div>
+
+        {!counterpartyId && (
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)] ">Клієнт (текст)</span>
+            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Ім'я або компанія" className={inputCls} />
           </label>
         )}
 
@@ -483,6 +460,89 @@ function PaymentModal({ open, onClose, order, onUpdated }: {
   );
 }
 
+// ── Return modal ──────────────────────────────────────────────────────────────
+
+function ReturnModal({ open, onClose, order, onReturned }: {
+  open: boolean; onClose: () => void;
+  order: Order | null; onReturned: () => void;
+}) {
+  const [qtys,  setQtys]  = useState<Record<number, string>>({});
+  const [busy,  setBusy]  = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    if (!open || !order) return;
+    setError(null);
+    const init: Record<number, string> = {};
+    order.items.forEach((it) => { init[it.id] = String(it.quantity); });
+    setQtys(init);
+  }, [open, order]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (inFlight.current || !order) return;
+    const lines = order.items.filter((it) => parseInt(qtys[it.id] ?? "0") > 0);
+    if (lines.length === 0) return;
+    inFlight.current = true;
+    setBusy(true); setError(null);
+    try {
+      await Promise.all(lines.map((it) =>
+        api("/api/warehouse/movements", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "RETURN_IN",
+            product_id: it.product_id,
+            quantity: parseInt(qtys[it.id] ?? "0"),
+            warehouse_to_id: it.warehouse_id,
+            order_id: order.id,
+            reason: `Повернення по замовленню ${order.order_number}`,
+          }),
+        })
+      ));
+      onReturned();
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Помилка повернення");
+    } finally { inFlight.current = false; setBusy(false); }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Повернення — ${order?.order_number ?? ""}`}
+      footer={
+        <>
+          <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+          <button type="submit" form="return-form" disabled={busy}
+            className="rounded-md bg-[var(--state-warn)]/90 px-3 py-1.5 text-sm text-white hover:bg-[var(--state-warn)] disabled:opacity-50">
+            {busy ? "Записую…" : "Записати повернення"}
+          </button>
+        </>
+      }
+    >
+      <form id="return-form" onSubmit={submit} className="space-y-3 text-sm">
+        <p className="text-[var(--text-muted)]">
+          Вкажіть кількість одиниць що повертаються по кожній позиції.
+        </p>
+        <div className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+          {order?.items.map((it) => (
+            <div key={it.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span className="flex-1 text-[var(--text)]">{it.product_name}</span>
+              <span className="text-xs text-[var(--text-faint)]">×{it.quantity}</span>
+              <input
+                type="number" min="0" max={it.quantity} step="1"
+                value={qtys[it.id] ?? "0"}
+                onChange={(e) => setQtys((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+              />
+            </div>
+          ))}
+        </div>
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+      </form>
+    </Modal>
+  );
+}
+
 // ── Reserve modal ─────────────────────────────────────────────────────────────
 
 function ReserveModal({ open, onClose, order, onReserved }: {
@@ -580,6 +640,7 @@ export default function OrdersPage() {
   const [createOpen,    setCreateOpen]    = useState(false);
   const [editOrder,     setEditOrder]     = useState<Order | null>(null);
   const [reserveOrder,  setReserveOrder]  = useState<Order | null>(null);
+  const [returnOrder,   setReturnOrder]   = useState<Order | null>(null);
   const [paymentOrder,  setPaymentOrder]  = useState<Order | null>(null);
   const [actionBusy,    setActionBusy]    = useState<number | null>(null);
 
@@ -755,6 +816,14 @@ export default function OrdersPage() {
                           ✎
                         </button>
                       )}
+                      {o.status === "shipped" && o.items.some((it) => it.warehouse_id) && (
+                        <button
+                          onClick={() => setReturnOrder(o)}
+                          title="Повернення товару"
+                          className="rounded-md bg-[var(--state-warn)]/10 px-2 py-1 text-xs font-medium text-[var(--state-warn)] hover:bg-[var(--state-warn)]/20">
+                          ↩ Повернення
+                        </button>
+                      )}
                       {(o.status === "new" || o.status === "confirmed" || o.status === "in_production") && (
                         <button
                           onClick={() => cancelOrder(o)}
@@ -791,6 +860,13 @@ export default function OrdersPage() {
         onClose={() => setReserveOrder(null)}
         order={reserveOrder}
         onReserved={(updated) => { updateOrder(updated); setReserveOrder(null); }}
+      />
+
+      <ReturnModal
+        open={returnOrder !== null}
+        onClose={() => setReturnOrder(null)}
+        order={returnOrder}
+        onReturned={() => { setReturnOrder(null); load(); }}
       />
 
       <PaymentModal

@@ -176,6 +176,7 @@ type ReplenishItem = {
 function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [items,    setItems]    = useState<ReplenishItem[]>([]);
   const [qtys,     setQtys]     = useState<Record<number, string>>({});
+  const [costs,    setCosts]    = useState<Record<number, string>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading,  setLoading]  = useState(true);
   const [busy,     setBusy]     = useState(false);
@@ -205,6 +206,9 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           kind:             it.kind,
           warehouse_id:     it.warehouse_id,
           specification_id: it.specification_id,
+          unit_cost:        it.kind === "purchase" && costs[it.product_id]
+                              ? parseFloat(costs[it.product_id])
+                              : null,
         }))
         .filter((it) => it.qty > 0);
       const res = await api<{ batches: number; movements: number }>("/api/warehouse/stock/replenish", { method: "POST", body: JSON.stringify({ items: payload }) });
@@ -253,6 +257,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
                   <th className="px-3 py-3 text-right font-medium">Наявно</th>
                   <th className="px-3 py-3 text-right font-medium">Мін / Бажаний</th>
                   <th className="px-3 py-3 text-right font-medium">Замовити</th>
+                  <th className="px-3 py-3 text-right font-medium">Ціна/од. ₴</th>
                   <th className="px-3 py-3 text-center font-medium">Тип</th>
                 </tr>
               </thead>
@@ -283,6 +288,19 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
                         onChange={(e) => setQtys((prev) => ({ ...prev, [it.product_id]: e.target.value }))}
                         className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                       />
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {it.kind === "purchase" ? (
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={costs[it.product_id] ?? ""}
+                          onChange={(e) => setCosts((prev) => ({ ...prev, [it.product_id]: e.target.value }))}
+                          placeholder="0.00"
+                          className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+                        />
+                      ) : (
+                        <span className="text-[var(--text-faint)] text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className={["rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",

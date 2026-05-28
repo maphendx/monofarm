@@ -1826,6 +1826,7 @@ class _ReplenishItem(BaseModel):
     kind:             str         # "batch" | "purchase"
     warehouse_id:     int | None = None
     specification_id: int | None = None
+    unit_cost:        Decimal | None = None
 
 
 class _ReplenishRequest(BaseModel):
@@ -1918,17 +1919,23 @@ def replenish_stock(
             batches_created += 1
         elif item.kind == "purchase" and item.warehouse_id:
             p = db.get(Product, item.product_id)
+            qty = Decimal(str(item.qty))
+            uc  = item.unit_cost
             m = WarehouseMovement(
                 organization_id=org.id,
                 product_id=item.product_id,
                 type=MovementType.PURCHASE_IN,
                 warehouse_to_id=item.warehouse_id,
-                quantity=Decimal(str(item.qty)),
+                quantity=qty,
                 unit=p.unit,  # type: ignore[union-attr]
+                unit_cost=uc,
+                total_cost=(uc * qty) if uc else None,
                 created_by_id=user.id,
             )
             db.add(m)
             db.flush()
+            if uc:
+                _update_avco(item.product_id, qty, uc, db)
             _apply_movement(m, db)
             movements_created += 1
     db.commit()
@@ -2175,6 +2182,22 @@ def update_batch(
     db.commit()
     db.refresh(b)
     return _batch_to_out(b, db)
+
+
+@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_batch(
+    batch_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    if not b:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    if b.status == BatchStatus.done:
+        raise HTTPException(status_code=400, detail="Не можна видалити закриту партію — вона вже записала рухи складу")
+    db.delete(b)
+    db.commit()
 
 
 @router.patch("/batches/{batch_id}/progress", response_model=BatchOut)
