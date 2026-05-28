@@ -19,7 +19,7 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
-    CellStock, Counterparty, MovementType, Order, OrderItem,
+    CellStock, Counterparty, MovementType, Order, OrderItem, OrderPayment,
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseZone, Product,
@@ -31,7 +31,7 @@ from app.schemas.warehouse import (
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementListOut, MovementOut,
-    OrderCreate, OrderItemOut, OrderOut, OrderUpdate,
+    OrderCreate, OrderItemOut, OrderOut, OrderPaymentCreate, OrderPaymentOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
     ProductCreate, ProductImageOut, ProductOut, ProductUpdate, ReserveRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
@@ -363,9 +363,16 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
         if cp:
             counterparty_name = cp.name
 
-    total      = o.total_amount or Decimal("0")
-    paid       = o.paid_amount  or Decimal("0")
+    total       = o.total_amount or Decimal("0")
+    paid        = o.paid_amount  or Decimal("0")
     outstanding = max(total - paid, Decimal("0"))
+
+    if paid <= 0:
+        payment_status = "unpaid"
+    elif total > 0 and paid >= total:
+        payment_status = "paid"
+    else:
+        payment_status = "partial"
 
     return OrderOut(
         id=o.id,
@@ -378,6 +385,7 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
         total_amount=o.total_amount,
         paid_amount=paid,
         outstanding=outstanding,
+        payment_status=payment_status,
         currency=o.currency,
         due_date=o.due_date,
         notes=o.notes,
@@ -2494,22 +2502,6 @@ def ship_order(
             if cp:
                 cp.balance += outstanding
 
-    # Auto-create cash transaction for the paid portion
-    paid = o.paid_amount or Decimal("0")
-    if paid > 0:
-        tx = CashTransaction(
-            organization_id=org.id,
-            created_by_id=user.id,
-            type=CashTxType.income,
-            category=CashTxCategory.order_payment,
-            amount=paid,
-            counterparty_id=o.counterparty_id,
-            order_id=o.id,
-            description=f"Оплата {o.order_number}",
-            transaction_date=date.today(),
-        )
-        db.add(tx)
-
     o.status = OrderStatus.shipped
     db.commit()
     db.refresh(o)
@@ -2553,6 +2545,135 @@ def cancel_order(
     db.commit()
     db.refresh(o)
     return _order_to_out(o, db)
+
+
+# ── Order Payments ────────────────────────────────────────────────────────────
+
+@router.post("/orders/{order_id}/payments", response_model=OrderPaymentOut, status_code=status.HTTP_201_CREATED)
+def record_payment(
+    order_id: int,
+    payload:  OrderPaymentCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> OrderPaymentOut:
+    o = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if o.status == OrderStatus.cancelled:
+        raise HTTPException(status_code=400, detail="Скасоване замовлення не може приймати оплати")
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Сума оплати має бути > 0")
+
+    # No overpayment (allow prepayment on any status, block if already overpaid)
+    total = o.total_amount or Decimal("0")
+    if total > 0 and (o.paid_amount + payload.amount) > total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Сума перевищує залишок до оплати ({total - o.paid_amount} ₴)",
+        )
+
+    paid_at = payload.paid_at or date.today()
+
+    # Atomic: cashflow → payment → order.paid_amount → cp.balance
+    tx = CashTransaction(
+        organization_id=org.id,
+        created_by_id=user.id,
+        type=CashTxType.income,
+        category=CashTxCategory.order_payment,
+        amount=payload.amount,
+        counterparty_id=o.counterparty_id,
+        order_id=o.id,
+        description=f"Оплата {o.order_number}",
+        transaction_date=paid_at,
+    )
+    db.add(tx)
+    db.flush()  # get tx.id before linking
+
+    payment = OrderPayment(
+        organization_id=org.id,
+        order_id=o.id,
+        amount=payload.amount,
+        paid_at=paid_at,
+        method=payload.method,
+        note=payload.note,
+        cashflow_id=tx.id,
+    )
+    db.add(payment)
+    db.flush()
+
+    o.paid_amount = o.paid_amount + payload.amount
+
+    # Reduce counterparty debt (guard: only if counterparty exists)
+    if o.counterparty_id:
+        cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+        if cp:
+            cp.balance -= payload.amount
+
+    db.commit()
+    db.refresh(payment)
+    return OrderPaymentOut.model_validate(payment)
+
+
+@router.get("/orders/{order_id}/payments", response_model=list[OrderPaymentOut])
+def list_payments(
+    order_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[OrderPaymentOut]:
+    o = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    rows = (
+        db.query(OrderPayment)
+        .filter_by(order_id=order_id, organization_id=org.id)
+        .order_by(OrderPayment.paid_at.desc(), OrderPayment.id.desc())
+        .all()
+    )
+    return [OrderPaymentOut.model_validate(p) for p in rows]
+
+
+@router.delete("/orders/{order_id}/payments/{payment_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def delete_payment(
+    order_id:   int,
+    payment_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> None:
+    o = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="Order not found")
+    p = db.query(OrderPayment).filter_by(id=payment_id, order_id=order_id, organization_id=org.id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    amount = p.amount
+
+    # Delete linked cashflow (guard: tx may have been deleted manually)
+    if p.cashflow_id:
+        tx = db.get(CashTransaction, p.cashflow_id)
+        if tx:
+            db.delete(tx)
+
+    db.delete(p)
+    db.flush()
+
+    # Recalculate paid_amount from remaining payments
+    from sqlalchemy import select, func as safunc
+    new_paid = db.execute(
+        select(safunc.coalesce(safunc.sum(OrderPayment.amount), Decimal("0")))
+        .where(OrderPayment.order_id == order_id)
+    ).scalar_one()
+    o.paid_amount = new_paid
+
+    # Restore counterparty debt
+    if o.counterparty_id:
+        cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+        if cp:
+            cp.balance += amount
+
+    db.commit()
 
 
 # ── Cash Flow ─────────────────────────────────────────────────────────────────

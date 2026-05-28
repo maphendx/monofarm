@@ -38,9 +38,25 @@ type Order = {
   customer_name: string | null; source: string;
   status: OrderStatus; total_amount: string | null;
   paid_amount: string; outstanding: string;
+  payment_status: "unpaid" | "partial" | "paid";
   due_date: string | null; notes: string | null;
   items: OrderItem[]; created_at: string;
 };
+
+type OrderPayment = {
+  id: number; order_id: number; amount: string;
+  paid_at: string; method: string | null; note: string | null;
+  cashflow_id: number | null; created_at: string;
+};
+
+const PAYMENT_BADGE: Record<string, { label: string; cls: string }> = {
+  unpaid:  { label: "Не оплачено", cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" },
+  partial: { label: "Частково",    cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" },
+  paid:    { label: "Оплачено",    cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" },
+};
+
+const PAYMENT_METHODS = ["card", "cash", "bank", "other"] as const;
+const METHOD_LABELS: Record<string, string> = { card: "Картка", cash: "Готівка", bank: "Банк", other: "Інше" };
 
 type Product     = { id: number; name: string; sku: string; sale_price: string | null };
 type Counterparty = { id: number; name: string; type: string };
@@ -233,7 +249,6 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
   const [customerName,   setCustomerName]   = useState("");
   const [status,         setStatus]         = useState<OrderStatus>("new");
   const [dueDate,        setDueDate]        = useState("");
-  const [paidAmount,     setPaidAmount]     = useState("");
   const [notes,          setNotes]          = useState("");
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -246,7 +261,6 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
     setCustomerName(order.customer_name ?? "");
     setStatus(order.status);
     setDueDate(order.due_date ?? "");
-    setPaidAmount(order.paid_amount ?? "0");
     setNotes(order.notes ?? "");
     api<Counterparty[]>("/api/warehouse/counterparties").then(setCounterparties).catch(() => {});
   }, [open, order]);
@@ -260,9 +274,8 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
     try {
       const body: Record<string, unknown> = {
         status,
-        due_date:    dueDate || null,
-        notes:       notes.trim() || null,
-        paid_amount: parseFloat(paidAmount) || 0,
+        due_date: dueDate || null,
+        notes:    notes.trim() || null,
       };
       if (counterpartyId) {
         body.counterparty_id = parseInt(counterpartyId);
@@ -340,11 +353,6 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
             <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
           </label>
-          <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)] ">Оплачено ₴</span>
-            <input type="number" min={0} step="0.01" value={paidAmount}
-              onChange={(e) => setPaidAmount(e.target.value)} className={inputCls} />
-          </label>
         </div>
 
         <label className="block">
@@ -354,6 +362,123 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
 
         {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>
+    </Modal>
+  );
+}
+
+// ── Payment modal ─────────────────────────────────────────────────────────────
+
+function PaymentModal({ open, onClose, order, onUpdated }: {
+  open: boolean; onClose: () => void;
+  order: Order | null; onUpdated: (o: Order) => void;
+}) {
+  const [payments, setPayments] = useState<OrderPayment[]>([]);
+  const [amount,   setAmount]   = useState("");
+  const [method,   setMethod]   = useState("card");
+  const [note,     setNote]     = useState("");
+  const [busy,     setBusy]     = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    if (!open || !order) return;
+    setAmount(""); setMethod("card"); setNote(""); setError(null);
+    api<OrderPayment[]>(`/api/warehouse/orders/${order.id}/payments`).then(setPayments).catch(() => {});
+  }, [open, order]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (inFlight.current || !order) return;
+    inFlight.current = true;
+    setBusy(true); setError(null);
+    try {
+      const p = await api<OrderPayment>(`/api/warehouse/orders/${order.id}/payments`, {
+        method: "POST",
+        body: JSON.stringify({ amount: parseFloat(amount), method, note: note.trim() || null }),
+      });
+      setPayments(prev => [p, ...prev]);
+      setAmount(""); setNote("");
+      // refresh order to update paid_amount / outstanding / payment_status
+      const updated = await api<Order>(`/api/warehouse/orders/${order.id}`);
+      onUpdated(updated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Помилка збереження");
+    } finally { inFlight.current = false; setBusy(false); }
+  }
+
+  async function deletePayment(pid: number, pAmount: string) {
+    if (!order || !confirm(`Скасувати оплату ${parseFloat(pAmount).toLocaleString("uk-UA")} ₴?`)) return;
+    try {
+      await api(`/api/warehouse/orders/${order.id}/payments/${pid}`, { method: "DELETE" });
+      setPayments(prev => prev.filter(p => p.id !== pid));
+      const updated = await api<Order>(`/api/warehouse/orders/${order.id}`);
+      onUpdated(updated);
+    } catch { alert("Помилка видалення"); }
+  }
+
+  const outstanding = order ? parseFloat(order.outstanding) : 0;
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Оплати — ${order?.order_number ?? ""}`}
+      footer={<button type="button" onClick={onClose} className="btn btn-ghost">Закрити</button>}
+    >
+      <div className="space-y-4 text-sm">
+        {/* History */}
+        {payments.length > 0 && (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] divide-y divide-[var(--border)]">
+            {payments.map(p => (
+              <div key={p.id} className="flex items-center justify-between px-3 py-2">
+                <div>
+                  <span className="font-medium tabular-nums">{parseFloat(p.amount).toLocaleString("uk-UA")} ₴</span>
+                  <span className="ml-2 text-xs text-[var(--text-faint)]">{METHOD_LABELS[p.method ?? ""] ?? p.method ?? ""}</span>
+                  {p.note && <span className="ml-2 text-xs italic text-[var(--text-faint)]">{p.note}</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--text-faint)]">{p.paid_at}</span>
+                  {!p.cashflow_id ? (
+                    <span className="text-[10px] text-[var(--text-faint)]">(hist)</span>
+                  ) : (
+                    <button onClick={() => deletePayment(p.id, p.amount)}
+                      className="text-[var(--text-faint)] hover:text-[var(--state-error)] text-xs">✕</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add payment form */}
+        {order?.status !== "cancelled" && (
+          <form onSubmit={submit} className="space-y-3">
+            <p className="text-xs text-[var(--text-muted)]">
+              Залишок до оплати: <span className="font-medium">{outstanding.toLocaleString("uk-UA")} ₴</span>
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-[var(--text-muted)]">Сума ₴ *</span>
+                <input type="number" required min="0.01" step="0.01" value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  className="input w-full" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[var(--text-muted)]">Метод</span>
+                <select value={method} onChange={e => setMethod(e.target.value)} className="input w-full">
+                  {PAYMENT_METHODS.map(m => <option key={m} value={m}>{METHOD_LABELS[m]}</option>)}
+                </select>
+              </label>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">Нотатка</span>
+              <input value={note} onChange={e => setNote(e.target.value)} className="input w-full" />
+            </label>
+            {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+            <button type="submit" disabled={busy || !amount}
+              className="btn btn-primary w-full disabled:opacity-50">
+              {busy ? "Зберігаю…" : "Записати оплату"}
+            </button>
+          </form>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -452,10 +577,11 @@ export default function OrdersPage() {
   const [orders,      setOrders]      = useState<Order[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<"Всі" | OrderStatus>("Всі");
-  const [createOpen,   setCreateOpen]   = useState(false);
-  const [editOrder,    setEditOrder]    = useState<Order | null>(null);
-  const [reserveOrder, setReserveOrder] = useState<Order | null>(null);
-  const [actionBusy,   setActionBusy]   = useState<number | null>(null);
+  const [createOpen,    setCreateOpen]    = useState(false);
+  const [editOrder,     setEditOrder]     = useState<Order | null>(null);
+  const [reserveOrder,  setReserveOrder]  = useState<Order | null>(null);
+  const [paymentOrder,  setPaymentOrder]  = useState<Order | null>(null);
+  const [actionBusy,    setActionBusy]    = useState<number | null>(null);
 
   const colVis = useColumnVisibility("orders", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
@@ -582,10 +708,15 @@ export default function OrdersPage() {
                     </td>
                   )}
                   {colVis.isVisible("debt") && (
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {outstanding > 0
-                        ? <span className="text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
-                        : <span className="text-[var(--text-faint)]">—</span>}
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex flex-col items-end gap-0.5">
+                        {(() => { const b = PAYMENT_BADGE[o.payment_status]; return b ? (
+                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${b.cls}`}>{b.label}</span>
+                        ) : null; })()}
+                        {outstanding > 0 && (
+                          <span className="tabular-nums text-xs text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
+                        )}
+                      </div>
                     </td>
                   )}
                   <td className="px-4 py-3">
@@ -606,6 +737,14 @@ export default function OrdersPage() {
                           title="Відвантажити"
                           className="rounded-md bg-[var(--state-ok)]/10 px-2 py-1 text-xs font-medium text-[var(--state-ok)] hover:bg-[var(--state-ok)]/20 disabled:opacity-50 dark:text-[var(--state-ok)]">
                           {isBusy ? "…" : "Відвантажити"}
+                        </button>
+                      )}
+                      {o.status !== "cancelled" && (
+                        <button
+                          onClick={() => setPaymentOrder(o)}
+                          title="Оплати"
+                          className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                          💳
                         </button>
                       )}
                       {o.status !== "shipped" && o.status !== "cancelled" && (
@@ -652,6 +791,13 @@ export default function OrdersPage() {
         onClose={() => setReserveOrder(null)}
         order={reserveOrder}
         onReserved={(updated) => { updateOrder(updated); setReserveOrder(null); }}
+      />
+
+      <PaymentModal
+        open={paymentOrder !== null}
+        onClose={() => setPaymentOrder(null)}
+        order={paymentOrder}
+        onUpdated={(updated) => { updateOrder(updated); setPaymentOrder(updated); }}
       />
 
       <ColumnSettingsModal

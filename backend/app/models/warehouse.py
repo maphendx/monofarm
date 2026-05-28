@@ -316,6 +316,20 @@ class OrderItem(Base):
 
 # ── Warehouse zones & cells ───────────────────────────────────────────────────
 
+class OrderPayment(Base):
+    __tablename__ = "wh_order_payments"
+
+    id:              Mapped[int]           = mapped_column(primary_key=True)
+    organization_id: Mapped[int]           = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id:        Mapped[int]           = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount:          Mapped[Decimal]       = mapped_column(Numeric(12, 2), nullable=False)
+    paid_at:         Mapped[date]          = mapped_column(Date, nullable=False)
+    method:          Mapped[str | None]    = mapped_column(String(80), nullable=True)
+    note:            Mapped[str | None]    = mapped_column(String(500), nullable=True)
+    cashflow_id:     Mapped[int | None]    = mapped_column(Integer, ForeignKey("wh_cash_transactions.id", ondelete="SET NULL"), nullable=True)
+    created_at:      Mapped[datetime]      = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class WarehouseZone(Base):
     __tablename__ = "wh_zones"
 

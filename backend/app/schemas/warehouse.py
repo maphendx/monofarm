@@ -416,7 +416,28 @@ class OrderUpdate(BaseModel):
     status:          OrderStatus | None = None
     due_date:        date | None = None
     notes:           str | None = None
-    paid_amount:     Decimal | None = None
+    # paid_amount intentionally removed — use POST /orders/{id}/payments instead
+
+
+class OrderPaymentCreate(BaseModel):
+    amount: Decimal
+    paid_at: date | None = None
+    method:  str | None = None
+    note:    str | None = None
+
+
+class OrderPaymentOut(BaseModel):
+    id:          int
+    order_id:    int
+    amount:      Decimal
+    paid_at:     date
+    method:      str | None
+    note:        str | None
+    cashflow_id: int | None
+    created_at:  datetime
+
+    class Config:
+        from_attributes = True
 
 
 class OrderItemOut(BaseModel):
@@ -442,7 +463,8 @@ class OrderOut(BaseModel):
     status:           OrderStatus
     total_amount:     Decimal | None
     paid_amount:      Decimal
-    outstanding:      Decimal        # total_amount - paid_amount
+    outstanding:      Decimal
+    payment_status:   str             # "unpaid" | "partial" | "paid"
     currency:         str
     due_date:         date | None
     notes:            str | None
