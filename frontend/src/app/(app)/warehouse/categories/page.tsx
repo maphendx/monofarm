@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  useColumnVisibility,
+  ColumnSettingsModal,
+  TableSettingsButton,
+  type ColDef,
+} from "@/components/warehouse/TableSettings";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -147,11 +153,20 @@ function CategoryModal({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const COLS: ColDef[] = [
+  { key: "name",       label: "Назва",          required: true },
+  { key: "color",      label: "Колір" },
+  { key: "created_at", label: "Дата створення" },
+];
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState<Category | null | "create">(null);
   const [deleting,   setDeleting]   = useState<number | null>(null);
+
+  const colVis = useColumnVisibility("categories", COLS);
+  const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     try { setCategories(await api<Category[]>("/api/warehouse/categories")); }
@@ -191,12 +206,15 @@ export default function CategoriesPage() {
             {categories.length} {categories.length === 1 ? "категорія" : "категорій"} · використовуються для фільтрації номенклатури
           </p>
         </div>
-        <button
-          onClick={() => setModal("create")}
-          className="h-9 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:bg-[var(--accent-hi)]  "
-        >
-          + Категорія
-        </button>
+        <div className="flex items-center gap-2">
+          <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
+          <button
+            onClick={() => setModal("create")}
+            className="h-9 rounded-lg bg-[var(--accent)] px-4 text-sm font-medium text-white hover:bg-[var(--accent-hi)]"
+          >
+            + Категорія
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -217,14 +235,14 @@ export default function CategoriesPage() {
             <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
               <tr>
                 <th className="px-5 py-3 font-medium">Назва</th>
-                <th className="px-4 py-3 font-medium">Колір</th>
-                <th className="px-4 py-3 font-medium text-right">Дата створення</th>
+                {colVis.isVisible("color")      && <th className="px-4 py-3 font-medium">Колір</th>}
+                {colVis.isVisible("created_at") && <th className="px-4 py-3 font-medium text-right">Дата створення</th>}
                 <th className="w-20 px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+            <tbody className="divide-y divide-[var(--border)]">
               {categories.map((cat) => (
-                <tr key={cat.id} className="group hover:bg-[var(--surface-hi)]/80 ">
+                <tr key={cat.id} className="group hover:bg-[var(--surface-hi)]/80">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2.5">
                       <ColorDot color={cat.color} />
@@ -236,12 +254,16 @@ export default function CategoriesPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <code className="text-xs text-[var(--text-faint)]">{cat.color ?? "—"}</code>
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-[var(--text-faint)]">
-                    {new Date(cat.created_at).toLocaleDateString("uk-UA")}
-                  </td>
+                  {colVis.isVisible("color") && (
+                    <td className="px-4 py-3">
+                      <code className="text-xs text-[var(--text-faint)]">{cat.color ?? "—"}</code>
+                    </td>
+                  )}
+                  {colVis.isVisible("created_at") && (
+                    <td className="px-4 py-3 text-right text-xs text-[var(--text-faint)]">
+                      {new Date(cat.created_at).toLocaleDateString("uk-UA")}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
@@ -283,6 +305,14 @@ export default function CategoriesPage() {
           onSaved={handleSaved}
         />
       )}
+
+      <ColumnSettingsModal
+        open={colSettingsOpen}
+        onClose={() => setColSettingsOpen(false)}
+        cols={colVis.cols}
+        hidden={colVis.hidden}
+        setVisibility={colVis.setVisibility}
+      />
     </div>
   );
 }

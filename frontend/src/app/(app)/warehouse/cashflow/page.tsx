@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import {
+  useColumnVisibility,
+  ColumnSettingsModal,
+  TableSettingsButton,
+  type ColDef,
+} from "@/components/warehouse/TableSettings";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,6 +188,16 @@ function thisMonthRange() {
   return { from, to };
 }
 
+const COLS: ColDef[] = [
+  { key: "date",         label: "Дата",        required: true },
+  { key: "type",         label: "Тип" },
+  { key: "category",     label: "Категорія" },
+  { key: "counterparty", label: "Контрагент" },
+  { key: "order",        label: "Замовлення" },
+  { key: "description",  label: "Опис" },
+  { key: "amount",       label: "Сума" },
+];
+
 export default function CashFlowPage() {
   const { from: defaultFrom, to: defaultTo } = thisMonthRange();
   const [transactions, setTransactions] = useState<CashTx[]>([]);
@@ -192,6 +208,9 @@ export default function CashFlowPage() {
   const [dateTo,       setDateTo]       = useState(defaultTo);
   const [createOpen,   setCreateOpen]   = useState(false);
   const [deleting,     setDeleting]     = useState<number | null>(null);
+
+  const colVis = useColumnVisibility("cashflow", COLS);
+  const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -275,57 +294,74 @@ export default function CashFlowPage() {
               className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs   " />
           </div>
         </div>
-        <button onClick={() => setCreateOpen(true)}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
-          + Транзакція
-        </button>
+        <div className="flex gap-2">
+          <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
+          <button onClick={() => setCreateOpen(true)}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]">
+            + Транзакція
+          </button>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
-              <th className="px-4 py-3 font-medium">Дата</th>
-              <th className="px-4 py-3 font-medium">Тип</th>
-              <th className="px-4 py-3 font-medium">Категорія</th>
-              <th className="px-4 py-3 font-medium">Контрагент</th>
-              <th className="px-4 py-3 font-medium">Замовлення</th>
-              <th className="px-4 py-3 font-medium">Опис</th>
-              <th className="px-4 py-3 font-medium text-right">Сума</th>
+              {colVis.isVisible("date")         && <th className="px-4 py-3 font-medium">Дата</th>}
+              {colVis.isVisible("type")         && <th className="px-4 py-3 font-medium">Тип</th>}
+              {colVis.isVisible("category")     && <th className="px-4 py-3 font-medium">Категорія</th>}
+              {colVis.isVisible("counterparty") && <th className="px-4 py-3 font-medium">Контрагент</th>}
+              {colVis.isVisible("order")        && <th className="px-4 py-3 font-medium">Замовлення</th>}
+              {colVis.isVisible("description")  && <th className="px-4 py-3 font-medium">Опис</th>}
+              {colVis.isVisible("amount")       && <th className="px-4 py-3 font-medium text-right">Сума</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)]">
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">Завантаження…</td></tr>
+              <tr><td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-10 text-center text-[var(--text-faint)]">Завантаження…</td></tr>
             ) : transactions.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">Транзакцій немає</td></tr>
+              <tr><td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-10 text-center text-[var(--text-faint)]">Транзакцій немає</td></tr>
             ) : transactions.map((tx) => {
               const meta = TYPE_META[tx.type];
               return (
-                <tr key={tx.id} className="hover:bg-[var(--surface-hi)] ">
-                  <td className="px-4 py-3 text-[var(--text-muted)] tabular-nums">
-                    {new Date(tx.transaction_date).toLocaleDateString("uk-UA")}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${meta.cls}`}>{meta.label}</span>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-[var(--text-muted)] ">
-                    {CATEGORY_LABELS[tx.category]}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] ">
-                    {tx.counterparty_name ?? <span className="text-[var(--text-faint)]">—</span>}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {tx.order_number ?? <span className="text-[var(--text-faint)]">—</span>}
-                  </td>
-                  <td className="max-w-[200px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
-                    {tx.description ?? "—"}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-medium tabular-nums ${meta.cls}`}>
-                    {meta.sign}{fmt(tx.amount)} ₴
-                  </td>
+                <tr key={tx.id} className="hover:bg-[var(--surface-hi)]">
+                  {colVis.isVisible("date") && (
+                    <td className="px-4 py-3 text-[var(--text-muted)] tabular-nums">
+                      {new Date(tx.transaction_date).toLocaleDateString("uk-UA")}
+                    </td>
+                  )}
+                  {colVis.isVisible("type") && (
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-medium ${meta.cls}`}>{meta.label}</span>
+                    </td>
+                  )}
+                  {colVis.isVisible("category") && (
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
+                      {CATEGORY_LABELS[tx.category]}
+                    </td>
+                  )}
+                  {colVis.isVisible("counterparty") && (
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
+                      {tx.counterparty_name ?? <span className="text-[var(--text-faint)]">—</span>}
+                    </td>
+                  )}
+                  {colVis.isVisible("order") && (
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {tx.order_number ?? <span className="text-[var(--text-faint)]">—</span>}
+                    </td>
+                  )}
+                  {colVis.isVisible("description") && (
+                    <td className="max-w-[200px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
+                      {tx.description ?? "—"}
+                    </td>
+                  )}
+                  {colVis.isVisible("amount") && (
+                    <td className={`px-4 py-3 text-right font-medium tabular-nums ${meta.cls}`}>
+                      {meta.sign}{fmt(tx.amount)} ₴
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => deleteTx(tx.id)}
@@ -368,6 +404,14 @@ export default function CashFlowPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(tx) => { setTransactions((prev) => [tx, ...prev]); load(); }}
+      />
+
+      <ColumnSettingsModal
+        open={colSettingsOpen}
+        onClose={() => setColSettingsOpen(false)}
+        cols={colVis.cols}
+        hidden={colVis.hidden}
+        setVisibility={colVis.setVisibility}
       />
     </div>
   );

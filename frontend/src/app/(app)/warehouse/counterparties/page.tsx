@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import {
+  useColumnVisibility,
+  ColumnSettingsModal,
+  TableSettingsButton,
+  type ColDef,
+} from "@/components/warehouse/TableSettings";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -274,6 +280,16 @@ function fmtBalance(v: string) {
   );
 }
 
+const COLS: ColDef[] = [
+  { key: "name",       label: "Назва",   required: true },
+  { key: "type",       label: "Тип" },
+  { key: "email",      label: "Email" },
+  { key: "phone",      label: "Телефон" },
+  { key: "tax_number", label: "ЄДРПОУ" },
+  { key: "balance",    label: "Баланс" },
+  { key: "notes",      label: "Нотатка" },
+];
+
 export default function CounterpartiesPage() {
   const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
   const [loading,        setLoading]        = useState(true);
@@ -282,6 +298,9 @@ export default function CounterpartiesPage() {
   const [createOpen,     setCreateOpen]     = useState(false);
   const [editing,        setEditing]        = useState<Counterparty | null>(null);
   const [balanceCp,      setBalanceCp]      = useState<Counterparty | null>(null);
+
+  const colVis = useColumnVisibility("counterparties", COLS);
+  const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     try { setCounterparties(await api<Counterparty[]>("/api/warehouse/counterparties")); }
@@ -336,53 +355,70 @@ export default function CounterpartiesPage() {
             ))}
           </div>
         </div>
-        <button onClick={() => { setEditing(null); setCreateOpen(true); }}
-          className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
-          + Контрагент
-        </button>
+        <div className="flex gap-2">
+          <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
+          <button onClick={() => { setEditing(null); setCreateOpen(true); }}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]">
+            + Контрагент
+          </button>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
-              <th className="px-4 py-3 font-medium">Назва</th>
-              <th className="px-4 py-3 font-medium">Тип</th>
-              <th className="px-4 py-3 font-medium">Email</th>
-              <th className="px-4 py-3 font-medium">Телефон</th>
-              <th className="px-4 py-3 font-medium">ЄДРПОУ</th>
-              <th className="px-4 py-3 font-medium text-right">Баланс</th>
-              <th className="px-4 py-3 font-medium">Нотатка</th>
+              {colVis.isVisible("name")       && <th className="px-4 py-3 font-medium">Назва</th>}
+              {colVis.isVisible("type")       && <th className="px-4 py-3 font-medium">Тип</th>}
+              {colVis.isVisible("email")      && <th className="px-4 py-3 font-medium">Email</th>}
+              {colVis.isVisible("phone")      && <th className="px-4 py-3 font-medium">Телефон</th>}
+              {colVis.isVisible("tax_number") && <th className="px-4 py-3 font-medium">ЄДРПОУ</th>}
+              {colVis.isVisible("balance")    && <th className="px-4 py-3 font-medium text-right">Баланс</th>}
+              {colVis.isVisible("notes")      && <th className="px-4 py-3 font-medium">Нотатка</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)]">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-faint)]">
+                <td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-10 text-center text-[var(--text-faint)]">
                   {search || typeFilter !== "Всі" ? "Нічого не знайдено" : "Контрагентів ще немає"}
                 </td>
               </tr>
             ) : filtered.map((c) => {
               const meta = TYPE_META[c.type];
               return (
-                <tr key={c.id} className="hover:bg-[var(--surface-hi)] ">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
-                      {meta.label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">{c.email ?? "—"}</td>
-                  <td className="px-4 py-3 text-[var(--text-faint)]">{c.phone ?? "—"}</td>
-                  <td className="px-4 py-3 text-[var(--text-faint)] font-mono text-xs">{c.tax_number ?? "—"}</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium">
-                    {fmtBalance(c.balance)}
-                  </td>
-                  <td className="max-w-[180px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
-                    {c.notes ?? "—"}
-                  </td>
+                <tr key={c.id} className="hover:bg-[var(--surface-hi)]">
+                  {colVis.isVisible("name") && (
+                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                  )}
+                  {colVis.isVisible("type") && (
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${meta.cls}`}>
+                        {meta.label}
+                      </span>
+                    </td>
+                  )}
+                  {colVis.isVisible("email") && (
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{c.email ?? "—"}</td>
+                  )}
+                  {colVis.isVisible("phone") && (
+                    <td className="px-4 py-3 text-[var(--text-faint)]">{c.phone ?? "—"}</td>
+                  )}
+                  {colVis.isVisible("tax_number") && (
+                    <td className="px-4 py-3 text-[var(--text-faint)] font-mono text-xs">{c.tax_number ?? "—"}</td>
+                  )}
+                  {colVis.isVisible("balance") && (
+                    <td className="px-4 py-3 text-right tabular-nums font-medium">
+                      {fmtBalance(c.balance)}
+                    </td>
+                  )}
+                  {colVis.isVisible("notes") && (
+                    <td className="max-w-[180px] px-4 py-3 truncate text-xs text-[var(--text-faint)]">
+                      {c.notes ?? "—"}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -418,6 +454,14 @@ export default function CounterpartiesPage() {
         onClose={() => setBalanceCp(null)}
         cp={balanceCp}
         onSaved={handleSaved}
+      />
+
+      <ColumnSettingsModal
+        open={colSettingsOpen}
+        onClose={() => setColSettingsOpen(false)}
+        cols={colVis.cols}
+        hidden={colVis.hidden}
+        setVisibility={colVis.setVisibility}
       />
     </div>
   );

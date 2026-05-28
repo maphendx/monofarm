@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "@/lib/api";
+import {
+  useColumnVisibility,
+  ColumnSettingsModal,
+  TableSettingsButton,
+  type ColDef,
+} from "@/components/warehouse/TableSettings";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +59,18 @@ type ActionMissing  = "nothing" | "hide";
 type BarcodeFilter  = "all" | "has" | "none";
 type SpecImportResult = { updated: number; skipped: number; errors: { sku: string; reason: string }[] };
 const PAGE_SIZES = [25, 50, 100] as const;
+
+const COLS: ColDef[] = [
+  { key: "name",       label: "Назва",        required: true },
+  { key: "sku",        label: "Артикул" },
+  { key: "barcode",    label: "Штрих-код" },
+  { key: "categories", label: "Категорія" },
+  { key: "unit",       label: "Од." },
+  { key: "stock",      label: "Залишок" },
+  { key: "full_cost",  label: "Собівартість" },
+  { key: "sale_price", label: "Ціна" },
+  { key: "margin",     label: "Маржа" },
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1013,6 +1031,9 @@ export default function ProductsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState(false);
 
+  const colVis = useColumnVisibility("products", COLS);
+  const [colSettingsOpen, setColSettingsOpen] = useState(false);
+
   // Modal state
   const [editProduct,  setEditProduct]  = useState<Product | null | "create">(null);
   const [specProduct,  setSpecProduct]  = useState<Product | null>(null);
@@ -1297,6 +1318,7 @@ export default function ProductsPage() {
             >
               {specImporting ? "…" : "↑ Специфікації"}
             </button>
+            <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
             <button onClick={() => setEditProduct("create")}
               className="btn btn-primary">
               + Номенклатура
@@ -1375,20 +1397,20 @@ export default function ProductsPage() {
                       className="rounded border-[var(--border-strong)] " />
                   </th>
                   <Th col="name"       sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>
-                  <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>
-                  <th className="px-4 py-3 font-medium">Штрих-код</th>
-                  <th className="px-4 py-3 font-medium">Категорія</th>
-                  <th className="px-4 py-3 font-medium">Од.</th>
-                  <Th col="stock"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>
-                  <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>
-                  <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>
-                  <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>
+                  {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>}
+                  {colVis.isVisible("barcode")    && <th className="px-4 py-3 font-medium">Штрих-код</th>}
+                  {colVis.isVisible("categories") && <th className="px-4 py-3 font-medium">Категорія</th>}
+                  {colVis.isVisible("unit")       && <th className="px-4 py-3 font-medium">Од.</th>}
+                  {colVis.isVisible("stock")      && <Th col="stock"      sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>}
+                  {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>}
+                  {colVis.isVisible("sale_price") && <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>}
+                  {colVis.isVisible("margin")     && <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>}
                   <th className="w-20 px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={11} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
+                  <tr><td colSpan={2 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-12 text-center text-sm text-[var(--text-faint)]">
                     {search || selectedCats.length > 0 || barcodeFilter !== "all" ? "Нічого не знайдено" : "Номенклатури ще немає"}
                   </td></tr>
                 ) : paginated.map((p) => {
@@ -1408,55 +1430,71 @@ export default function ProductsPage() {
                           {p.name}
                         </button>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
-                        {p.barcode || <span className="opacity-30">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {p.categories.map((c) => {
-                            const color = catColorMap.get(c);
-                            return (
-                              <span
-                                key={c}
-                                onClick={() => setSelectedCats((prev) => prev.includes(c) ? prev : [...prev, c])}
-                                className={color
-                                  ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
-                                  : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)]  transition-opacity"}
-                                style={color ? { background: color, color: "#111" } : undefined}
-                              >
-                                {c}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={[
-                          "font-mono text-sm tabular-nums",
-                          isOut ? "font-semibold text-[var(--state-error)]"
-                            : avail < 5 ? "text-[var(--state-warn)]"
-                            : "text-[var(--text)] ",
-                        ].join(" ")}>{Math.round(avail)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums">
-                        {p.full_cost
-                          ? <span className="text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</span>
-                          : p.cost_price
-                            ? <span className="text-[var(--text-faint)]" title="Середньозважена ціна (зі специфікації немає)">{fmtPrice(p.cost_price)}</span>
-                            : <span className="text-[var(--text-faint)]">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        {margin !== null ? (
-                          <span className={["font-medium tabular-nums",
-                            margin >= 50 ? "text-[var(--state-ok)]"
-                              : margin >= 20 ? "text-[var(--state-warn)]"
-                              : "text-[var(--state-error)]",
-                          ].join(" ")}>{margin.toFixed(0)}%</span>
-                        ) : "—"}
-                      </td>
+                      {colVis.isVisible("sku") && (
+                        <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
+                      )}
+                      {colVis.isVisible("barcode") && (
+                        <td className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
+                          {p.barcode || <span className="opacity-30">—</span>}
+                        </td>
+                      )}
+                      {colVis.isVisible("categories") && (
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {p.categories.map((c) => {
+                              const color = catColorMap.get(c);
+                              return (
+                                <span
+                                  key={c}
+                                  onClick={() => setSelectedCats((prev) => prev.includes(c) ? prev : [...prev, c])}
+                                  className={color
+                                    ? "cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
+                                    : "cursor-pointer rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs hover:bg-[var(--surface-hi)] transition-opacity"}
+                                  style={color ? { background: color, color: "#111" } : undefined}
+                                >
+                                  {c}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      )}
+                      {colVis.isVisible("unit") && (
+                        <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
+                      )}
+                      {colVis.isVisible("stock") && (
+                        <td className="px-4 py-3 text-right">
+                          <span className={[
+                            "font-mono text-sm tabular-nums",
+                            isOut ? "font-semibold text-[var(--state-error)]"
+                              : avail < 5 ? "text-[var(--state-warn)]"
+                              : "text-[var(--text)]",
+                          ].join(" ")}>{Math.round(avail)}</span>
+                        </td>
+                      )}
+                      {colVis.isVisible("full_cost") && (
+                        <td className="px-4 py-3 text-right text-sm tabular-nums">
+                          {p.full_cost
+                            ? <span className="text-[var(--text-muted)]">{fmtPrice(p.full_cost)}</span>
+                            : p.cost_price
+                              ? <span className="text-[var(--text-faint)]" title="Середньозважена ціна (зі специфікації немає)">{fmtPrice(p.cost_price)}</span>
+                              : <span className="text-[var(--text-faint)]">—</span>}
+                        </td>
+                      )}
+                      {colVis.isVisible("sale_price") && (
+                        <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">{fmtPrice(p.sale_price)}</td>
+                      )}
+                      {colVis.isVisible("margin") && (
+                        <td className="px-4 py-3 text-right text-sm">
+                          {margin !== null ? (
+                            <span className={["font-medium tabular-nums",
+                              margin >= 50 ? "text-[var(--state-ok)]"
+                                : margin >= 20 ? "text-[var(--state-warn)]"
+                                : "text-[var(--state-error)]",
+                            ].join(" ")}>{margin.toFixed(0)}%</span>
+                          ) : "—"}
+                        </td>
+                      )}
                       {/* Row actions */}
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1 justify-end">
@@ -1554,6 +1592,14 @@ export default function ProductsPage() {
           onClose={() => setSpecProduct(null)}
         />
       )}
+
+      <ColumnSettingsModal
+        open={colSettingsOpen}
+        onClose={() => setColSettingsOpen(false)}
+        cols={colVis.cols}
+        hidden={colVis.hidden}
+        setVisibility={colVis.setVisibility}
+      />
     </>
   );
 }

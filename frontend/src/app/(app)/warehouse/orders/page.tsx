@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import {
+  useColumnVisibility,
+  ColumnSettingsModal,
+  TableSettingsButton,
+  type ColDef,
+} from "@/components/warehouse/TableSettings";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -425,6 +431,17 @@ function ReserveModal({ open, onClose, order, onReserved }: {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const COLS: ColDef[] = [
+  { key: "number",   label: "Номер",   required: true },
+  { key: "client",   label: "Клієнт" },
+  { key: "source",   label: "Джерело" },
+  { key: "items",    label: "Позиції" },
+  { key: "status",   label: "Статус" },
+  { key: "due_date", label: "До дати" },
+  { key: "amount",   label: "Сума" },
+  { key: "debt",     label: "Борг" },
+];
+
 const STATUS_FILTERS: Array<"Всі" | OrderStatus> = ["Всі", "new", "confirmed", "in_production", "ready", "shipped"];
 const STATUS_FILTER_LABELS: Record<string, string> = {
   "Всі": "Всі", new: "Нові", confirmed: "Резерв",
@@ -439,6 +456,9 @@ export default function OrdersPage() {
   const [editOrder,    setEditOrder]    = useState<Order | null>(null);
   const [reserveOrder, setReserveOrder] = useState<Order | null>(null);
   const [actionBusy,   setActionBusy]   = useState<number | null>(null);
+
+  const colVis = useColumnVisibility("orders", COLS);
+  const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
     try { setOrders(await api<Order[]>("/api/warehouse/orders")); }
@@ -493,62 +513,81 @@ export default function OrdersPage() {
             </button>
           ))}
         </div>
-        <button onClick={() => setCreateOpen(true)}
-          className="btn btn-primary btn-sm">
-          + Замовлення
-        </button>
+        <div className="flex gap-2">
+          <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
+          <button onClick={() => setCreateOpen(true)}
+            className="btn btn-primary btn-sm">
+            + Замовлення
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
+          <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
-              <th className="px-4 py-3 font-medium">Номер</th>
-              <th className="px-4 py-3 font-medium">Клієнт</th>
-              <th className="px-4 py-3 font-medium">Джерело</th>
-              <th className="px-4 py-3 font-medium">Позиції</th>
-              <th className="px-4 py-3 font-medium">Статус</th>
-              <th className="px-4 py-3 font-medium">До дати</th>
-              <th className="px-4 py-3 font-medium text-right">Сума</th>
-              <th className="px-4 py-3 font-medium text-right">Борг</th>
+              {colVis.isVisible("number")   && <th className="px-4 py-3 font-medium">Номер</th>}
+              {colVis.isVisible("client")   && <th className="px-4 py-3 font-medium">Клієнт</th>}
+              {colVis.isVisible("source")   && <th className="px-4 py-3 font-medium">Джерело</th>}
+              {colVis.isVisible("items")    && <th className="px-4 py-3 font-medium">Позиції</th>}
+              {colVis.isVisible("status")   && <th className="px-4 py-3 font-medium">Статус</th>}
+              {colVis.isVisible("due_date") && <th className="px-4 py-3 font-medium">До дати</th>}
+              {colVis.isVisible("amount")   && <th className="px-4 py-3 font-medium text-right">Сума</th>}
+              {colVis.isVisible("debt")     && <th className="px-4 py-3 font-medium text-right">Борг</th>}
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border)] dark:divide-neutral-800">
+          <tbody className="divide-y divide-[var(--border)]">
             {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає замовлень</td></tr>
+              <tr><td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає замовлень</td></tr>
             ) : filtered.map((o) => {
               const meta = STATUS_META[o.status];
               const isBusy = actionBusy === o.id;
               const outstanding = parseFloat(o.outstanding);
               return (
-                <tr key={o.id} className="hover:bg-[var(--surface-hi)] ">
-                  <td className="px-4 py-3 font-mono text-xs font-medium">{o.order_number}</td>
-                  <td className="px-4 py-3">
-                    {o.counterparty_name ?? o.customer_name ?? <span className="text-[var(--text-faint)]">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
-                      {SOURCE_LABELS[o.source] ?? o.source}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)] ">
-                    {o.items.map((it) => `${it.product_name} ×${it.quantity}`).join(", ") || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--text-muted)]">
-                    {o.due_date ? new Date(o.due_date).toLocaleDateString("uk-UA") : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium tabular-nums">
-                    {o.total_amount ? `${parseFloat(o.total_amount).toLocaleString("uk-UA")} ₴` : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {outstanding > 0
-                      ? <span className="text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
-                      : <span className="text-[var(--text-faint)]">—</span>}
-                  </td>
+                <tr key={o.id} className="hover:bg-[var(--surface-hi)]">
+                  {colVis.isVisible("number") && (
+                    <td className="px-4 py-3 font-mono text-xs font-medium">{o.order_number}</td>
+                  )}
+                  {colVis.isVisible("client") && (
+                    <td className="px-4 py-3">
+                      {o.counterparty_name ?? o.customer_name ?? <span className="text-[var(--text-faint)]">—</span>}
+                    </td>
+                  )}
+                  {colVis.isVisible("source") && (
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs">
+                        {SOURCE_LABELS[o.source] ?? o.source}
+                      </span>
+                    </td>
+                  )}
+                  {colVis.isVisible("items") && (
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
+                      {o.items.map((it) => `${it.product_name} ×${it.quantity}`).join(", ") || "—"}
+                    </td>
+                  )}
+                  {colVis.isVisible("status") && (
+                    <td className="px-4 py-3">
+                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
+                    </td>
+                  )}
+                  {colVis.isVisible("due_date") && (
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
+                      {o.due_date ? new Date(o.due_date).toLocaleDateString("uk-UA") : "—"}
+                    </td>
+                  )}
+                  {colVis.isVisible("amount") && (
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
+                      {o.total_amount ? `${parseFloat(o.total_amount).toLocaleString("uk-UA")} ₴` : "—"}
+                    </td>
+                  )}
+                  {colVis.isVisible("debt") && (
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {outstanding > 0
+                        ? <span className="text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
+                        : <span className="text-[var(--text-faint)]">—</span>}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       {o.status === "new" && (
@@ -613,6 +652,14 @@ export default function OrdersPage() {
         onClose={() => setReserveOrder(null)}
         order={reserveOrder}
         onReserved={(updated) => { updateOrder(updated); setReserveOrder(null); }}
+      />
+
+      <ColumnSettingsModal
+        open={colSettingsOpen}
+        onClose={() => setColSettingsOpen(false)}
+        cols={colVis.cols}
+        hidden={colVis.hidden}
+        setVisibility={colVis.setVisibility}
       />
     </div>
   );
