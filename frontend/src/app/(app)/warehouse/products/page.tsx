@@ -1346,6 +1346,17 @@ export default function ProductsPage() {
     setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
   }
 
+  async function copyOne(id: number) {
+    const copy = await api<Product>(`/api/warehouse/products/${id}/copy`, { method: "POST" });
+    setProducts((prev) => {
+      const idx = prev.findIndex((x) => x.id === id);
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+    setEditProduct(copy);
+  }
+
   async function hardDeleteOne(id: number, name: string) {
     if (!window.confirm(`Видалити «${name}» назавжди?`)) return;
     try {
@@ -1628,10 +1639,23 @@ export default function ProductsPage() {
                   const isOut  = avail === 0 && stock.some((s) => s.product_id === p.id);
                   return (
                     <tr key={p.id}
-                      className={selected.has(p.id) ? "bg-[var(--accent-soft)]/50 " : "hover:bg-[var(--surface-hi)]/80 "}>
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
-                          className="rounded border-[var(--border-strong)]" />
+                      className={["group", selected.has(p.id) ? "bg-[var(--accent-soft)]/50" : "hover:bg-[var(--surface-hi)]/80"].join(" ")}>
+                      <td className="w-10 px-2 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!showArchive && (
+                            <button
+                              onClick={() => copyOne(p.id)}
+                              title="Створити копію"
+                              className="opacity-0 group-hover:opacity-100 flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--accent)] transition-opacity"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                              </svg>
+                            </button>
+                          )}
+                          <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)}
+                            className="rounded border-[var(--border-strong)]" />
+                        </div>
                       </td>
                       {colVis.orderedCols.map((col) => {
                         if (!colVis.isVisible(col.key)) return null;

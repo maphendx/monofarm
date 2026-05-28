@@ -1068,6 +1068,45 @@ def restore_product(
     return _make_product_out(p, org.id)
 
 
+@router.post("/products/{product_id}/copy", response_model=ProductOut, status_code=201)
+def copy_product(
+    product_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ProductOut:
+    p = _get_product(product_id, org, db)
+    # Find a unique SKU: base-copy, base-copy-2, base-copy-3 …
+    base = p.sku + "-copy"
+    taken = {
+        row.sku for row in
+        db.query(Product.sku).filter(Product.organization_id == org.id, Product.sku.like(base + "%")).all()
+    }
+    new_sku = base
+    n = 2
+    while new_sku in taken:
+        new_sku = f"{base}-{n}"
+        n += 1
+    copy = Product(
+        organization_id=org.id,
+        name=p.name + " (копія)",
+        sku=new_sku,
+        barcode=None,
+        categories=list(p.categories),
+        unit=p.unit,
+        description=p.description,
+        is_active=True,
+        sale_price=p.sale_price,
+        min_stock=p.min_stock,
+        desired_stock=p.desired_stock,
+        box_limit=p.box_limit,
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return _make_product_out(copy, org.id)
+
+
 # ── Product image ─────────────────────────────────────────────────────────────
 
 @router.post("/products/{product_id}/image", response_model=ProductOut)
