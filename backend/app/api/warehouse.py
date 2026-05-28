@@ -1320,20 +1320,29 @@ def delete_product(
     _:   User         = Depends(require_roles(UserRole.admin)),
 ) -> None:
     p = _get_product(product_id, org, db)
-    movements  = db.query(func.count(WarehouseMovement.id)).filter_by(product_id=product_id).scalar() or 0
-    order_items = db.query(func.count(OrderItem.id)).filter_by(product_id=product_id).scalar() or 0
-    batches    = db.query(func.count(ProductionBatch.id)).filter_by(product_id=product_id).scalar() or 0
-    if movements or order_items or batches:
-        parts = []
-        if movements:   parts.append(f"{movements} рухів")
-        if order_items: parts.append(f"{order_items} замовлень")
-        if batches:     parts.append(f"{batches} партій")
+    blockers: list[str] = []
+    if db.query(func.count(WarehouseMovement.id)).filter_by(product_id=product_id).scalar():
+        blockers.append("рухи складу")
+    if db.query(func.count(OrderItem.id)).filter_by(product_id=product_id).scalar():
+        blockers.append("замовлення")
+    if db.query(func.count(ProductionBatch.id)).filter_by(product_id=product_id).scalar():
+        blockers.append("виробничі партії")
+    if db.query(CellStock).filter(CellStock.product_id == product_id, CellStock.quantity > 0).first():
+        blockers.append("залишки в комірках")
+    if blockers:
         raise HTTPException(
             status_code=409,
-            detail=f"Товар задіяний у {', '.join(parts)}. Заархівуйте замість видалення.",
+            detail=f"Товар задіяний у: {', '.join(blockers)}. Заархівуйте замість видалення.",
         )
-    db.delete(p)
-    db.commit()
+    try:
+        db.delete(p)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Неможливо видалити: товар має звʼязані записи. Заархівуйте замість видалення.",
+        )
 
 
 class StockThresholdsUpdate(BaseModel):
