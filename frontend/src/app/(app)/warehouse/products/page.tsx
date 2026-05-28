@@ -82,6 +82,13 @@ const COLS: ColDef[] = [
 function PhotoPreview({ src, alt, children }: { src: string; alt: string; children: React.ReactNode }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
 
+  useEffect(() => {
+    if (!rect) return;
+    const hide = () => setRect(null);
+    window.addEventListener("scroll", hide, { passive: true, capture: true });
+    return () => window.removeEventListener("scroll", hide, { capture: true });
+  }, [rect]);
+
   return (
     <div
       onMouseEnter={(e) => setRect(e.currentTarget.getBoundingClientRect())}
