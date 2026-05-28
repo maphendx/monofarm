@@ -46,12 +46,14 @@ function ZoneModal({
         : await api<Zone>(`/api/warehouse/warehouses/${params.id}/zones`, { method: "POST", body: JSON.stringify(body) });
       onSaved(saved);
       onClose();
-    } catch {
-      setErr("Помилка збереження");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка збереження");
     } finally {
       setBusy(false);
     }
   }
+
+  const willResize = zone && (rows !== zone.rows || cols !== zone.cols);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -77,12 +79,14 @@ function ZoneModal({
             </label>
           </div>
           <p className="text-xs text-[var(--text-faint)]">
-            Буде згенеровано {rows * cols} комірок: A1…{String.fromCharCode(64 + cols)}{rows}
-            {zone && rows * cols !== zone.cell_count && (
-              <span className="ml-1 text-[var(--state-warn)]">— наявний вміст комірок буде видалено</span>
-            )}
+            Буде {zone ? "залишено" : "згенеровано"} {rows * cols} комірок: A1…{String.fromCharCode(64 + cols)}{rows}
           </p>
-          {err && <p className="text-[var(--state-error)]">{err}</p>}
+          {willResize && (
+            <div className="rounded-lg border border-[rgba(239,68,68,.3)] bg-[rgba(239,68,68,.06)] px-3 py-2 text-xs text-[var(--state-error)]">
+              Зміна розміру видалить усі поточні комірки. Якщо в них є товари — отримаєш помилку. Спочатку очистіть комірки.
+            </div>
+          )}
+          {err && <p className="text-[var(--state-error)] text-sm">{err}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
             <button type="submit" disabled={busy || !name.trim()} className="btn btn-primary disabled:opacity-50">
@@ -95,7 +99,7 @@ function ZoneModal({
   );
 }
 
-// ── CellModal — assign product ────────────────────────────────────────────────
+// ── CellModal — multi-product per cell ────────────────────────────────────────
 
 function CellModal({
   cell, products, onClose, onSaved,
@@ -105,81 +109,132 @@ function CellModal({
   onClose: () => void;
   onSaved: (cell: Cell) => void;
 }) {
-  const [productId, setProductId] = useState<number | "">(cell.stock[0]?.product_id ?? "");
-  const [quantity,  setQuantity]  = useState(cell.stock[0]?.quantity ?? "1");
-  const [busy,      setBusy]      = useState(false);
-  const [err,       setErr]       = useState<string | null>(null);
+  const [stock,      setStock]      = useState<CellStockItem[]>(cell.stock);
+  const [addPid,     setAddPid]     = useState<string>("");
+  const [addQty,     setAddQty]     = useState("1");
+  const [busy,       setBusy]       = useState(false);
+  const [removeBusy, setRemoveBusy] = useState<number | null>(null);
+  const [err,        setErr]        = useState<string | null>(null);
+  const inFlight = useRef(false);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!productId) return;
+  const usedIds = new Set(stock.map((s) => s.product_id));
+  const available = products.filter((p) => !usedIds.has(p.id));
+
+  async function addOrUpdate(pid: number, qty: number) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true); setErr(null);
     try {
       const updated = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/stock`, {
         method: "PUT",
-        body: JSON.stringify({ product_id: productId, quantity: parseFloat(quantity) }),
+        body: JSON.stringify({ product_id: pid, quantity: qty }),
       });
-      onSaved({ ...cell, stock: [updated] });
-      onClose();
-    } catch {
-      setErr("Помилка збереження");
-    } finally {
-      setBusy(false);
-    }
+      setStock((prev) => {
+        const idx = prev.findIndex((s) => s.product_id === pid);
+        return idx >= 0 ? prev.map((s, i) => i === idx ? updated : s) : [...prev, updated];
+      });
+      setAddPid(""); setAddQty("1");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка збереження");
+    } finally { inFlight.current = false; setBusy(false); }
   }
 
-  async function clear() {
-    if (!cell.stock[0]) { onClose(); return; }
-    setBusy(true);
+  async function removeProduct(pid: number) {
+    setRemoveBusy(pid);
     try {
-      await api(`/api/warehouse/cells/${cell.id}/stock/${cell.stock[0].product_id}`, { method: "DELETE" });
-      onSaved({ ...cell, stock: [] });
-      onClose();
-    } finally {
-      setBusy(false);
-    }
+      await api(`/api/warehouse/cells/${cell.id}/stock/${pid}`, { method: "DELETE" });
+      setStock((prev) => prev.filter((s) => s.product_id !== pid));
+    } finally { setRemoveBusy(null); }
+  }
+
+  function handleClose() {
+    onSaved({ ...cell, stock });
+    onClose();
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl">
-        <h2 className="mb-1 font-semibold">Комірка {cell.code}</h2>
-        {cell.notes && <p className="mb-3 text-xs text-[var(--text-faint)]">{cell.notes}</p>}
-        <form onSubmit={save} className="space-y-4 text-sm">
-          <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)]">Товар</span>
-            <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value ? parseInt(e.target.value) : "")}
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]"
-            >
-              <option value="">— не обрано —</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
-            <input type="number" min={0} step="0.01" value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]" />
-          </label>
-          {err && <p className="text-[var(--state-error)]">{err}</p>}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            {cell.stock.length > 0 ? (
-              <button type="button" onClick={clear} disabled={busy}
-                className="text-xs text-[var(--state-error)] hover:underline">Очистити</button>
-            ) : <span />}
-            <div className="flex gap-2">
-              <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
-              <button type="submit" disabled={busy || !productId} className="btn btn-primary disabled:opacity-50">
-                {busy ? "…" : "Зберегти"}
-              </button>
-            </div>
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
+          <div>
+            <h2 className="font-semibold">Комірка {cell.code}</h2>
+            {cell.notes && <p className="text-xs text-[var(--text-faint)]">{cell.notes}</p>}
           </div>
-        </form>
+          <button onClick={handleClose}
+            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
+        </div>
+
+        {/* Current stock */}
+        <div className="px-5 py-4 space-y-2">
+          {stock.length === 0 ? (
+            <p className="text-sm text-[var(--text-faint)]">Комірка порожня</p>
+          ) : (
+            <div className="space-y-1">
+              {stock.map((s) => (
+                <div key={s.product_id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium">{s.product_name}</p>
+                    <p className="font-mono text-xs text-[var(--text-faint)]">{s.product_sku}</p>
+                  </div>
+                  <input
+                    type="number" min="0" step="0.01"
+                    defaultValue={parseFloat(s.quantity)}
+                    onBlur={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v !== parseFloat(s.quantity)) addOrUpdate(s.product_id, v);
+                    }}
+                    className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+                  />
+                  <button
+                    onClick={() => removeProduct(s.product_id)}
+                    disabled={removeBusy === s.product_id}
+                    className="flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-40">
+                    {removeBusy === s.product_id ? "…" : "×"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add product */}
+          {available.length > 0 && (
+            <div className="flex gap-2 pt-1">
+              <select
+                value={addPid}
+                onChange={(e) => setAddPid(e.target.value)}
+                className="flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]">
+                <option value="">+ Додати товар…</option>
+                {available.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              {addPid && (
+                <>
+                  <input
+                    type="number" min="0" step="0.01" value={addQty}
+                    onChange={(e) => setAddQty(e.target.value)}
+                    className="w-20 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+                  />
+                  <button
+                    onClick={() => addOrUpdate(parseInt(addPid), parseFloat(addQty) || 0)}
+                    disabled={busy}
+                    className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50">
+                    {busy ? "…" : "OK"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}
+        </div>
+
+        <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
+          <button onClick={handleClose} className="btn btn-primary">Готово</button>
+        </div>
       </div>
     </div>
   );
@@ -200,6 +255,7 @@ function ZoneAccordion({
   const [zoneData,   setZoneData]   = useState<ZoneWithCells | null>(null);
   const [loading,    setLoading]    = useState(false);
   const [activeCell, setActiveCell] = useState<Cell | null>(null);
+  const [search,     setSearch]     = useState("");
 
   async function load() {
     if (zoneData) return;
@@ -225,6 +281,17 @@ function ZoneAccordion({
   }
 
   const cells = zoneData?.cells ?? [];
+  const q = search.trim().toLowerCase();
+
+  function cellMatches(cell: Cell) {
+    if (!q) return false;
+    return cell.stock.some(
+      (s) => s.product_name.toLowerCase().includes(q) || s.product_sku.toLowerCase().includes(q)
+    );
+  }
+
+  const hasSearch = q.length > 0;
+  const matchCount = hasSearch ? cells.filter(cellMatches).length : 0;
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden">
@@ -233,7 +300,9 @@ function ZoneAccordion({
         <button onClick={toggle} className="flex flex-1 items-center gap-3 text-left">
           <span className={["text-xs transition-transform", open ? "rotate-90" : ""].join(" ")}>▶</span>
           <span className="font-medium">{initialZone.name}</span>
-          <span className="text-xs text-[var(--text-faint)]">{initialZone.rows} × {initialZone.cols} = {initialZone.cell_count} комірок</span>
+          <span className="text-xs text-[var(--text-faint)]">
+            {initialZone.rows} × {initialZone.cols} = {initialZone.cell_count} комірок
+          </span>
         </button>
         <button onClick={() => onEdit(initialZone)} title="Редагувати"
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
@@ -253,7 +322,27 @@ function ZoneAccordion({
 
       {/* Grid */}
       {open && (
-        <div className="border-t border-[var(--border)] p-4">
+        <div className="border-t border-[var(--border)] p-4 space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]"
+              width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="search"
+              placeholder="Знайти товар у стелажі…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] pl-8 pr-3 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]"
+            />
+            {hasSearch && (
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[var(--text-faint)]">
+                {matchCount > 0 ? `${matchCount} комірок` : "не знайдено"}
+              </span>
+            )}
+          </div>
+
           {loading ? (
             <p className="text-sm text-[var(--text-faint)]">Завантаження…</p>
           ) : (
@@ -262,23 +351,42 @@ function ZoneAccordion({
               style={{ gridTemplateColumns: `repeat(${initialZone.cols}, minmax(0, 1fr))` }}
             >
               {cells.map((cell) => {
-                const item = cell.stock[0];
+                const matched = hasSearch && cellMatches(cell);
+                const dimmed  = hasSearch && !matched;
+                const filled  = cell.stock.length > 0;
+                const multi   = cell.stock.length > 1;
+
                 return (
                   <button
                     key={cell.id}
                     onClick={() => setActiveCell(cell)}
                     className={[
-                      "group relative flex min-h-[56px] flex-col items-start justify-between rounded-lg border p-2 text-left transition-colors",
-                      item
-                        ? "border-[var(--accent)] bg-[rgba(34,211,238,.06)] hover:bg-[rgba(34,211,238,.10)]"
-                        : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                      "group relative flex min-h-[56px] flex-col items-start justify-between rounded-lg border p-2 text-left transition-all",
+                      matched
+                        ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] ring-1 ring-[var(--state-ok)]"
+                        : filled
+                          ? "border-[var(--accent)] bg-[rgba(34,211,238,.06)] hover:bg-[rgba(34,211,238,.10)]"
+                          : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                      dimmed ? "opacity-30" : "",
                     ].join(" ")}
                   >
-                    <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
-                    {item ? (
+                    <div className="flex w-full items-start justify-between">
+                      <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
+                      {multi && (
+                        <span className="rounded-full bg-[var(--accent)] px-1.5 text-[9px] font-bold text-white leading-4">
+                          {cell.stock.length}
+                        </span>
+                      )}
+                    </div>
+                    {filled ? (
                       <div className="w-full min-w-0">
-                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">{item.product_name}</p>
-                        <p className="font-mono text-[10px] text-[var(--accent)]">{parseFloat(item.quantity)} шт</p>
+                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
+                          {cell.stock[0].product_name}
+                          {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
+                        </p>
+                        <p className="font-mono text-[10px] text-[var(--accent)]">
+                          {cell.stock.reduce((s, i) => s + parseFloat(i.quantity), 0)} шт
+                        </p>
                       </div>
                     ) : (
                       <span className="text-[10px] text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
@@ -335,8 +443,12 @@ export default function WarehouseDetailPage() {
 
   async function deleteZone(id: number) {
     if (!window.confirm("Видалити стелаж і всі його комірки?")) return;
-    await api(`/api/warehouse/warehouses/${whId}/zones/${id}`, { method: "DELETE" });
-    setZones((prev) => prev.filter((z) => z.id !== id));
+    try {
+      await api(`/api/warehouse/warehouses/${whId}/zones/${id}`, { method: "DELETE" });
+      setZones((prev) => prev.filter((z) => z.id !== id));
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Помилка видалення");
+    }
   }
 
   if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
@@ -365,8 +477,7 @@ export default function WarehouseDetailPage() {
       {zones.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] py-16 text-center">
           <p className="text-sm text-[var(--text-muted)]">Стелажів ще немає</p>
-          <button onClick={() => setZoneModal("create")}
-            className="mt-3 btn btn-primary">
+          <button onClick={() => setZoneModal("create")} className="mt-3 btn btn-primary">
             Додати перший стелаж
           </button>
         </div>

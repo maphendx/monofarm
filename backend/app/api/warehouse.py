@@ -524,6 +524,18 @@ def update_zone(
         raise HTTPException(status_code=404, detail="Zone not found")
     data = payload.model_dump(exclude_unset=True)
     resize = "rows" in data or "cols" in data
+    if resize:
+        occupied = (
+            db.query(func.count(CellStock.id))
+            .join(WarehouseCell, CellStock.cell_id == WarehouseCell.id)
+            .filter(WarehouseCell.zone_id == zone.id)
+            .scalar() or 0
+        )
+        if occupied:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Не можна змінити розмір стелажу — {occupied} комірок містять товари. Спочатку очистіть їх.",
+            )
     for k, v in data.items():
         setattr(zone, k, v)
     if resize:
@@ -550,6 +562,17 @@ def delete_zone(
     ).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
+    occupied = (
+        db.query(func.count(CellStock.id))
+        .join(WarehouseCell, CellStock.cell_id == WarehouseCell.id)
+        .filter(WarehouseCell.zone_id == zone.id)
+        .scalar() or 0
+    )
+    if occupied:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не можна видалити стелаж — {occupied} комірок містять товари. Спочатку очистіть їх.",
+        )
     db.delete(zone)
     db.commit()
 
