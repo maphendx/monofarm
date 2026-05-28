@@ -25,7 +25,7 @@ export type Movement = {
   reason: string | null; created_at: string;
 };
 
-type Product      = { id: number; name: string; sku: string; unit: string };
+type Product      = { id: number; name: string; sku: string; unit: string; sale_price: string | null; cost_price: string | null };
 type Warehouse    = { id: number; name: string; type: string };
 type Counterparty = { id: number; name: string; type: string };
 
@@ -176,8 +176,20 @@ export function CreateMovementModal({
   }
 
   function handleProductSelect(key: string, p: Product | null, text: string) {
-    if (p) setLine(key, { productId: String(p.id), search: p.name, unit: p.unit });
-    else   setLine(key, { productId: "", search: text });
+    if (p) {
+      const autoPrice =
+        meta.needsPrice
+          ? (mType === "PURCHASE_IN" ? p.cost_price : p.sale_price) ?? ""
+          : (mType === "SALE_OUT" ? p.sale_price : "") ?? "";
+      setLine(key, {
+        productId: String(p.id),
+        search:    p.name,
+        unit:      p.unit,
+        unitCost:  autoPrice ? parseFloat(autoPrice).toFixed(2) : "",
+      });
+    } else {
+      setLine(key, { productId: "", search: text });
+    }
   }
 
   const validLines = lines.filter((l) =>
