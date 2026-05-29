@@ -25,6 +25,7 @@ const NAV_GROUPS = [
     label: "Склади",
     items: [
       { href: "/warehouse/warehouses", label: "Склади" },
+      { href: "/warehouse/zones",      label: "Стелажі" },
     ],
   },
   {

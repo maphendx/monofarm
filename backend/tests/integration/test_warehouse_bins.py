@@ -341,3 +341,20 @@ def test_cell_notes_patch(setup, client, auth_headers):
                      json={"notes": "верхня полиця"}, headers=auth_headers)
     assert r.status_code == 200, r.text
     assert r.json()["notes"] == "верхня полиця"
+
+
+def test_cell_numbering_row_letter_col_number(client, auth_headers):
+    """Codes are row-letter + column-number, in row-major grid order."""
+    wh = client.post("/api/warehouse/warehouses",
+                     json={"name": "Num", "type": "finished"}, headers=auth_headers).json()
+    zone = client.post(f"/api/warehouse/warehouses/{wh['id']}/zones",
+                       json={"name": "Z", "rows": 2, "cols": 3}, headers=auth_headers).json()
+    cells = client.get(f"/api/warehouse/zones/{zone['id']}/cells", headers=auth_headers).json()["cells"]
+    assert [c["code"] for c in cells] == ["A1", "A2", "A3", "B1", "B2", "B3"]
+
+
+def test_all_zones_overview(setup, client, auth_headers):
+    rows = client.get("/api/warehouse/zones", headers=auth_headers).json()
+    assert len(rows) >= 1
+    z = rows[0]
+    assert "warehouse_name" in z and "cell_count" in z and "filled_cells" in z

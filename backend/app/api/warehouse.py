@@ -39,7 +39,7 @@ from app.schemas.warehouse import (
     ShipPick, ShipRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
     StockEntryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
-    ZoneCreate, ZoneOut, ZoneUpdate, ZoneWithCellsOut,
+    ZoneCreate, ZoneOut, ZoneOverviewOut, ZoneUpdate, ZoneWithCellsOut,
 )
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
@@ -624,10 +624,12 @@ def _col_letter(n: int) -> str:
 
 
 def _generate_cells(zone: WarehouseZone) -> list[WarehouseCell]:
+    """Generate cell codes as row-letter + column-number: row A → A1, A2, …;
+    row B → B1, B2, …  Appended row-major so cell id order matches the grid."""
     cells = []
     for r in range(zone.rows):
         for c in range(zone.cols):
-            code = f"{_col_letter(c)}{r + 1}"
+            code = f"{_col_letter(r)}{c + 1}"
             cells.append(WarehouseCell(zone_id=zone.id, code=code))
     return cells
 
@@ -638,6 +640,40 @@ def _zone_out(zone: WarehouseZone, db: Session) -> ZoneOut:
         id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
         sort_order=zone.sort_order, cell_count=count, created_at=zone.created_at,
     )
+
+
+@router.get("/zones", response_model=list[ZoneOverviewOut])
+def list_all_zones(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ZoneOverviewOut]:
+    """Flat overview of every zone across all warehouses (for the Стелажі page)."""
+    rows = (
+        db.query(WarehouseZone, Warehouse)
+        .join(Warehouse, Warehouse.id == WarehouseZone.warehouse_id)
+        .filter(WarehouseZone.organization_id == org.id)
+        .order_by(Warehouse.name, WarehouseZone.sort_order, WarehouseZone.id)
+        .all()
+    )
+    # One grouped query each for total and filled cell counts (avoids N+1).
+    counts = dict(
+        db.query(WarehouseCell.zone_id, func.count(WarehouseCell.id))
+        .group_by(WarehouseCell.zone_id).all()
+    )
+    filled = dict(
+        db.query(WarehouseCell.zone_id, func.count(func.distinct(WarehouseCell.id)))
+        .join(CellStock, CellStock.cell_id == WarehouseCell.id)
+        .filter(CellStock.quantity > 0)
+        .group_by(WarehouseCell.zone_id).all()
+    )
+    return [
+        ZoneOverviewOut(
+            id=z.id, name=z.name, rows=z.rows, cols=z.cols, sort_order=z.sort_order,
+            cell_count=counts.get(z.id, 0), created_at=z.created_at,
+            warehouse_id=wh.id, warehouse_name=wh.name, filled_cells=filled.get(z.id, 0),
+        )
+        for z, wh in rows
+    ]
 
 
 @router.get("/warehouses/{wh_id}/zones", response_model=list[ZoneOut])
@@ -768,9 +804,11 @@ def get_zone_cells(
     ).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
+    # Order by id = generation (row-major) order, so the CSS grid lays cells out
+    # correctly regardless of code string sorting (e.g. A10 vs A2).
     cells = (db.query(WarehouseCell)
                .filter(WarehouseCell.zone_id == zone_id)
-               .order_by(WarehouseCell.code)
+               .order_by(WarehouseCell.id)
                .all())
     cells_out = []
     for cell in cells:

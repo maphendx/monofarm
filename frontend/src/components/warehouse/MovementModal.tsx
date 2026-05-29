@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import { CellCombobox } from "@/components/warehouse/CellCombobox";
 
 export type MovementType = "PRODUCTION_IN" | "PRODUCTION_OUT" | "SALE_OUT" | "PURCHASE_IN" | "DEFECT" | "ADJUSTMENT" | "TRANSFER" | "RETURN_IN" | "WRITE_OFF";
 
@@ -328,10 +329,7 @@ export function CreateMovementModal({
               {meta.needsTo ? "Розкласти в комірку" : "Відібрати з комірки"}
               <span className="ml-1 text-[var(--text-faint)]">— опційно</span>
             </span>
-            <select value={cellId} onChange={(e) => setCellId(e.target.value)} className="input">
-              <option value="">— автоматично —</option>
-              {cells.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
+            <CellCombobox cells={cells} value={cellId} onChange={setCellId} emptyLabel="автоматично" />
           </label>
         )}
 

@@ -591,6 +591,12 @@ class ZoneWithCellsOut(ZoneOut):
     cells: list[CellOut] = []
 
 
+class ZoneOverviewOut(ZoneOut):
+    warehouse_id:   int
+    warehouse_name: str
+    filled_cells:   int   # cells with at least one product
+
+
 # ── Bin operations ──────────────────────────────────────────────────────────
 
 class PutawayRequest(BaseModel):

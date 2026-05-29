@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { CellCombobox } from "@/components/warehouse/CellCombobox";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -146,11 +147,7 @@ function PutawayModal({
         </div>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Комірка</span>
-          <select value={cellId} onChange={(e) => setCellId(e.target.value)}
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]">
-            {cells.length === 0 && <option value="">— немає комірок —</option>}
-            {cells.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
+          <CellCombobox cells={cells} value={cellId} onChange={setCellId} />
         </label>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
@@ -213,11 +210,7 @@ function RelocateModal({
         </div>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Куди</span>
-          <select value={toId} onChange={(e) => setToId(e.target.value)}
-            className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 outline-none focus:border-[var(--border-strong)]">
-            {targets.length === 0 && <option value="">— немає інших комірок —</option>}
-            {targets.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
+          <CellCombobox cells={targets} value={toId} onChange={setToId} placeholder="Комірка призначення…" />
         </label>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
