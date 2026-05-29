@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
+import { MascotLoader } from "@/components/ui/MascotLoader";
 import { SearchModal } from "@/components/ui/SearchModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
@@ -54,11 +55,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   if (!ready || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-[var(--text-muted)]">
-        {t("common.loading")}
-      </div>
-    );
+    return <MascotLoader label={t("common.loading")} />;
   }
 
   return (

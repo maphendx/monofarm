@@ -35,7 +35,7 @@ function cardCenter(id: number): { x: number; y: number } | null {
   Two leg frames for walking animation.
   Colors follow the project's cyan design system.
 */
-function PixelSprite({
+export function PixelSprite({
   hasAlert,
   flip,
   walkFrame,
