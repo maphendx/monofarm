@@ -180,7 +180,10 @@ export function Sidebar({
           Theme · search · agent: hidden when collapsed, shown on hover/pinned.
       ─────────────────────────────────────────────────────────────────────── */}
       <div className="py-2">
-        <div className="flex items-center overflow-hidden">
+        <div className={[
+          "flex items-center",
+          pinned ? "overflow-visible" : "overflow-hidden group-hover/sidebar:overflow-visible"
+        ].join(" ")}>
 
           {/* Pin / unpin — always visible */}
           <button
@@ -201,8 +204,10 @@ export function Sidebar({
 
           {/* Theme · search · agent — appear only when sidebar is expanded */}
           <div className={[
-            "flex flex-1 items-center overflow-hidden",
-            pinned ? "opacity-100" : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100",
+            "flex flex-1 items-center",
+            pinned
+              ? "opacity-100 overflow-visible"
+              : "opacity-0 overflow-hidden group-hover/sidebar:opacity-100 group-hover/sidebar:overflow-visible transition-opacity duration-150",
           ].join(" ")}>
 
             <div className="flex flex-1 items-center justify-center">
