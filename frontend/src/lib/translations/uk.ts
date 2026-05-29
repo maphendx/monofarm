@@ -11,6 +11,7 @@ const uk = {
     users: "Користувачі",
     settings: "Налаштування",
     warehouse: "Склад",
+    support: "Підтримка",
   },
   common: {
     save: "Зберегти",
