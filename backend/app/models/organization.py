@@ -52,6 +52,14 @@ PLAN_PRICE_USD: dict[OrgPlan, int] = {
     OrgPlan.farm:    69,
 }
 
+# Annual billing: pay yearly, save 20% vs 12× monthly.
+YEARLY_DISCOUNT_PCT = 20
+
+
+def yearly_price_usd(plan: OrgPlan) -> int:
+    """Annual price = 12 months − discount, rounded to whole USD."""
+    return round(PLAN_PRICE_USD[plan] * 12 * (100 - YEARLY_DISCOUNT_PCT) / 100)
+
 
 class Organization(Base):
     __tablename__ = "organizations"

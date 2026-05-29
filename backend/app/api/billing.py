@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_org, require_roles
 from app.core.config import settings
 from app.core.db import get_db
-from app.models.organization import PLAN_LIMITS, PLAN_PRICE_USD, OrgPlan, Organization
+from app.models.organization import (
+    PLAN_LIMITS,
+    PLAN_PRICE_USD,
+    YEARLY_DISCOUNT_PCT,
+    OrgPlan,
+    Organization,
+    yearly_price_usd,
+)
 from app.models.printer import Printer
 from app.models.user import User, UserRole
 
@@ -31,15 +38,20 @@ def _headers() -> dict[str, str]:
     }
 
 
-def _variant_for(plan: OrgPlan) -> str:
-    mapping = {
+def _variant_for(plan: OrgPlan, interval: str = "month") -> str:
+    monthly = {
         OrgPlan.starter: settings.LMSQ_VARIANT_STARTER,
         OrgPlan.pro:     settings.LMSQ_VARIANT_PRO,
         OrgPlan.farm:    settings.LMSQ_VARIANT_FARM,
     }
-    vid = mapping.get(plan, "")
+    yearly = {
+        OrgPlan.starter: settings.LMSQ_VARIANT_STARTER_YEARLY,
+        OrgPlan.pro:     settings.LMSQ_VARIANT_PRO_YEARLY,
+        OrgPlan.farm:    settings.LMSQ_VARIANT_FARM_YEARLY,
+    }
+    vid = (yearly if interval == "year" else monthly).get(plan, "")
     if not vid:
-        raise HTTPException(status_code=503, detail=f"Variant for plan '{plan}' not configured")
+        raise HTTPException(status_code=503, detail=f"Variant for plan '{plan}' ({interval}) not configured")
     return vid
 
 
@@ -62,8 +74,14 @@ def billing_status(
         "extra_slots": org.extra_printer_slots or 0,
         "extra_price_usd": EXTRA_PRINTER_PRICE_USD[org.plan],
         "max_printers": PLAN_MAX_PRINTERS[org.plan],
+        "yearly_discount_pct": YEARLY_DISCOUNT_PCT,
         "plans": [
-            {"key": p.value, "price_usd": PLAN_PRICE_USD[p], "limits": PLAN_LIMITS[p]}
+            {
+                "key": p.value,
+                "price_usd": PLAN_PRICE_USD[p],
+                "yearly_price_usd": yearly_price_usd(p),
+                "limits": PLAN_LIMITS[p],
+            }
             for p in OrgPlan
         ],
     }
@@ -100,6 +118,11 @@ def create_checkout(
     if plan == OrgPlan.free:
         raise HTTPException(status_code=400, detail="Use cancel to downgrade to free")
 
+    interval = body.get("interval", "month")
+    if interval not in ("month", "year"):
+        raise HTTPException(status_code=400, detail="Invalid interval")
+    discount_code = (body.get("discount_code") or "").strip()
+
     # Billing not configured → upgrade directly (bootstrap / dev mode)
     if not settings.LMSQ_API_KEY:
         import datetime
@@ -109,20 +132,25 @@ def create_checkout(
         log.info("Free upgrade: org %s → %s (billing not configured)", org.id, plan.value)
         return {"url": None, "upgraded": True, "plan": plan.value}
 
+    attributes: dict = {
+        "checkout_data": {
+            "custom": {"org_id": str(org.id), "plan": plan.value},
+        },
+        "product_options": {
+            "redirect_url": f"{settings.FARM_PUBLIC_URL}/settings?billing=success",
+        },
+    }
+    # Pre-apply a promo code (codes themselves are created in the LS dashboard).
+    if discount_code:
+        attributes["checkout_data"]["discount_code"] = discount_code
+
     payload = {
         "data": {
             "type": "checkouts",
-            "attributes": {
-                "checkout_data": {
-                    "custom": {"org_id": str(org.id), "plan": plan.value},
-                },
-                "product_options": {
-                    "redirect_url": f"{settings.FARM_PUBLIC_URL}/settings?billing=success",
-                },
-            },
+            "attributes": attributes,
             "relationships": {
                 "store":   {"data": {"type": "stores",   "id": settings.LMSQ_STORE_ID}},
-                "variant": {"data": {"type": "variants", "id": _variant_for(plan)}},
+                "variant": {"data": {"type": "variants", "id": _variant_for(plan, interval)}},
             },
         }
     }

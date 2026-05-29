@@ -30,10 +30,11 @@ interface BillingStatus {
   usage: { printers: number; users: number };
   limits: { printers: number; users: number };
   price_usd: number;
-  plans: Array<{ key: string; price_usd: number; limits: { printers: number; users: number } }>;
+  plans: Array<{ key: string; price_usd: number; yearly_price_usd: number; limits: { printers: number; users: number } }>;
   extra_slots?: number;
   extra_price_usd?: number | null;
   max_printers?: number | null;
+  yearly_discount_pct?: number;
 }
 
 type SectionId =
@@ -169,6 +170,7 @@ function BillingSection() {
   const [cancelling, setCancelling] = useState(false);
   const [extraSlots, setExtraSlots] = useState(0);
   const [savingSlots, setSavingSlots] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<"month" | "year">("month");
   const inFlight = useRef(false);
 
   const billingMsg = typeof window !== "undefined"
@@ -254,7 +256,36 @@ function BillingSection() {
 
       {/* ── Plans grid ── */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
-        <h3 className="mb-4 font-semibold">Змінити план</h3>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Змінити план</h3>
+          {/* Monthly / yearly toggle */}
+          <div className="flex items-center rounded-lg border border-[var(--border)] p-0.5 text-xs">
+            <button
+              onClick={() => setBillingInterval("month")}
+              className={[
+                "rounded-md px-3 py-1 font-medium transition",
+                billingInterval === "month" ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:text-[var(--text)]",
+              ].join(" ")}
+            >
+              Місяць
+            </button>
+            <button
+              onClick={() => setBillingInterval("year")}
+              className={[
+                "flex items-center gap-1 rounded-md px-3 py-1 font-medium transition",
+                billingInterval === "year" ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:text-[var(--text)]",
+              ].join(" ")}
+            >
+              Рік
+              <span className={[
+                "rounded px-1 py-0.5 text-[10px] font-semibold leading-none",
+                billingInterval === "year" ? "bg-white/20 text-white" : "bg-[var(--state-ok)]/15 text-[var(--state-ok)]",
+              ].join(" ")}>
+                −{billing.yearly_discount_pct ?? 20}%
+              </span>
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-4 gap-3">
           {billing.plans.map((p, idx) => {
             const isCurrent = p.key === billing.plan;
@@ -278,9 +309,17 @@ function BillingSection() {
                   )}
                 </div>
                 <p className="mb-1 text-xl font-bold">
-                  {p.price_usd === 0 ? "Free" : `$${p.price_usd}`}
-                  {p.price_usd > 0 && <span className="text-xs font-normal text-[var(--text-faint)]">/міс</span>}
+                  {p.price_usd === 0
+                    ? "Free"
+                    : billingInterval === "year"
+                      ? <>${p.yearly_price_usd}<span className="text-xs font-normal text-[var(--text-faint)]">/рік</span></>
+                      : <>${p.price_usd}<span className="text-xs font-normal text-[var(--text-faint)]">/міс</span></>}
                 </p>
+                {p.price_usd > 0 && billingInterval === "year" && (
+                  <p className="mb-1 text-[11px] text-[var(--state-ok)]">
+                    ≈ ${(p.yearly_price_usd / 12).toFixed(1)}/міс · економія ${p.price_usd * 12 - p.yearly_price_usd}
+                  </p>
+                )}
                 <p className="mb-3 text-xs text-[var(--text-muted)]">{PLAN_DESC[p.key]}</p>
                 <p className="mb-4 text-xs text-[var(--text-faint)]">
                   до {p.limits.printers} принтерів

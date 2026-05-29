@@ -40,9 +40,12 @@ class Settings(BaseSettings):
     LMSQ_API_KEY: str = ""          # Lemon Squeezy API key
     LMSQ_WEBHOOK_SECRET: str = ""   # from LS dashboard → webhooks
     LMSQ_STORE_ID: str = ""         # numeric store ID from LS URL
-    LMSQ_VARIANT_STARTER: str = ""  # variant ID for each plan
+    LMSQ_VARIANT_STARTER: str = ""  # monthly variant ID for each plan
     LMSQ_VARIANT_PRO: str = ""
     LMSQ_VARIANT_FARM: str = ""
+    LMSQ_VARIANT_STARTER_YEARLY: str = ""  # annual variant IDs (−20%)
+    LMSQ_VARIANT_PRO_YEARLY: str = ""
+    LMSQ_VARIANT_FARM_YEARLY: str = ""
 
     # Fernet key for encrypting sensitive DB fields (Bambu credentials).
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
