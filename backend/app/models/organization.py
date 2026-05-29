@@ -41,15 +41,15 @@ PLAN_MAX_PRINTERS: dict[OrgPlan, int | None] = {
 EXTRA_PRINTER_PRICE_USD: dict[OrgPlan, int | None] = {
     OrgPlan.free:    None,
     OrgPlan.starter: None,
-    OrgPlan.pro:     1,
-    OrgPlan.farm:    1,
+    OrgPlan.pro:     2,
+    OrgPlan.farm:    2,
 }
 
 PLAN_PRICE_USD: dict[OrgPlan, int] = {
     OrgPlan.free:    0,
-    OrgPlan.starter: 5,
-    OrgPlan.pro:     9,
-    OrgPlan.farm:    29,
+    OrgPlan.starter: 12,
+    OrgPlan.pro:     29,
+    OrgPlan.farm:    69,
 }
 
 
