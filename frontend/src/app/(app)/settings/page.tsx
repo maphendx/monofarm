@@ -364,7 +364,9 @@ function BillingSection() {
               </p>
             </div>
             <span className="text-sm font-semibold">
-              ${(billing.price_usd + (extraSlots * (billing.extra_price_usd ?? 0))).toFixed(0)}/міс
+              {billingInterval === "year"
+                ? `$${(billing.plans.find((p) => p.key === billing.plan)?.yearly_price_usd ?? 0) + Math.round(extraSlots * (billing.extra_price_usd ?? 0) * 12 * 0.8)}/рік`
+                : `$${(billing.price_usd + extraSlots * (billing.extra_price_usd ?? 0)).toFixed(0)}/міс`}
             </span>
           </div>
           <div className="flex items-center gap-3">
