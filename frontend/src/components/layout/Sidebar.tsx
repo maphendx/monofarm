@@ -135,8 +135,6 @@ export function Sidebar({
         </span>
       </div>
 
-      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
-
       {/* Main nav */}
       <nav className="flex flex-1 flex-col overflow-hidden px-2 py-3">
         {NAV_GROUPS.map((group, gi) => (
@@ -164,7 +162,6 @@ export function Sidebar({
       </nav>
 
       {/* Settings (admin only) + Support (everyone) */}
-      <div className="mx-3 h-px bg-[var(--surface-hi)]" />
       <div className="px-2 py-2">
         {isAdmin && (
           <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
@@ -182,7 +179,7 @@ export function Sidebar({
           Pin arrow: always visible (w-14 = exact collapsed sidebar width).
           Theme · search · agent: hidden when collapsed, shown on hover/pinned.
       ─────────────────────────────────────────────────────────────────────── */}
-      <div className="border-t border-[var(--border)] py-2">
+      <div className="py-2">
         <div className="flex items-center overflow-hidden">
 
           {/* Pin / unpin — always visible */}
