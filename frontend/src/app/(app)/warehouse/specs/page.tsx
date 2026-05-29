@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, api, getToken } from "@/lib/api";
 import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
+import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -239,20 +240,35 @@ export default function SpecsPage() {
           placeholder="Назва або SKU…"
           className="w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none focus:border-[var(--border-strong)]"
         />
-        {(["all", "has", "none"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={[
-              "rounded-full px-3 py-1 text-xs transition-colors",
-              filter === f
-                ? "bg-[var(--accent)] text-white"
-                : "bg-[var(--surface-hi)] text-[var(--text-muted)] hover:text-[var(--text)]",
-            ].join(" ")}
-          >
-            {f === "all" ? "Всі" : f === "has" ? "Зі специфікацією" : "Без специфікації"}
-          </button>
-        ))}
+        <FilterDropdown active={filter !== "all" ? 1 : 0}>
+          <div className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Специфікація</p>
+            <div className="space-y-0.5">
+              {([["all", "Всі"], ["has", "Зі специфікацією"], ["none", "Без специфікації"]] as const).map(([val, label]) => (
+                <label key={val} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                  <input
+                    type="radio"
+                    name="spec-filter"
+                    checked={filter === val}
+                    onChange={() => setFilter(val)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span className="text-sm">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {filter !== "all" && (
+            <div className="border-t border-[var(--border)] p-3">
+              <button
+                onClick={() => setFilter("all")}
+                className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+              >
+                Скинути фільтри
+              </button>
+            </div>
+          )}
+        </FilterDropdown>
         <span className="ml-auto text-xs text-[var(--text-faint)]">{sorted.length} позицій</span>
       </div>
 

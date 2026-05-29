@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { CreateMovementModal, Movement, MovementType, TYPE_META } from "@/components/warehouse/MovementModal";
+import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -41,6 +42,7 @@ export default function MovementsPage() {
   const [hasMore,        setHasMore]        = useState(false);
   const [total,          setTotal]          = useState<number | null>(null);
   const [filter,         setFilter]         = useState<TFilter>("Всі");
+  const [search,         setSearch]         = useState("");
   const [loading,        setLoading]        = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [createOpen,     setCreateOpen]     = useState(false);
@@ -95,27 +97,63 @@ export default function MovementsPage() {
     loadFirst(filter);
   }, [filter, loadFirst]);
 
+  const displayed = search
+    ? items.filter((m) => m.product_name.toLowerCase().includes(search.toLowerCase()))
+    : items;
+
   const colSpan = COLS.filter(c => colVis.isVisible(c.key)).length;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {TYPE_FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                filter === f
-                  ? "bg-[var(--accent)] text-white"
-                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
-              ].join(" ")}>
-              {f}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]"
+              width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input
+              type="search"
+              placeholder="Товар…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 w-52 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]"
+            />
+          </div>
+          <FilterDropdown active={filter !== "Всі" ? 1 : 0}>
+            <div className="p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Тип руху</p>
+              <div className="space-y-0.5">
+                {TYPE_FILTERS.map((f) => (
+                  <label key={f} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                    <input
+                      type="radio"
+                      name="move-type-filter"
+                      checked={filter === f}
+                      onChange={() => setFilter(f)}
+                      className="accent-[var(--accent)]"
+                    />
+                    <span className="text-sm">{f}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {filter !== "Всі" && (
+              <div className="border-t border-[var(--border)] p-3">
+                <button
+                  onClick={() => setFilter("Всі")}
+                  className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+                >
+                  Скинути фільтри
+                </button>
+              </div>
+            )}
+          </FilterDropdown>
         </div>
         <div className="flex items-center gap-2">
           {total != null && (
             <span className="text-xs text-[var(--text-faint)]">
-              {items.length} з {total}
+              {displayed.length}{search ? ` з ${items.length}` : total != null ? ` з ${total}` : ""}
             </span>
           )}
           <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
@@ -142,9 +180,9 @@ export default function MovementsPage() {
           <tbody className="divide-y divide-[var(--border)]">
             {initialLoading ? (
               <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Завантаження…</td></tr>
-            ) : items.length === 0 ? (
+            ) : displayed.length === 0 ? (
               <tr><td colSpan={colSpan} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає записів</td></tr>
-            ) : items.map(m => {
+            ) : displayed.map(m => {
               const meta   = TYPE_META[m.type];
               const qty    = parseFloat(m.quantity);
               const isOut  = m.direction === "out";

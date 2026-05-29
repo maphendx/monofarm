@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
+import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -484,24 +485,57 @@ export default function StockPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="h-8 w-64 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] pl-8 pr-3 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]" />
         </div>
-        <div className="flex gap-1">
-          {warehouses.map((w) => (
-            <button key={w} onClick={() => setWhFilter(w)}
-              className={["rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                whFilter === w
-                  ? "bg-[var(--accent)] text-white"
-                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
-              ].join(" ")}>
-              {w}
-            </button>
-          ))}
-        </div>
-        {mode !== "all" && (
-          <button onClick={() => setMode("all")}
-            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">
-            × Скинути
-          </button>
-        )}
+        <FilterDropdown active={(whFilter !== "Всі" ? 1 : 0) + (mode !== "all" ? 1 : 0)}>
+          <div className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Склад</p>
+            <div className="space-y-0.5">
+              {warehouses.map((w) => (
+                <label key={w} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                  <input
+                    type="radio"
+                    name="wh-filter"
+                    checked={whFilter === w}
+                    onChange={() => setWhFilter(w)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span className="text-sm">{w}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="border-t border-[var(--border)] p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Статус</p>
+            <div className="space-y-0.5">
+              {([
+                ["all",   "Всі"],
+                ["out",   "Немає на складі"],
+                ["low",   "Нижче мінімуму"],
+                ["order", "Потребують замовлення"],
+              ] as const).map(([val, label]) => (
+                <label key={val} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                  <input
+                    type="radio"
+                    name="mode-filter"
+                    checked={mode === val}
+                    onChange={() => setMode(val)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span className="text-sm">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {(whFilter !== "Всі" || mode !== "all") && (
+            <div className="border-t border-[var(--border)] p-3">
+              <button
+                onClick={() => { setWhFilter("Всі"); setMode("all"); }}
+                className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+              >
+                Скинути фільтри
+              </button>
+            </div>
+          )}
+        </FilterDropdown>
         <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
         <button onClick={load}
           className="ml-auto rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]">

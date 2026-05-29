@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -341,19 +342,35 @@ export default function CounterpartiesPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--border-strong)]   "
           />
-          <div className="flex gap-1">
-            {TYPE_FILTERS.map((f) => (
-              <button key={f} onClick={() => setTypeFilter(f)}
-                className={[
-                  "rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                  typeFilter === f
-                    ? "bg-[var(--accent)] text-white  "
-                    : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
-                ].join(" ")}>
-                {TYPE_FILTER_LABELS[f]}
-              </button>
-            ))}
-          </div>
+          <FilterDropdown active={typeFilter !== "Всі" ? 1 : 0}>
+            <div className="p-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Тип</p>
+              <div className="space-y-0.5">
+                {TYPE_FILTERS.map((f) => (
+                  <label key={f} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                    <input
+                      type="radio"
+                      name="cp-type-filter"
+                      checked={typeFilter === f}
+                      onChange={() => setTypeFilter(f)}
+                      className="accent-[var(--accent)]"
+                    />
+                    <span className="text-sm">{TYPE_FILTER_LABELS[f]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            {typeFilter !== "Всі" && (
+              <div className="border-t border-[var(--border)] p-3">
+                <button
+                  onClick={() => setTypeFilter("Всі")}
+                  className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+                >
+                  Скинути фільтри
+                </button>
+              </div>
+            )}
+          </FilterDropdown>
         </div>
         <div className="flex gap-2">
           <TableSettingsButton onClick={() => setColSettingsOpen(true)} />

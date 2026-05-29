@@ -5,24 +5,29 @@ import { usePathname } from "next/navigation";
 
 import { usePageTitle } from "@/lib/usePageTitle";
 
-const NAV_GROUPS = [
+type NavItem  = { href: string; label: string };
+type NavGroup = { label: string; href: string; exact?: boolean; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
   {
-    label: null,
-    items: [
-      { href: "/warehouse", label: "Огляд", exact: true },
-    ],
+    label: "Огляд",
+    href: "/warehouse",
+    exact: true,
+    items: [],
   },
   {
     label: "Товари",
+    href: "/warehouse/products",
     items: [
-      { href: "/warehouse/products",    label: "Номенклатура" },
-      { href: "/warehouse/specs",       label: "Специфікації" },
-      { href: "/warehouse/stock",       label: "Залишки" },
-      { href: "/warehouse/categories",  label: "Категорії" },
+      { href: "/warehouse/products",   label: "Номенклатура" },
+      { href: "/warehouse/specs",      label: "Специфікації" },
+      { href: "/warehouse/stock",      label: "Залишки" },
+      { href: "/warehouse/categories", label: "Категорії" },
     ],
   },
   {
     label: "Склади",
+    href: "/warehouse/warehouses",
     items: [
       { href: "/warehouse/warehouses", label: "Склади" },
       { href: "/warehouse/zones",      label: "Стелажі" },
@@ -30,6 +35,7 @@ const NAV_GROUPS = [
   },
   {
     label: "Операції",
+    href: "/warehouse/movements",
     items: [
       { href: "/warehouse/movements",  label: "Рухи" },
       { href: "/warehouse/production", label: "Виробництво" },
@@ -37,6 +43,7 @@ const NAV_GROUPS = [
   },
   {
     label: "Продажі",
+    href: "/warehouse/orders",
     items: [
       { href: "/warehouse/orders",         label: "Замовлення" },
       { href: "/warehouse/counterparties", label: "Контрагенти" },
@@ -45,56 +52,74 @@ const NAV_GROUPS = [
   },
   {
     label: "Аналіз",
-    items: [
-      { href: "/warehouse/analytics", label: "Аналітика" },
-    ],
+    href: "/warehouse/analytics",
+    items: [],
   },
 ];
 
-function isActive(href: string, pathname: string, exact?: boolean) {
-  if (exact) return pathname === href;
-  return pathname === href || pathname.startsWith(href + "/");
-}
-
-function NavTab({ href, label, exact }: { href: string; label: string; exact?: boolean }) {
-  const pathname = usePathname();
-  const active = isActive(href, pathname, exact);
-  return (
-    <Link
-      href={href}
-      className={[
-        "shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors",
-        active
-          ? "border-b-2 border-[var(--accent)] font-medium text-[var(--accent)]"
-          : "border-b-2 border-transparent text-[var(--text-muted)] hover:text-[var(--text-hi)]",
-      ].join(" ")}
-    >
-      {label}
-    </Link>
+function isGroupActive(group: NavGroup, pathname: string): boolean {
+  if (group.items.length === 0) {
+    return group.exact ? pathname === group.href : pathname.startsWith(group.href);
+  }
+  return group.items.some(
+    (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
   );
 }
 
 export default function WarehouseLayout({ children }: { children: React.ReactNode }) {
   usePageTitle("nav.warehouse");
+  const pathname = usePathname();
+  const activeGroup = NAV_GROUPS.find((g) => isGroupActive(g, pathname)) ?? null;
+
   return (
     <div className="-mx-6 -mt-6">
 
-      {/* ── Horizontal tab nav ──────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="flex overflow-x-auto px-4 scrollbar-none">
-          {NAV_GROUPS.map((group, gi) => (
-            <div key={gi} className={["flex items-center", gi > 0 ? "border-l border-[var(--border)] ml-1 pl-1" : ""].join(" ")}>
-              {group.label && (
-                <span className="hidden shrink-0 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)] sm:inline">
-                  {group.label}
-                </span>
-              )}
-              {group.items.map((item) => (
-                <NavTab key={item.href} {...item} />
-              ))}
-            </div>
-          ))}
+      {/* ── Sticky nav header ─────────────────────────────────────────────── */}
+      <div className="sticky top-0 z-20 bg-[var(--bg-elevated)]">
+
+        {/* Primary row — group tabs */}
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-[var(--border)] px-4 py-2 scrollbar-none">
+          {NAV_GROUPS.map((group) => {
+            const active = isGroupActive(group, pathname);
+            return (
+              <Link
+                key={group.href}
+                href={group.href}
+                className={[
+                  "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-[var(--accent)] text-white"
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]",
+                ].join(" ")}
+              >
+                {group.label}
+              </Link>
+            );
+          })}
         </div>
+
+        {/* Secondary row — sub-pages of active group */}
+        {activeGroup && activeGroup.items.length > 0 && (
+          <div className="flex items-center overflow-x-auto border-b border-[var(--border)] px-5 scrollbar-none">
+            {activeGroup.items.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={[
+                    "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-xs transition-colors",
+                    active
+                      ? "border-[var(--accent)] font-medium text-[var(--accent)]"
+                      : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
+                  ].join(" ")}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}

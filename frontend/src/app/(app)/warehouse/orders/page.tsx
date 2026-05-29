@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
+import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -834,19 +835,35 @@ export default function OrdersPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {STATUS_FILTERS.map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={[
-                "rounded-md px-2.5 py-1.5 text-xs transition-colors",
-                filter === f
-                  ? "bg-[var(--accent)] text-white  "
-                  : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]  ",
-              ].join(" ")}>
-              {STATUS_FILTER_LABELS[f]}
-            </button>
-          ))}
-        </div>
+        <FilterDropdown active={filter !== "Всі" ? 1 : 0}>
+          <div className="p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Статус</p>
+            <div className="space-y-0.5">
+              {STATUS_FILTERS.map((f) => (
+                <label key={f} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
+                  <input
+                    type="radio"
+                    name="order-status-filter"
+                    checked={filter === f}
+                    onChange={() => setFilter(f)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span className="text-sm">{STATUS_FILTER_LABELS[f]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {filter !== "Всі" && (
+            <div className="border-t border-[var(--border)] p-3">
+              <button
+                onClick={() => setFilter("Всі")}
+                className="w-full rounded-md px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+              >
+                Скинути фільтри
+              </button>
+            </div>
+          )}
+        </FilterDropdown>
         <div className="flex gap-2">
           <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
           <button onClick={() => setCreateOpen(true)}
