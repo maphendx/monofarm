@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -193,7 +194,7 @@ export default function CategoriesPage() {
     }
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={4} rows={5} />;
 
   return (
     <div className="space-y-4">

@@ -7,6 +7,7 @@ import { TelegramLinkModal } from "@/components/users/TelegramLinkModal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Адмін",
@@ -128,7 +129,7 @@ export function UsersSection() {
     upsert(updated);
   }
 
-  if (loading) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
+  if (loading) return <PageSkeleton cols={5} rows={4} />;
 
   return (
     <div className="space-y-4">

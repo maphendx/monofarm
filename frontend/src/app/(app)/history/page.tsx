@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 interface HistoryEntry {
   id: number;
@@ -70,7 +71,7 @@ export default function HistoryPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">{t("common.loading")}</p>
+        <PageSkeleton cols={6} />
       ) : entries.length === 0 ? (
         <p className="text-sm text-[var(--text-muted)]">{t("history.noRecords")}</p>
       ) : (

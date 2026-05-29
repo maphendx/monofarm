@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -327,7 +328,7 @@ export default function CounterpartiesPage() {
     return true;
   });
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={5} />;
 
   return (
     <div className="space-y-4">

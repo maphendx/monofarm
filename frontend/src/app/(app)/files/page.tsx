@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, api, getToken } from "@/lib/api";
+import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -706,12 +707,7 @@ export default function FilesPage() {
 
   const targetPrinter = defaultPrinterId ? printers.find(p => p.id === defaultPrinterId) : null;
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-24 text-sm text-[var(--text-muted)]">
-      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-accent mr-2" />
-      Завантаження…
-    </div>
-  );
+  if (loading) return <CardsSkeleton count={12} cols={5} />;
 
   const isDragging = !!draggedFile;
 

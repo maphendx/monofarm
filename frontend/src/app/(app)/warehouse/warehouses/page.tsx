@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 type WarehouseType = "raw" | "wip" | "finished" | "defect";
 
@@ -145,7 +146,7 @@ export default function WarehousesPage() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) {
-    return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+    return <PageSkeleton cols={4} rows={4} />;
   }
 
   const active   = warehouses.filter((w) => w.is_active);

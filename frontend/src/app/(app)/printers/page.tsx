@@ -9,6 +9,7 @@ import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
+import { TableSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── add wizard types ──────────────────────────────────────────────────────────
 
@@ -616,7 +617,7 @@ export default function PrintersPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>
+        <TableSkeleton rows={6} cols={6} />
       ) : printers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-10 text-center ">
           <p className="text-sm text-[var(--text-muted)]">Принтерів ще немає</p>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { AuthImage } from "@/components/ui/AuthImage";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -1488,7 +1489,7 @@ export default function ProductsPage() {
       });
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={10} />;
 
   return (
     <>

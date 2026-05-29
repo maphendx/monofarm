@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 type Zone = {
   id: number; name: string; rows: number; cols: number;
@@ -21,7 +22,7 @@ export default function ZonesOverviewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={4} rows={5} />;
 
   if (zones.length === 0) {
     return (

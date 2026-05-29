@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export default function WarehouseDashboard() {
     return avail < 10 && s.warehouse_name === "Готова продукція";
   });
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={5} withStats statsCount={4} />;
 
   return (
     <div className="space-y-6">

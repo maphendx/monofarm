@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export default function AnalyticsPage() {
 
   const fmt = (v: string) => parseFloat(v).toLocaleString("uk-UA", { maximumFractionDigits: 0 });
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={4} withStats statsCount={4} />;
   if (error || !data) return (
     <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-faint)] ">
       {error ?? "Немає даних"}

@@ -15,6 +15,7 @@ import {
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 interface Summary {
   tasks: { queued: number; in_progress: number; done: number; cancelled: number };
@@ -104,9 +105,7 @@ export default function AnalyticsPage() {
       .finally(() => setLoading(false));
   }, [days]);
 
-  if (loading) {
-    return <p className="text-sm text-[var(--text-muted)]">{t("common.loading")}</p>;
-  }
+  if (loading) return <PageSkeleton cols={5} withStats statsCount={5} />;
 
   const maxDone = Math.max(...daily.map((d) => d.done), 1);
 

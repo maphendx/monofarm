@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { CreateBatchModal, Batch, BatchComponent } from "@/components/warehouse/CreateBatchModal";
 import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ export default function ProductionPage() {
     setBatches((prev) => prev.filter((b) => b.id !== id));
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={6} />;
 
   const byStatus = (s: BatchStatus) => batches.filter((b) => b.status === s);
 

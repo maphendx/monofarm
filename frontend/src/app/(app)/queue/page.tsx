@@ -11,6 +11,7 @@ import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { KanbanSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── mascot ────────────────────────────────────────────────────────────────────
 
@@ -578,7 +579,7 @@ export default function QueuePage() {
     finally { distributeRef.current = false; }
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
 
   return (
     <div className="-mx-6 -mt-6 flex flex-col">

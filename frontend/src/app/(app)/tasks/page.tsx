@@ -19,6 +19,7 @@ import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { FarmTask, FarmTaskStatus, Filament, PrintTask, PrintTaskStatus } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { KanbanSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ════════════════════════════════════════════════════════════════════════
 // FARM TASKS (kanban)
@@ -500,7 +501,7 @@ function PrintTasksTab() {
 
   const counts = tasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
 
-  if (loading) return <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>;
+  if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
 
   return (
     <div className="space-y-4">

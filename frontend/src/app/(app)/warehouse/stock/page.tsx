@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -408,7 +409,7 @@ export default function StockPage() {
 
   const colSpan = 1 + COLS.filter((c) => colVis.isVisible(c.key)).length;
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={6} />;
 
   return (
     <div className="space-y-4">

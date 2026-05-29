@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -380,7 +381,7 @@ export default function ProductDetailPage() {
     } finally { delBusy.current = false; }
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={5} rows={6} />;
   if (!product) return <div className="text-sm text-[var(--state-error)]">Товар не знайдено</div>;
 
   const TABS: { id: Tab; label: string }[] = [

@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, FilamentColor } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -588,7 +589,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
           </button>
         )}
       </div>
-      {loading ? <p className="text-xs text-[var(--text-faint)]">Завантаження…</p>
+      {loading ? <PageSkeleton cols={7} />
         : colors.length === 0 ? <p className="text-xs text-[var(--text-faint)]">Каталог порожній</p>
         : (
           <div className="flex flex-wrap gap-1.5">

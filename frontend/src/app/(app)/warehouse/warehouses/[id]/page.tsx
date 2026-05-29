@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -668,7 +669,7 @@ export default function WarehouseDetailPage() {
     }
   }
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">Завантаження…</div>;
+  if (loading) return <PageSkeleton cols={5} rows={6} />;
   if (!warehouse) return <div className="text-sm text-[var(--state-error)]">Склад не знайдено</div>;
 
   return (
