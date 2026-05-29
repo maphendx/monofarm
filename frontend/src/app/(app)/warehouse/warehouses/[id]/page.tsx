@@ -502,7 +502,7 @@ function ZoneAccordion({
 
           <div className="overflow-x-auto">
             <div
-              className="grid gap-1.5"
+              className="mx-auto grid w-fit gap-1.5"
               style={{ gridTemplateColumns: `repeat(${zone.cols}, minmax(0, 168px))` }}
             >
               {cells.map((cell) => {
