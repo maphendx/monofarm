@@ -3,7 +3,6 @@
 import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── Налаштування контактів — заміни на свої ────────────────────────────────────
-const SUPPORT_TELEGRAM = "https://t.me/monofarm";   // TODO: твій Telegram для підтримки
 const SUPPORT_EMAIL    = "support@monofarm.app";    // TODO: робочий email на домені
 
 export default function SupportPage() {
@@ -21,8 +20,8 @@ export default function SupportPage() {
           </span>
           <span className="text-sm text-[var(--text-faint)]">0 звернень</span>
         </div>
-        <a href={SUPPORT_TELEGRAM} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
-          + Нове повідомлення
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="btn btn-primary btn-sm">
+          Написати email
         </a>
       </div>
 
@@ -35,14 +34,11 @@ export default function SupportPage() {
         </div>
         <div>
           <p className="text-sm font-medium text-[var(--text)]">Поки що немає звернень</p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">Потрібна допомога? Напишіть нам — відповідаємо протягом доби.</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Потрібна допомога? Напишіть нам на email — відповідаємо протягом доби.</p>
         </div>
-        <a href={SUPPORT_TELEGRAM} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-          + Надіслати повідомлення
+        <a href={`mailto:${SUPPORT_EMAIL}`} className="btn btn-primary">
+          Надіслати email
         </a>
-        <p className="text-xs text-[var(--text-faint)]">
-          або на email <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[var(--accent)] hover:underline">{SUPPORT_EMAIL}</a>
-        </p>
       </div>
     </div>
   );
