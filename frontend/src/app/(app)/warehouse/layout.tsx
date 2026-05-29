@@ -78,7 +78,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
       <div className="sticky top-0 z-20 bg-[var(--bg-elevated)]">
 
         {/* Primary row — group tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-[var(--border)] px-4 py-2 scrollbar-none">
+        <div className="flex items-center gap-1 overflow-x-auto px-4 py-2.5 scrollbar-none">
           {NAV_GROUPS.map((group) => {
             const active = isGroupActive(group, pathname);
             return (
@@ -86,9 +86,9 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
                 key={group.href}
                 href={group.href}
                 className={[
-                  "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "shrink-0 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-[var(--accent)] text-white"
+                    ? "bg-[var(--accent)] text-white shadow-sm"
                     : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]",
                 ].join(" ")}
               >
@@ -100,7 +100,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
 
         {/* Secondary row — sub-pages of active group */}
         {activeGroup && activeGroup.items.length > 0 && (
-          <div className="flex items-center overflow-x-auto border-b border-[var(--border)] px-5 scrollbar-none">
+          <div className="flex items-center gap-1 overflow-x-auto border-t border-[var(--border)] bg-[var(--bg)] px-4 py-1.5 scrollbar-none">
             {activeGroup.items.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
@@ -108,10 +108,10 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
                   key={item.href}
                   href={item.href}
                   className={[
-                    "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-xs transition-colors",
+                    "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                     active
-                      ? "border-[var(--accent)] font-medium text-[var(--accent)]"
-                      : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)]",
+                      ? "bg-[var(--accent)]/15 text-[var(--accent)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]",
                   ].join(" ")}
                 >
                   {item.label}
@@ -120,6 +120,8 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
             })}
           </div>
         )}
+
+        <div className="border-b border-[var(--border)]" />
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
