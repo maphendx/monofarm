@@ -633,6 +633,20 @@ class ProductLocationsOut(BaseModel):
     warehouses: list[ProductWarehouseLocationOut] = []
 
 
+class CellNotesUpdate(BaseModel):
+    notes: str | None = None
+
+
+class ShipPick(BaseModel):
+    product_id: int
+    cell_id:    int
+    quantity:   Decimal
+
+
+class ShipRequest(BaseModel):
+    picks: list[ShipPick] = []
+
+
 class CellMovementOut(BaseModel):
     id:            int
     product_id:    int

@@ -27,7 +27,7 @@ from app.models.warehouse import (
 from app.schemas.warehouse import (
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
-    CellMovementOut, CellOut, CellStockOut, CellStockSet,
+    CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
@@ -36,6 +36,7 @@ from app.schemas.warehouse import (
     ProductCreate, ProductImageOut, ProductOut, ProductUpdate,
     ProductCellLocationOut, ProductLocationsOut, ProductWarehouseLocationOut,
     PutawayRequest, RelocateRequest, ReserveRequest,
+    ShipPick, ShipRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
     StockEntryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneUpdate, ZoneWithCellsOut,
@@ -308,6 +309,14 @@ def _unassigned_qty(product_id: int, warehouse_id: int, db: Session) -> Decimal:
     entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
     total = entry.quantity if entry else Decimal("0")
     return max(Decimal("0"), total - _cell_assigned(product_id, warehouse_id, db))
+
+
+def _lock_stock_row(product_id: int, warehouse_id: int, db: Session) -> None:
+    """Row-lock the (product, warehouse) stock entry so concurrent bin edits on
+    the same product+warehouse serialize (prevents over-assigning the pool)."""
+    db.query(StockEntry).filter_by(
+        product_id=product_id, warehouse_id=warehouse_id
+    ).with_for_update().first()
 
 
 def _log_cell_move(
@@ -800,6 +809,7 @@ def set_cell_stock(
         raise HTTPException(status_code=404, detail="Product not found")
 
     wh_id   = _cell_warehouse_id(cell, db)
+    _lock_stock_row(payload.product_id, wh_id, db)
     cs      = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     current = cs.quantity if cs else Decimal("0")
     delta   = payload.quantity - current
@@ -841,6 +851,25 @@ def remove_cell_stock(
     db.commit()
 
 
+@router.patch("/cells/{cell_id}", response_model=CellOut)
+def update_cell(
+    cell_id: int,
+    payload: CellNotesUpdate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CellOut:
+    """Edit a cell's free-text note (e.g. «верхня полиця»)."""
+    cell = _get_cell(cell_id, org, db)
+    cell.notes = (payload.notes or "").strip() or None
+    db.commit()
+    stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
+    return CellOut(
+        id=cell.id, code=cell.code, notes=cell.notes,
+        stock=[_cell_stock_out(cs) for cs in stock_rows],
+    )
+
+
 # ── Putaway / relocate / locations ────────────────────────────────────────────
 
 @router.get("/warehouses/{wh_id}/unassigned", response_model=list[UnassignedItemOut])
@@ -860,9 +889,18 @@ def list_unassigned(
         .order_by(Product.name)
         .all()
     )
+    # One grouped query for all cell allocations in this warehouse (avoids N+1).
+    assigned_map = dict(
+        db.query(CellStock.product_id, func.sum(CellStock.quantity))
+        .join(WarehouseCell, WarehouseCell.id == CellStock.cell_id)
+        .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+        .filter(WarehouseZone.warehouse_id == wh_id, CellStock.quantity > 0)
+        .group_by(CellStock.product_id)
+        .all()
+    )
     out: list[UnassignedItemOut] = []
     for e, p in entries:
-        unassigned = e.quantity - _cell_assigned(p.id, wh_id, db)
+        unassigned = e.quantity - assigned_map.get(p.id, Decimal("0"))
         if unassigned > 0:
             out.append(UnassignedItemOut(
                 product_id=p.id, product_name=p.name, product_sku=p.sku,
@@ -888,6 +926,7 @@ def putaway_to_cell(
         raise HTTPException(status_code=400, detail="Кількість має бути більшою за 0")
 
     wh_id = _cell_warehouse_id(cell, db)
+    _lock_stock_row(payload.product_id, wh_id, db)
     avail = _unassigned_qty(payload.product_id, wh_id, db)
     if payload.quantity > avail:
         raise HTTPException(
@@ -921,6 +960,7 @@ def relocate_between_cells(
     if _cell_warehouse_id(src, db) != _cell_warehouse_id(dst, db):
         raise HTTPException(status_code=400, detail="Переміщення можливе лише в межах одного складу")
 
+    _lock_stock_row(payload.product_id, _cell_warehouse_id(src, db), db)
     src_cs = db.query(CellStock).filter_by(cell_id=src.id, product_id=payload.product_id).first()
     if not src_cs or src_cs.quantity < payload.quantity:
         have = src_cs.quantity if src_cs else Decimal("0")
@@ -2883,6 +2923,7 @@ def reserve_order(
 @router.post("/orders/{order_id}/ship", response_model=OrderOut)
 def ship_order(
     order_id: int,
+    payload: ShipRequest | None = None,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -2890,7 +2931,13 @@ def ship_order(
     """Deduct stock, create SALE_OUT movements, update counterparty balance.
 
     Transitions order: confirmed | ready → shipped.
+
+    Optional `picks` says which cells the goods were physically pulled from, so
+    bin counts match reality. Anything not covered by picks falls back to FIFO.
     """
+    picks_by_product: dict[int, list[ShipPick]] = {}
+    for pk in (payload.picks if payload else []):
+        picks_by_product.setdefault(pk.product_id, []).append(pk)
     o = (
         db.query(Order)
         .filter_by(id=order_id, organization_id=org.id)
@@ -2946,7 +2993,12 @@ def ship_order(
         )
         db.add(m)
         db.flush()
-        # Pick the shipped quantity out of cells (FIFO) so locations stay in sync
+        # Honor operator-specified bins first (no FIFO guessing), then let the
+        # clamp draw any remainder FIFO so locations stay within the new total.
+        for pk in picks_by_product.get(item.product_id, []):
+            cell = _get_cell(pk.cell_id, org, db, warehouse_id=item.warehouse_id)
+            _pick_from_cell(cell, item.product_id, pk.quantity, org.id, db,
+                            movement_id=m.id, created_by_id=user.id)
         _clamp_cells_to_stock(item.product_id, item.warehouse_id, org.id, db,
                               movement_id=m.id, created_by_id=user.id)
 

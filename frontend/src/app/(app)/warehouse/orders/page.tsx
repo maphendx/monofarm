@@ -49,6 +49,12 @@ type OrderPayment = {
   cashflow_id: number | null; created_at: string;
 };
 
+type ProductCell = { cell_id: number; zone_name: string; code: string; quantity: string };
+type ProductLocations = {
+  product_id: number;
+  warehouses: { warehouse_id: number; warehouse_name: string; cells: ProductCell[]; unassigned: string; total: string }[];
+};
+
 const PAYMENT_BADGE: Record<string, { label: string; cls: string }> = {
   unpaid:  { label: "Не оплачено", cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" },
   partial: { label: "Частково",    cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" },
@@ -622,6 +628,149 @@ function ReserveModal({ open, onClose, order, onReserved }: {
   );
 }
 
+// ── ShipModal — confirm which bins the goods are pulled from ───────────────────
+
+function ShipModal({ order, onClose, onShipped }: {
+  order: Order;
+  onClose: () => void;
+  onShipped: (o: Order) => void;
+}) {
+  const [cellsByItem, setCellsByItem] = useState<Record<number, ProductCell[]>>({});
+  const [picks,       setPicks]       = useState<Record<number, Record<number, string>>>({});
+  const [loading,     setLoading]     = useState(true);
+  const [busy,        setBusy]        = useState(false);
+  const [err,         setErr]         = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(order.items.map(async (it) => {
+      if (!it.warehouse_id) return [it.id, [] as ProductCell[]] as const;
+      const loc = await api<ProductLocations>(`/api/warehouse/products/${it.product_id}/locations`);
+      const wh = loc.warehouses.find((w) => w.warehouse_id === it.warehouse_id);
+      return [it.id, wh?.cells ?? []] as const;
+    })).then((pairs) => {
+      if (cancelled) return;
+      const cmap: Record<number, ProductCell[]> = {};
+      const pmap: Record<number, Record<number, string>> = {};
+      for (const [itemId, cells] of pairs) {
+        cmap[itemId] = cells;
+        const item = order.items.find((i) => i.id === itemId)!;
+        let remaining = item.quantity;           // FIFO prefill up to the ordered qty
+        pmap[itemId] = {};
+        for (const c of cells) {
+          if (remaining <= 0) break;
+          const take = Math.min(parseFloat(c.quantity), remaining);
+          pmap[itemId][c.cell_id] = String(take);
+          remaining -= take;
+        }
+      }
+      setCellsByItem(cmap); setPicks(pmap); setLoading(false);
+    }).catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [order]);
+
+  const hasCells = Object.values(cellsByItem).some((c) => c.length > 0);
+
+  function setPick(itemId: number, cellId: number, val: string) {
+    setPicks((p) => ({ ...p, [itemId]: { ...p[itemId], [cellId]: val } }));
+  }
+  function itemPicked(itemId: number) {
+    return Object.values(picks[itemId] || {}).reduce((s, q) => s + (parseFloat(q) || 0), 0);
+  }
+
+  const invalid = order.items.some((it) => {
+    if (itemPicked(it.id) > it.quantity) return true;
+    return (cellsByItem[it.id] || []).some((c) => (parseFloat(picks[it.id]?.[c.cell_id] || "0") || 0) > parseFloat(c.quantity));
+  });
+
+  async function submit() {
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setErr(null);
+    try {
+      const pickList: { product_id: number; cell_id: number; quantity: number }[] = [];
+      for (const it of order.items) {
+        for (const [cid, q] of Object.entries(picks[it.id] || {})) {
+          const qty = parseFloat(q) || 0;
+          if (qty > 0) pickList.push({ product_id: it.product_id, cell_id: parseInt(cid), quantity: qty });
+        }
+      }
+      const updated = await api<Order>(`/api/warehouse/orders/${order.id}/ship`, {
+        method: "POST", body: JSON.stringify({ picks: pickList }),
+      });
+      onShipped(updated); onClose();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка відвантаження");
+    } finally { inFlight.current = false; setBusy(false); }
+  }
+
+  return (
+    <Modal
+      open onClose={onClose} title={`Відвантажити — ${order.order_number}`}
+      footer={
+        <>
+          <button onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
+          <button onClick={submit} disabled={busy || loading || invalid} className="btn btn-primary disabled:opacity-50">
+            {busy ? "Відвантажую…" : "Відвантажити"}
+          </button>
+        </>
+      }
+    >
+      {loading ? (
+        <p className="text-sm text-[var(--text-faint)]">Завантаження комірок…</p>
+      ) : !hasCells ? (
+        <p className="text-sm text-[var(--text-muted)]">
+          Товари не розкладені по комірках — буде списано зі складу.
+        </p>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <p className="text-xs text-[var(--text-faint)]">
+            Вкажіть, з яких комірок фізично забрали товар (заповнено за FIFO). Решта спишеться зі складу.
+          </p>
+          {order.items.map((it) => {
+            const cells = cellsByItem[it.id] || [];
+            const picked = itemPicked(it.id);
+            const fromFloor = Math.max(0, it.quantity - picked);
+            return (
+              <div key={it.id} className="rounded-lg border border-[var(--border)] p-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="font-medium">{it.product_name}</span>
+                  <span className="font-mono text-xs text-[var(--text-faint)]">потрібно {it.quantity}</span>
+                </div>
+                {cells.length === 0 ? (
+                  <p className="text-xs text-[var(--text-faint)]">нема в комірках — зі складу</p>
+                ) : (
+                  <div className="space-y-1">
+                    {cells.map((c) => (
+                      <div key={c.cell_id} className="flex items-center gap-2">
+                        <span className="flex-1 font-mono text-xs text-[var(--text-muted)]">{c.zone_name} {c.code}</span>
+                        <span className="font-mono text-[10px] text-[var(--text-faint)]">є {parseFloat(c.quantity).toFixed(0)}</span>
+                        <input
+                          type="number" min="0" max={parseFloat(c.quantity)} step="0.01"
+                          value={picks[it.id]?.[c.cell_id] ?? "0"}
+                          onChange={(e) => setPick(it.id, c.cell_id, e.target.value)}
+                          className="w-16 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono outline-none focus:border-[var(--accent)]"
+                        />
+                      </div>
+                    ))}
+                    {fromFloor > 0 && (
+                      <p className="text-[10px] text-[var(--text-faint)]">+ {fromFloor.toFixed(0)} зі складу (нерозкладене)</p>
+                    )}
+                    {picked > it.quantity && (
+                      <p className="text-[10px] text-[var(--state-error)]">забагато: {picked} &gt; {it.quantity}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {err && <p className="text-[var(--state-error)]">{err}</p>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const COLS: ColDef[] = [
@@ -648,6 +797,7 @@ export default function OrdersPage() {
   const [createOpen,    setCreateOpen]    = useState(false);
   const [editOrder,     setEditOrder]     = useState<Order | null>(null);
   const [reserveOrder,  setReserveOrder]  = useState<Order | null>(null);
+  const [shipModalOrder, setShipModalOrder] = useState<Order | null>(null);
   const [returnOrder,   setReturnOrder]   = useState<Order | null>(null);
   const [paymentOrder,  setPaymentOrder]  = useState<Order | null>(null);
   const [actionBusy,    setActionBusy]    = useState<number | null>(null);
@@ -664,17 +814,6 @@ export default function OrdersPage() {
 
   function updateOrder(updated: Order) {
     setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o));
-  }
-
-  async function shipOrder(order: Order) {
-    if (actionBusy) return;
-    setActionBusy(order.id);
-    try {
-      const updated = await api<Order>(`/api/warehouse/orders/${order.id}/ship`, { method: "POST" });
-      updateOrder(updated);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Помилка відвантаження");
-    } finally { setActionBusy(null); }
   }
 
   async function cancelOrder(order: Order) {
@@ -801,7 +940,7 @@ export default function OrdersPage() {
                       )}
                       {(o.status === "confirmed" || o.status === "ready") && (
                         <button
-                          onClick={() => shipOrder(o)}
+                          onClick={() => setShipModalOrder(o)}
                           disabled={isBusy}
                           title="Відвантажити"
                           className="rounded-md bg-[var(--state-ok)]/10 px-2 py-1 text-xs font-medium text-[var(--state-ok)] hover:bg-[var(--state-ok)]/20 disabled:opacity-50 dark:text-[var(--state-ok)]">
@@ -869,6 +1008,14 @@ export default function OrdersPage() {
         order={reserveOrder}
         onReserved={(updated) => { updateOrder(updated); setReserveOrder(null); }}
       />
+
+      {shipModalOrder && (
+        <ShipModal
+          order={shipModalOrder}
+          onClose={() => setShipModalOrder(null)}
+          onShipped={(updated) => { updateOrder(updated); setShipModalOrder(null); }}
+        />
+      )}
 
       <ReturnModal
         open={returnOrder !== null}

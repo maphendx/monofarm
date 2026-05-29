@@ -295,3 +295,49 @@ def test_full_lifecycle_invariant(setup, client, auth_headers):
 
     # Final: assigned must not exceed 40
     assert float(s["assigned_qty"]) <= 40
+
+
+def test_ship_with_explicit_picks(setup, client, auth_headers):
+    """Operator-specified picks pull from the chosen cell (no FIFO teleportation)."""
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=20, unit_cost=5)
+    # A=10 (older), B=10 (newer)
+    client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 10}, headers=auth_headers)
+    client.post(f"/api/warehouse/cells/{cells[1]['id']}/putaway",
+                json={"product_id": p["id"], "quantity": 10}, headers=auth_headers)
+
+    order = client.post("/api/warehouse/orders", json={
+        "customer_name": "Pick Buyer",
+        "items": [{"product_id": p["id"], "quantity": 6, "unit_price": 10}],
+    }, headers=auth_headers).json()
+    client.post(f"/api/warehouse/orders/{order['id']}/reserve",
+                json={"warehouse_id": wh["id"]}, headers=auth_headers)
+
+    # Pick all 6 from cell B (newer) — FIFO alone would have hit A first.
+    r = client.post(f"/api/warehouse/orders/{order['id']}/ship", headers=auth_headers,
+                    json={"picks": [{"product_id": p["id"], "cell_id": cells[1]["id"], "quantity": 6}]})
+    assert r.status_code == 200, r.text
+
+    loc = client.get(f"/api/warehouse/products/{p['id']}/locations", headers=auth_headers).json()
+    by_cell = {c["cell_id"]: float(c["quantity"]) for c in loc["warehouses"][0]["cells"]}
+    assert by_cell.get(cells[0]["id"]) == 10   # A untouched
+    assert by_cell.get(cells[1]["id"]) == 4    # B drew the 6
+
+
+def test_set_cell_stock_capped_to_unassigned(setup, client, auth_headers):
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=10, unit_cost=5)
+    r = client.put(f"/api/warehouse/cells/{cells[0]['id']}/stock",
+                   json={"product_id": p["id"], "quantity": 15}, headers=auth_headers)
+    assert r.status_code == 400
+
+
+def test_cell_notes_patch(setup, client, auth_headers):
+    cells = setup["cells"]
+    r = client.patch(f"/api/warehouse/cells/{cells[0]['id']}",
+                     json={"notes": "верхня полиця"}, headers=auth_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["notes"] == "верхня полиця"

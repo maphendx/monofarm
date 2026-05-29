@@ -253,8 +253,16 @@ function CellModal({
   const [busy,       setBusy]       = useState(false);
   const [removeBusy, setRemoveBusy] = useState<number | null>(null);
   const [relocate,   setRelocate]   = useState<CellStockItem | null>(null);
+  const [notes,      setNotes]      = useState(cell.notes ?? "");
   const [err,        setErr]        = useState<string | null>(null);
   const inFlight = useRef(false);
+
+  function saveNotes() {
+    if ((notes.trim() || null) === (cell.notes ?? null)) return;
+    api(`/api/warehouse/cells/${cell.id}`, { method: "PATCH", body: JSON.stringify({ notes: notes.trim() }) })
+      .then(() => onChanged())
+      .catch(() => {});
+  }
 
   const usedIds = new Set(stock.map((s) => s.product_id));
   const addable = unassigned.filter((u) => num(u.unassigned) > 0 && !usedIds.has(u.product_id));
@@ -310,9 +318,15 @@ function CellModal({
 
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="font-semibold">Комірка {cell.code}</h2>
-            {cell.notes && <p className="text-xs text-[var(--text-faint)]">{cell.notes}</p>}
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              placeholder="Нотатка (напр. верхня полиця)…"
+              className="mt-0.5 w-full bg-transparent text-xs text-[var(--text-faint)] outline-none placeholder:text-[var(--text-faint)] focus:text-[var(--text)]"
+            />
           </div>
           <button onClick={onClose}
             className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
