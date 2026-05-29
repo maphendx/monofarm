@@ -500,53 +500,60 @@ function ZoneAccordion({
             )}
           </div>
 
-          <div
-            className="grid gap-1"
-            style={{ gridTemplateColumns: `repeat(${zone.cols}, minmax(0, 1fr))` }}
-          >
-            {cells.map((cell) => {
-              const matched = hasSearch && cellMatches(cell);
-              const dimmed  = hasSearch && !matched;
-              const filled  = cell.stock.length > 0;
-              const multi   = cell.stock.length > 1;
-              const totalQty = cell.stock.reduce((s, i) => s + num(i.quantity), 0);
-              const title = filled
-                ? cell.stock.map((s) => `${s.product_name}: ${num(s.quantity)}`).join(", ")
-                : cell.code;
+          <div className="overflow-x-auto">
+            <div
+              className="grid gap-1.5"
+              style={{ gridTemplateColumns: `repeat(${zone.cols}, minmax(0, 168px))` }}
+            >
+              {cells.map((cell) => {
+                const matched = hasSearch && cellMatches(cell);
+                const dimmed  = hasSearch && !matched;
+                const filled  = cell.stock.length > 0;
+                const multi   = cell.stock.length > 1;
+                const totalQty = cell.stock.reduce((s, i) => s + num(i.quantity), 0);
+                const title = filled
+                  ? cell.stock.map((s) => `${s.product_name} (${s.product_sku}): ${num(s.quantity)}`).join(", ")
+                  : cell.code;
 
-              return (
-                <button
-                  key={cell.id}
-                  onClick={() => setActiveCell(cell)}
-                  title={title}
-                  className={[
-                    "group relative flex h-10 flex-col justify-between rounded-md border p-1 text-left transition-all",
-                    matched
-                      ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.12)] ring-1 ring-[var(--state-ok)]"
-                      : filled
-                        ? "border-[var(--accent)] bg-[rgba(34,211,238,.08)] hover:bg-[rgba(34,211,238,.14)]"
-                        : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
-                    dimmed ? "opacity-30" : "",
-                  ].join(" ")}
-                >
-                  <div className="flex w-full items-center justify-between leading-none">
-                    <span className="font-mono text-[9px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
-                    {multi && (
-                      <span className="rounded-full bg-[var(--accent)] px-1 text-[8px] font-bold leading-[14px] text-white">
-                        {cell.stock.length}
-                      </span>
+                return (
+                  <button
+                    key={cell.id}
+                    onClick={() => setActiveCell(cell)}
+                    title={title}
+                    className={[
+                      "group relative flex min-h-[60px] flex-col justify-between rounded-lg border p-2 text-left transition-all",
+                      matched
+                        ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.12)] ring-1 ring-[var(--state-ok)]"
+                        : filled
+                          ? "border-[var(--accent)] bg-[rgba(34,211,238,.08)] hover:bg-[rgba(34,211,238,.14)]"
+                          : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                      dimmed ? "opacity-30" : "",
+                    ].join(" ")}
+                  >
+                    <div className="flex w-full items-center justify-between leading-none">
+                      <span className="font-mono text-[10px] font-semibold text-[var(--text-faint)]">{cell.code}</span>
+                      {multi && (
+                        <span className="rounded-full bg-[var(--accent)] px-1.5 text-[9px] font-bold leading-4 text-white">
+                          {cell.stock.length}
+                        </span>
+                      )}
+                    </div>
+                    {filled ? (
+                      <div className="mt-1 w-full min-w-0">
+                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
+                          {cell.stock[0].product_name}
+                          {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
+                        </p>
+                        <p className="truncate font-mono text-[9px] leading-tight text-[var(--text-faint)]">{cell.stock[0].product_sku}</p>
+                        <p className="font-mono text-[10px] font-semibold leading-tight text-[var(--accent)]">{totalQty} шт</p>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] leading-none text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
                     )}
-                  </div>
-                  {filled ? (
-                    <span className="truncate font-mono text-[11px] font-semibold leading-none text-[var(--accent)]">
-                      {totalQty}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] leading-none text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
-                  )}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
