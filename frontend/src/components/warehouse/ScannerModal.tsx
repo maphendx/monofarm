@@ -44,8 +44,8 @@ function nextPhase(phase: Phase, result: ScanResult): Phase {
 
 function TypeBadge({ type }: { type: "cell" | "product" }) {
   return type === "cell"
-    ? <span className="shrink-0 rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--accent)]">Комірка</span>
-    : <span className="shrink-0 rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--state-ok)]">Товар</span>;
+    ? <span className="shrink-0 rounded-md bg-[var(--surface-hi)] px-2.5 py-1 text-sm text-[var(--accent)]">Комірка</span>
+    : <span className="shrink-0 rounded-md bg-[var(--surface-hi)] px-2.5 py-1 text-sm text-[var(--state-ok)]">Товар</span>;
 }
 
 function phaseLabel(phase: Phase): string {
@@ -114,21 +114,21 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   function reset() { setPhase({ kind: "idle" }); setErr(null); setValue(""); setTimeout(() => inputRef.current?.focus(), 50); }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8vh]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative mx-4 w-full max-w-[560px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
+        className="relative w-full max-w-[1040px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Input row */}
-        <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
+        <div className="flex items-center gap-4 border-b border-[var(--border)] px-7 py-5">
           {loading ? (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               className="shrink-0 animate-spin text-[var(--accent)]">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
           ) : (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>
@@ -140,26 +140,26 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Скануй QR комірки або баркод товару…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
+            className="flex-1 bg-transparent text-2xl outline-none placeholder:text-[var(--text-faint)]"
             autoComplete="off"
           />
           {(phase.kind !== "idle" && phase.kind !== "done") && (
             <button onClick={reset}
-              className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] transition-colors">
+              className="text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition-colors">
               ↺ скинути
             </button>
           )}
-          <kbd className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">esc</kbd>
+          <kbd className="rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--text-faint)]">esc</kbd>
         </div>
 
         {/* State area */}
-        <div className="min-h-[80px] py-2">
+        <div className="min-h-[180px] py-3">
 
           {/* Scanned items */}
           {(phase.kind === "cell" || phase.kind === "both") && (
-            <div className="flex items-center gap-3 px-4 py-2 text-sm">
+            <div className="flex items-center gap-4 px-7 py-3.5 text-lg">
               <TypeBadge type="cell" />
-              <span className="font-mono font-bold text-[var(--accent)]">
+              <span className="font-mono text-xl font-bold text-[var(--accent)]">
                 {(phase as { cell: CellDetail }).cell.cell_code}
               </span>
               <span className="truncate text-[var(--text-faint)]">
@@ -168,13 +168,13 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
               <button onClick={() => setPhase(phase.kind === "both"
                 ? { kind: "product", product: phase.product }
                 : { kind: "idle" })}
-                className="ml-auto shrink-0 text-[10px] text-[var(--text-faint)] hover:text-[var(--state-error)]">×</button>
+                className="ml-auto shrink-0 text-base text-[var(--text-faint)] hover:text-[var(--state-error)]">×</button>
             </div>
           )}
           {(phase.kind === "product" || phase.kind === "both") && (
-            <div className="flex items-center gap-3 px-4 py-2 text-sm">
+            <div className="flex items-center gap-4 px-7 py-3.5 text-lg">
               <TypeBadge type="product" />
-              <span className="font-mono font-bold">
+              <span className="font-mono text-xl font-bold">
                 {(phase as { product: Product }).product.sku}
               </span>
               <span className="truncate text-[var(--text-faint)]">
@@ -183,38 +183,38 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
               <button onClick={() => setPhase(phase.kind === "both"
                 ? { kind: "cell", cell: phase.cell }
                 : { kind: "idle" })}
-                className="ml-auto shrink-0 text-[10px] text-[var(--text-faint)] hover:text-[var(--state-error)]">×</button>
+                className="ml-auto shrink-0 text-base text-[var(--text-faint)] hover:text-[var(--state-error)]">×</button>
             </div>
           )}
 
           {/* Assign row */}
           {phase.kind === "both" && (
-            <div className="flex items-center gap-3 border-t border-[var(--border)] px-4 py-3">
-              <span className="text-sm text-[var(--text-muted)]">Кількість</span>
+            <div className="flex items-center gap-4 border-t border-[var(--border)] px-7 py-5">
+              <span className="text-lg text-[var(--text-muted)]">Кількість</span>
               <input
                 type="number" min="0.01" step="1"
                 value={phase.qty}
                 onChange={(e) => setPhase({ ...phase, qty: e.target.value })}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); assign(); } }}
-                className="w-20 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-center font-mono text-sm outline-none focus:border-[var(--accent)]"
+                className="w-28 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-center font-mono text-xl outline-none focus:border-[var(--accent)]"
                 autoFocus
               />
               <button onClick={assign} disabled={busy}
-                className="flex-1 rounded-lg bg-[var(--accent)] py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
+                className="flex-1 rounded-xl bg-[var(--accent)] py-3 text-lg font-medium text-white hover:opacity-90 disabled:opacity-50">
                 {busy ? "…" : "✓ Призначити"}
               </button>
-              <kbd className="shrink-0 rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">↵</kbd>
+              <kbd className="shrink-0 rounded-md border border-[var(--border)] px-2.5 py-1 text-sm text-[var(--text-faint)]">↵</kbd>
             </div>
           )}
 
           {/* Done */}
           {phase.kind === "done" && (
-            <div className="px-4 py-4 text-center text-sm text-[var(--state-ok)]">✓ Призначено — скануй наступне</div>
+            <div className="px-7 py-8 text-center text-xl text-[var(--state-ok)]">✓ Призначено — скануй наступне</div>
           )}
 
           {/* Hint */}
           {(phase.kind === "idle" || phase.kind === "cell" || phase.kind === "product") && (
-            <p className={["px-4 py-2 text-xs text-[var(--text-faint)]",
+            <p className={["px-7 py-3 text-base text-[var(--text-faint)]",
               phase.kind !== "idle" ? "border-t border-[var(--border)] animate-pulse" : "",
             ].join(" ")}>
               {phaseLabel(phase)}
@@ -222,15 +222,15 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
           )}
 
           {err && (
-            <p className="border-t border-[var(--border)] px-4 py-2 text-xs text-[var(--state-error)]">{err}</p>
+            <p className="border-t border-[var(--border)] px-7 py-3 text-base text-[var(--state-error)]">{err}</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-4 border-t border-[var(--border)] px-4 py-2 text-[10px] text-[var(--text-faint)]">
-          <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">↵</kbd> підтвердити</span>
-          <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">esc</kbd> закрити</span>
-          <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">⌘⇧S</kbd> відкрити/закрити</span>
+        <div className="flex items-center gap-6 border-t border-[var(--border)] px-7 py-3 text-sm text-[var(--text-faint)]">
+          <span><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">↵</kbd> підтвердити</span>
+          <span><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">esc</kbd> закрити</span>
+          <span><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">⌘⇧S</kbd> відкрити/закрити</span>
           <span className="ml-auto opacity-60">монофарм · сканер</span>
         </div>
       </div>
