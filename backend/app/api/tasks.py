@@ -305,8 +305,8 @@ def update_task(
     if payload.defect_reason is not None:
         task.defect_reason = payload.defect_reason
 
-    # deduct filaments and calculate cost when task is marked done
-    if payload.status == PrintTaskStatus.done and consumptions:
+    # deduct filaments and calculate cost on first transition to done only
+    if payload.status == PrintTaskStatus.done and old_status != PrintTaskStatus.done and consumptions:
         from app.models.filament import Filament, FilamentLog
         from app.api.filaments import _warehouse_movement
 
