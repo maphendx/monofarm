@@ -292,6 +292,7 @@ def update_task(
     consumptions = payload.filament_consumptions
     pieces_ok = payload.pieces_ok
     pieces_defective = payload.pieces_defective or 0
+    old_status = task.status  # capture before setattr overwrites it
     exclude_fields = {"filament_consumptions", "pieces_ok", "pieces_defective", "defect_reason"}
     update_data = payload.model_dump(exclude_none=True, exclude=exclude_fields)
     for field, val in update_data.items():
@@ -347,7 +348,7 @@ def update_task(
     # warehouse sync when task → done
     transitioning_to_done = (
         payload.status == PrintTaskStatus.done
-        and task.status != PrintTaskStatus.done
+        and old_status != PrintTaskStatus.done
     )
     if transitioning_to_done and (pieces_ok or 0) > 0 and task.product_id:
         from decimal import Decimal
