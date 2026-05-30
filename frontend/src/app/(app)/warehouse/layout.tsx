@@ -55,6 +55,11 @@ const NAV_GROUPS: NavGroup[] = [
     href: "/warehouse/analytics",
     items: [],
   },
+  {
+    label: "📷 Сканер",
+    href: "/warehouse/scanner",
+    items: [],
+  },
 ];
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {

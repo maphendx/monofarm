@@ -14,7 +14,10 @@
       "Bash(ls .git/hooks/post-commit)",
       "Bash(rm \"/Users/maphendx/Documents/!Projects/monofarm/.git/hooks/post-merge\")",
       "Bash(git rm *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(docker compose *)",
+      "Read(//var/run/**)",
+      "Read(//Users/maphendx/.docker/run/**)"
     ],
     "additionalDirectories": [
       "/Users/maphendx/Documents/monofarm/frontend/src/app/(app)/warehouse/products"

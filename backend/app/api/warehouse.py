@@ -27,7 +27,7 @@ from app.models.warehouse import (
 from app.schemas.warehouse import (
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
-    CellAssign, CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet,
+    CellAssign, CellDetailOut, CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet, ScanResult,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
@@ -71,6 +71,66 @@ def _make_product_out(p: Product, org_id: int) -> ProductOut:
 
 
 # ── Product categories ────────────────────────────────────────────────────────
+
+@router.get("/scan", response_model=ScanResult)
+def scan(
+    q:   str,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> ScanResult:
+    """Universal QR/barcode lookup. Accepts CELL:{id}, PROD:{id}, barcode, or SKU."""
+    q = q.strip()
+
+    if q.upper().startswith("CELL:"):
+        try:
+            cell_id = int(q.split(":", 1)[1])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Невірний формат CELL")
+        cell = (
+            db.query(WarehouseCell)
+            .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+            .filter(WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id)
+            .first()
+        )
+        if not cell:
+            raise HTTPException(status_code=404, detail="Комірку не знайдено")
+        zone = db.get(WarehouseZone, cell.zone_id)
+        wh   = db.get(Warehouse, zone.warehouse_id)
+        stocks = db.query(CellStock).filter_by(cell_id=cell.id).all()
+        stock_out = []
+        for cs in stocks:
+            p = db.get(Product, cs.product_id)
+            if p:
+                stock_out.append(CellStockOut(
+                    product_id=cs.product_id, product_name=p.name,
+                    product_sku=p.sku, quantity=cs.quantity,
+                ))
+        detail = CellDetailOut(
+            cell_id=cell.id, cell_code=cell.code, cell_notes=cell.notes,
+            zone_id=zone.id, zone_name=zone.name,
+            warehouse_id=wh.id, warehouse_name=wh.name,
+            stock=stock_out,
+        )
+        return ScanResult(type="cell", cell=detail)
+
+    # PROD:{id} or barcode or sku
+    pid: int | None = None
+    if q.upper().startswith("PROD:"):
+        try:
+            pid = int(q.split(":", 1)[1])
+        except ValueError:
+            pass
+    p = None
+    if pid:
+        p = db.query(Product).filter_by(id=pid, organization_id=org.id).first()
+    if not p:
+        p = db.query(Product).filter_by(barcode=q, organization_id=org.id).first()
+    if not p:
+        p = db.query(Product).filter_by(sku=q, organization_id=org.id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Не знайдено")
+    return ScanResult(type="product", product=_make_product_out(p, org.id))
+
 
 @router.get("/categories", response_model=list[ProductCategoryOut])
 def list_categories(
@@ -823,6 +883,39 @@ def get_zone_cells(
         sort_order=zone.sort_order, cell_count=count, created_at=zone.created_at,
         cells=cells_out,
     )
+
+
+@router.get("/warehouses/{wh_id}/zones-with-cells", response_model=list[ZoneWithCellsOut])
+def list_zones_with_cells(
+    wh_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ZoneWithCellsOut]:
+    """Return all zones + their cells for a warehouse in one call (for label printing)."""
+    _get_warehouse(wh_id, org, db)
+    zones = (db.query(WarehouseZone)
+               .filter(WarehouseZone.warehouse_id == wh_id, WarehouseZone.organization_id == org.id)
+               .order_by(WarehouseZone.sort_order, WarehouseZone.id)
+               .all())
+    result = []
+    for zone in zones:
+        cells = (db.query(WarehouseCell)
+                   .filter(WarehouseCell.zone_id == zone.id)
+                   .order_by(WarehouseCell.id)
+                   .all())
+        cells_out = []
+        for cell in cells:
+            stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
+            cells_out.append(CellOut(
+                id=cell.id, code=cell.code, notes=cell.notes,
+                stock=[_cell_stock_out(cs) for cs in stock_rows],
+            ))
+        result.append(ZoneWithCellsOut(
+            id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
+            sort_order=zone.sort_order, cell_count=len(cells), created_at=zone.created_at,
+            cells=cells_out,
+        ))
+    return result
 
 
 @router.put("/cells/{cell_id}/stock", response_model=CellStockOut)

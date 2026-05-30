@@ -562,6 +562,23 @@ class CellAssign(BaseModel):
     quantity:   Decimal
 
 
+class CellDetailOut(BaseModel):
+    cell_id:        int
+    cell_code:      str
+    cell_notes:     str | None
+    zone_id:        int
+    zone_name:      str
+    warehouse_id:   int
+    warehouse_name: str
+    stock:          list[CellStockOut] = []
+
+
+class ScanResult(BaseModel):
+    type:    str   # "cell" | "product"
+    cell:    CellDetailOut | None = None
+    product: ProductOut    | None = None
+
+
 class CellStockOut(BaseModel):
     product_id:   int
     product_name: str
