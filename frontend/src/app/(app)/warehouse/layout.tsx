@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ScannerPanel } from "@/components/warehouse/ScannerPanel";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 type NavItem  = { href: string; label: string };
@@ -55,11 +57,6 @@ const NAV_GROUPS: NavGroup[] = [
     href: "/warehouse/analytics",
     items: [],
   },
-  {
-    label: "📷 Сканер",
-    href: "/warehouse/scanner",
-    items: [],
-  },
 ];
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {
@@ -75,6 +72,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
   usePageTitle("nav.warehouse");
   const pathname = usePathname();
   const activeGroup = NAV_GROUPS.find((g) => isGroupActive(g, pathname)) ?? null;
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   return (
     <div className="-mx-6 -mt-6">
@@ -101,6 +99,17 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
               </Link>
             );
           })}
+          <button
+            onClick={() => setScannerOpen(true)}
+            title="Сканер"
+            className="ml-auto shrink-0 flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>
+            </svg>
+            <span className="hidden sm:inline">Сканер</span>
+          </button>
         </div>
 
         {/* Secondary row — sub-pages of active group */}
@@ -133,6 +142,8 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
       <div className="px-6 py-5">
         {children}
       </div>
+
+      {scannerOpen && <ScannerPanel onClose={() => setScannerOpen(false)} />}
     </div>
   );
 }

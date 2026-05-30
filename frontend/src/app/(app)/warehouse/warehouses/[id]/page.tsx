@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import QRCode from "react-qr-code";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -350,19 +351,39 @@ function CellModal({
       <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="font-semibold">Комірка {cell.code}</h2>
-            <input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={saveNotes}
-              placeholder="Нотатка (напр. верхня полиця)…"
-              className="mt-0.5 w-full bg-transparent text-xs text-[var(--text-faint)] outline-none placeholder:text-[var(--text-faint)] focus:text-[var(--text)]"
-            />
+        <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4 gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            {/* QR code for this cell */}
+            <div className="shrink-0 cursor-pointer" title={`QR: CELL:${cell.id}`}
+              onClick={() => {
+                const w = window.open("", "_blank");
+                if (w) {
+                  w.document.write(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;gap:8px">
+                    <div id="qr"></div>
+                    <p style="font-size:18px;font-weight:bold">${cell.code}</p>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                    <script>new QRCode(document.getElementById('qr'),{text:'CELL:${cell.id}',width:200,height:200});</script>
+                  </body></html>`);
+                  w.document.close();
+                  setTimeout(() => w.print(), 600);
+                }
+              }}>
+              <QRCode value={`CELL:${cell.id}`} size={64} level="M" />
+              <p className="mt-0.5 text-center font-mono text-[9px] text-[var(--text-faint)]">🖨 друк</p>
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">Комірка {cell.code}</h2>
+              <input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={saveNotes}
+                placeholder="Нотатка (напр. верхня полиця)…"
+                className="mt-0.5 w-full bg-transparent text-xs text-[var(--text-faint)] outline-none placeholder:text-[var(--text-faint)] focus:text-[var(--text)]"
+              />
+            </div>
           </div>
           <button onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
         </div>
 
         {/* Current stock */}
@@ -581,6 +602,32 @@ function ZoneAccordion({
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button
+          title="Друк QR-міток зони"
+          onClick={() => {
+            const rows = cells.map((c) => `
+              <div style="display:inline-flex;flex-direction:column;align-items:center;border:1px solid #ccc;padding:6px;margin:4px;border-radius:4px;width:100px">
+                <div id="qr-${c.id}"></div>
+                <p style="font-family:monospace;font-size:11px;font-weight:bold;margin:2px 0">${c.code}</p>
+                <p style="font-family:monospace;font-size:9px;color:#888;margin:0">${zone.name}</p>
+              </div>`).join("");
+            const w = window.open("", "_blank");
+            if (w) {
+              w.document.write(`<html><head><title>Мітки ${zone.name}</title></head><body>
+                <div style="display:flex;flex-wrap:wrap">${rows}</div>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                <script>${cells.map((c) => `new QRCode(document.getElementById('qr-${c.id}'),{text:'CELL:${c.id}',width:80,height:80});`).join("")}</script>
+              </body></html>`);
+              w.document.close();
+              setTimeout(() => w.print(), 800);
+            }
+          }}
+          className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
           </svg>
         </button>
         <button onClick={() => onDelete(zone.id)} title="Видалити"

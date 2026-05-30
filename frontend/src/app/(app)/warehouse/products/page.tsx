@@ -1405,6 +1405,52 @@ export default function ProductsPage() {
     }
   }
 
+  async function printProductCards() {
+    const sel = products.filter((p) => selected.has(p.id));
+    if (!sel.length) return;
+    const mod = await import("jsbarcode");
+    const JsBarcode = (mod as { default: unknown }).default ?? mod;
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+    const cards = await Promise.all(sel.map(async (p) => {
+      const barcodeText = p.barcode || `PROD:${p.id}`;
+      let barcodeImg = "";
+      try {
+        const canvas = document.createElement("canvas");
+        (JsBarcode as (el: HTMLCanvasElement, v: string, o: object) => void)(canvas, barcodeText, {
+          format: "CODE128", displayValue: true, fontSize: 11, margin: 5,
+          width: 2, height: 55, background: "#fff", lineColor: "#000",
+        });
+        barcodeImg = canvas.toDataURL("image/png");
+      } catch { /* no barcode */ }
+      const imgSrc = p.image_url
+        ? (p.image_url.startsWith("/") ? `${API}${p.image_url}` : p.image_url)
+        : "";
+      return `
+        <div style="display:inline-flex;flex-direction:column;width:160px;border:1px solid #ccc;border-radius:6px;overflow:hidden;page-break-inside:avoid;margin:4px">
+          ${imgSrc ? `<img src="${imgSrc}" style="width:100%;height:100px;object-fit:cover" />` : ""}
+          <div style="padding:8px;flex:1">
+            <p style="font-size:12px;font-weight:600;margin:0 0 2px">${p.name}</p>
+            <p style="font-size:10px;color:#666;margin:0 0 2px;font-family:monospace">${p.sku}</p>
+            ${p.categories?.length ? `<p style="font-size:9px;color:#999;margin:0">${p.categories.slice(0,2).join(", ")}</p>` : ""}
+            ${p.sale_price ? `<p style="font-size:11px;font-weight:600;color:#0891b2;margin:4px 0 0">${parseFloat(p.sale_price).toLocaleString("uk-UA")} ₴</p>` : ""}
+          </div>
+          ${barcodeImg ? `<div style="border-top:1px solid #eee;padding:4px;text-align:center"><img src="${barcodeImg}" style="height:45px;max-width:100%" /></div>` : ""}
+        </div>`;
+    }));
+
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<html><head><title>Картки товарів</title><style>
+      body{font-family:system-ui;margin:8mm}
+      @media print{@page{margin:8mm}}
+    </style></head><body>
+      <div style="display:flex;flex-wrap:wrap">${cards.join("")}</div>
+    </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  }
+
   function handleSaved(p: Product) {
     setProducts((prev) => {
       const idx = prev.findIndex((x) => x.id === p.id);
@@ -1928,6 +1974,7 @@ export default function ProductsPage() {
           { label: "Відновити",        onClick: restoreSelected,    disabled: deleting, variant: "default" },
           { label: "Видалити назавжди", onClick: hardDeleteSelected, disabled: deleting, variant: "danger"  },
         ] : [
+          { label: "🖨 Картки",   onClick: printProductCards,  disabled: deleting, variant: "ghost"  },
           { label: "Архівувати",  onClick: archiveSelected,    disabled: deleting, variant: "ghost"  },
           { label: "Видалити",    onClick: hardDeleteSelected,  disabled: deleting, variant: "danger"  },
         ]}
