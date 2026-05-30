@@ -639,13 +639,14 @@ class RelocateRequest(BaseModel):
 
 class ScanAction(str, enum.Enum):
     """Operation chosen by scanning a functional ACTION QR."""
-    write_off     = "write_off"      # remove from a cell + warehouse ledger (WRITE_OFF)
-    transfer      = "transfer"       # cell → cell within the same warehouse (relocate)
-    receive       = "receive"        # book into a cell (PURCHASE_IN); unit_cost optional → AVCO
-    stocktake     = "stocktake"      # set a cell to the counted qty and correct the total
-    sale_out      = "sale_out"       # ship from a cell (SALE_OUT); unit_price optional → revenue
-    defect        = "defect"         # mark defective, remove from a cell (DEFECT)
-    production_in = "production_in"   # book finished goods into a cell (PRODUCTION_IN)
+    write_off      = "write_off"       # remove from a cell + warehouse ledger (WRITE_OFF)
+    transfer       = "transfer"        # cell → cell; same warehouse = relocate, else TRANSFER
+    receive        = "receive"         # book into a cell (PURCHASE_IN); unit_cost optional → AVCO
+    stocktake      = "stocktake"       # set a cell to the counted qty and correct the total
+    sale_out       = "sale_out"        # ship from a cell (SALE_OUT); unit_price optional → revenue
+    defect         = "defect"          # mark defective, remove from a cell (DEFECT)
+    production_in  = "production_in"    # book finished goods into a cell (PRODUCTION_IN)
+    production_out = "production_out"   # issue components to production from a cell (PRODUCTION_OUT)
 
 
 class ScanActionRequest(BaseModel):

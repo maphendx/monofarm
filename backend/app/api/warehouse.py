@@ -1166,13 +1166,14 @@ def scan_action(
 ) -> ScanActionResult:
     """Execute a warehouse operation chosen via a functional ACTION QR.
 
-    write_off     — remove qty from a cell and the warehouse ledger (WRITE_OFF).
-    transfer      — move qty between two cells in the same warehouse (relocate).
-    receive       — book qty into a cell (PURCHASE_IN); unit_cost optional → AVCO.
-    stocktake     — set a cell to the counted qty and correct the warehouse total.
-    sale_out      — ship qty from a cell (SALE_OUT); unit_price optional → revenue.
-    defect        — mark qty defective, remove from a cell (DEFECT).
-    production_in — book finished goods into a cell (PRODUCTION_IN).
+    write_off      — remove qty from a cell and the warehouse ledger (WRITE_OFF).
+    transfer       — cell → cell: relocate within a warehouse, or TRANSFER across.
+    receive        — book qty into a cell (PURCHASE_IN); unit_cost optional → AVCO.
+    stocktake      — set a cell to the counted qty and correct the warehouse total.
+    sale_out       — ship qty from a cell (SALE_OUT); unit_price optional → revenue.
+    defect         — mark qty defective, remove from a cell (DEFECT).
+    production_in  — book finished goods into a cell (PRODUCTION_IN).
+    production_out — issue components to production from a cell (PRODUCTION_OUT).
     """
     product = _get_product(payload.product_id, org, db)
     if payload.quantity <= 0:
@@ -1223,32 +1224,53 @@ def scan_action(
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
 
-    # ── Переміщення (cell → cell, same warehouse) ──────────────────────────────
+    # ── Переміщення: cell → cell (relocate), or warehouse → warehouse (TRANSFER) ─
     if payload.action == ScanAction.transfer:
         if not payload.to_cell_id:
             raise HTTPException(status_code=400, detail="Не вказано комірку призначення")
         if payload.to_cell_id == cell.id:
             raise HTTPException(status_code=400, detail="Комірки збігаються")
-        dst = _get_cell(payload.to_cell_id, org, db)
-        if _cell_warehouse_id(dst, db) != wh_id:
-            raise HTTPException(status_code=400, detail="Переміщення можливе лише в межах одного складу")
+        dst    = _get_cell(payload.to_cell_id, org, db)
+        dst_wh = _cell_warehouse_id(dst, db)
         src_cs = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
         if not src_cs or src_cs.quantity < payload.quantity:
             have = src_cs.quantity if src_cs else Decimal("0")
             raise HTTPException(status_code=400, detail=f"У комірці лише {have}")
-        src_cs.quantity -= payload.quantity
-        if src_cs.quantity <= 0:
-            db.delete(src_cs)
-        dst_cs = db.query(CellStock).filter_by(cell_id=dst.id, product_id=payload.product_id).first()
-        if dst_cs:
-            dst_cs.quantity += payload.quantity
-        else:
-            db.add(CellStock(cell_id=dst.id, product_id=payload.product_id, quantity=payload.quantity))
-        _log_cell_move(db, org_id=org.id, product_id=payload.product_id, quantity=payload.quantity,
-                       kind=CellMoveKind.relocate, cell_from_id=cell.id, cell_to_id=dst.id,
-                       created_by_id=user.id)
+
+        if dst_wh == wh_id:
+            # Same warehouse → pure relocate; warehouse total unchanged.
+            src_cs.quantity -= payload.quantity
+            if src_cs.quantity <= 0:
+                db.delete(src_cs)
+            dst_cs = db.query(CellStock).filter_by(cell_id=dst.id, product_id=payload.product_id).first()
+            if dst_cs:
+                dst_cs.quantity += payload.quantity
+            else:
+                db.add(CellStock(cell_id=dst.id, product_id=payload.product_id, quantity=payload.quantity))
+            _log_cell_move(db, org_id=org.id, product_id=payload.product_id, quantity=payload.quantity,
+                           kind=CellMoveKind.relocate, cell_from_id=cell.id, cell_to_id=dst.id,
+                           created_by_id=user.id)
+            db.commit()
+            return ScanActionResult(message=f"Переміщено {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
+
+        # Cross-warehouse → real TRANSFER ledger movement (decrements src wh, adds dst wh).
+        _lock_stock_row(payload.product_id, dst_wh, db)
+        m = WarehouseMovement(
+            organization_id=org.id, type=MovementType.TRANSFER,
+            product_id=payload.product_id, warehouse_from_id=wh_id, warehouse_to_id=dst_wh,
+            quantity=payload.quantity, reason=f"Переміщення між складами (скан) {cell.code} → {dst.code}",
+            created_by_id=user.id,
+        )
+        db.add(m)
+        db.flush()
+        _pick_from_cell(cell, payload.product_id, payload.quantity, org.id, db,
+                        movement_id=m.id, created_by_id=user.id)
+        _apply_movement(m, db)   # src wh -= qty, dst wh += qty, clamps cells in both
+        avail = _unassigned_qty(payload.product_id, dst_wh, db)
+        _putaway(dst, payload.product_id, min(payload.quantity, avail), org.id, db,
+                 movement_id=m.id, created_by_id=user.id)
         db.commit()
-        return ScanActionResult(message=f"Переміщено {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
+        return ScanActionResult(message=f"Переміщено між складами {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
 
     # ── Списання (WRITE_OFF) ───────────────────────────────────────────────────
     if payload.action == ScanAction.write_off:
@@ -1265,6 +1287,11 @@ def scan_action(
     if payload.action == ScanAction.defect:
         _outbound(MovementType.DEFECT, f"Брак (скан) з {cell.code}", replenish=True)
         return ScanActionResult(message=f"Брак {payload.quantity} {product.unit} з {cell.code}")
+
+    # ── Видача у виробництво (PRODUCTION_OUT) ──────────────────────────────────
+    if payload.action == ScanAction.production_out:
+        _outbound(MovementType.PRODUCTION_OUT, f"Видача у виробництво (скан) з {cell.code}", replenish=True)
+        return ScanActionResult(message=f"Видано у виробництво {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Прийом (PURCHASE_IN); unit_cost optional → AVCO ────────────────────────
     if payload.action == ScanAction.receive:
