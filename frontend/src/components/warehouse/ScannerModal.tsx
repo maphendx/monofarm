@@ -74,28 +74,44 @@ function instructionText(phase: Phase): string {
 // ── Step row ──────────────────────────────────────────────────────────────────
 
 function StepRow({
-  kind, label, main, sub, active,
-}: { kind: "cell" | "product"; label: string; main?: string; sub?: string; active: boolean }) {
+  step, label, main, sub, done, active,
+}: { step: number; label: string; main?: string; sub?: string; done: boolean; active: boolean }) {
   return (
     <div
       className={[
-        "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+        "flex items-center gap-3.5 rounded-xl border px-4 py-3.5 transition-colors",
         active
-          ? "border-[var(--accent)] bg-[var(--accent-weak)]"
+          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
           : "border-[var(--border)] bg-[var(--surface)]",
       ].join(" ")}
     >
-      <span className={kind === "cell" ? "badge badge-accent" : "badge badge-ok"}>{label}</span>
-      {main ? (
-        <div className="min-w-0">
-          <div className="truncate font-mono text-base font-semibold text-[var(--text)]">{main}</div>
-          {sub && <div className="truncate text-sm text-[var(--text-muted)]">{sub}</div>}
-        </div>
-      ) : (
-        <span className="text-sm text-[var(--text-faint)]">
-          {active ? "← піднеси сканер сюди" : "очікує сканування"}
-        </span>
-      )}
+      {/* Step number / check */}
+      <div
+        className={[
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+          done
+            ? "bg-[var(--state-ok)] text-white"
+            : active
+              ? "bg-[var(--accent)] text-[var(--bg-elevated)]"
+              : "bg-[var(--surface-hi)] text-[var(--text-faint)]",
+        ].join(" ")}
+      >
+        {done ? "✓" : step}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">{label}</div>
+        {main ? (
+          <>
+            <div className="truncate font-mono text-base font-semibold text-[var(--text)]">{main}</div>
+            {sub && <div className="truncate text-sm text-[var(--text-muted)]">{sub}</div>}
+          </>
+        ) : (
+          <div className="text-sm text-[var(--text-faint)]">
+            {active ? "Піднеси сканер сюди →" : "очікує сканування"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -160,86 +176,90 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   const canClear = phase.kind !== "idle" && phase.kind !== "done";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative mx-4 w-full max-w-[560px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
+        className="relative w-full max-w-[640px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
         onClick={(e) => { e.stopPropagation(); inputRef.current?.focus(); }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
           <div className="flex items-center gap-2.5">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" strokeLinejoin="round" className="text-[var(--accent)]">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>
             </svg>
-            <h2 className="text-base font-semibold text-[var(--text)]">Сканер складу</h2>
+            <h2 className="text-lg font-semibold text-[var(--text)]">Сканер складу</h2>
           </div>
-          <button onClick={onClose} className="btn btn-ghost">Закрити</button>
+          <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="Закрити">✕</button>
         </div>
 
-        {/* Input row */}
-        <div className="flex items-center gap-3 px-5 pt-4">
-          {loading ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className="shrink-0 animate-spin text-[var(--accent)]">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>
-            </svg>
-          )}
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Піднеси сканер до коду…"
-            className="input text-base"
-            autoComplete="off"
-          />
-        </div>
+        <div className="px-6 py-5">
+          {/* Hero scan field */}
+          <div className="relative">
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2">
+              {loading ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  className="animate-spin text-[var(--accent)]">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)]">
+                  <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>
+                </svg>
+              )}
+            </span>
+            <input
+              ref={inputRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Піднеси сканер до коду…"
+              className="h-14 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] pl-12 pr-4 text-lg text-[var(--text)] outline-none transition-colors placeholder:text-[var(--text-dim)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-ring)]"
+              autoComplete="off"
+            />
+          </div>
 
-        {/* State area */}
-        <div className="px-5 pb-4 pt-3">
+          {/* State area */}
           {phase.kind === "done" ? (
-            <div className="py-6 text-center">
-              <div className="text-2xl text-[var(--state-ok)]">✓</div>
-              <p className="mt-1 text-base font-semibold text-[var(--state-ok)]">Готово!</p>
+            <div className="py-10 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--state-ok)] text-2xl text-white">✓</div>
+              <p className="mt-3 text-lg font-semibold text-[var(--state-ok)]">Готово!</p>
               <p className="text-sm text-[var(--text-muted)]">Можна сканувати наступне</p>
             </div>
           ) : (
             <>
               {/* Two steps — always visible */}
-              <div className="space-y-2">
+              <div className="mt-5 space-y-2.5">
                 <StepRow
-                  kind="cell" label="Комірка"
+                  step={1} label="Комірка"
                   main={cell?.cell_code}
                   sub={cell ? `${cell.zone_name} · ${cell.warehouse_name}` : undefined}
-                  active={target === "cell" || target === "any"}
+                  done={!!cell}
+                  active={!cell && (target === "cell" || target === "any")}
                 />
                 <StepRow
-                  kind="product" label="Товар"
+                  step={2} label="Товар"
                   main={product?.sku}
                   sub={product?.name}
-                  active={target === "product" || target === "any"}
+                  done={!!product}
+                  active={!product && (target === "product" || target === "any")}
                 />
               </div>
 
               {/* Quantity + confirm */}
               {phase.kind === "both" ? (
-                <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="shrink-0 text-sm font-medium text-[var(--text-muted)]">Скільки штук?</label>
+                <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="shrink-0 text-base font-medium text-[var(--text)]">Скільки штук?</label>
                     {/* Touch-friendly stepper — number stays tappable for manual entry */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button type="button" aria-label="Менше"
                         onClick={() => setPhase({ ...phase, qty: String(Math.max(1, (parseFloat(phase.qty) || 1) - 1)) })}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-lg text-[var(--text-muted)] hover:bg-[var(--surface-hi)] active:scale-95">
+                        className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-xl text-[var(--text-muted)] hover:bg-[var(--surface-hi)] active:scale-95">
                         −
                       </button>
                       <input
@@ -247,23 +267,23 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
                         value={phase.qty}
                         onChange={(e) => setPhase({ ...phase, qty: e.target.value })}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); assign(); } }}
-                        className="h-9 w-16 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-center font-mono text-base text-[var(--text-hi)] outline-none focus:border-[var(--accent)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                        className="h-11 w-20 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-center font-mono text-lg text-[var(--text-hi)] outline-none focus:border-[var(--accent)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                       />
                       <button type="button" aria-label="Більше"
                         onClick={() => setPhase({ ...phase, qty: String((parseFloat(phase.qty) || 1) + 1) })}
-                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-lg text-[var(--text-muted)] hover:bg-[var(--surface-hi)] active:scale-95">
+                        className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)] text-xl text-[var(--text-muted)] hover:bg-[var(--surface-hi)] active:scale-95">
                         +
                       </button>
                     </div>
-                    <button onClick={assign} disabled={busy} className="btn btn-primary btn-lg min-w-[180px] flex-1">
+                    <button onClick={assign} disabled={busy} className="btn btn-primary h-11 min-w-[200px] flex-1 text-base">
                       {busy ? "Зберігаю…" : "Призначити в комірку"}
                     </button>
                   </div>
                 </div>
               ) : (
                 /* Instruction line */
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <p className="text-[15px] font-medium text-[var(--text)]">{instructionText(phase)}</p>
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <p className="text-base font-medium text-[var(--text)]">{instructionText(phase)}</p>
                   {canClear && (
                     <button onClick={reset} className="btn btn-ghost shrink-0">Очистити</button>
                   )}
@@ -271,7 +291,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
               )}
 
               {err && (
-                <div className="mt-3 rounded-lg border border-[var(--border)] px-3 py-2.5 text-sm font-medium text-[var(--state-error)]">
+                <div className="mt-4 rounded-xl border border-[var(--state-error)]/30 bg-[var(--state-error)]/5 px-4 py-3 text-sm font-medium text-[var(--state-error)]">
                   {err}
                 </div>
               )}
@@ -280,7 +300,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Footer — plain reassurance, no keyboard jargon */}
-        <div className="border-t border-[var(--border)] px-5 py-2.5 text-center text-[13px] text-[var(--text-faint)]">
+        <div className="border-t border-[var(--border)] px-6 py-3 text-center text-[13px] text-[var(--text-faint)]">
           Піднеси сканер DS6878 до коду — він зчитається сам
         </div>
       </div>
