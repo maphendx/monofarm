@@ -25,28 +25,36 @@ import { api } from "@/lib/api";
 type CellDetail = { cell_id: number; cell_code: string; cell_notes: string | null; zone_name: string; warehouse_name: string };
 type Product    = { id: number; name: string; sku: string; barcode: string | null; unit: string };
 type ScanResult = { type: "cell" | "product"; cell?: CellDetail; product?: Product };
-type ScanAction = "write_off" | "transfer" | "receive" | "stocktake";
+type ScanAction = "write_off" | "transfer" | "receive" | "stocktake" | "sale_out" | "defect" | "production_in";
+type PriceField = "unit_cost" | "unit_price";
 
-const ACTIONS: Record<ScanAction, { label: string; verb: string; idle: string; qtyLabel: string; needsTo: boolean; needsPrice: boolean }> = {
-  write_off: { label: "Списання",        verb: "Списати",      idle: "Списання: скануй комірку, потім товар",          qtyLabel: "Кількість",            needsTo: false, needsPrice: false },
-  transfer:  { label: "Переміщення",     verb: "Перемістити",  idle: "Переміщення: скануй комірку-джерело",            qtyLabel: "Кількість",            needsTo: true,  needsPrice: false },
-  receive:   { label: "Прийом",          verb: "Прийняти",     idle: "Прийом: скануй комірку, потім товар",            qtyLabel: "Кількість",            needsTo: false, needsPrice: true  },
-  stocktake: { label: "Інвентаризація",  verb: "Зберегти факт", idle: "Інвентаризація: скануй комірку, потім товар",   qtyLabel: "Фактично в комірці",   needsTo: false, needsPrice: false },
+const ACTIONS: Record<ScanAction, { label: string; verb: string; idle: string; qtyLabel: string; needsTo: boolean; priceField?: PriceField; priceLabel?: string }> = {
+  write_off:     { label: "Списання",       verb: "Списати",       idle: "Списання: скануй комірку, потім товар",            qtyLabel: "Кількість",          needsTo: false },
+  transfer:      { label: "Переміщення",    verb: "Перемістити",   idle: "Переміщення: скануй комірку-джерело",              qtyLabel: "Кількість",          needsTo: true  },
+  receive:       { label: "Прийом",         verb: "Прийняти",      idle: "Прийом: скануй комірку, потім товар",              qtyLabel: "Кількість",          needsTo: false, priceField: "unit_cost",  priceLabel: "Ціна/од." },
+  stocktake:     { label: "Інвентаризація", verb: "Зберегти факт", idle: "Інвентаризація: скануй комірку, потім товар",      qtyLabel: "Фактично в комірці", needsTo: false },
+  sale_out:      { label: "Відвантаження",  verb: "Відвантажити",  idle: "Відвантаження: скануй комірку, потім товар",       qtyLabel: "Кількість",          needsTo: false, priceField: "unit_price", priceLabel: "Ціна продажу/од." },
+  defect:        { label: "Брак",           verb: "Списати в брак", idle: "Брак: скануй комірку, потім товар",               qtyLabel: "Кількість",          needsTo: false },
+  production_in: { label: "Оприбуткування", verb: "Оприбуткувати", idle: "Оприбуткування: скануй комірку, потім товар",      qtyLabel: "Кількість",          needsTo: false },
 };
 
 // ACTION QR suffix → action.
 const ACTION_QR: Record<string, ScanAction> = {
   WRITE_OFF: "write_off", TRANSFER: "transfer", RECEIVE: "receive", STOCKTAKE: "stocktake",
+  SALE_OUT: "sale_out", DEFECT: "defect", PRODUCTION_IN: "production_in",
 };
 
 // ── Action-QR print sheet (wall poster) ─────────────────────────────────────────
 
 function printActionSheet() {
   const items = [
-    { code: "ACTION:WRITE_OFF", label: "Списання" },
-    { code: "ACTION:TRANSFER",  label: "Переміщення" },
-    { code: "ACTION:RECEIVE",   label: "Прийом" },
-    { code: "ACTION:STOCKTAKE", label: "Інвентаризація" },
+    { code: "ACTION:WRITE_OFF",     label: "Списання" },
+    { code: "ACTION:TRANSFER",      label: "Переміщення" },
+    { code: "ACTION:RECEIVE",       label: "Прийом" },
+    { code: "ACTION:STOCKTAKE",     label: "Інвентаризація" },
+    { code: "ACTION:SALE_OUT",      label: "Відвантаження" },
+    { code: "ACTION:DEFECT",        label: "Брак" },
+    { code: "ACTION:PRODUCTION_IN", label: "Оприбуткування" },
   ];
   const cards = items.map((it) => `
     <div style="display:inline-flex;flex-direction:column;align-items:center;border:1px solid #ccc;padding:18px;margin:10px;border-radius:8px;width:220px">
@@ -154,7 +162,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
       } else {
         const body: Record<string, unknown> = { action, product_id: product.id, quantity, cell_id: cell.cell_id };
         if (needsTo && toCell) body.to_cell_id = toCell.cell_id;
-        if (action === "receive" && price.trim()) body.unit_cost = parseFloat(price);
+        if (meta?.priceField && price.trim()) body[meta.priceField] = parseFloat(price);
         const r = await api<{ message: string }>(`/api/warehouse/scan-action`, { method: "POST", body: JSON.stringify(body) });
         toast.success(r.message);
       }
@@ -267,9 +275,9 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
                 className="w-28 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-center font-mono text-xl outline-none focus:border-[var(--accent)]"
                 autoFocus
               />
-              {action === "receive" && (
+              {meta?.priceField && (
                 <>
-                  <span className="text-lg text-[var(--text-muted)]">Ціна/од.</span>
+                  <span className="text-lg text-[var(--text-muted)]">{meta.priceLabel}</span>
                   <input
                     type="number" min="0" step="0.01" inputMode="decimal"
                     value={price}

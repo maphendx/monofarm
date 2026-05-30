@@ -1166,10 +1166,13 @@ def scan_action(
 ) -> ScanActionResult:
     """Execute a warehouse operation chosen via a functional ACTION QR.
 
-    write_off — remove qty from a cell and the warehouse ledger (WRITE_OFF).
-    transfer  — move qty between two cells in the same warehouse (relocate).
-    receive   — book qty into a cell (PURCHASE_IN); unit_cost optional → AVCO.
-    stocktake — set a cell to the counted qty and correct the warehouse total.
+    write_off     — remove qty from a cell and the warehouse ledger (WRITE_OFF).
+    transfer      — move qty between two cells in the same warehouse (relocate).
+    receive       — book qty into a cell (PURCHASE_IN); unit_cost optional → AVCO.
+    stocktake     — set a cell to the counted qty and correct the warehouse total.
+    sale_out      — ship qty from a cell (SALE_OUT); unit_price optional → revenue.
+    defect        — mark qty defective, remove from a cell (DEFECT).
+    production_in — book finished goods into a cell (PRODUCTION_IN).
     """
     product = _get_product(payload.product_id, org, db)
     if payload.quantity <= 0:
@@ -1178,6 +1181,47 @@ def scan_action(
     cell  = _get_cell(payload.cell_id, org, db)
     wh_id = _cell_warehouse_id(cell, db)
     _lock_stock_row(payload.product_id, wh_id, db)
+
+    def _outbound(mtype: MovementType, reason: str, *,
+                  unit_price: Decimal | None = None, replenish: bool = False) -> None:
+        """Pick qty from the cell and decrement the warehouse via an outbound ledger move."""
+        cs   = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
+        have = cs.quantity if cs else Decimal("0")
+        if have < payload.quantity:
+            raise HTTPException(status_code=400, detail=f"У комірці лише {have}")
+        revenue = (payload.quantity * unit_price) if unit_price else None
+        m = WarehouseMovement(
+            organization_id=org.id, type=mtype,
+            product_id=payload.product_id, warehouse_from_id=wh_id,
+            quantity=payload.quantity, unit_price=unit_price, total_revenue=revenue,
+            reason=reason, created_by_id=user.id,
+        )
+        db.add(m)
+        db.flush()
+        # Pick from the cell BEFORE _apply_movement so the FIFO clamp leaves it alone.
+        _pick_from_cell(cell, payload.product_id, payload.quantity, org.id, db,
+                        movement_id=m.id, created_by_id=user.id)
+        _apply_movement(m, db)
+        if replenish:
+            _check_and_auto_replenish(payload.product_id, org.id, db)
+        db.commit()
+
+    def _inbound(mtype: MovementType, reason: str, *, unit_cost: Decimal | None = None) -> None:
+        """Add qty to the warehouse via an inbound ledger move and put it away into the cell."""
+        total = (payload.quantity * unit_cost) if unit_cost else None
+        m = WarehouseMovement(
+            organization_id=org.id, type=mtype,
+            product_id=payload.product_id, warehouse_to_id=wh_id,
+            quantity=payload.quantity, unit_cost=unit_cost, total_cost=total,
+            reason=reason, created_by_id=user.id,
+        )
+        db.add(m)
+        db.flush()
+        _apply_movement(m, db)   # AVCO before stock add when unit_cost is set
+        avail = _unassigned_qty(payload.product_id, wh_id, db)
+        _putaway(cell, payload.product_id, min(payload.quantity, avail), org.id, db,
+                 movement_id=m.id, created_by_id=user.id)
+        db.commit()
 
     # ── Переміщення (cell → cell, same warehouse) ──────────────────────────────
     if payload.action == ScanAction.transfer:
@@ -1208,41 +1252,29 @@ def scan_action(
 
     # ── Списання (WRITE_OFF) ───────────────────────────────────────────────────
     if payload.action == ScanAction.write_off:
-        cs   = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
-        have = cs.quantity if cs else Decimal("0")
-        if have < payload.quantity:
-            raise HTTPException(status_code=400, detail=f"У комірці лише {have}")
-        m = WarehouseMovement(
-            organization_id=org.id, type=MovementType.WRITE_OFF,
-            product_id=payload.product_id, warehouse_from_id=wh_id,
-            quantity=payload.quantity, reason=f"Списання (скан) з {cell.code}",
-            created_by_id=user.id,
-        )
-        db.add(m)
-        db.flush()
-        _pick_from_cell(cell, payload.product_id, payload.quantity, org.id, db,
-                        movement_id=m.id, created_by_id=user.id)
-        _apply_movement(m, db)
-        db.commit()
+        _outbound(MovementType.WRITE_OFF, f"Списання (скан) з {cell.code}")
         return ScanActionResult(message=f"Списано {payload.quantity} {product.unit} з {cell.code}")
+
+    # ── Відвантаження (SALE_OUT); unit_price optional → revenue ────────────────
+    if payload.action == ScanAction.sale_out:
+        _outbound(MovementType.SALE_OUT, f"Відвантаження (скан) з {cell.code}",
+                  unit_price=payload.unit_price, replenish=True)
+        return ScanActionResult(message=f"Відвантажено {payload.quantity} {product.unit} з {cell.code}")
+
+    # ── Брак (DEFECT) ──────────────────────────────────────────────────────────
+    if payload.action == ScanAction.defect:
+        _outbound(MovementType.DEFECT, f"Брак (скан) з {cell.code}", replenish=True)
+        return ScanActionResult(message=f"Брак {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Прийом (PURCHASE_IN); unit_cost optional → AVCO ────────────────────────
     if payload.action == ScanAction.receive:
-        total = (payload.quantity * payload.unit_cost) if payload.unit_cost else None
-        m = WarehouseMovement(
-            organization_id=org.id, type=MovementType.PURCHASE_IN,
-            product_id=payload.product_id, warehouse_to_id=wh_id,
-            quantity=payload.quantity, unit_cost=payload.unit_cost, total_cost=total,
-            reason=f"Прийом (скан) у {cell.code}", created_by_id=user.id,
-        )
-        db.add(m)
-        db.flush()
-        _apply_movement(m, db)   # AVCO before stock add when unit_cost is set
-        avail = _unassigned_qty(payload.product_id, wh_id, db)
-        _putaway(cell, payload.product_id, min(payload.quantity, avail), org.id, db,
-                 movement_id=m.id, created_by_id=user.id)
-        db.commit()
+        _inbound(MovementType.PURCHASE_IN, f"Прийом (скан) у {cell.code}", unit_cost=payload.unit_cost)
         return ScanActionResult(message=f"Прийнято {payload.quantity} {product.unit} у {cell.code}")
+
+    # ── Оприбуткування з виробництва (PRODUCTION_IN) ───────────────────────────
+    if payload.action == ScanAction.production_in:
+        _inbound(MovementType.PRODUCTION_IN, f"Оприбуткування з виробництва (скан) у {cell.code}")
+        return ScanActionResult(message=f"Оприбутковано {payload.quantity} {product.unit} у {cell.code}")
 
     # ── Інвентаризація: set cell to counted qty, correct warehouse total ───────
     cs      = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
