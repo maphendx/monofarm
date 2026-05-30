@@ -230,6 +230,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-4 border-t border-[var(--border)] px-4 py-2 text-[10px] text-[var(--text-faint)]">
           <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">↵</kbd> підтвердити</span>
           <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">esc</kbd> закрити</span>
+          <span><kbd className="rounded border border-[var(--border)] px-1 py-0.5">⌘⇧S</kbd> відкрити/закрити</span>
           <span className="ml-auto opacity-60">монофарм · сканер</span>
         </div>
       </div>

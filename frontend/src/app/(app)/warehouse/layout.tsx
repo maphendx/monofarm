@@ -74,6 +74,17 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
   const activeGroup = NAV_GROUPS.find((g) => isGroupActive(g, pathname)) ?? null;
   const [scannerOpen, setScannerOpen] = useState(false);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setScannerOpen((v) => !v);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="-mx-6 -mt-6">
 
@@ -101,7 +112,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
           })}
           <button
             onClick={() => setScannerOpen(true)}
-            title="Сканер"
+            title="Сканер (⌘⇧S)"
             className="ml-auto shrink-0 flex items-center gap-1.5 rounded-lg border border-[var(--border-strong)] px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] transition-colors"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
