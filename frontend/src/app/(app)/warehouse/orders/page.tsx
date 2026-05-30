@@ -1065,7 +1065,8 @@ export default function OrdersPage() {
         onClose={() => setBatchOrder(null)}
         initialProductId={batchOrder?.items[0]?.product_id?.toString()}
         initialOrderId={batchOrder?.id}
-        onCreated={(_b: Batch) => { setBatchOrder(null); }}
+        orderNumber={batchOrder?.order_number}
+        onCreated={(_b: Batch) => { setBatchOrder(null); load(); }}
       />
 
       <ColumnSettingsModal

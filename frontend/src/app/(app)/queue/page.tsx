@@ -347,7 +347,10 @@ function CompleteModal({ task, onClose, onDone }: {
         {task.product_name && piecesOk > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--state-ok)]/20 bg-[var(--state-ok)]/5 px-3 py-2 text-xs text-[var(--state-ok)]">
             <span>→</span>
-            <span>{piecesOk} шт. <strong>{task.product_name}</strong> з'являться на складі готової продукції</span>
+            <span>
+              {piecesOk} шт. <strong>{task.product_name}</strong>
+              {" "}— оновить партію або піде на склад готової продукції
+            </span>
           </div>
         )}
         {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}

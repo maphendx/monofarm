@@ -28,13 +28,14 @@ type Spec     = { id: number; name: string; version: number; is_default: boolean
 type FarmTask = { id: number; title: string; quantity: number; status: string; product_id: number | null };
 
 export function CreateBatchModal({
-  open, onClose, onCreated, initialProductId, initialOrderId,
+  open, onClose, onCreated, initialProductId, initialOrderId, orderNumber,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (b: Batch) => void;
   initialProductId?: string;
   initialOrderId?: number;
+  orderNumber?: string;
 }) {
   const [products,    setProducts]    = useState<Product[]>([]);
   const [specs,       setSpecs]       = useState<Spec[]>([]);
@@ -109,6 +110,12 @@ export function CreateBatchModal({
       </>}
     >
       <form id="batch-form" onSubmit={submit} className="space-y-3 text-sm">
+        {orderNumber && (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--state-warn)]/20 bg-[var(--state-warn)]/5 px-3 py-2 text-xs text-[var(--state-warn)]">
+            <span>📦</span>
+            <span>Замовлення <strong>{orderNumber}</strong> → при створенні партії статус зміниться на "Виробництво"</span>
+          </div>
+        )}
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)] ">Товар</span>
           <select required value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>
