@@ -2653,6 +2653,11 @@ def create_batch(
     _get_product(payload.product_id, org, db)
     b = ProductionBatch(organization_id=org.id, created_by_id=user.id, **payload.model_dump())
     db.add(b)
+    # auto-advance linked order to in_production
+    if payload.order_id:
+        order = db.query(Order).filter_by(id=payload.order_id, organization_id=org.id).first()
+        if order and order.status == OrderStatus.confirmed:
+            order.status = OrderStatus.in_production
     db.commit()
     db.refresh(b)
     return _batch_to_out(b, db)

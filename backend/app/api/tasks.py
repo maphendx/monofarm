@@ -344,48 +344,69 @@ def update_task(
         if total_cost > 0:
             task.material_cost_uah = round(total_cost, 2)
 
-    # auto PRODUCTION_IN: finished good lands on the warehouse when task → done
+    # warehouse sync when task → done
     transitioning_to_done = (
         payload.status == PrintTaskStatus.done
         and task.status != PrintTaskStatus.done
     )
     if transitioning_to_done and (pieces_ok or 0) > 0 and task.product_id:
         from decimal import Decimal
-        from app.models.warehouse import Warehouse, WarehouseMovement, WarehouseType, MovementType
+        from app.models.warehouse import (
+            BatchStatus as WBatchStatus, ProductionBatch,
+            Warehouse, WarehouseMovement, WarehouseType, MovementType,
+        )
         from app.api.warehouse import _apply_movement, _update_avco
 
-        finished_wh = (
-            db.query(Warehouse)
+        # if there is a live batch linked to this task, update its counters —
+        # PRODUCTION_IN will fire when the batch is closed (prevents double-counting)
+        linked_batch = (
+            db.query(ProductionBatch)
             .filter(
-                Warehouse.organization_id == org.id,
-                Warehouse.type == WarehouseType.finished,
-                Warehouse.is_active == True,
+                ProductionBatch.print_task_id == task_id,
+                ProductionBatch.organization_id == org.id,
+                ProductionBatch.status.notin_([WBatchStatus.done, WBatchStatus.cancelled]),
             )
-            .order_by(Warehouse.id)
             .first()
         )
-        if finished_wh:
-            qty = Decimal(pieces_ok)
-            unit_cost: Decimal | None = None
-            total_cost_uah = task.material_cost_uah  # may be set by filament block above
-            if total_cost_uah and pieces_ok:
-                unit_cost = Decimal(str(round(total_cost_uah / pieces_ok, 4)))
-            if unit_cost:
-                _update_avco(task.product_id, qty, unit_cost, db)
-            m = WarehouseMovement(
-                organization_id=org.id,
-                type=MovementType.PRODUCTION_IN,
-                product_id=task.product_id,
-                warehouse_to_id=finished_wh.id,
-                quantity=qty,
-                unit_cost=unit_cost,
-                total_cost=Decimal(str(total_cost_uah)) if total_cost_uah else None,
-                reason=f"Задача #{task_id}: {task.title}",
-                created_by_id=user.id,
+
+        if linked_batch:
+            linked_batch.printed_qty += (pieces_ok or 0) + pieces_defective
+            linked_batch.good_qty    += pieces_ok or 0
+            linked_batch.defect_qty  += pieces_defective
+        else:
+            # standalone task: immediate PRODUCTION_IN to finished warehouse
+            finished_wh = (
+                db.query(Warehouse)
+                .filter(
+                    Warehouse.organization_id == org.id,
+                    Warehouse.type == WarehouseType.finished,
+                    Warehouse.is_active == True,
+                )
+                .order_by(Warehouse.id)
+                .first()
             )
-            db.add(m)
-            db.flush()
-            _apply_movement(m, db)
+            if finished_wh:
+                qty = Decimal(pieces_ok)
+                unit_cost: Decimal | None = None
+                total_cost_uah = task.material_cost_uah
+                if total_cost_uah and pieces_ok:
+                    unit_cost = Decimal(str(round(total_cost_uah / pieces_ok, 4)))
+                if unit_cost:
+                    _update_avco(task.product_id, qty, unit_cost, db)
+                m = WarehouseMovement(
+                    organization_id=org.id,
+                    type=MovementType.PRODUCTION_IN,
+                    product_id=task.product_id,
+                    warehouse_to_id=finished_wh.id,
+                    quantity=qty,
+                    unit_cost=unit_cost,
+                    total_cost=Decimal(str(total_cost_uah)) if total_cost_uah else None,
+                    reason=f"Задача #{task_id}: {task.title}",
+                    created_by_id=user.id,
+                )
+                db.add(m)
+                db.flush()
+                _apply_movement(m, db)
 
     db.commit()
     db.refresh(task)

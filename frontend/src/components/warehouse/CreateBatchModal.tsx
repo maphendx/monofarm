@@ -28,22 +28,24 @@ type Spec     = { id: number; name: string; version: number; is_default: boolean
 type FarmTask = { id: number; title: string; quantity: number; status: string; product_id: number | null };
 
 export function CreateBatchModal({
-  open, onClose, onCreated, initialProductId
+  open, onClose, onCreated, initialProductId, initialOrderId,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (b: Batch) => void;
   initialProductId?: string;
+  initialOrderId?: number;
 }) {
-  const [products,   setProducts]   = useState<Product[]>([]);
-  const [specs,      setSpecs]      = useState<Spec[]>([]);
-  const [farmTasks,  setFarmTasks]  = useState<FarmTask[]>([]);
-  const [productId,  setProductId]  = useState("");
-  const [specId,     setSpecId]     = useState("");
-  const [targetQty,  setTargetQty]  = useState("10");
-  const [dueDate,    setDueDate]    = useState("");
-  const [notes,      setNotes]      = useState("");
+  const [products,    setProducts]    = useState<Product[]>([]);
+  const [specs,       setSpecs]       = useState<Spec[]>([]);
+  const [farmTasks,   setFarmTasks]   = useState<FarmTask[]>([]);
+  const [productId,   setProductId]   = useState("");
+  const [specId,      setSpecId]      = useState("");
+  const [targetQty,   setTargetQty]   = useState("10");
+  const [dueDate,     setDueDate]     = useState("");
+  const [notes,       setNotes]       = useState("");
   const [printTaskId, setPrintTaskId] = useState("");
+  const [orderId,     setOrderId]     = useState<number | undefined>(undefined);
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -51,6 +53,7 @@ export function CreateBatchModal({
   useEffect(() => {
     if (!open) return;
     setProductId(initialProductId || "");
+    setOrderId(initialOrderId);
     setSpecId("");
     setTargetQty("10");
     setDueDate("");
@@ -59,7 +62,7 @@ export function CreateBatchModal({
     setError(null);
     api<Product[]>("/api/warehouse/products").then(setProducts).catch(() => {});
     api<FarmTask[]>("/api/queue").then(setFarmTasks).catch(() => {});
-  }, [open, initialProductId]);
+  }, [open, initialProductId, initialOrderId]);
 
   useEffect(() => {
     if (!productId) { setSpecs([]); setSpecId(""); return; }
@@ -82,6 +85,7 @@ export function CreateBatchModal({
       if (dueDate)       body.due_date = dueDate;
       if (notes.trim())  body.notes = notes.trim();
       if (printTaskId)   body.print_task_id = parseInt(printTaskId);
+      if (orderId)       body.order_id = orderId;
       const b = await api<Batch>("/api/warehouse/batches", { method: "POST", body: JSON.stringify(body) });
       onCreated(b);
       onClose();

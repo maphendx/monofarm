@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
+import { CreateBatchModal, type Batch } from "@/components/warehouse/CreateBatchModal";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -803,6 +804,7 @@ export default function OrdersPage() {
   const [returnOrder,   setReturnOrder]   = useState<Order | null>(null);
   const [paymentOrder,  setPaymentOrder]  = useState<Order | null>(null);
   const [actionBusy,    setActionBusy]    = useState<number | null>(null);
+  const [batchOrder,    setBatchOrder]    = useState<Order | null>(null);
 
   const colVis = useColumnVisibility("orders", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
@@ -956,7 +958,16 @@ export default function OrdersPage() {
                           Резерв
                         </button>
                       )}
-                      {(o.status === "confirmed" || o.status === "ready") && (
+                      {(o.status === "confirmed" || o.status === "in_production") && (
+                        <button
+                          onClick={() => setBatchOrder(o)}
+                          disabled={isBusy}
+                          title="Запустити у виробництво"
+                          className="rounded-md bg-[var(--state-warn)]/10 px-2 py-1 text-xs font-medium text-[var(--state-warn)] hover:bg-[var(--state-warn)]/20 disabled:opacity-50">
+                          → Виробництво
+                        </button>
+                      )}
+                      {(o.status === "confirmed" || o.status === "ready" || o.status === "in_production") && (
                         <button
                           onClick={() => setShipModalOrder(o)}
                           disabled={isBusy}
@@ -1047,6 +1058,14 @@ export default function OrdersPage() {
         onClose={() => setPaymentOrder(null)}
         order={paymentOrder}
         onUpdated={(updated) => { updateOrder(updated); setPaymentOrder(updated); }}
+      />
+
+      <CreateBatchModal
+        open={batchOrder !== null}
+        onClose={() => setBatchOrder(null)}
+        initialProductId={batchOrder?.items[0]?.product_id?.toString()}
+        initialOrderId={batchOrder?.id}
+        onCreated={(_b: Batch) => { setBatchOrder(null); }}
       />
 
       <ColumnSettingsModal
