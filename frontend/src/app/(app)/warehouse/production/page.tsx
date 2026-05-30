@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { CreateBatchModal, Batch, BatchComponent } from "@/components/warehouse/CreateBatchModal";
 import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
@@ -121,6 +122,7 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
   onDelete: (id: number) => Promise<void>;
   onProgressUpdate: (b: Batch) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.printed_qty - batch.good_qty;
   const [busy, setBusy]       = useState(false);
@@ -133,7 +135,7 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
   }
 
   async function handleDelete() {
-    if (!confirm("Видалити цю партію?")) return;
+    if (!await confirm({ message: "Видалити цю партію?", variant: "danger" })) return;
     setBusy(true);
     try { await onDelete(batch.id); }
     catch { setBusy(false); }
@@ -225,6 +227,7 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
           ✓ Завершити
         </button>
       )}
+      {dialog}
     </div>
   );
 }

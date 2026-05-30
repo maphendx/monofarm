@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { TelegramLinkModal } from "@/components/users/TelegramLinkModal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
@@ -88,6 +89,7 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
 }
 
 export function UsersSection() {
+  const { confirm, dialog } = useConfirm();
   const me = useUser();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,13 +120,13 @@ export function UsersSection() {
 
   async function remove(u: AdminUser) {
     if (u.id === me.id) return;
-    if (!confirm(`Видалити користувача ${u.email}?`)) return;
+    if (!await confirm({ message: `Видалити користувача ${u.email}?`, variant: "danger" })) return;
     await api(`/api/users/${u.id}`, { method: "DELETE" });
     setUsers(prev => prev.filter(x => x.id !== u.id));
   }
 
   async function unlinkTelegram(u: AdminUser) {
-    if (!confirm(`Відвʼязати Telegram від ${u.email}?`)) return;
+    if (!await confirm({ message: `Відвʼязати Telegram від ${u.email}?`, variant: "warn" })) return;
     const updated = await api<AdminUser>(`/api/users/${u.id}/telegram`, { method: "DELETE" });
     upsert(updated);
   }
@@ -198,6 +200,7 @@ export function UsersSection() {
 
       <UserFormModal open={modalOpen} initial={editing} onClose={() => setModalOpen(false)} onSaved={upsert} />
       <TelegramLinkModal user={tgLinkUser} onClose={() => setTgLinkUser(null)} />
+      {dialog}
     </div>
   );
 }

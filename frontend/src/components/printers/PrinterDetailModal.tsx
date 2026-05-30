@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
@@ -27,6 +28,7 @@ function MoonrakerControls({
   printer: Printer;
   onUpdated: (p: Printer) => void;
 }) {
+  const { confirm: confirmDialog, dialog: confirmDialogNode } = useConfirm();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -74,8 +76,8 @@ function MoonrakerControls({
         )}
         <button
           type="button"
-          onClick={() => {
-            if (confirm("Скасувати поточний друк? Це не скасується автоматично.")) act("cancel");
+          onClick={async () => {
+            if (await confirmDialog({ message: "Скасувати поточний друк? Це не скасується автоматично.", variant: "warn" })) act("cancel");
           }}
           disabled={busy !== null}
           className="col-span-2 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)] disabled:opacity-50"
@@ -84,6 +86,7 @@ function MoonrakerControls({
         </button>
       </div>
       {err && <p className="text-xs text-[var(--state-error)]">{err}</p>}
+      {confirmDialogNode}
     </div>
   );
 }
@@ -211,6 +214,7 @@ export function PrinterDetailModal({
   onUpdated: (p: Printer) => void;
   onDeleted?: (id: number) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
   const isManual = printer?.kind === "other";
@@ -275,6 +279,7 @@ export function PrinterDetailModal({
   }
 
   return (
+    <>
     <Modal
       open={!!printer}
       onClose={() => !busy && onClose()}
@@ -474,7 +479,7 @@ export function PrinterDetailModal({
             <button
               type="button"
               onClick={async () => {
-                if (!confirm(`Видалити ${printer.name}? Усі записи плану з ним теж видаляться.`))
+                if (!await confirm({ message: `Видалити ${printer.name}? Усі записи плану з ним теж видаляться.`, variant: "danger" }))
                   return;
                 try {
                   await api(`/api/printers/${printer.id}`, { method: "DELETE" });
@@ -492,5 +497,7 @@ export function PrinterDetailModal({
         )}
       </div>
     </Modal>
+    {dialog}
+    </>
   );
 }

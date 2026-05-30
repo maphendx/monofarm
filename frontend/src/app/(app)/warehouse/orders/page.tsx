@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -358,6 +360,7 @@ function PaymentModal({ open, onClose, order, onUpdated }: {
   open: boolean; onClose: () => void;
   order: Order | null; onUpdated: (o: Order) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const [payments, setPayments] = useState<OrderPayment[]>([]);
   const [amount,   setAmount]   = useState("");
   const [method,   setMethod]   = useState("card");
@@ -393,18 +396,19 @@ function PaymentModal({ open, onClose, order, onUpdated }: {
   }
 
   async function deletePayment(pid: number, pAmount: string) {
-    if (!order || !confirm(`Скасувати оплату ${parseFloat(pAmount).toLocaleString("uk-UA")} ₴?`)) return;
+    if (!order || !await confirm({ message: `Скасувати оплату ${parseFloat(pAmount).toLocaleString("uk-UA")} ₴?`, variant: "danger" })) return;
     try {
       await api(`/api/warehouse/orders/${order.id}/payments/${pid}`, { method: "DELETE" });
       setPayments(prev => prev.filter(p => p.id !== pid));
       const updated = await api<Order>(`/api/warehouse/orders/${order.id}`);
       onUpdated(updated);
-    } catch { alert("Помилка видалення"); }
+    } catch { toast.error("Помилка видалення"); }
   }
 
   const outstanding = order ? parseFloat(order.outstanding) : 0;
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title={`Оплати — ${order?.order_number ?? ""}`}
       footer={<button type="button" onClick={onClose} className="btn btn-ghost">Закрити</button>}
     >
@@ -466,6 +470,8 @@ function PaymentModal({ open, onClose, order, onUpdated }: {
         )}
       </div>
     </Modal>
+    {dialog}
+    </>
   );
 }
 
@@ -794,6 +800,7 @@ const STATUS_FILTER_LABELS: Record<string, string> = {
 };
 
 export default function OrdersPage() {
+  const { confirm, dialog } = useConfirm();
   const [orders,      setOrders]      = useState<Order[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [filter,      setFilter]      = useState<"Всі" | OrderStatus>("Всі");
@@ -821,13 +828,13 @@ export default function OrdersPage() {
   }
 
   async function cancelOrder(order: Order) {
-    if (actionBusy || !confirm(`Скасувати замовлення ${order.order_number}?`)) return;
+    if (actionBusy || !await confirm({ message: `Скасувати замовлення ${order.order_number}?`, variant: "danger" })) return;
     setActionBusy(order.id);
     try {
       const updated = await api<Order>(`/api/warehouse/orders/${order.id}/cancel`, { method: "POST" });
       updateOrder(updated);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Помилка");
+      toast.error(err instanceof Error ? err.message : "Помилка");
     } finally { setActionBusy(null); }
   }
 
@@ -1078,6 +1085,7 @@ export default function OrdersPage() {
         orderedCols={colVis.orderedCols}
         setOrder={colVis.setOrder}
       />
+      {dialog}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { PrintersManager } from "@/components/printers/PrintersManager";
 import { UsersSection } from "@/components/users/UsersSection";
@@ -495,7 +496,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
       });
       setAddedKeys((prev) => new Set(prev).add(d.dev_id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Помилка додавання");
+      toast.error(e instanceof Error ? e.message : "Помилка додавання");
     } finally {
       setAddingKey(null);
     }
@@ -515,7 +516,7 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
       });
       setAddedKeys((prev) => new Set(prev).add(d.url));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Помилка додавання");
+      toast.error(e instanceof Error ? e.message : "Помилка додавання");
     } finally {
       setAddingKey(null);
     }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { LabelGeneratorModal } from "@/components/labels/LabelGeneratorModal";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
@@ -537,6 +538,7 @@ function AdjustModal({
 // ── FilamentColorsSection ─────────────────────────────────────────────────────
 
 function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
+  const { confirm, dialog } = useConfirm();
   const [colors, setColors] = useState<FilamentColor[]>([]);
   const [loading, setLoading] = useState(true);
   const [editColor, setEditColor] = useState<FilamentColor | null>(null);
@@ -571,7 +573,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
   }
 
   async function remove(c: FilamentColor) {
-    if (!confirm(`Видалити колір "${c.name}"?`)) return;
+    if (!await confirm({ message: `Видалити колір "${c.name}"?`, variant: "danger" })) return;
     await api(`/api/filament-colors/${c.id}`, { method: "DELETE" });
     setColors(prev => prev.filter(x => x.id !== c.id));
   }
@@ -636,6 +638,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
           {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
         </form>
       </Modal>
+      {dialog}
     </div>
   );
 }
@@ -644,6 +647,7 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
 
 export default function FilamentPage() {
   usePageTitle("nav.filament");
+  const { confirm: confirmPage, dialog: dialogPage } = useConfirm();
   const t = useT();
   const me = useUser();
   const isAdmin = me.role === "admin";
@@ -673,7 +677,7 @@ export default function FilamentPage() {
   }
 
   async function remove(f: Filament) {
-    if (!confirm(`Видалити ${f.material} · ${f.color}?`)) return;
+    if (!await confirmPage({ message: `Видалити ${f.material} · ${f.color}?`, variant: "danger" })) return;
     await api(`/api/materials/${f.id}`, { method: "DELETE" });
     setFilaments(prev => prev.filter(x => x.id !== f.id));
     setSelected(prev => { const s = new Set(prev); s.delete(f.id); return s; });
@@ -836,6 +840,7 @@ export default function FilamentPage() {
           </div>
         </div>
       )}
+      {dialogPage}
     </div>
   );
 }

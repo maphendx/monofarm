@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
@@ -161,6 +162,7 @@ const COLS: ColDef[] = [
 ];
 
 export default function CategoriesPage() {
+  const { confirm, dialog } = useConfirm();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [modal,      setModal]      = useState<Category | null | "create">(null);
@@ -184,7 +186,7 @@ export default function CategoriesPage() {
   }
 
   async function deleteCategory(id: number) {
-    if (!window.confirm("Видалити категорію? Продукти з цією категорією залишаться незмінними.")) return;
+    if (!await confirm({ message: "Видалити категорію? Продукти з цією категорією залишаться незмінними.", variant: "danger" })) return;
     setDeleting(id);
     try {
       await api(`/api/warehouse/categories/${id}`, { method: "DELETE" });
@@ -316,6 +318,7 @@ export default function CategoriesPage() {
         orderedCols={colVis.orderedCols}
         setOrder={colVis.setOrder}
       />
+      {dialog}
     </div>
   );
 }

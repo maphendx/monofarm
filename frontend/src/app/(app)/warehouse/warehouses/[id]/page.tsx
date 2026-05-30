@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
@@ -618,6 +620,7 @@ function UnassignedPanel({
 export default function WarehouseDetailPage() {
   const params  = useParams<{ id: string }>();
   const router  = useRouter();
+  const { confirm, dialog } = useConfirm();
   const whId    = parseInt(params.id);
 
   const [warehouse,  setWarehouse]  = useState<Warehouse | null>(null);
@@ -660,12 +663,12 @@ export default function WarehouseDetailPage() {
   );
 
   async function deleteZone(id: number) {
-    if (!window.confirm("Видалити стелаж і всі його комірки?")) return;
+    if (!await confirm({ message: "Видалити стелаж і всі його комірки?", variant: "danger" })) return;
     try {
       await api(`/api/warehouse/warehouses/${whId}/zones/${id}`, { method: "DELETE" });
       setZones((prev) => prev.filter((z) => z.id !== id));
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Помилка видалення");
+      toast.error(e instanceof Error ? e.message : "Помилка видалення");
     }
   }
 
@@ -733,6 +736,7 @@ export default function WarehouseDetailPage() {
           onDone={refresh}
         />
       )}
+      {dialog}
     </div>
   );
 }

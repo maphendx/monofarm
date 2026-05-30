@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import type { PrinterGroup } from "@/lib/types";
 
@@ -15,6 +16,7 @@ export function PrinterGroupsModal({
   onClose: () => void;
   onChange: () => void; // called after any mutating action so dashboard can reload
 }) {
+  const { confirm, dialog } = useConfirm();
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [newName, setNewName] = useState("");
@@ -98,7 +100,7 @@ export function PrinterGroupsModal({
     const label = g.printer_count > 0
       ? `Видалити групу "${g.name}"? ${g.printer_count} принтер(ів) буде знято з групи.`
       : `Видалити групу "${g.name}"?`;
-    if (!confirm(label)) return;
+    if (!await confirm({ message: label, variant: "danger" })) return;
     setError(null);
     try {
       await api(`/api/printer-groups/${g.id}`, { method: "DELETE" });
@@ -128,6 +130,7 @@ export function PrinterGroupsModal({
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title="Групи принтерів">
       <div className="space-y-4 text-sm">
         {/* create */}
@@ -250,5 +253,7 @@ export function PrinterGroupsModal({
         )}
       </div>
     </Modal>
+    {dialog}
+    </>
   );
 }

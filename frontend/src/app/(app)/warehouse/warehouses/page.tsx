@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 type WarehouseType = "raw" | "wip" | "finished" | "defect";
@@ -125,6 +127,7 @@ function WarehouseModal({
 
 export default function WarehousesPage() {
   const router = useRouter();
+  const { confirm, dialog } = useConfirm();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [stock,      setStock]      = useState<StockEntry[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -211,12 +214,12 @@ export default function WarehousesPage() {
                   </button>
                   <button
                     onClick={async () => {
-                      if (!window.confirm(`Видалити склад «${w.name}»?`)) return;
+                      if (!await confirm({ message: `Видалити склад «${w.name}»?`, variant: "danger" })) return;
                       try {
                         await api(`/api/warehouse/warehouses/${w.id}`, { method: "DELETE" });
                         setWarehouses((prev) => prev.filter((x) => x.id !== w.id));
                       } catch (e: unknown) {
-                        alert(e instanceof Error ? e.message : "Помилка видалення");
+                        toast.error(e instanceof Error ? e.message : "Помилка видалення");
                       }
                     }}
                     title="Видалити"
@@ -305,6 +308,7 @@ export default function WarehousesPage() {
           }}
         />
       )}
+      {dialog}
     </div>
   );
 }

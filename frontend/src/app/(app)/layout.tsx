@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Toaster } from "sonner";
 import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
 import { MascotLoader } from "@/components/ui/MascotLoader";
 import { SearchModal } from "@/components/ui/SearchModal";
@@ -79,6 +80,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
+      <Toaster position="bottom-right" richColors closeButton />
     </AuthProvider>
   );
 }

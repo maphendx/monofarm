@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
@@ -200,6 +202,7 @@ const COLS: ColDef[] = [
 ];
 
 export default function CashFlowPage() {
+  const { confirm, dialog } = useConfirm();
   const { from: defaultFrom, to: defaultTo } = thisMonthRange();
   const [transactions, setTransactions] = useState<CashTx[]>([]);
   const [summary,      setSummary]      = useState<Summary | null>(null);
@@ -232,13 +235,13 @@ export default function CashFlowPage() {
   useEffect(() => { load(); }, [load]);
 
   async function deleteTx(id: number) {
-    if (!confirm("Видалити транзакцію?")) return;
+    if (!await confirm({ message: "Видалити транзакцію?", variant: "danger" })) return;
     setDeleting(id);
     try {
       await api(`/api/warehouse/cashflow/${id}`, { method: "DELETE" });
       setTransactions((prev) => prev.filter((t) => t.id !== id));
       load(); // refresh summary
-    } catch { alert("Помилка видалення"); }
+    } catch { toast.error("Помилка видалення"); }
     finally { setDeleting(null); }
   }
 
@@ -431,6 +434,7 @@ export default function CashFlowPage() {
         orderedCols={colVis.orderedCols}
         setOrder={colVis.setOrder}
       />
+      {dialog}
     </div>
   );
 }

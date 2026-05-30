@@ -14,6 +14,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
@@ -462,6 +463,7 @@ function PrintTaskEditModal({ task, onClose, onSaved }: { task: PrintTask | null
 }
 
 function PrintTasksTab() {
+  const { confirm, dialog } = useConfirm();
   const [tasks, setTasks] = useState<PrintTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<PrintTaskStatus | "all">("all");
@@ -480,7 +482,7 @@ function PrintTasksTab() {
   useEffect(() => { load(); }, [load]);
 
   async function remove(task: PrintTask) {
-    if (!confirm(`Видалити "${task.title}"?`)) return;
+    if (!await confirm({ message: `Видалити "${task.title}"?`, variant: "danger" })) return;
     await api(`/api/queue/${task.id}`, { method: "DELETE" });
     setTasks(prev => prev.filter(t => t.id !== task.id));
   }
@@ -606,6 +608,7 @@ function PrintTasksTab() {
       <PrintTaskEditModal task={editing} onClose={() => setEditing(null)} onSaved={t => { upsert(t); setEditing(null); }} />
       <CompleteModal task={completing} onClose={() => setCompleting(null)}
         onDone={t => { upsert(t); setCompleting(null); }} />
+      {dialog}
     </div>
   );
 }

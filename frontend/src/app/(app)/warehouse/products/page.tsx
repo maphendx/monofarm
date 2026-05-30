@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { AuthImage } from "@/components/ui/AuthImage";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -188,6 +190,7 @@ function ProductModal({
   onClose: () => void;
   onSaved: (p: Product) => void;
 }) {
+  const { confirm, dialog } = useConfirm();
   const isEdit = product !== null;
   const src = product ?? prefill;  // for field defaults
 
@@ -230,14 +233,14 @@ function ProductModal({
       setImages(list);
       await refreshProduct();
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Помилка завантаження");
+      toast.error(e instanceof Error ? e.message : "Помилка завантаження");
     } finally {
       setImgBusy(false);
     }
   }
 
   async function deleteImage(imgId: number) {
-    if (!product || !window.confirm("Видалити фото?")) return;
+    if (!product || !await confirm({ message: "Видалити фото?", variant: "danger" })) return;
     setImgBusy(true);
     try {
       await api(`/api/warehouse/products/${product.id}/images/${imgId}`, { method: "DELETE" });
@@ -518,6 +521,7 @@ function ProductModal({
           </button>
         </div>
       </div>
+      {dialog}
     </div>
   );
 }
@@ -1211,6 +1215,7 @@ function FilterDropdown({
 }
 
 export default function ProductsPage() {
+  const { confirm, dialog } = useConfirm();
   const [products,   setProducts]   = useState<Product[]>([]);
   const [stock,      setStock]      = useState<StockEntry[]>([]);
   const [cats,       setCats]       = useState<ProductCat[]>([]);
@@ -1335,7 +1340,7 @@ export default function ProductsPage() {
   }
 
   async function archiveSelected() {
-    if (!window.confirm(`Архівувати ${selected.size} позицій?`)) return;
+    if (!await confirm({ message: `Архівувати ${selected.size} позицій?`, variant: "warn" })) return;
     setDeleting(true);
     try {
       await Promise.all([...selected].map((id) => api(`/api/warehouse/products/${id}/archive`, { method: "POST" })));
@@ -1354,7 +1359,7 @@ export default function ProductsPage() {
   }
 
   async function hardDeleteSelected() {
-    if (!window.confirm(`Видалити ${selected.size} позицій назавжди? Дію не можна скасувати.`)) return;
+    if (!await confirm({ message: `Видалити ${selected.size} позицій назавжди? Дію не можна скасувати.`, variant: "danger" })) return;
     setDeleting(true);
     const failed: string[] = [];
     try {
@@ -1368,7 +1373,7 @@ export default function ProductsPage() {
       }));
       setProducts((prev) => prev.filter((p) => !selected.has(p.id) || failed.includes(p.name)));
       setSelected(new Set());
-      if (failed.length) alert(`Не вдалося видалити: ${failed.join(", ")}. Є рухи або замовлення — заархівуйте їх.`);
+      if (failed.length) toast.error(`Не вдалося видалити: ${failed.join(", ")}. Є рухи або замовлення — заархівуйте їх.`);
     } finally { setDeleting(false); }
   }
 
@@ -1390,13 +1395,13 @@ export default function ProductsPage() {
   }
 
   async function hardDeleteOne(id: number, name: string) {
-    if (!window.confirm(`Видалити «${name}» назавжди?`)) return;
+    if (!await confirm({ message: `Видалити «${name}» назавжди?`, variant: "danger" })) return;
     try {
       await api(`/api/warehouse/products/${id}`, { method: "DELETE" });
       setProducts((prev) => prev.filter((p) => p.id !== id));
       setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) alert(e.message);
+      if (e instanceof ApiError && e.status === 409) toast.error(e.message);
     }
   }
 
@@ -1426,7 +1431,7 @@ export default function ProductsPage() {
       Object.entries(preview.mapping).forEach(([k, v]) => { if (v) initMap[parseInt(k)] = v; });
       setColMapping(initMap);
     } catch {
-      alert("Помилка читання файлу");
+      toast.error("Помилка читання файлу");
     } finally {
       setImporting(false);
     }
@@ -1448,7 +1453,7 @@ export default function ProductsPage() {
       setImportFile(null);
       await load(showArchive);
     } catch {
-      alert("Помилка імпорту");
+      toast.error("Помилка імпорту");
     } finally {
       setImporting(false);
     }
@@ -1467,7 +1472,7 @@ export default function ProductsPage() {
       setSpecImportResult(result);
       await load(showArchive);
     } catch {
-      alert("Помилка імпорту специфікацій");
+      toast.error("Помилка імпорту специфікацій");
     } finally {
       setSpecImporting(false);
     }
@@ -1927,6 +1932,7 @@ export default function ProductsPage() {
           { label: "Видалити",    onClick: hardDeleteSelected,  disabled: deleting, variant: "danger"  },
         ]}
       />
+      {dialog}
     </>
   );
 }

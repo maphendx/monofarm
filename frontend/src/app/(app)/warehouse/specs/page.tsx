@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
 import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
@@ -93,7 +94,7 @@ export default function SpecsPage() {
       setImportResult(result);
       await load();
     } catch {
-      alert("Помилка імпорту специфікацій");
+      toast.error("Помилка імпорту специфікацій");
     } finally {
       setImporting(false);
     }

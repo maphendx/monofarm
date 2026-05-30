@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { ApiError, api } from "@/lib/api";
@@ -84,7 +85,7 @@ export function PrinterCard({
       const updated = list.find((p) => p.id === printer.id);
       if (updated) onUpdated?.(updated);
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : "Помилка");
+      toast.error(err instanceof ApiError ? err.message : "Помилка");
     } finally {
       setBusy(null);
     }
