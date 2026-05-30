@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { ScannerPanel } from "@/components/warehouse/ScannerPanel";
+import { ScannerModal } from "@/components/warehouse/ScannerModal";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 type NavItem  = { href: string; label: string };
@@ -143,7 +143,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
         {children}
       </div>
 
-      {scannerOpen && <ScannerPanel onClose={() => setScannerOpen(false)} />}
+      {scannerOpen && <ScannerModal onClose={() => setScannerOpen(false)} />}
     </div>
   );
 }
