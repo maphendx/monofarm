@@ -234,6 +234,8 @@ function RelocateModal({
 
 // ── CellModal — manage stock inside one cell ───────────────────────────────────
 
+type AllProduct = { id: number; name: string; sku: string; unit: string };
+
 function CellModal({
   cell, unassigned, flatCells, onClose, onChanged,
 }: {
@@ -251,6 +253,15 @@ function CellModal({
   const [relocate,   setRelocate]   = useState<CellStockItem | null>(null);
   const [notes,      setNotes]      = useState(cell.notes ?? "");
   const [err,        setErr]        = useState<string | null>(null);
+
+  // assign any product (not just unassigned pool)
+  const [assignOpen,   setAssignOpen]   = useState(false);
+  const [allProducts,  setAllProducts]  = useState<AllProduct[]>([]);
+  const [assignSearch, setAssignSearch] = useState("");
+  const [assignPid,    setAssignPid]    = useState<number | null>(null);
+  const [assignQty,    setAssignQty]    = useState("1");
+  const [assignBusy,   setAssignBusy]   = useState(false);
+
   const inFlight = useRef(false);
 
   function saveNotes() {
@@ -258,6 +269,32 @@ function CellModal({
     api(`/api/warehouse/cells/${cell.id}`, { method: "PATCH", body: JSON.stringify({ notes: notes.trim() }) })
       .then(() => onChanged())
       .catch(() => {});
+  }
+
+  function openAssign() {
+    setAssignOpen(true);
+    setAssignSearch(""); setAssignPid(null); setAssignQty("1");
+    if (allProducts.length === 0)
+      api<AllProduct[]>("/api/warehouse/products").then(setAllProducts).catch(() => {});
+  }
+
+  async function submitAssign() {
+    if (!assignPid || assignBusy) return;
+    setAssignBusy(true); setErr(null);
+    try {
+      const item = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ product_id: assignPid, quantity: parseFloat(assignQty) || 1 }),
+      });
+      setStock((prev) => {
+        const idx = prev.findIndex((s) => s.product_id === item.product_id);
+        return idx >= 0 ? prev.map((s, i) => i === idx ? item : s) : [...prev, item];
+      });
+      setAssignOpen(false); setAssignPid(null); setAssignQty("1");
+      onChanged();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Помилка");
+    } finally { setAssignBusy(false); }
   }
 
   const usedIds = new Set(stock.map((s) => s.product_id));
@@ -399,6 +436,81 @@ function CellModal({
             <p className="pt-1 text-xs text-[var(--text-faint)]">
               Немає нерозкладеного товару на цьому складі — спершу зробіть «Отримання».
             </p>
+          )}
+
+          {/* Assign any product from catalog */}
+          {!assignOpen ? (
+            <button
+              type="button"
+              onClick={openAssign}
+              className="mt-1 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-2 text-xs text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+            >
+              <span className="text-base leading-none">+</span>
+              Призначити номенклатуру
+            </button>
+          ) : (
+            <div className="rounded-lg border border-[var(--border-strong)] bg-[var(--bg)] p-3 space-y-2">
+              <p className="text-xs font-medium text-[var(--text-muted)]">Призначити номенклатуру</p>
+              <input
+                type="search"
+                autoFocus
+                placeholder="Пошук товару…"
+                value={assignSearch}
+                onChange={(e) => { setAssignSearch(e.target.value); setAssignPid(null); }}
+                className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-sm outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--accent)]"
+              />
+              {assignSearch.trim().length >= 1 && (
+                <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
+                  {allProducts
+                    .filter((p) => {
+                      const q = assignSearch.toLowerCase();
+                      return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+                    })
+                    .slice(0, 20)
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setAssignPid(p.id); setAssignSearch(`${p.sku} · ${p.name}`); }}
+                        className={[
+                          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]",
+                          assignPid === p.id ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "",
+                        ].join(" ")}
+                      >
+                        <span className="font-mono text-xs text-[var(--text-faint)]">{p.sku}</span>
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))}
+                  {allProducts.filter((p) => {
+                    const q = assignSearch.toLowerCase();
+                    return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+                  }).length === 0 && (
+                    <p className="px-3 py-2 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
+                  )}
+                </div>
+              )}
+              {assignPid && (
+                <div className="flex gap-2">
+                  <input
+                    type="number" min="0.01" step="0.01" value={assignQty}
+                    onChange={(e) => setAssignQty(e.target.value)}
+                    className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={submitAssign}
+                    disabled={assignBusy || parseFloat(assignQty) <= 0}
+                    className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {assignBusy ? "…" : "Призначити"}
+                  </button>
+                  <button type="button" onClick={() => setAssignOpen(false)}
+                    className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {err && <p className="text-sm text-[var(--state-error)]">{err}</p>}

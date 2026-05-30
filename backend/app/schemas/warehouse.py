@@ -557,6 +557,11 @@ class CellStockSet(BaseModel):
     quantity:   Decimal
 
 
+class CellAssign(BaseModel):
+    product_id: int
+    quantity:   Decimal
+
+
 class CellStockOut(BaseModel):
     product_id:   int
     product_name: str

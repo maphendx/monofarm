@@ -27,7 +27,7 @@ from app.models.warehouse import (
 from app.schemas.warehouse import (
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
-    CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet,
+    CellAssign, CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
@@ -887,6 +887,51 @@ def remove_cell_stock(
         _pick_from_cell(cell, product_id, cs.quantity, org.id, db,
                         kind=CellMoveKind.adjust, created_by_id=user.id)
     db.commit()
+
+
+@router.post("/cells/{cell_id}/assign", response_model=CellStockOut, status_code=status.HTTP_201_CREATED)
+def assign_cell_product(
+    cell_id: int,
+    payload: CellAssign,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CellStockOut:
+    """Assign any product directly to a cell via ADJUSTMENT — no prior stock required."""
+    from decimal import Decimal as D
+    cell = _get_cell(cell_id, org, db)
+    product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Кількість має бути > 0")
+
+    wh_id = _cell_warehouse_id(cell, db)
+    _lock_stock_row(payload.product_id, wh_id, db)
+
+    m = WarehouseMovement(
+        organization_id=org.id,
+        type=MovementType.ADJUSTMENT,
+        product_id=payload.product_id,
+        warehouse_to_id=wh_id,
+        quantity=payload.quantity,
+        reason=f"Призначення в комірку {cell.code}",
+        created_by_id=user.id,
+    )
+    db.add(m)
+    db.flush()
+    _apply_movement(m, db)
+    _putaway(cell, payload.product_id, payload.quantity, org.id, db,
+             kind=CellMoveKind.putaway, movement_id=m.id, created_by_id=user.id)
+    db.commit()
+
+    cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
+    return CellStockOut(
+        product_id=payload.product_id,
+        product_name=product.name,
+        product_sku=product.sku,
+        quantity=cs.quantity if cs else payload.quantity,
+    )
 
 
 @router.patch("/cells/{cell_id}", response_model=CellOut)
