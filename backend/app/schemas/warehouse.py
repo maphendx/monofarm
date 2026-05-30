@@ -1,3 +1,4 @@
+import enum
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -634,6 +635,27 @@ class RelocateRequest(BaseModel):
     from_cell_id: int
     to_cell_id:   int
     quantity:     Decimal
+
+
+class ScanAction(str, enum.Enum):
+    """Operation chosen by scanning a functional ACTION QR."""
+    write_off = "write_off"   # remove from a cell + warehouse ledger (WRITE_OFF)
+    transfer  = "transfer"    # cell → cell within the same warehouse (relocate)
+    receive   = "receive"     # book into a cell (PURCHASE_IN); unit_cost optional → AVCO
+    stocktake = "stocktake"   # set a cell to the counted qty and correct the total
+
+
+class ScanActionRequest(BaseModel):
+    action:     ScanAction
+    product_id: int
+    quantity:   Decimal
+    cell_id:    int                    # source (write_off/transfer/stocktake) or target (receive)
+    to_cell_id: int | None = None      # transfer destination
+    unit_cost:  Decimal | None = None  # receive only, optional
+
+
+class ScanActionResult(BaseModel):
+    message: str
 
 
 class UnassignedItemOut(BaseModel):
