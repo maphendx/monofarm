@@ -11,9 +11,6 @@ import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 type BatchStatus = "draft" | "active" | "paused" | "done" | "cancelled";
 
-type Product = { id: number; name: string; sku: string };
-type Spec    = { id: number; name: string; version: number; is_default: boolean };
-
 const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
   { status: "draft",  label: "Заплановано", accent: "border-[var(--border-strong)] " },
   { status: "active", label: "Друкується",  accent: "border-[var(--accent)]" },
@@ -145,7 +142,15 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
       <div className="mb-1 flex items-start justify-between gap-2">
-        <span className="font-medium leading-tight">{batch.product_name}</span>
+        <div className="min-w-0">
+          <span className="font-medium leading-tight">{batch.product_name}</span>
+          {batch.print_task_id && (
+            <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[var(--accent)]">
+              <span>🖨</span>
+              <span className="truncate">#{batch.print_task_id}{batch.print_task_title ? ` · ${batch.print_task_title}` : ""}</span>
+            </p>
+          )}
+        </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {batch.status === "active" && (
             <span className="rounded-full bg-[rgba(56,189,248,.08)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">● live</span>

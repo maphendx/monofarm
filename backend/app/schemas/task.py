@@ -13,6 +13,7 @@ class PrintTaskCreate(BaseModel):
     estimated_minutes: int | None = None
     deadline: date | None = None
     notes: str | None = None
+    product_id: int | None = None
 
 
 class FilamentConsumption(BaseModel):
@@ -29,6 +30,7 @@ class PrintTaskUpdate(BaseModel):
     deadline: date | None = None
     notes: str | None = None
     status: PrintTaskStatus | None = None
+    product_id: int | None = None
     filament_consumptions: list[FilamentConsumption] | None = None
     # production outcome (supplied together with status=done)
     pieces_ok: int | None = None
@@ -51,6 +53,8 @@ class PrintTaskOut(BaseModel):
     file_size: int | None = None
     filament_meta: dict | None = None
     filament_consumptions: list | None = None
+    product_id: int | None = None
+    product_name: str | None = None
     pieces_ok: int | None = None
     pieces_defective: int | None = None
     defect_reason: str | None = None

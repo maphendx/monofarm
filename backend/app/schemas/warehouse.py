@@ -372,6 +372,7 @@ class BatchCreate(BaseModel):
     due_date:         date | None = None
     notes:            str | None = None
     order_id:         int | None = None
+    print_task_id:    int | None = None
 
 
 class BatchUpdate(BaseModel):
@@ -397,13 +398,15 @@ class BatchOut(BaseModel):
     printed_qty:      int
     good_qty:         int
     defect_qty:       int
-    status:           BatchStatus
-    due_date:         date | None
-    order_id:         int | None
-    notes:            str | None
-    components:       list[BatchComponentOut] = []
-    created_at:       datetime
-    updated_at:       datetime
+    status:            BatchStatus
+    due_date:          date | None
+    order_id:          int | None
+    print_task_id:     int | None = None
+    print_task_title:  str | None = None
+    notes:             str | None
+    components:        list[BatchComponentOut] = []
+    created_at:        datetime
+    updated_at:        datetime
 
     class Config:
         from_attributes = True

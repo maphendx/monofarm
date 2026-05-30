@@ -71,6 +71,11 @@ export function TaskQueueItem({
             📎 {task.file_name}
           </span>
         )}
+        {task.product_name && (
+          <span className="rounded bg-[var(--state-ok)]/10 px-1 py-0.5 text-[10px] text-[var(--state-ok)]">
+            {task.product_name}
+          </span>
+        )}
       </div>
       {task.filament_meta && (
         <div className="mt-1.5">

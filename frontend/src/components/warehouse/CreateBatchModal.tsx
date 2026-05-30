@@ -19,40 +19,46 @@ export type Batch = {
   id: number; product_name: string; specification_id: number | null;
   target_qty: number; printed_qty: number; good_qty: number; defect_qty: number;
   status: BatchStatus; due_date: string | null; notes: string | null;
+  print_task_id: number | null; print_task_title: string | null;
   components: BatchComponent[];
 };
 
-type Product = { id: number; name: string; sku: string };
-type Spec    = { id: number; name: string; version: number; is_default: boolean };
+type Product  = { id: number; name: string; sku: string };
+type Spec     = { id: number; name: string; version: number; is_default: boolean };
+type FarmTask = { id: number; title: string; quantity: number; status: string; product_id: number | null };
 
 export function CreateBatchModal({
   open, onClose, onCreated, initialProductId
-}: { 
-  open: boolean; 
-  onClose: () => void; 
+}: {
+  open: boolean;
+  onClose: () => void;
   onCreated: (b: Batch) => void;
   initialProductId?: string;
 }) {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [specs,    setSpecs]    = useState<Spec[]>([]);
+  const [products,   setProducts]   = useState<Product[]>([]);
+  const [specs,      setSpecs]      = useState<Spec[]>([]);
+  const [farmTasks,  setFarmTasks]  = useState<FarmTask[]>([]);
   const [productId,  setProductId]  = useState("");
   const [specId,     setSpecId]     = useState("");
   const [targetQty,  setTargetQty]  = useState("10");
   const [dueDate,    setDueDate]    = useState("");
   const [notes,      setNotes]      = useState("");
+  const [printTaskId, setPrintTaskId] = useState("");
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-    setProductId(initialProductId || ""); 
-    setSpecId(""); 
-    setTargetQty("10"); 
-    setDueDate(""); 
-    setNotes(""); 
+    setProductId(initialProductId || "");
+    setSpecId("");
+    setTargetQty("10");
+    setDueDate("");
+    setNotes("");
+    setPrintTaskId("");
     setError(null);
     api<Product[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+    api<FarmTask[]>("/api/queue").then(setFarmTasks).catch(() => {});
   }, [open, initialProductId]);
 
   useEffect(() => {
@@ -72,9 +78,10 @@ export function CreateBatchModal({
         product_id: parseInt(productId),
         target_qty: parseInt(targetQty),
       };
-      if (specId)   body.specification_id = parseInt(specId);
-      if (dueDate)  body.due_date = dueDate;
-      if (notes.trim()) body.notes = notes.trim();
+      if (specId)        body.specification_id = parseInt(specId);
+      if (dueDate)       body.due_date = dueDate;
+      if (notes.trim())  body.notes = notes.trim();
+      if (printTaskId)   body.print_task_id = parseInt(printTaskId);
       const b = await api<Batch>("/api/warehouse/batches", { method: "POST", body: JSON.stringify(body) });
       onCreated(b);
       onClose();
@@ -130,6 +137,26 @@ export function CreateBatchModal({
           <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
+
+        {(() => {
+          const linked = farmTasks.filter(
+            t => t.product_id === parseInt(productId) && t.status !== "done" && t.status !== "cancelled"
+          );
+          if (!productId || linked.length === 0) return null;
+          return (
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">
+                Задача на фермі <span className="text-[var(--text-faint)]">(опційно)</span>
+              </span>
+              <select value={printTaskId} onChange={e => setPrintTaskId(e.target.value)} className={inputCls}>
+                <option value="">— не прив'язано —</option>
+                {linked.map(t => (
+                  <option key={t.id} value={t.id}>#{t.id} · {t.title} ×{t.quantity}</option>
+                ))}
+              </select>
+            </label>
+          );
+        })()}
 
         {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>

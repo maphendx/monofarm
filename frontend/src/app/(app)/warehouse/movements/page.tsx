@@ -217,7 +217,13 @@ export default function MovementsPage() {
                     </td>
                   )}
                   {colVis.isVisible("reason") && (
-                    <td className="px-4 py-3 text-xs text-[var(--text-faint)]">{m.reason ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-faint)]">
+                      {m.reason
+                        ? m.reason.startsWith("Задача #")
+                          ? <span className="inline-flex items-center gap-1"><span className="rounded bg-[var(--accent)]/10 px-1 py-px text-[10px] text-[var(--accent)]">авто</span>{m.reason}</span>
+                          : m.reason
+                        : "—"}
+                    </td>
                   )}
                 </tr>
               );

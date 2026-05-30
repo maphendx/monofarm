@@ -106,6 +106,8 @@ export interface PrintTask {
   file_size: number | null;
   filament_meta: FilamentMeta | null;
   filament_consumptions: { filament_id: number; grams: number }[] | null;
+  product_id: number | null;
+  product_name: string | null;
   pieces_ok: number | null;
   pieces_defective: number | null;
   defect_reason: string | null;

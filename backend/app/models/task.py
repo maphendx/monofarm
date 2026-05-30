@@ -49,6 +49,10 @@ class PrintTask(Base):
     defect_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     material_cost_uah: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # optional link to a warehouse product (enables auto PRODUCTION_IN on done)
+    product_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("wh_products.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

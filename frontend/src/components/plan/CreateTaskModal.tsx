@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { ApiError, api, getToken } from "@/lib/api";
 import type { PrintTask } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+type ProductOption = { id: number; name: string; sku: string };
 
 export function CreateTaskModal({
   open,
@@ -23,15 +25,21 @@ export function CreateTaskModal({
   const [filamentColor, setFilamentColor] = useState("");
   const [etaMin, setEtaMin] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [productId, setProductId] = useState<number | null>(null);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (open) api<ProductOption[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+  }, [open]);
+
   function reset() {
     setTitle(""); setQty("1"); setFilamentType("");
     setFilamentColor(""); setEtaMin(""); setDeadline("");
-    setFile(null); setError(null);
+    setProductId(null); setFile(null); setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -48,6 +56,7 @@ export function CreateTaskModal({
           filament_color: filamentColor || null,
           estimated_minutes: etaMin ? parseInt(etaMin) : null,
           deadline: deadline || null,
+          product_id: productId,
         }),
       });
 
@@ -131,6 +140,20 @@ export function CreateTaskModal({
               className="input" />
           </label>
         </div>
+        {products.length > 0 && (
+          <label className="block">
+            <span className="mb-1 block">
+              Товар <span className="text-[var(--text-faint)]">— при завершенні автоматично додасть на склад</span>
+            </span>
+            <select value={productId ?? ""} onChange={e => setProductId(e.target.value ? Number(e.target.value) : null)}
+              className="input">
+              <option value="">— не прив'язано до SKU —</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.sku} · {p.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="mb-1 block">Дедлайн (опційно)</span>
           <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)}

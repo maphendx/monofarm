@@ -283,6 +283,7 @@ class ProductionBatch(Base):
     status:           Mapped[BatchStatus] = mapped_column(Enum(BatchStatus), default=BatchStatus.draft, nullable=False, index=True)
     due_date:         Mapped[date | None] = mapped_column(Date, nullable=True)
     order_id:         Mapped[int | None]  = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="SET NULL"), nullable=True)
+    print_task_id:    Mapped[int | None]  = mapped_column(Integer, ForeignKey("print_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     notes:            Mapped[str | None]  = mapped_column(Text, nullable=True)
     created_by_id:    Mapped[int | None]  = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:       Mapped[datetime]    = mapped_column(DateTime(timezone=True), server_default=func.now())

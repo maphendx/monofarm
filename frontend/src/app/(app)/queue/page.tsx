@@ -344,6 +344,12 @@ function CompleteModal({ task, onClose, onDone }: {
             {costPerOk != null && <p className="text-xs text-[var(--text-muted)]">{costPerOk.toFixed(2)} грн/шт. для {piecesOk} добрих</p>}
           </div>
         )}
+        {task.product_name && piecesOk > 0 && (
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--state-ok)]/20 bg-[var(--state-ok)]/5 px-3 py-2 text-xs text-[var(--state-ok)]">
+            <span>→</span>
+            <span>{piecesOk} шт. <strong>{task.product_name}</strong> з'являться на складі готової продукції</span>
+          </div>
+        )}
         {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
       </div>
     </Modal>
@@ -381,7 +387,14 @@ function QueueRow({
           ) : (
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)]">3mf</div>
           )}
-          <span className="truncate text-[var(--accent)]">{task.file_name ?? task.title}</span>
+          <div className="min-w-0">
+            <span className="block truncate text-[var(--accent)]">{task.file_name ?? task.title}</span>
+            {task.product_name && (
+              <span className="inline-block mt-0.5 rounded bg-[var(--state-ok)]/10 px-1 py-px text-[10px] text-[var(--state-ok)]" title="Прив'язано до товару">
+                {task.product_name}
+              </span>
+            )}
+          </div>
         </div>
       </td>
 
@@ -395,10 +408,15 @@ function QueueRow({
       {status === "done" ? (
         <td className="px-3 py-2">
           {task.pieces_ok != null ? (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-[var(--state-ok)]">✓ {task.pieces_ok}</span>
-              {(task.pieces_defective ?? 0) > 0 && (
-                <span className="text-[var(--state-error)]" title={task.defect_reason ?? ""}>✕ {task.pieces_defective}</span>
+            <div className="flex flex-col gap-0.5 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-[var(--state-ok)]">✓ {task.pieces_ok}</span>
+                {(task.pieces_defective ?? 0) > 0 && (
+                  <span className="text-[var(--state-error)]" title={task.defect_reason ?? ""}>✕ {task.pieces_defective}</span>
+                )}
+              </div>
+              {task.product_name && task.pieces_ok > 0 && (
+                <span className="text-[10px] text-[var(--state-ok)] opacity-70">+{task.pieces_ok} на склад</span>
               )}
             </div>
           ) : <span className="text-[var(--text-muted)]">×{task.quantity}</span>}

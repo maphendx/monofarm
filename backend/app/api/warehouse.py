@@ -2605,6 +2605,12 @@ def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
                 is_sufficient=available_stock is None or available_stock >= total_qty,
             ))
 
+    print_task_title: str | None = None
+    if b.print_task_id:
+        from app.models.task import PrintTask
+        pt = db.get(PrintTask, b.print_task_id)
+        print_task_title = pt.title if pt else None
+
     return BatchOut(
         id=b.id, product_id=b.product_id,
         product_name=p.name if p else "",  # type: ignore[union-attr]
@@ -2612,7 +2618,10 @@ def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
         target_qty=b.target_qty, printed_qty=b.printed_qty,
         good_qty=b.good_qty, defect_qty=b.defect_qty,
         status=b.status, due_date=b.due_date,
-        order_id=b.order_id, notes=b.notes,
+        order_id=b.order_id,
+        print_task_id=b.print_task_id,
+        print_task_title=print_task_title,
+        notes=b.notes,
         components=components,
         created_at=b.created_at, updated_at=b.updated_at,
     )
@@ -3073,8 +3082,9 @@ def cancel_order(
     if o.status == OrderStatus.shipped:
         raise HTTPException(status_code=400, detail="Cannot cancel a shipped order")
 
-    # Release reservations if the order was confirmed
-    if o.status == OrderStatus.confirmed:
+    # Release reservations for any status that had stock locked (confirmed → ready)
+    _RESERVED_STATUSES = {OrderStatus.confirmed, OrderStatus.in_production, OrderStatus.ready}
+    if o.status in _RESERVED_STATUSES:
         items = db.query(OrderItem).filter_by(order_id=o.id).all()
         for item in items:
             if item.warehouse_id:
