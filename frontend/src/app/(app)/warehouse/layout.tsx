@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -73,17 +73,6 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const activeGroup = NAV_GROUPS.find((g) => isGroupActive(g, pathname)) ?? null;
   const [scannerOpen, setScannerOpen] = useState(false);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        setScannerOpen((v) => !v);
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
 
   return (
     <div className="-mx-6 -mt-6">

@@ -7,6 +7,7 @@ import { Toaster } from "sonner";
 import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
 import { MascotLoader } from "@/components/ui/MascotLoader";
 import { SearchModal } from "@/components/ui/SearchModal";
+import { ScannerModal } from "@/components/warehouse/ScannerModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
@@ -21,18 +22,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [ready,       setReady]       = useState(false);
   const [pinned,      setPinned]      = useState(false);
   const [searchOpen,  setSearchOpen]  = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   // Restore pinned state from localStorage after mount
   useEffect(() => {
     setPinned(localStorage.getItem("sidebar-pinned") === "true");
   }, []);
 
-  // ⌘K / Ctrl+K — open search from anywhere
+  // ⌘K / Ctrl+K — search  |  ⌘⇧S / Ctrl⇧S — scanner
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setSearchOpen((v) => !v);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setScannerOpen((v) => !v);
       }
     }
     document.addEventListener("keydown", onKey);
@@ -79,7 +85,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
+      {searchOpen  && <SearchModal  onClose={() => setSearchOpen(false)} />}
+      {scannerOpen && <ScannerModal onClose={() => setScannerOpen(false)} />}
       <Toaster position="bottom-right" richColors closeButton />
     </AuthProvider>
   );
