@@ -10,47 +10,60 @@ import { API_URL, getToken } from "@/lib/api";
 
 export type WarehouseLabelItem =
   | { type: "cell"; id: number; code: string; zone_name: string; notes?: string | null }
-  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null };
+  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[] };
 
-type LabelSize  = "50x25" | "57x32" | "100x50" | "100x100";
-type PrintMode  = "zebra" | "a4";
-type LabelFields = { secondary: boolean; tertiary: boolean; photo: boolean };
+type LabelSize   = "50x25" | "57x32" | "100x30" | "100x50" | "100x100";
+type PrintMode   = "zebra" | "a4";
+type LabelFields = { secondary: boolean; photo: boolean };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SIZES = [
+  { key: "100x30"  as LabelSize, label: "100×30 мм",  wMm: 100, hMm: 30  },
+  { key: "100x50"  as LabelSize, label: "100×50 мм",  wMm: 100, hMm: 50  },
   { key: "50x25"   as LabelSize, label: "50×25 мм",   wMm: 50,  hMm: 25  },
   { key: "57x32"   as LabelSize, label: "57×32 мм",   wMm: 57,  hMm: 32  },
-  { key: "100x50"  as LabelSize, label: "100×50 мм",  wMm: 100, hMm: 50  },
   { key: "100x100" as LabelSize, label: "100×100 мм", wMm: 100, hMm: 100 },
 ];
 
-const DEFAULT_SIZE: Record<PrintMode, LabelSize> = { zebra: "57x32", a4: "100x50" };
-const DEFAULT_FIELDS: LabelFields = { secondary: true, tertiary: false, photo: true };
+const DEFAULT_SIZE: Record<PrintMode, LabelSize> = { a4: "100x30", zebra: "57x32" };
+const DEFAULT_FIELDS: LabelFields = { secondary: true, photo: true };
 const PX_PER_MM = 96 / 25.4;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function defaultQr(item: WarehouseLabelItem): string {
-  return item.type === "cell" ? `CELL:${item.id}` : (item.barcode || `PROD:${item.sku}`);
+  return item.type === "cell" ? `CELL:${item.id}` : (item.barcode || item.sku);
 }
 
-async function toDataUrl(src: string): Promise<string | null> {
-  if (src.startsWith("http")) return src; // absolute URL (S3) — use as-is
+async function fetchDataUrl(src: string): Promise<string | null> {
+  if (src.startsWith("http")) return src;
   try {
-    const r = await fetch(API_URL + src, {
-      headers: { Authorization: `Bearer ${getToken() ?? ""}` },
-    });
+    const r = await fetch(API_URL + src, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } });
     if (!r.ok) return null;
     const blob = await r.blob();
-    return await new Promise<string>(resolve => {
+    return await new Promise<string>(res => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
+      reader.onload = () => res(reader.result as string);
       reader.readAsDataURL(blob);
     });
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+async function generateCode128Url(text: string, hPx: number): Promise<string | null> {
+  try {
+    const mod = await import("jsbarcode");
+    const JsBarcode = ((mod as { default?: unknown }).default ?? mod) as (el: HTMLCanvasElement, v: string, o: object) => void;
+    const canvas = document.createElement("canvas");
+    JsBarcode(canvas, text, {
+      format: "CODE128", displayValue: true,
+      fontSize: Math.max(8, Math.round(hPx * 0.18)),
+      textMargin: 2, margin: 4,
+      width: 2, height: Math.round(hPx * 0.62),
+      background: "#ffffff", lineColor: "#000000",
+    });
+    return canvas.toDataURL("image/png");
+  } catch { return null; }
 }
 
 function buildZpl(
@@ -73,16 +86,15 @@ function buildZpl(
   return items.map((item, i) => {
     const primary   = item.type === "cell" ? item.code : safe(item.name);
     const secondary = item.type === "cell" ? item.zone_name : item.sku;
-    const tertiary  = item.type === "cell" ? (item.notes ?? "") : (item.barcode ?? "");
+    const cats      = item.type === "product" ? (item.categories?.slice(0, 2).join(", ") ?? "") : "";
 
     return [
       "^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0",
       `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${safe(qrVals[i] ?? defaultQr(item))}^FS`,
-      `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safe(primary)}^FS`,
+      `^FO${txX},${Math.floor(H * 0.30)}^A0N,${fsP},${fsP}^FD${safe(primary)}^FS`,
       fields.secondary && secondary
-        ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safe(secondary)}^FS` : "",
-      fields.tertiary && tertiary
-        ? `^FO${txX},${Math.floor(H * 0.80)}^A0N,${fsS},${fsS}^FD${safe(tertiary)}^FS` : "",
+        ? `^FO${txX},${Math.floor(H * 0.58)}^A0N,${fsS},${fsS}^FD${safe(secondary)}^FS` : "",
+      cats ? `^FO${txX},${Math.floor(H * 0.78)}^A0N,${fsS},${fsS}^FD${safe(cats)}^FS` : "",
       "^XZ",
     ].filter(Boolean).join("\n");
   }).join("\n");
@@ -100,18 +112,18 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
       signal: AbortSignal.timeout(3000),
     });
     return wr.ok ? "ok" : "error";
-  } catch {
-    return "not_available";
-  }
+  } catch { return "not_available"; }
 }
 
 // ─── LabelCard ────────────────────────────────────────────────────────────────
-// Cell:            [QR | code + zone]
-// Product zebra:   [QR | name + sku]
-// Product a4:      [photo | name + sku + barcode | QR]
+//
+//  Cell:              [QR] | [code (big) + zone]
+//  Product zebra:     [QR] | [name + sku]
+//  Product a4:        [photo?] | [full name + categories] | [Code128 barcode]
+//
 
 function LabelCard({
-  item, qrVal, cfg, fields, mode, imgDataUrl,
+  item, qrVal, cfg, fields, mode, imgDataUrl, barcodeDataUrl,
 }: {
   item: WarehouseLabelItem;
   qrVal: string;
@@ -119,11 +131,12 @@ function LabelCard({
   fields: LabelFields;
   mode: PrintMode;
   imgDataUrl?: string;
+  barcodeDataUrl?: string;
 }) {
-  const pad = 1.5;
-  const qrMm = cfg.hMm - pad * 2;
+  const pad   = 1.5;
+  const sqMm  = cfg.hMm - pad * 2;   // side-column square size (mm)
 
-  const base: React.CSSProperties = {
+  const outer: React.CSSProperties = {
     width: `${cfg.wMm}mm`, height: `${cfg.hMm}mm`,
     border: "0.3mm solid #ccc", borderRadius: "1mm",
     display: "flex", flexDirection: "row", alignItems: "center",
@@ -133,7 +146,7 @@ function LabelCard({
   };
 
   const qrEl = (
-    <div style={{ width: `${qrMm}mm`, height: `${qrMm}mm`, flexShrink: 0 }}>
+    <div style={{ width: `${sqMm}mm`, height: `${sqMm}mm`, flexShrink: 0 }}>
       <QRCode value={qrVal || " "} level="M" size={128}
         style={{ width: "100%", height: "100%", display: "block" }} />
     </div>
@@ -143,22 +156,22 @@ function LabelCard({
   const fsSub     = `${Math.max(2.2, cfg.hMm * 0.16)}mm`;
   const gap       = `${pad * 0.4}mm`;
 
-  // ── Cell ────────────────────────────────────────────────────────────────────
+  // ── Cell (QR left, text right) ──────────────────────────────────────────────
   if (item.type === "cell") {
     return (
-      <div style={base}>
+      <div style={outer}>
         {qrEl}
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
           <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item.code}
           </div>
           {fields.secondary && (
-            <div style={{ fontSize: fsSub, color: "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: fsSub, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {item.zone_name}
             </div>
           )}
-          {fields.tertiary && item.notes && (
-            <div style={{ fontSize: fsSub, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.notes && (
+            <div style={{ fontSize: fsSub, color: "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {item.notes}
             </div>
           )}
@@ -167,65 +180,79 @@ function LabelCard({
     );
   }
 
-  // ── Product — Zebra (QR left, text right, no photo) ─────────────────────────
+  // ── Product Zebra (QR left, name + sku right) ────────────────────────────────
   if (mode === "zebra") {
     return (
-      <div style={base}>
+      <div style={outer}>
         {qrEl}
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
           <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item.name}
           </div>
-          {fields.secondary && (
-            <div style={{ fontSize: fsSub, color: "#444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.sku}
+          <div style={{ fontSize: fsSub, color: "#555", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.sku}
+          </div>
+          {item.categories?.length ? (
+            <div style={{ fontSize: fsSub, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.categories.slice(0, 2).join(", ")}
             </div>
-          )}
-          {fields.tertiary && item.barcode && (
-            <div style={{ fontSize: fsSub, color: "#888", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.barcode}
-            </div>
-          )}
+          ) : null}
         </div>
       </div>
     );
   }
 
-  // ── Product — A4 (photo left, text center, QR right) ────────────────────────
-  const photoMm = qrMm;
-  const showPhoto = fields.photo && (imgDataUrl || true); // always reserve space if photo enabled
+  // ── Product A4 (photo | name+categories | Code128 barcode) ──────────────────
+  //
+  //   [photo sqMm×sqMm] | [flex-1 text] | [barcode]
+  //
+  const bcAreaH = `${sqMm * 0.88}mm`;   // barcode image height
+  const bcAreaW = `${cfg.wMm * 0.38}mm`; // barcode column width
 
   return (
-    <div style={base}>
-      {/* Photo */}
-      {showPhoto && (
-        <div style={{ width: `${photoMm}mm`, height: `${photoMm}mm`, flexShrink: 0, overflow: "hidden", borderRadius: "0.5mm", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={outer}>
+      {/* Photo (optional) */}
+      {fields.photo && (
+        <div style={{
+          width: `${sqMm}mm`, height: `${sqMm}mm`, flexShrink: 0,
+          overflow: "hidden", borderRadius: "0.5mm",
+          background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
           {imgDataUrl
             ? <img src={imgDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            : <div style={{ fontSize: `${Math.max(2, cfg.hMm * 0.15)}mm`, color: "#bbb", textAlign: "center" }}>фото</div>
+            : <span style={{ fontSize: `${Math.max(2, sqMm * 0.22)}mm`, color: "#ccc" }}>фото</span>
           }
         </div>
       )}
 
-      {/* Text */}
+      {/* Name + categories */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
-        <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.15, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+        <div style={{
+          fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.2,
+          overflow: "hidden",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+        }}>
           {item.name}
         </div>
-        {fields.secondary && (
-          <div style={{ fontSize: fsSub, color: "#444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.sku}
+        {fields.secondary && item.categories?.length ? (
+          <div style={{ fontSize: fsSub, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.categories.slice(0, 3).join(" · ")}
           </div>
-        )}
-        {fields.tertiary && item.barcode && (
-          <div style={{ fontSize: fsSub, color: "#888", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.barcode}
-          </div>
-        )}
+        ) : null}
+        <div style={{ fontSize: fsSub, color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.sku}
+        </div>
       </div>
 
-      {/* QR */}
-      {qrEl}
+      {/* Code128 barcode */}
+      <div style={{ flexShrink: 0, width: bcAreaW, height: `${sqMm}mm`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {barcodeDataUrl
+          ? <img src={barcodeDataUrl} alt={item.barcode || item.sku} style={{ height: bcAreaH, width: "100%", objectFit: "contain", display: "block" }} />
+          : <div style={{ width: "100%", height: bcAreaH, background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: `${Math.max(1.8, sqMm * 0.14)}mm`, color: "#bbb" }}>штрих-код</span>
+            </div>
+        }
+      </div>
     </div>
   );
 }
@@ -248,17 +275,32 @@ export function WarehouseLabelModal({
   const [customQr, setCustomQr] = useState(() => defaultQr(items[0]));
   const [status,   setStatus]   = useState<string | null>(null);
   const [busy,     setBusy]     = useState(false);
-  const [imgUrls,  setImgUrls]  = useState<Record<number, string>>({});
+  const [imgUrls,      setImgUrls]      = useState<Record<number, string>>({});
+  const [barcodeUrls,  setBarcodeUrls]  = useState<Record<number, string>>({});
   const hiddenRef = useRef<HTMLDivElement>(null);
   const inFlight  = useRef(false);
 
-  // Pre-fetch product images as data URLs for A4 print capture
+  const cfg      = SIZES.find(s => s.key === sizeKey)!;
+  const isSingle = items.length === 1;
+
+  // Pre-fetch images + pre-render Code128 barcodes for A4 print capture
   useEffect(() => {
     if (!isProduct) return;
+
+    const hPx = Math.round(cfg.hMm * (96 / 25.4));
+
     items.forEach(item => {
-      if (item.type !== "product" || !item.image_url) return;
-      toDataUrl(item.image_url).then(url => {
-        if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
+      if (item.type !== "product") return;
+
+      if (item.image_url) {
+        fetchDataUrl(item.image_url).then(url => {
+          if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
+        });
+      }
+
+      const barcodeText = item.barcode || item.sku || `PROD:${item.id}`;
+      generateCode128Url(barcodeText, hPx).then(url => {
+        if (url) setBarcodeUrls(prev => ({ ...prev, [item.id]: url }));
       });
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -268,36 +310,37 @@ export function WarehouseLabelModal({
     setSizeKey(DEFAULT_SIZE[m]);
   }
 
-  const cfg      = SIZES.find(s => s.key === sizeKey)!;
-  const isSingle = items.length === 1;
-
   function getQrVal(item: WarehouseLabelItem): string {
     return isSingle ? (customQr || defaultQr(item)) : defaultQr(item);
   }
 
-  // ── A4 print ────────────────────────────────────────────────────────────────
+  // ── A4 print ─────────────────────────────────────────────────────────────────
   function printA4() {
     const container = hiddenRef.current;
     if (!container) return;
 
-    const labelHtml = Array.from(container.children).map(el => el.outerHTML).join("");
+    // Strip explicit SVG width/height attrs so CSS can control sizing
+    const labelHtml = Array.from(container.children)
+      .map(el => el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1"))
+      .join("");
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4;margin:10mm}
-  body{display:flex;flex-wrap:wrap;gap:2mm;align-content:flex-start;background:#fff}
-  svg{width:100%!important;height:100%!important;display:block}
-  img{display:block;max-width:100%;max-height:100%}
+  @page{size:A4;margin:8mm}
+  body{display:flex;flex-wrap:wrap;gap:1.5mm;align-content:flex-start;background:#fff;padding:0}
+  svg{width:100%!important;height:100%!important;display:block!important}
+  img{display:block}
 </style></head><body>
 ${labelHtml}
-<script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
+<script>window.onload=function(){setTimeout(function(){window.print();},500);}</script>
 </body></html>`;
 
     const w = window.open("", "_blank");
     if (w) { w.document.open(); w.document.write(html); w.document.close(); }
   }
 
-  // ── Zebra ZPL ───────────────────────────────────────────────────────────────
+  // ── Zebra ZPL ────────────────────────────────────────────────────────────────
   async function printZebra() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setStatus(null);
@@ -312,8 +355,8 @@ ${labelHtml}
     inFlight.current = false; setBusy(false);
   }
 
-  // ── Preview ─────────────────────────────────────────────────────────────────
-  const PREVIEW_W = 248;
+  // ── Preview ──────────────────────────────────────────────────────────────────
+  const PREVIEW_W = 260;
   const naturalW  = cfg.wMm * PX_PER_MM;
   const naturalH  = cfg.hMm * PX_PER_MM;
   const scale     = PREVIEW_W / naturalW;
@@ -321,25 +364,16 @@ ${labelHtml}
 
   const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm font-mono outline-none focus:border-[var(--border-focus)]";
 
-  // Field labels depend on item type
-  const fieldDefs = items[0].type === "cell"
-    ? [
-        { key: "secondary" as const, label: "Назва зони" },
-        { key: "tertiary"  as const, label: "Нотатка"    },
-      ]
-    : mode === "a4"
-      ? [
-          { key: "photo"     as const, label: "Фото"              },
-          { key: "secondary" as const, label: "Артикул (SKU)"     },
-          { key: "tertiary"  as const, label: "Штрих-код (текст)" },
-        ]
-      : [
-          { key: "secondary" as const, label: "Артикул (SKU)"     },
-          { key: "tertiary"  as const, label: "Штрих-код (текст)" },
-        ];
+  const previewItem  = items[0];
+  const previewImg   = previewItem.type === "product" ? imgUrls[previewItem.id]     : undefined;
+  const previewBC    = previewItem.type === "product" ? barcodeUrls[previewItem.id] : undefined;
 
-  const previewItem = items[0];
-  const previewImgUrl = previewItem.type === "product" ? imgUrls[previewItem.id] : undefined;
+  // Field toggles depend on item type and mode
+  const fieldRows = [
+    ...(isProduct && mode === "a4" ? [{ key: "photo"     as keyof LabelFields, label: "Фото" }] : []),
+    ...(isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Категорії" }] : []),
+    ...(!isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Назва зони" }] : []),
+  ];
 
   return (
     <>
@@ -350,7 +384,9 @@ ${labelHtml}
         title={
           items.length > 1
             ? `Мітки — ${items.length} ${isProduct ? "позицій" : "комірок"}`
-            : `Мітка — ${isProduct ? (items[0] as { name: string }).name : (items[0] as { code: string }).code}`
+            : `Мітка — ${isProduct
+                ? (items[0] as Extract<WarehouseLabelItem, { type: "product" }>).name
+                : (items[0] as Extract<WarehouseLabelItem, { type: "cell" }>).code}`
         }
         footer={
           <>
@@ -386,7 +422,8 @@ ${labelHtml}
                     cfg={cfg}
                     fields={fields}
                     mode={mode}
-                    imgDataUrl={previewImgUrl}
+                    imgDataUrl={previewImg}
+                    barcodeDataUrl={previewBC}
                   />
                 </div>
               </div>
@@ -407,8 +444,8 @@ ${labelHtml}
                 <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Формат</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {([
-                    { key: "a4"    as PrintMode, label: "A4 / фото папір" },
-                    { key: "zebra" as PrintMode, label: "Zebra (термо)"   },
+                    { key: "a4" as PrintMode,    label: "A4 / фото папір" },
+                    { key: "zebra" as PrintMode,  label: "Zebra (термо)"  },
                   ]).map(m => (
                     <button key={m.key} type="button" onClick={() => switchMode(m.key)}
                       className={[
@@ -442,9 +479,11 @@ ${labelHtml}
               </div>
             </div>
 
-            {/* QR content */}
+            {/* QR / barcode content (single item) */}
             <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Вміст QR</p>
+              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
+                {mode === "a4" && isProduct ? "Вміст штрих-коду" : "Вміст QR"}
+              </p>
               {isSingle ? (
                 <>
                   <input
@@ -464,35 +503,37 @@ ${labelHtml}
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--text-faint)]">
                   {items[0].type === "cell"
                     ? <>Кожна: <span className="font-mono">CELL:{"{id}"}</span></>
-                    : <>Кожна: штрих-код або <span className="font-mono">PROD:{"{sku}"}</span></>
+                    : <>Кожна: штрих-код або <span className="font-mono">{"{sku}"}</span></>
                   }
                 </div>
               )}
             </div>
 
-            {/* Fields */}
-            <div>
-              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Показувати</p>
-              <div className="space-y-2">
-                {fieldDefs.map(({ key, label }) => (
-                  <label key={key} className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={fields[key]}
-                      onChange={() => setFields(prev => ({ ...prev, [key]: !prev[key] }))}
-                      className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-neutral-900 dark:accent-neutral-100"
-                    />
-                    <span className="text-xs text-[var(--text)]">{label}</span>
-                  </label>
-                ))}
+            {/* Field toggles */}
+            {fieldRows.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Показувати</p>
+                <div className="space-y-2">
+                  {fieldRows.map(({ key, label }) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={fields[key]}
+                        onChange={() => setFields(prev => ({ ...prev, [key]: !prev[key] }))}
+                        className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-neutral-900 dark:accent-neutral-100"
+                      />
+                      <span className="text-xs text-[var(--text)]">{label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         </div>
       </Modal>
 
-      {/* Hidden labels for A4 print capture */}
+      {/* Hidden labels for A4 print capture — rendered in portal so they are outside the modal's overflow */}
       {createPortal(
         <div
           ref={hiddenRef}
@@ -506,7 +547,8 @@ ${labelHtml}
               cfg={cfg}
               fields={fields}
               mode={mode}
-              imgDataUrl={item.type === "product" ? imgUrls[item.id] : undefined}
+              imgDataUrl={item.type === "product" ? imgUrls[item.id]     : undefined}
+              barcodeDataUrl={item.type === "product" ? barcodeUrls[item.id] : undefined}
             />
           ))}
         </div>,

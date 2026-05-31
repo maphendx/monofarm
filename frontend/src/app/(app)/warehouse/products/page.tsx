@@ -1986,7 +1986,7 @@ export default function ProductsPage() {
       {labelModal && (() => {
         const labelItems: WarehouseLabelItem[] = products
           .filter(p => selected.has(p.id))
-          .map(p => ({ type: "product" as const, id: p.id, name: p.name, sku: p.sku, barcode: p.barcode, image_url: p.image_url }));
+          .map(p => ({ type: "product" as const, id: p.id, name: p.name, sku: p.sku, barcode: p.barcode, image_url: p.image_url, categories: p.categories }));
         return labelItems.length > 0
           ? <WarehouseLabelModal items={labelItems} onClose={() => setLabelModal(false)} />
           : null;
