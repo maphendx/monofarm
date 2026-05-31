@@ -401,16 +401,19 @@ export default function LabelsPage() {
         {/* Canvas area */}
         <div className="flex flex-1 items-start justify-center overflow-auto bg-[var(--surface-hi)] p-8"
           onClick={() => setSelId(null)}>
-          {/* Shadow + border wrapper */}
-          <div style={{ position: "relative", width: CANVAS_W_PX, height: canvasH, flexShrink: 0 }}
-            className="shadow-xl" onClick={e => e.stopPropagation()}>
-
+          {/* Canvas wrapper — outer container in px, overlays pixel-perfect */}
+          <div
+            ref={canvasRef}
+            style={{ position: "relative", width: CANVAS_W_PX, height: canvasH, flexShrink: 0 }}
+            className="shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Rendered label (mm-based, scaled) */}
-            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: tplNatW, height: tplNatH, position: "absolute" }}>
+            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: tplNatW, height: tplNatH, position: "absolute", pointerEvents: "none" }}>
               <LabelCanvas template={editing} vars={previewVars} barcodeUrls={previewBcUrls} />
             </div>
 
-            {/* Interaction overlays (px-based, in scaled space) */}
+            {/* Interaction overlays (px-based in outer container) */}
             {editing.elements.map(el => {
               const lPx = el.x * PX_PER_MM * scale;
               const tPx = el.y * PX_PER_MM * scale;
@@ -420,7 +423,6 @@ export default function LabelsPage() {
               return (
                 <div
                   key={el.id}
-                  ref={isSel ? canvasRef : undefined}
                   style={{
                     position: "absolute",
                     left: lPx, top: tPx,
@@ -456,8 +458,6 @@ export default function LabelsPage() {
               );
             })}
 
-            {/* Canvas ref target for coordinate math */}
-            <div ref={canvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
           </div>
         </div>
 

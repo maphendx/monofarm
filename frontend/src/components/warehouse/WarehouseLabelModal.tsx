@@ -155,6 +155,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [customQr,    setCustomQr]    = useState<string>("");
   const [imgUrls,     setImgUrls]     = useState<Record<number,string>>({});
   const [bcUrls,      setBcUrls]      = useState<Record<string,string>>({});
+  const [printBcUrls, setPrintBcUrls] = useState<Record<string,string>>({});
   const [status,      setStatus]      = useState<string | null>(null);
   const [busy,        setBusy]        = useState(false);
   const [saving,      setSaving]      = useState(false);
@@ -329,19 +330,34 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     } finally { inFlight.current = false; setSaving(false); }
   }
 
-  // ── A4 print — renders React labels directly into DOM, uses window.print() ──
+  // ── A4 print — renders React labels into DOM, uses window.print() ──────────
   async function printA4() {
     if (!activeTpl || printing) return;
+
+    // 1. Generate ALL barcode data URLs before rendering (no async gaps)
+    const allBc: Record<string, string> = { ...bcUrls };
+    const hPx = Math.round(activeTpl.height_mm * 203 / 25.4);
+    await Promise.all(
+      activeTpl.elements
+        .filter(e => e.type === "barcode")
+        .flatMap(el =>
+          items.map(async item => {
+            const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+            const raw  = substituteVars(el.value ?? "", vars as Record<string, string>);
+            if (!raw || allBc[raw]) return;
+            const url = await generateCode128Url(raw, hPx);
+            if (url) allBc[raw] = url;
+          }),
+        ),
+    );
+    setPrintBcUrls(allBc);
+
+    // 2. Render print portal + trigger print
     setPrinting(true);
-    // Let React render the print portal before triggering print
-    await new Promise(r => setTimeout(r, 250));
-    const cleanup = () => {
-      setPrinting(false);
-      window.removeEventListener("afterprint", cleanup);
-    };
+    await new Promise(r => setTimeout(r, 300));
+    const cleanup = () => { setPrinting(false); window.removeEventListener("afterprint", cleanup); };
     window.addEventListener("afterprint", cleanup);
     window.print();
-    // Fallback: clean up after 30s if afterprint never fires
     setTimeout(cleanup, 30_000);
   }
 
@@ -488,46 +504,51 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
             </div>
           ) : (
             <>
-              {/* Canvas box */}
-              <div style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0 }}
-                className="shadow-xl" onClick={e => e.stopPropagation()}>
-                {/* Rendered label */}
-                {/* Scaled canvas + overlays share the SAME transform container → mm units always align */}
-                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: displayTpl.width_mm * PX_PER_MM, height: displayTpl.height_mm * PX_PER_MM, position: "absolute" }}>
+              {/* Canvas box — outer container in px, overlays in px coords (no transform math) */}
+              <div
+                ref={canvasBoxRef}
+                style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0 }}
+                className="shadow-xl"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Scaled label render */}
+                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: displayTpl.width_mm * PX_PER_MM, height: displayTpl.height_mm * PX_PER_MM, position: "absolute", pointerEvents: "none" }}>
                   <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls} />
-
-                  {/* Interaction overlays in mm — perfectly aligned with canvas elements */}
-                  {editMode && (localTpl?.elements ?? []).map(el => {
-                    const isSel = selId === el.id;
-                    const hMm   = Math.max(el.h, 1);
-                    // handle size in mm (2mm × 2mm, centered on corner)
-                    const HSZ = 2;
-                    return (
-                      <div key={el.id} style={{
-                        position: "absolute",
-                        left: `${el.x}mm`, top: `${el.y}mm`,
-                        width: `${el.w}mm`, height: `${hMm}mm`,
-                        cursor: "move",
-                        outline: isSel ? "0.5mm solid #06b6d4" : "0.3mm dashed rgba(150,150,150,0.4)",
-                        boxSizing: "border-box", zIndex: isSel ? 100 : 1,
-                      }} onMouseDown={e => onElMouseDown(e, el)}>
-                        {isSel && HANDLES.map(h => {
-                          const { left, top } = handlePos(h, el.w * PX_PER_MM, hMm * PX_PER_MM);
-                          return (
-                            <div key={h} style={{
-                              position: "absolute",
-                              left: left - 5, top: top - 5,
-                              width: 10, height: 10,
-                              background: "#06b6d4", border: "1.5px solid #fff",
-                              borderRadius: 2, cursor: HANDLE_CURSOR[h], zIndex: 20,
-                              boxShadow: "0 0 0 1px #06b6d4",
-                            }} onMouseDown={e => onHandleMouseDown(e, el, h)} />
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
                 </div>
+
+                {/* Interaction overlays — in OUTER px space, pixel-perfect with rendered content */}
+                {editMode && (localTpl?.elements ?? []).map(el => {
+                  const lp = el.x * PX_PER_MM * scale;
+                  const tp = el.y * PX_PER_MM * scale;
+                  const wp = el.w * PX_PER_MM * scale;
+                  const hp = Math.max(el.h * PX_PER_MM * scale, 4);
+                  const isSel = selId === el.id;
+                  return (
+                    <div key={el.id} style={{
+                      position: "absolute",
+                      left: lp, top: tp, width: wp, height: hp,
+                      cursor: "move",
+                      outline: isSel ? "2px solid #06b6d4" : "1px dashed rgba(150,150,150,0.35)",
+                      boxSizing: "border-box",
+                      zIndex: isSel ? 100 : 2,
+                    }} onMouseDown={e => onElMouseDown(e, el)}>
+                      {isSel && HANDLES.map(h => {
+                        const { left, top } = handlePos(h, wp, hp);
+                        return (
+                          <div key={h} style={{
+                            position: "absolute",
+                            left: left - 5, top: top - 5,
+                            width: 10, height: 10,
+                            background: "#06b6d4", border: "2px solid #fff",
+                            borderRadius: 2, cursor: HANDLE_CURSOR[h],
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                            zIndex: 20,
+                          }} onMouseDown={e => onHandleMouseDown(e, el, h)} />
+                        );
+                      })}
+                    </div>
+                  );
+                })}
               </div>
               {/* Info below canvas */}
               <p className="text-[10px] text-[var(--text-faint)]">
@@ -635,44 +656,57 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     </div>
     </div>  {/* end modal dialog */}
 
-    {/* Print portal — rendered only during print, hidden on screen */}
+    {/* Print portal — React-rendered labels, @media print shows only these */}
     {printing && activeTpl && createPortal(
-      <>
-        {/* eslint-disable-next-line react/no-danger */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            body > *:not(#wl-a4-print) { display: none !important; }
-            @page { size: A4; margin: 8mm; }
-          }
-          @media screen { #wl-a4-print { display: none !important; } }
-        ` }} />
-        <div id="wl-a4-print" style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "2mm",
-          alignContent: "flex-start",
-          background: "#fff",
-          fontFamily: "Arial, Helvetica, sans-serif",
-        }}>
-          {items.map((item, i) => {
-            const vars = itemToVars(
-              item,
-              isSingle && i === 0 ? qrVal : defaultQr(item),
-              item.type === "product" ? imgUrls[item.id] : undefined,
-            );
-            const bcu: Record<string, string> = {};
-            activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
-              const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
-              if (bcUrls[raw]) bcu[raw] = bcUrls[raw];
-            });
-            return (
-              <div key={i} style={{ breakInside: "avoid", pageBreakInside: "avoid", flexShrink: 0 }}>
-                <LabelCanvas template={activeTpl} vars={vars} barcodeUrls={bcu} />
-              </div>
-            );
-          })}
-        </div>
-      </>,
+      (() => {
+        // Auto-calculate minimum margin so labels fit maximum columns
+        // A4 = 210mm. Find largest margin where at least 1 label fits.
+        // Try 2 columns first; fall back to 1.
+        const lw = activeTpl.width_mm;
+        const GAP = 2;
+        const marginForTwo = Math.max(1, Math.floor((210 - 2 * lw - GAP) / 2));
+        const margin = lw * 2 + GAP + marginForTwo * 2 <= 210 ? marginForTwo : Math.max(1, Math.floor((210 - lw) / 2));
+        const cols = lw * 2 + GAP + margin * 2 <= 210 ? 2 : 1;
+
+        return (
+          <>
+            {/* eslint-disable-next-line react/no-danger */}
+            <style dangerouslySetInnerHTML={{ __html: `
+              @media print {
+                body > *:not(#wl-a4-print) { display: none !important; }
+                @page { size: A4; margin: ${margin}mm; }
+              }
+              @media screen { #wl-a4-print { display: none !important; } }
+            ` }} />
+            <div id="wl-a4-print" style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${cols}, ${lw}mm)`,
+              gap: `${GAP}mm`,
+              alignContent: "flex-start",
+              background: "#fff",
+              fontFamily: "Arial, Helvetica, sans-serif",
+            }}>
+              {items.map((item, i) => {
+                const vars = itemToVars(
+                  item,
+                  isSingle && i === 0 ? qrVal : defaultQr(item),
+                  item.type === "product" ? imgUrls[item.id] : undefined,
+                );
+                const bcu: Record<string, string> = {};
+                activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+                  const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
+                  if (printBcUrls[raw]) bcu[raw] = printBcUrls[raw];
+                });
+                return (
+                  <div key={i} style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+                    <LabelCanvas template={activeTpl} vars={vars} barcodeUrls={bcu} />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })(),
       document.body,
     )}
     </>
