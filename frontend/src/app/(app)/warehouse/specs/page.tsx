@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
-import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
+import { SpecModal } from "@/components/warehouse/SpecModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
