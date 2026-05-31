@@ -1084,14 +1084,17 @@ export default function OrdersPage() {
         onUpdated={(updated) => { updateOrder(updated); setPaymentOrder(updated); }}
       />
 
-      <CreateBatchModal
-        open={batchOrder !== null}
-        onClose={() => setBatchOrder(null)}
-        initialProductId={batchOrder?.items[0]?.product_id?.toString()}
-        initialOrderId={batchOrder?.id}
-        orderNumber={batchOrder?.order_number}
-        onCreated={(_b: Batch) => { setBatchOrder(null); load(); }}
-      />
+      {batchOrder !== null && (
+        <CreateBatchModal
+          key={batchOrder.id}
+          open
+          onClose={() => setBatchOrder(null)}
+          initialProductId={batchOrder.items[0]?.product_id?.toString()}
+          initialOrderId={batchOrder.id}
+          orderNumber={batchOrder.order_number}
+          onCreated={(_b: Batch) => { setBatchOrder(null); load(); }}
+        />
+      )}
 
       <ColumnSettingsModal
         open={colSettingsOpen}

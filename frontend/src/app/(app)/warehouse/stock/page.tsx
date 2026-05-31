@@ -769,12 +769,15 @@ export default function StockPage() {
         onCreated={() => { load(); }}
       />
 
-      <CreateBatchModal
-        open={batchProductId !== null}
-        onClose={() => setBatchProductId(null)}
-        initialProductId={batchProductId ?? undefined}
-        onCreated={() => {}}
-      />
+      {batchProductId !== null && (
+        <CreateBatchModal
+          key={batchProductId}
+          open
+          onClose={() => setBatchProductId(null)}
+          initialProductId={batchProductId}
+          onCreated={() => {}}
+        />
+      )}
 
       <ColumnSettingsModal
         open={colSettingsOpen}

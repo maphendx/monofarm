@@ -40,37 +40,36 @@ export function CreateBatchModal({
   const [products,    setProducts]    = useState<Product[]>([]);
   const [specs,       setSpecs]       = useState<Spec[]>([]);
   const [farmTasks,   setFarmTasks]   = useState<FarmTask[]>([]);
-  const [productId,   setProductId]   = useState("");
+  const [productId,   setProductId]   = useState(initialProductId || "");
   const [specId,      setSpecId]      = useState("");
   const [targetQty,   setTargetQty]   = useState("10");
   const [dueDate,     setDueDate]     = useState("");
   const [notes,       setNotes]       = useState("");
   const [printTaskId, setPrintTaskId] = useState("");
-  const [orderId,     setOrderId]     = useState<number | undefined>(undefined);
+  const [orderId,     setOrderId]     = useState<number | undefined>(initialOrderId);
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
-    setProductId(initialProductId || "");
-    setOrderId(initialOrderId);
-    setSpecId("");
-    setTargetQty("10");
-    setDueDate("");
-    setNotes("");
-    setPrintTaskId("");
-    setError(null);
     api<Product[]>("/api/warehouse/products").then(setProducts).catch(() => {});
     api<FarmTask[]>("/api/queue").then(setFarmTasks).catch(() => {});
-  }, [open, initialProductId, initialOrderId]);
+    if (initialProductId) {
+      api<Spec[]>(`/api/warehouse/products/${initialProductId}/specs`)
+        .then((ss) => { setSpecs(ss); setSpecId(ss.find((s) => s.is_default)?.id.toString() ?? ss[0]?.id.toString() ?? ""); })
+        .catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (!productId) { setSpecs([]); setSpecId(""); return; }
-    api<Spec[]>(`/api/warehouse/products/${productId}/specs`)
+  function handleProductChange(id: string) {
+    setProductId(id);
+    setSpecs([]);
+    setSpecId("");
+    if (!id) return;
+    api<Spec[]>(`/api/warehouse/products/${id}/specs`)
       .then((ss) => { setSpecs(ss); setSpecId(ss.find((s) => s.is_default)?.id.toString() ?? ss[0]?.id.toString() ?? ""); })
       .catch(() => {});
-  }, [productId]);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -118,7 +117,7 @@ export function CreateBatchModal({
         )}
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)] ">Товар</span>
-          <select required value={productId} onChange={(e) => setProductId(e.target.value)} className={inputCls}>
+          <select required value={productId} onChange={(e) => handleProductChange(e.target.value)} className={inputCls}>
             <option value="">— обери товар —</option>
             {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>)}
           </select>

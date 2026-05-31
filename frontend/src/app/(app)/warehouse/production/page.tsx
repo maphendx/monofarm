@@ -295,11 +295,14 @@ export default function ProductionPage() {
         })}
       </div>
 
-      <CreateBatchModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(b) => setBatches((prev) => [b, ...prev])}
-      />
+      {createOpen && (
+        <CreateBatchModal
+          key="new"
+          open
+          onClose={() => setCreateOpen(false)}
+          onCreated={(b) => setBatches((prev) => [b, ...prev])}
+        />
+      )}
 
       {batchToClose && (
         <CloseBatchModal
