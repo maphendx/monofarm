@@ -137,7 +137,14 @@ export function CreateMovementModal({
   const [whFromId,      setWhFromId]      = useState("");
   const [whToId,        setWhToId]        = useState("");
   const [counterpartyId, setCounterpartyId] = useState("");
-  const [lines,         setLines]         = useState<LineItem[]>([newLine()]);
+  const [lines,         setLines]         = useState<LineItem[]>(() => {
+    const first = newLine();
+    if (initialProductId) {
+      first.productId = initialProductId;
+      first.quantity  = initialQuantity || "1";
+    }
+    return [first];
+  });
   const [reason,        setReason]        = useState("");
   const [cellId,        setCellId]        = useState("");
   const [cells,         setCells]         = useState<FlatCell[]>([]);
@@ -146,15 +153,7 @@ export function CreateMovementModal({
   const inFlight = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
-    setMType(initialType);
-    setWhFromId(""); setWhToId(""); setCounterpartyId(""); setReason(""); setError(null);
-    const first = newLine();
-    if (initialProductId) {
-      first.productId = initialProductId;
-      first.quantity  = initialQuantity || "1";
-    }
-    setLines([first]);
+    const first = lines[0];
     Promise.all([
       api<Product[]>("/api/warehouse/products"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
@@ -168,7 +167,7 @@ export function CreateMovementModal({
         if (prod) setLines([{ ...first, search: prod.name, unit: prod.unit }]);
       }
     }).catch(() => {});
-  }, [open, initialType, initialProductId, initialQuantity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const meta = TYPE_META[mType];
 

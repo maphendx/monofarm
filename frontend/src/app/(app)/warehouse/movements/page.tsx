@@ -241,11 +241,14 @@ export default function MovementsPage() {
         </div>
       )}
 
-      <CreateMovementModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={m => { setItems(prev => [m, ...prev]); setTotal(t => t != null ? t + 1 : null); }}
-      />
+      {createOpen && (
+        <CreateMovementModal
+          key="new"
+          open
+          onClose={() => setCreateOpen(false)}
+          onCreated={m => { setItems(prev => [m, ...prev]); setTotal(t => t != null ? t + 1 : null); }}
+        />
+      )}
 
       <ColumnSettingsModal
         open={colSettingsOpen}

@@ -760,14 +760,17 @@ export default function StockPage() {
         ✎ Клікніть Мін / Бажаний / Коробка щоб редагувати прямо в таблиці · «Замовити» = кількість коробок до бажаного рівня
       </p>
 
-      <CreateMovementModal
-        open={movementOpen}
-        onClose={() => { setMovementOpen(false); setMovementProductId(null); setMovementQuantity(null); }}
-        initialType={movementType}
-        initialProductId={movementProductId ?? undefined}
-        initialQuantity={movementQuantity ?? undefined}
-        onCreated={() => { load(); }}
-      />
+      {movementOpen && (
+        <CreateMovementModal
+          key={`${movementType}-${movementProductId ?? "any"}`}
+          open
+          onClose={() => { setMovementOpen(false); setMovementProductId(null); setMovementQuantity(null); }}
+          initialType={movementType}
+          initialProductId={movementProductId ?? undefined}
+          initialQuantity={movementQuantity ?? undefined}
+          onCreated={() => { load(); }}
+        />
+      )}
 
       {batchProductId !== null && (
         <CreateBatchModal
