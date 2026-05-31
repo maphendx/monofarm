@@ -1,4 +1,3 @@
-import re
 
 import requests as _requests
 from fastapi import APIRouter, Depends, HTTPException, status

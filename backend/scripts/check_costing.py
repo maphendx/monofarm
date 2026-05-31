@@ -63,7 +63,7 @@ def main() -> None:
                     )
 
             # Cash flow direction per type in this org
-            print(f"\n  Cash flow check — movement counts by type:")
+            print("\n  Cash flow check — movement counts by type:")
             _CF = {
                 MovementType.SALE_OUT:       "inflow  (revenue)",
                 MovementType.PURCHASE_IN:    "outflow (purchase)",

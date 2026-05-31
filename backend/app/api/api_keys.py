@@ -11,7 +11,6 @@ Storage: SHA-256 hex digest of raw key. High-entropy random = no salt needed.
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 from datetime import datetime, timezone
 

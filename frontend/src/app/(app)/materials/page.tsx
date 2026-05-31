@@ -525,7 +525,7 @@ function AdjustModal({
             placeholder="напр. 250" className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-[var(--text-muted)]">Причина (необов'язково)</span>
+          <span className="mb-1 block text-xs text-[var(--text-muted)]">Причина (необов’язково)</span>
           <input type="text" value={reason} onChange={e => setReason(e.target.value)}
             placeholder="Нова котушка, витрата на замовлення #12…" className={inputCls} />
         </label>

@@ -157,7 +157,7 @@ export default function OnboardingPage() {
                 </div>
                 {os === "windows" && (
                   <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
-                    Запусти в PowerShell (не cmd). Після встановлення значок з'явиться в системному треї.
+                    Запусти в PowerShell (не cmd). Після встановлення значок з’явиться в системному треї.
                   </p>
                 )}
               </div>

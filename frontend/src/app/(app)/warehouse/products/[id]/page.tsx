@@ -169,7 +169,7 @@ function AddComponentForm({
           <span className="mb-0.5 block text-[10px] text-[var(--text-faint)]">Продукт на складі</span>
           <select value={productId} onChange={e => setProductId(e.target.value)}
             className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs">
-            <option value="">— не прив'язано —</option>
+            <option value="">— не прив’язано —</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </label>

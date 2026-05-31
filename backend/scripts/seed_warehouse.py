@@ -1,5 +1,6 @@
 """Seed warehouse module with demo data (idempotent on warehouses/products by name)."""
-import os, sys
+import os
+import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from decimal import Decimal
@@ -64,7 +65,7 @@ def main():
         # Warehouses
         wh_fin = get_or_create_wh(db, org.id, "Готова продукція", WarehouseType.finished, "Полиця A")
         wh_raw = get_or_create_wh(db, org.id, "Сировина",         WarehouseType.raw,      "Полиця B–C")
-        wh_bad = get_or_create_wh(db, org.id, "Брак",             WarehouseType.defect,   "Полиця D")
+        get_or_create_wh(db, org.id, "Брак",             WarehouseType.defect,   "Полиця D")
 
         # Products
         products_data = [

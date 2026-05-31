@@ -381,7 +381,7 @@ def update_task(
                 .filter(
                     Warehouse.organization_id == org.id,
                     Warehouse.type == WarehouseType.finished,
-                    Warehouse.is_active == True,
+                    Warehouse.is_active,
                 )
                 .order_by(Warehouse.id)
                 .first()

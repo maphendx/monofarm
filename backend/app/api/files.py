@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org, get_current_user, require_roles
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
 from app.models.gcode_folder import GcodeFolder

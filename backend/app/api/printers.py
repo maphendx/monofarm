@@ -14,8 +14,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org, get_current_user, require_roles
-from app.core.config import settings
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.plan import PlanEntry
@@ -467,10 +466,9 @@ async def camera_stream(
     org_id = user.organization_id
 
     # go2rtc stream URL — uses bambu:// for A1/P1 (port 6000), rtsps:// for X1 (port 322)
-    go2rtc_stream_url = go2rtc._stream_url(row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
-    go2rtc_name = go2rtc.stream_name(row.bambu_dev_id)
+    go2rtc._stream_url(row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
+    go2rtc.stream_name(row.bambu_dev_id)
     # go2rtc MJPEG endpoint — accessed locally at localhost:1984 from farm PC
-    go2rtc_local_url = f"http://localhost:1984/api/stream.mjpeg?src={go2rtc_name}"
 
     # ── Tunnel path: native Bambu binary protocol via agent ───────────────────
     # Agent on farm PC connects directly to printer:6000 using the documented

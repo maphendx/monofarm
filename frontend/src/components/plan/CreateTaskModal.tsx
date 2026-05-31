@@ -147,7 +147,7 @@ export function CreateTaskModal({
             </span>
             <select value={productId ?? ""} onChange={e => setProductId(e.target.value ? Number(e.target.value) : null)}
               className="input">
-              <option value="">— не прив'язано до SKU —</option>
+              <option value="">— не прив’язано до SKU —</option>
               {products.map(p => (
                 <option key={p.id} value={p.id}>{p.sku} · {p.name}</option>
               ))}

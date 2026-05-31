@@ -775,6 +775,7 @@ def cloud_upload_and_print(
     project_id = project.get("project_id") or project.get("id", "")
     model_id = project.get("model_id") or project_id
     upload_url = project.get("upload_url") or data.get("upload_url")
+    cover_url = project.get("cover_url") or project.get("cover") or ""
     if not upload_url:
         raise BambuError(f"Bambu Cloud: no upload_url in project response: {data}")
 

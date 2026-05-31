@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.models.organization import Organization, _slugify
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 
 

@@ -963,7 +963,7 @@ function KeyCRMSection() {
             type="password" autoComplete="new-password"
             placeholder={data?.keycrm_configured ? "••••••••" : "Секрет для підпису вебхука"}
             className={inputCls} />
-          <p className="mt-1 text-xs text-[var(--text-faint)]">Придумайте будь-який рядок — вставте його ж у KeyCRM у полі "Secret"</p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">Придумайте будь-який рядок — вставте його ж у KeyCRM у полі &quot;Secret&quot;</p>
         </label>
         {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
         <button type="submit" disabled={saving}

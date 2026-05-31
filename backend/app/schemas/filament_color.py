@@ -18,7 +18,7 @@ class FilamentColorOut(BaseModel):
     name: str
     hex_color: str
     sort_order: int
-    
+
 
     class Config:
         from_attributes = True

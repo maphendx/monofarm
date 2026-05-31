@@ -155,10 +155,15 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
     return () => { if (walkTimer.current) clearInterval(walkTimer.current); };
   }, [isMoving]);
 
-  /* Keep refs in sync each render */
-  hasAlertRef.current = needsAttentionPrinterIds(printers).length > 0;
-  const hasAlert = hasAlertRef.current;
-  isMovingRef.current = isMoving;
+  const hasAlert = needsAttentionPrinterIds(printers).length > 0;
+
+  useEffect(() => {
+    hasAlertRef.current = hasAlert;
+  }, [hasAlert]);
+
+  useEffect(() => {
+    isMovingRef.current = isMoving;
+  }, [isMoving]);
 
   /* Wave interval: toggle arm frame while waving */
   useEffect(() => {

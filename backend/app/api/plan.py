@@ -10,7 +10,7 @@ from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.plan import PlanEntry
-from app.models.printer import Printer, PrinterKind
+from app.models.printer import Printer
 from app.models.task import PrintTask
 from app.models.user import UserRole
 from app.schemas.plan import PlanEntryCreate, PlanEntryOut, PlanEntryUpdate

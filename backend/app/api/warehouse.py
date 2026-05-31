@@ -992,7 +992,6 @@ def assign_cell_product(
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> CellStockOut:
     """Assign any product directly to a cell via ADJUSTMENT — no prior stock required."""
-    from decimal import Decimal as D
     cell = _get_cell(cell_id, org, db)
     product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
     if not product:

@@ -8,7 +8,6 @@ bookkeeping detail and is NOT needed for Moonraker API calls. We strip it.
 from __future__ import annotations
 
 import logging
-import time
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 

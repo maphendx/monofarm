@@ -87,7 +87,7 @@ def main() -> None:
         ok("reserve order", reserve.get("status") == "confirmed")
 
     # Ship (must NOT create CashTransaction)
-    cf_before = req("GET", f"/api/warehouse/cashflow", token=token)
+    cf_before = req("GET", "/api/warehouse/cashflow", token=token)
     cf_count_before = len(cf_before) if isinstance(cf_before, list) else 0
 
     ship = req("POST", f"/api/warehouse/orders/{oid}/ship", token=token)
@@ -98,13 +98,13 @@ def main() -> None:
         ok("ship order", ship.get("status") == "shipped")
         shipped = True
 
-        cf_after = req("GET", f"/api/warehouse/cashflow", token=token)
+        cf_after = req("GET", "/api/warehouse/cashflow", token=token)
         cf_count_after = len(cf_after) if isinstance(cf_after, list) else 0
         ok("ship does NOT create CashTransaction", cf_count_after == cf_count_before,
            f"before={cf_count_before} after={cf_count_after}")
 
         # cp.balance should increase by 1000 (full debt)
-        cp_after_ship = req("GET", f"/api/warehouse/counterparties", token=token)
+        cp_after_ship = req("GET", "/api/warehouse/counterparties", token=token)
         cp_row = next((c for c in cp_after_ship if c["id"] == cp_id), None)
         if cp_row:
             ok("ship adds full debt to cp.balance",
@@ -115,7 +115,7 @@ def main() -> None:
     p1 = req("POST", f"/api/warehouse/orders/{oid}/payments",
              {"amount": 400, "method": "card", "note": "first payment"}, token=token)
     ok("pay 400", "id" in p1, str(p1))
-    p1_id = p1["id"]
+    p1["id"]
 
     # Check order state
     o = req("GET", f"/api/warehouse/orders/{oid}", token=token)
@@ -124,13 +124,13 @@ def main() -> None:
     ok("outstanding=600", float(o["outstanding"]) == 600)
 
     # Check cp.balance decreased
-    cp_list = req("GET", f"/api/warehouse/counterparties", token=token)
+    cp_list = req("GET", "/api/warehouse/counterparties", token=token)
     cp_row = next((c for c in cp_list if c["id"] == cp_id), None)
     if cp_row and shipped:
         ok("cp.balance reduced by 400", float(cp_row["balance"]) == 600, f"balance={cp_row['balance']}")
 
     # Check CashTransaction created
-    cf_list = req("GET", f"/api/warehouse/cashflow", token=token)
+    cf_list = req("GET", "/api/warehouse/cashflow", token=token)
     cf_order = [x for x in cf_list if x.get("order_id") == oid] if isinstance(cf_list, list) else []
     ok("CashTransaction created for payment", len(cf_order) == 1, f"count={len(cf_order)}")
 
@@ -150,19 +150,19 @@ def main() -> None:
     ok("overpayment rejected", "__error" in over, f"error={over.get('detail', '')}")
 
     # Delete payment 600
-    del_res = req("DELETE", f"/api/warehouse/orders/{oid}/payments/{p2_id}", token=token)
+    req("DELETE", f"/api/warehouse/orders/{oid}/payments/{p2_id}", token=token)
     o = req("GET", f"/api/warehouse/orders/{oid}", token=token)
     ok("after delete: payment_status=partial", o["payment_status"] == "partial")
     ok("after delete: outstanding=600", float(o["outstanding"]) == 600)
 
     if cp_row and shipped:
-        cp_list2 = req("GET", f"/api/warehouse/counterparties", token=token)
+        cp_list2 = req("GET", "/api/warehouse/counterparties", token=token)
         cp_row2 = next((c for c in cp_list2 if c["id"] == cp_id), None)
         if cp_row2:
             ok("cp.balance restored +600", float(cp_row2["balance"]) == 600, f"balance={cp_row2['balance']}")
 
     # PATCH paid_amount directly → should be ignored (field not in schema)
-    patch = req("PATCH", f"/api/warehouse/orders/{oid}",
+    req("PATCH", f"/api/warehouse/orders/{oid}",
                 {"paid_amount": 9999, "notes": "test"}, token=token)
     o_after = req("GET", f"/api/warehouse/orders/{oid}", token=token)
     ok("PATCH paid_amount ignored", float(o_after["paid_amount"]) != 9999,

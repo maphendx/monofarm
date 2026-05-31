@@ -563,6 +563,16 @@ class CellAssign(BaseModel):
     quantity:   Decimal
 
 
+class CellStockOut(BaseModel):
+    product_id:   int
+    product_name: str
+    product_sku:  str
+    quantity:     Decimal
+
+    class Config:
+        from_attributes = True
+
+
 class CellDetailOut(BaseModel):
     cell_id:        int
     cell_code:      str
@@ -578,16 +588,6 @@ class ScanResult(BaseModel):
     type:    str   # "cell" | "product"
     cell:    CellDetailOut | None = None
     product: ProductOut    | None = None
-
-
-class CellStockOut(BaseModel):
-    product_id:   int
-    product_name: str
-    product_sku:  str
-    quantity:     Decimal
-
-    class Config:
-        from_attributes = True
 
 
 class CellOut(BaseModel):
