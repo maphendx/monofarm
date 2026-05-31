@@ -331,16 +331,25 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   function printA4() {
     const container = document.getElementById("wl-print-capture");
     if (!container) return;
+    const labelHtml = Array.from(container.children)
+      .map(el => `<div class="lbl">${el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1")}</div>`)
+      .join("");
+    const tplW = activeTpl ? `${activeTpl.width_mm}mm` : "100mm";
+    const tplH = activeTpl ? `${activeTpl.height_mm}mm` : "30mm";
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   @page{size:A4;margin:8mm}
-  body{display:flex;flex-wrap:wrap;gap:1.5mm;align-content:flex-start;background:#fff}
+  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif}
+  body{display:flex;flex-wrap:wrap;gap:2mm;align-content:flex-start;padding:0}
+  .lbl{display:inline-flex;flex-shrink:0;width:${tplW};height:${tplH};break-inside:avoid;page-break-inside:avoid}
+  .lbl>*{width:100%;height:100%}
   svg{width:100%!important;height:100%!important;display:block!important}
-  img{display:block}
+  img{display:block;max-width:100%;max-height:100%}
+  span,div{word-break:break-word;overflow-wrap:break-word}
 </style></head><body>
-${Array.from(container.children).map(el => el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1")).join("")}
-<script>window.onload=function(){setTimeout(function(){window.print();},500);}</script>
+${labelHtml}
+<script>window.onload=function(){setTimeout(function(){window.print();},600);}</script>
 </body></html>`;
     const w = window.open("", "_blank");
     if (w) { w.document.open(); w.document.write(html); w.document.close(); }
@@ -374,8 +383,9 @@ ${Array.from(container.children).map(el => el.outerHTML.replace(/<svg ([^>]*?)wi
 
   return (
     <>
-    {/* Full-screen overlay */}
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-elevated)]">
+    {/* Large modal overlay */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div className="relative flex w-full max-w-[1280px] h-[92vh] flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl overflow-hidden">
 
       {/* ── Top bar ───────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3">
@@ -492,27 +502,41 @@ ${Array.from(container.children).map(el => el.outerHTML.replace(/<svg ([^>]*?)wi
               <div style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0 }}
                 className="shadow-xl" onClick={e => e.stopPropagation()}>
                 {/* Rendered label */}
+                {/* Scaled canvas + overlays share the SAME transform container → mm units always align */}
                 <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: displayTpl.width_mm * PX_PER_MM, height: displayTpl.height_mm * PX_PER_MM, position: "absolute" }}>
                   <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls} />
+
+                  {/* Interaction overlays in mm — perfectly aligned with canvas elements */}
+                  {editMode && (localTpl?.elements ?? []).map(el => {
+                    const isSel = selId === el.id;
+                    const hMm   = Math.max(el.h, 1);
+                    // handle size in mm (2mm × 2mm, centered on corner)
+                    const HSZ = 2;
+                    return (
+                      <div key={el.id} style={{
+                        position: "absolute",
+                        left: `${el.x}mm`, top: `${el.y}mm`,
+                        width: `${el.w}mm`, height: `${hMm}mm`,
+                        cursor: "move",
+                        outline: isSel ? "0.35mm solid #06b6d4" : "0.25mm dashed rgba(100,100,100,0.3)",
+                        boxSizing: "border-box", zIndex: isSel ? 10 : 1,
+                      }} onMouseDown={e => onElMouseDown(e, el)}>
+                        {isSel && HANDLES.map(h => {
+                          const { left, top } = handlePos(h, el.w * PX_PER_MM, hMm * PX_PER_MM);
+                          return (
+                            <div key={h} style={{
+                              position: "absolute",
+                              left: left - 4, top: top - 4,
+                              width: `${HSZ}mm`, height: `${HSZ}mm`,
+                              background: "#fff", border: "0.3mm solid #06b6d4",
+                              borderRadius: "0.3mm", cursor: HANDLE_CURSOR[h], zIndex: 20,
+                            }} onMouseDown={e => onHandleMouseDown(e, el, h)} />
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
-                {/* Interaction overlays (edit mode) */}
-                {editMode && (localTpl?.elements ?? []).map(el => {
-                  const lp = el.x * PX_PER_MM * scale, tp = el.y * PX_PER_MM * scale;
-                  const wp = el.w * PX_PER_MM * scale, hp = Math.max(el.h * PX_PER_MM * scale, 4);
-                  const isSel = selId === el.id;
-                  return (
-                    <div key={el.id} style={{ position: "absolute", left: lp, top: tp, width: wp, height: hp, cursor: "move", outline: isSel ? "1.5px solid #06b6d4" : "1px dashed rgba(100,100,100,0.25)", boxSizing: "border-box", zIndex: isSel ? 10 : 1 }}
-                      onMouseDown={e => onElMouseDown(e, el)}>
-                      {isSel && HANDLES.map(h => {
-                        const { left, top } = handlePos(h, wp, hp);
-                        return (
-                          <div key={h} style={{ position: "absolute", left: left - 4, top: top - 4, width: 8, height: 8, background: "#fff", border: "1.5px solid #06b6d4", borderRadius: 2, cursor: HANDLE_CURSOR[h], zIndex: 20 }}
-                            onMouseDown={e => onHandleMouseDown(e, el, h)} />
-                        );
-                      })}
-                    </div>
-                  );
-                })}
               </div>
               {/* Info below canvas */}
               <p className="text-[10px] text-[var(--text-faint)]">
@@ -618,6 +642,7 @@ ${Array.from(container.children).map(el => el.outerHTML.replace(/<svg ([^>]*?)wi
         </div>
       </div>
     </div>
+    </div>  {/* end modal dialog */}
 
     {/* Hidden print capture portal */}
     {activeTpl && createPortal(

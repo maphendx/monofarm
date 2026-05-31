@@ -110,12 +110,12 @@ function ElementRenderer({
           color: el.color ?? "#000",
           textAlign: el.align ?? "left",
           lineHeight: 1.2,
-          display: "flex", alignItems: "center",
+          display: "block",
           fontFamily: "Arial, Helvetica, sans-serif",
+          wordBreak: "break-word",
+          overflowWrap: "break-word",
         }}>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
-            {content}
-          </span>
+          {content}
         </div>
       );
     }
