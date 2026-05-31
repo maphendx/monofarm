@@ -42,9 +42,10 @@ function useCode128DataUrl(text: string | null): string | null {
     import("jsbarcode").then(mod => {
       if (cancelled) return;
       try {
-        const JsBarcode = (mod as { default: Function }).default ?? mod;
+        type JsBarcodeFn = (el: HTMLCanvasElement, value: string, opts: Record<string, unknown>) => void;
+        const JsBarcode = ((mod as { default?: JsBarcodeFn }).default ?? mod) as JsBarcodeFn;
         const canvas = document.createElement("canvas");
-        (JsBarcode as Function)(canvas, text, {
+        JsBarcode(canvas, text, {
           format: "CODE128",
           displayValue: false,
           margin: 8,

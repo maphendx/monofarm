@@ -28,6 +28,24 @@ type SpecImportResult = {
 };
 
 type SortKey = "name" | "sku" | "full_cost" | "sale_price" | "margin";
+
+function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
+  col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
+  onSort: (c: SortKey) => void; children: React.ReactNode; className?: string;
+}) {
+  const active = sortKey === col;
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className={`cursor-pointer select-none px-4 py-3 font-medium text-[var(--text-muted)] hover:text-[var(--text)] ${className}`}
+    >
+      <span className={`inline-flex items-center gap-1 ${className.includes("text-right") ? "justify-end" : ""}`}>
+        {children}
+        {active && <span className="text-[var(--accent)]">{sortDir === "asc" ? "↑" : "↓"}</span>}
+      </span>
+    </th>
+  );
+}
 type SortDir = "asc" | "desc";
 
 // ── Column defs ───────────────────────────────────────────────────────────────
@@ -279,12 +297,12 @@ export default function SpecsPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-xs">
               <tr>
-                <Th col="name" className="text-left">Назва</Th>
-                {colVis.isVisible("sku")        && <Th col="sku"        className="text-left">SKU</Th>}
+                <Th col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">Назва</Th>
+                {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">SKU</Th>}
                 {colVis.isVisible("categories") && <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>}
-                {colVis.isVisible("full_cost")  && <Th col="full_cost"  className="text-right">Собівартість</Th>}
-                {colVis.isVisible("sale_price") && <Th col="sale_price" className="text-right">Ціна</Th>}
-                {colVis.isVisible("margin")     && <Th col="margin"     className="text-right">Маржа</Th>}
+                {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собівартість</Th>}
+                {colVis.isVisible("sale_price") && <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>}
+                {colVis.isVisible("margin")     && <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>}
                 <th className="w-24 px-4 py-3" />
               </tr>
             </thead>

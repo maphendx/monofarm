@@ -113,7 +113,7 @@ export function CreateBatchModal({
         {orderNumber && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--state-warn)]/20 bg-[var(--state-warn)]/5 px-3 py-2 text-xs text-[var(--state-warn)]">
             <span>📦</span>
-            <span>Замовлення <strong>{orderNumber}</strong> → при створенні партії статус зміниться на "Виробництво"</span>
+            <span>Замовлення <strong>{orderNumber}</strong> → при створенні партії статус зміниться на «Виробництво»</span>
           </div>
         )}
         <label className="block">

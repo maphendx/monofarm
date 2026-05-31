@@ -30,7 +30,7 @@ export function TableSkeleton({ rows = 8, cols = 5 }: { rows?: number; cols?: nu
                 <th key={c} className="px-4 py-3">
                   <div
                     className="skeleton h-3 rounded"
-                    style={{ width: c === 0 ? "40%" : `${50 + Math.random() * 30}%` }}
+                    style={{ width: c === 0 ? "40%" : `${55 + (c * 13) % 30}%` }}
                   />
                 </th>
               ))}
