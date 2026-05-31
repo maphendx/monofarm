@@ -402,63 +402,65 @@ export default function LabelsPage() {
         {/* Canvas area */}
         <div className="flex flex-1 items-start justify-center overflow-auto bg-[var(--surface-hi)] p-8"
           onClick={() => setSelId(null)}>
-          {/* Canvas wrapper — outer container in px, overlays pixel-perfect */}
+          {/* Outer clip container */}
           <div
             ref={canvasRef}
-            style={{ position: "relative", width: CANVAS_W_PX, height: canvasH, flexShrink: 0 }}
+            style={{ position: "relative", width: CANVAS_W_PX, height: canvasH, flexShrink: 0, overflow: "hidden" }}
             className="shadow-xl"
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); setSelId(null); }}
           >
-            {/* Rendered label (mm-based, scaled) */}
-            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: tplNatW, height: tplNatH, position: "absolute", pointerEvents: "none" }}>
-              <LabelCanvas template={editing} vars={previewVars} barcodeUrls={previewBcUrls} />
-            </div>
+            {/* Single scaled container — canvas + overlays in same mm space */}
+            <div style={{
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+              width: `${editing.width_mm}mm`,
+              height: `${editing.height_mm}mm`,
+              position: "absolute",
+              top: 0, left: 0,
+            }}>
+              <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                <LabelCanvas template={editing} vars={previewVars} barcodeUrls={previewBcUrls} />
+              </div>
 
-            {/* Interaction overlays (px-based in outer container) */}
-            {editing.elements.map(el => {
-              const lPx = el.x * PX_PER_MM * scale;
-              const tPx = el.y * PX_PER_MM * scale;
-              const wPx = el.w * PX_PER_MM * scale;
-              const hPx = el.h * PX_PER_MM * scale;
-              const isSel = selId === el.id;
-              return (
-                <div
-                  key={el.id}
-                  style={{
-                    position: "absolute",
-                    left: lPx, top: tPx,
-                    width: wPx, height: Math.max(hPx, 4),
-                    cursor: "move",
-                    outline: isSel ? "2px solid #06b6d4" : "1px dashed rgba(150,150,150,0.4)",
-                    boxSizing: "border-box",
-                    zIndex: isSel ? 100 : 1,
-                  }}
-                  onMouseDown={e => onElMouseDown(e, el)}
-                >
-                  {/* Resize handles — only on selected */}
-                  {isSel && HANDLES.map(h => {
-                    const { left, top } = handlePos(h, wPx, Math.max(hPx, 4));
-                    return (
-                      <div key={h}
-                        style={{
+              {editing.elements.map(el => {
+                const isSel = selId === el.id;
+                const hMm   = Math.max(el.h, 1);
+                const HSZ   = 2.5;
+                return (
+                  <div key={el.id}
+                    style={{
+                      position: "absolute",
+                      left: `${el.x}mm`, top: `${el.y}mm`,
+                      width: `${el.w}mm`, height: `${hMm}mm`,
+                      cursor: "move",
+                      outline: isSel ? "0.4mm solid #06b6d4" : "0.2mm dashed rgba(120,120,120,0.4)",
+                      boxSizing: "border-box",
+                      zIndex: isSel ? 200 : 10,
+                    }}
+                    onMouseDown={e => { e.stopPropagation(); onElMouseDown(e, el); }}
+                  >
+                    {isSel && HANDLES.map(h => {
+                      const hx = h.includes("e") ? el.w : h.includes("w") ? 0 : el.w / 2;
+                      const hy = h.includes("s") ? hMm : h.includes("n") ? 0 : hMm / 2;
+                      return (
+                        <div key={h} style={{
                           position: "absolute",
-                          left: left - 5, top: top - 5,
-                          width: 10, height: 10,
+                          left: `${hx}mm`, top: `${hy}mm`,
+                          width: `${HSZ}mm`, height: `${HSZ}mm`,
+                          marginLeft: `${-HSZ / 2}mm`, marginTop: `${-HSZ / 2}mm`,
                           background: "#06b6d4",
-                          border: "1.5px solid #fff",
-                          borderRadius: 2,
+                          border: "0.3mm solid #fff",
+                          borderRadius: "0.4mm",
                           cursor: HANDLE_CURSOR[h],
-                          zIndex: 20,
-                          boxShadow: "0 0 0 1px #06b6d4",
-                        }}
-                        onMouseDown={e => onHandleMouseDown(e, el, h)}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
-
+                          zIndex: 300,
+                          boxShadow: "0 0.5mm 1mm rgba(0,0,0,0.25)",
+                        }} onMouseDown={e => { e.stopPropagation(); onHandleMouseDown(e, el, h); }} />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

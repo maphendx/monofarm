@@ -608,51 +608,64 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
             </div>
           ) : (
             <>
-              {/* Canvas box — outer container in px, overlays in px coords (no transform math) */}
+              {/* Outer container — clips to CANVAS_W×canvasH */}
               <div
                 ref={canvasBoxRef}
-                style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0 }}
+                style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0, overflow: "hidden" }}
                 className="shadow-xl"
-                onClick={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); editMode && setSelId(null); }}
               >
-                {/* Scaled label render */}
-                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: displayTpl.width_mm * PX_PER_MM, height: displayTpl.height_mm * PX_PER_MM, position: "absolute", pointerEvents: "none" }}>
-                  <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls} />
-                </div>
+                {/* Single scaled container — both canvas AND overlays live here in mm space */}
+                <div style={{
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  width: `${displayTpl.width_mm}mm`,
+                  height: `${displayTpl.height_mm}mm`,
+                  position: "absolute",
+                  top: 0, left: 0,
+                }}>
+                  {/* Rendered label (pointer events disabled so overlays catch clicks) */}
+                  <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                    <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls} />
+                  </div>
 
-                {/* Interaction overlays — in OUTER px space, pixel-perfect with rendered content */}
-                {editMode && (localTpl?.elements ?? []).map(el => {
-                  const lp = el.x * PX_PER_MM * scale;
-                  const tp = el.y * PX_PER_MM * scale;
-                  const wp = el.w * PX_PER_MM * scale;
-                  const hp = Math.max(el.h * PX_PER_MM * scale, 4);
-                  const isSel = selId === el.id;
-                  return (
-                    <div key={el.id} style={{
-                      position: "absolute",
-                      left: lp, top: tp, width: wp, height: hp,
-                      cursor: "move",
-                      outline: isSel ? "2px solid #06b6d4" : "1px dashed rgba(150,150,150,0.35)",
-                      boxSizing: "border-box",
-                      zIndex: isSel ? 100 : 2,
-                    }} onMouseDown={e => onElMouseDown(e, el)}>
-                      {isSel && HANDLES.map(h => {
-                        const { left, top } = handlePos(h, wp, hp);
-                        return (
-                          <div key={h} style={{
-                            position: "absolute",
-                            left: left - 5, top: top - 5,
-                            width: 10, height: 10,
-                            background: "#06b6d4", border: "2px solid #fff",
-                            borderRadius: 2, cursor: HANDLE_CURSOR[h],
-                            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-                            zIndex: 20,
-                          }} onMouseDown={e => onHandleMouseDown(e, el, h)} />
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                  {/* Overlays in mm — SAME coordinate system, zero drift at any position */}
+                  {editMode && (localTpl?.elements ?? []).map(el => {
+                    const isSel = selId === el.id;
+                    const hMm   = Math.max(el.h, 1);
+                    const HSZ   = 2.5; // handle size in mm
+                    return (
+                      <div key={el.id} style={{
+                        position: "absolute",
+                        left: `${el.x}mm`, top: `${el.y}mm`,
+                        width: `${el.w}mm`, height: `${hMm}mm`,
+                        cursor: "move",
+                        outline: isSel ? "0.4mm solid #06b6d4" : "0.2mm dashed rgba(120,120,120,0.4)",
+                        boxSizing: "border-box",
+                        zIndex: isSel ? 200 : 10,
+                      }} onMouseDown={e => { e.stopPropagation(); onElMouseDown(e, el); }}>
+                        {isSel && HANDLES.map(h => {
+                          const hx = h.includes("e") ? el.w : h.includes("w") ? 0 : el.w / 2;
+                          const hy = h.includes("s") ? hMm : h.includes("n") ? 0 : hMm / 2;
+                          return (
+                            <div key={h} style={{
+                              position: "absolute",
+                              left: `${hx}mm`, top: `${hy}mm`,
+                              width: `${HSZ}mm`, height: `${HSZ}mm`,
+                              marginLeft: `${-HSZ / 2}mm`, marginTop: `${-HSZ / 2}mm`,
+                              background: "#06b6d4",
+                              border: "0.3mm solid #fff",
+                              borderRadius: "0.4mm",
+                              cursor: HANDLE_CURSOR[h],
+                              zIndex: 300,
+                              boxShadow: "0 0.5mm 1mm rgba(0,0,0,0.25)",
+                            }} onMouseDown={e => { e.stopPropagation(); onHandleMouseDown(e, el, h); }} />
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               {/* Info below canvas */}
               <p className="text-[10px] text-[var(--text-faint)]">
