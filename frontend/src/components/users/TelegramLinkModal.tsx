@@ -14,26 +14,19 @@ export function TelegramLinkModal({
   onClose: () => void;
 }) {
   const [link, setLink] = useState<TelegramLink | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setLink(null);
-      setError(null);
-      setCopied(false);
-      return;
-    }
-    setBusy(true);
-    setError(null);
+    if (!user) return;
     api<TelegramLink>(`/api/users/${user.id}/telegram/link`, { method: "POST" })
       .then(setLink)
       .catch((err) =>
         setError(err instanceof ApiError ? err.message : "Помилка"),
       )
       .finally(() => setBusy(false));
-  }, [user]);
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function copy() {
     if (!link?.deep_link) return;

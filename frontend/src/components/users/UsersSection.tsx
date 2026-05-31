@@ -199,7 +199,7 @@ export function UsersSection() {
       </div>
 
       <UserFormModal open={modalOpen} initial={editing} onClose={() => setModalOpen(false)} onSaved={upsert} />
-      <TelegramLinkModal user={tgLinkUser} onClose={() => setTgLinkUser(null)} />
+      {tgLinkUser && <TelegramLinkModal key={tgLinkUser.id} user={tgLinkUser} onClose={() => setTgLinkUser(null)} />}
       {dialog}
     </div>
   );
