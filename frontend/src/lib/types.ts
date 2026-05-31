@@ -189,3 +189,13 @@ export interface PlanEntry {
   done: boolean;
   created_at: string;
 }
+
+export interface LabelTemplate {
+  id: number;
+  name: string;
+  target_type: string;
+  format: "html" | "zpl";
+  content: string;
+  width_mm: number;
+  height_mm: number;
+}

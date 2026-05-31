@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { PrintersManager } from "@/components/printers/PrintersManager";
 import { UsersSection } from "@/components/users/UsersSection";
 import { ApiError, api, clearToken, getToken } from "@/lib/api";
+import { Trash2 } from "lucide-react";
+import LabelTemplatesEditor from "@/components/labels/LabelTemplatesEditor";
+
 import { useUser } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -40,7 +43,7 @@ interface BillingStatus {
 
 type SectionId =
   | "profile" | "general"
-  | "organization" | "printers" | "users" | "filament"
+  | "organization" | "printers" | "users" | "filament" | "labels"
   | "queue" | "notifications" | "maintenance" | "integrations" | "billing";
 
 // ── Nav config ─────────────────────────────────────────────────────────────
@@ -58,6 +61,10 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[]; adminOnly?: 
     id: "organization", label: "Організація",
     d: ["M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
     adminOnly: true,
+  },
+  {
+    id: "labels", label: "Шаблони лейблів",
+    d: ["M4 4h16v16H4z", "M4 8h16", "M8 4v16"],
   },
   {
     id: "printers", label: "Принтери",
@@ -1758,6 +1765,7 @@ export default function SettingsPage() {
         )}
         {active === "printers" && <PrintersSection />}
         {active === "users" && <UsersSection />}
+        {active === "labels" && <LabelTemplatesEditor />}
         {active === "filament" && <ComingSoon label="Пластик" />}
         {active === "queue" && <ComingSoon label="Черга" />}
         {active === "notifications" && <ComingSoon label="Сповіщення" />}
