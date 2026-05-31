@@ -1,22 +1,37 @@
-export async function generateCode128Url(text: string, hPx: number): Promise<string | null> {
+/**
+ * Generates a Code128 barcode as an SVG data URL.
+ * SVG is infinitely scalable — no pixelation at any element size.
+ * hPx is kept for API compatibility but no longer affects quality.
+ */
+export async function generateCode128Url(
+  text: string,
+  _hPx?: number,
+  showText = false,
+): Promise<string | null> {
   if (!text) return null;
   try {
     const mod = await import("jsbarcode");
     const JsBarcode = ((mod as { default?: unknown }).default ?? mod) as (
-      el: HTMLCanvasElement, v: string, o: object,
+      el: SVGSVGElement | HTMLCanvasElement, v: string, o: object,
     ) => void;
-    const canvas = document.createElement("canvas");
-    // Generate at 3× resolution. width:3 → 3px per bar module for crisp display.
-    const h = Math.round(hPx * 3);
-    const barH = Math.round(h * 0.58);
-    const fontSize = Math.max(10, Math.round(h * 0.13));
-    JsBarcode(canvas, text, {
-      format: "CODE128", displayValue: true,
-      fontSize, textMargin: 2, margin: 5,
-      width: 3, height: barH,
-      background: "#ffffff", lineColor: "#000000",
+
+    // Render into an SVG element (vector, infinitely scalable)
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    JsBarcode(svg as unknown as SVGSVGElement, text, {
+      format: "CODE128",
+      displayValue: showText,
+      fontSize: showText ? 14 : 0,
+      textMargin: showText ? 4 : 0,
+      margin: 2,
+      background: "#ffffff",
+      lineColor: "#000000",
+      xmlDocument: document,
     });
-    return canvas.toDataURL("image/png");
+
+    // Serialize SVG → data URL
+    const serialized = new XMLSerializer().serializeToString(svg);
+    const encoded = encodeURIComponent(serialized);
+    return `data:image/svg+xml;charset=utf-8,${encoded}`;
   } catch {
     return null;
   }

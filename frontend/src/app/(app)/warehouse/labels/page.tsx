@@ -108,12 +108,13 @@ export default function LabelsPage() {
   useEffect(() => {
     if (!editing) return;
     const vars = SAMPLE_VARS[editing.item_type] ?? SAMPLE_VARS.universal;
-    const hPx  = Math.round(editing.height_mm * 203 / 25.4);
     editing.elements.filter(e => e.type === "barcode").forEach(el => {
-      const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
-      if (!raw || bcUrls[raw]) return;
-      generateCode128Url(raw, hPx).then(url => {
-        if (url) setBcUrls(p => ({ ...p, [raw]: url }));
+      const showText = el.showText ?? false;
+      const raw      = substituteVars(el.value ?? "", vars as Record<string, string>);
+      const cacheKey = `${raw}__${showText ? "1" : "0"}`;
+      if (!raw || bcUrls[cacheKey]) return;
+      generateCode128Url(raw, 0, showText).then(url => {
+        if (url) setBcUrls(p => ({ ...p, [cacheKey]: url, [raw]: url }));
       });
     });
   }, [editing?.elements]); // eslint-disable-line react-hooks/exhaustive-deps

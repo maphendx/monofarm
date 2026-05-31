@@ -59,7 +59,7 @@ BUILTIN_TEMPLATES = [
             {"id": "name", "type": "text",    "x": 23,  "y": 3,   "w": 29, "h": 7,  "text": "{{name}}",        "fontSize": 4.5, "fontWeight": "bold",   "color": "#111", "align": "left"},
             {"id": "cats", "type": "text",    "x": 23,  "y": 12,  "w": 29, "h": 5,  "text": "{{categories}}",  "fontSize": 3.5, "fontWeight": "normal", "color": "#555", "align": "left"},
             {"id": "sku",  "type": "text",    "x": 23,  "y": 19,  "w": 29, "h": 5,  "text": "{{sku}}",         "fontSize": 3.5, "fontWeight": "normal", "color": "#999", "align": "left"},
-            {"id": "bc",   "type": "barcode", "x": 54,  "y": 2,   "w": 44, "h": 26, "value": "{{PROD_QR}}",    "format": "CODE128", "showText": True},
+            {"id": "bc",   "type": "barcode", "x": 54,  "y": 2,   "w": 44, "h": 26, "value": "{{PROD_QR}}",    "barcodeFormat": "CODE128", "showText": False},
         ],
     },
     {

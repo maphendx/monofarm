@@ -132,12 +132,25 @@ function ElementRenderer({
 
     case "barcode": {
       const bcVal = substituteVars(el.value ?? "", vars);
-      const bcUrl = barcodeUrls?.[bcVal];
+      // key includes showText so toggle re-generates
+      const cacheKey = `${bcVal}__${el.showText ? "1" : "0"}`;
+      const bcUrl = barcodeUrls?.[cacheKey] ?? barcodeUrls?.[bcVal];
       return (
-        <div style={{ ...pos }}>
+        <div style={{ ...pos, overflow: "hidden" }}>
           {bcUrl
-            ? <img src={bcUrl} alt={bcVal} style={{ width: "100%", height: "100%", objectFit: "fill", display: "block" }} />
-            : <div style={{ width: "100%", height: "100%", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            ? <img
+                src={bcUrl}
+                alt={bcVal}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  // SVG barcodes scale perfectly with objectFit: fill (bars stay rectangular)
+                  objectFit: "fill",
+                  display: "block",
+                  imageRendering: "crisp-edges",
+                }}
+              />
+            : <div style={{ width: "100%", height: "100%", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center", border: "0.2mm dashed #ccc" }}>
                 <span style={{ fontSize: `${Math.max(2, el.h * 0.14)}mm`, color: "#bbb", fontFamily: "Arial" }}>{bcVal || "штрих-код"}</span>
               </div>
           }

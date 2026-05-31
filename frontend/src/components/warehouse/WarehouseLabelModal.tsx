@@ -172,7 +172,7 @@ function defaultEl(type: LabelElement["type"], tpl: LabelTemplate): LabelElement
   switch (type) {
     case "text":    return { id: uid(), type, x: cx, y: cy, w: 30, h: 7,  text: "{{name}}", fontSize: 4.5, fontWeight: "normal", color: "#111111", align: "left" };
     case "qr":      return { id: uid(), type, x: cx, y: cy, w: 20, h: 20, value: "{{CELL_QR}}", level: "M" };
-    case "barcode": return { id: uid(), type, x: cx, y: cy, w: 35, h: 15, value: "{{PROD_QR}}", barcodeFormat: "CODE128", showText: true };
+    case "barcode": return { id: uid(), type, x: cx, y: cy, w: 35, h: 15, value: "{{PROD_QR}}", barcodeFormat: "CODE128", showText: false };
     case "image":   return { id: uid(), type, x: cx, y: cy, w: 20, h: 20, source: "product_image", objectFit: "cover" };
     case "rect":    return { id: uid(), type, x: cx, y: cy, w: 30, h: 10, borderColor: "#cccccc", borderWidth: 0.3, fillColor: "transparent", borderRadius: 0 };
     case "line":    return { id: uid(), type, x: cx, y: cy, w: 40, h: 0.5, strokeColor: "#cccccc", strokeWidth: 0.5, orientation: "horizontal" };
@@ -247,14 +247,17 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   // ── Pre-render barcodes when template changes ──────────────────────────────
   useEffect(() => {
     if (!activeTpl) return;
-    // Use print DPI (203) for high-quality barcode rendering
-    const hPx = Math.round(activeTpl.height_mm * 203 / 25.4);
+    // SVG barcodes — no hPx needed, infinitely scalable
     activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+      const showText = el.showText ?? false;
       items.slice(0, 20).forEach(item => {
-        const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
-        const raw  = substituteVars(el.value ?? "", vars as Record<string,string>);
-        if (!raw || bcUrls[raw]) return;
-        generateCode128Url(raw, hPx).then(url => { if (url) setBcUrls(p => ({ ...p, [raw]: url })); });
+        const vars     = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+        const raw      = substituteVars(el.value ?? "", vars as Record<string,string>);
+        const cacheKey = `${raw}__${showText ? "1" : "0"}`;
+        if (!raw || bcUrls[cacheKey]) return;
+        generateCode128Url(raw, 0, showText).then(url => {
+          if (url) setBcUrls(p => ({ ...p, [cacheKey]: url, [raw]: url }));
+        });
       });
     });
   }, [activeTpl?.id, activeTpl?.elements]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -384,21 +387,22 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   async function printA4() {
     if (!activeTpl || printing) return;
 
-    // 1. Generate ALL barcode data URLs before rendering (no async gaps)
+    // 1. Generate ALL barcode SVGs before rendering (SVG — no hPx needed)
     const allBc: Record<string, string> = { ...bcUrls };
-    const hPx = Math.round(activeTpl.height_mm * 203 / 25.4);
     await Promise.all(
       activeTpl.elements
         .filter(e => e.type === "barcode")
-        .flatMap(el =>
-          items.map(async item => {
-            const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
-            const raw  = substituteVars(el.value ?? "", vars as Record<string, string>);
-            if (!raw || allBc[raw]) return;
-            const url = await generateCode128Url(raw, hPx);
-            if (url) allBc[raw] = url;
-          }),
-        ),
+        .flatMap(el => {
+          const showText = el.showText ?? false;
+          return items.map(async item => {
+            const vars     = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+            const raw      = substituteVars(el.value ?? "", vars as Record<string, string>);
+            const cacheKey = `${raw}__${showText ? "1" : "0"}`;
+            if (!raw || allBc[cacheKey]) return;
+            const url = await generateCode128Url(raw, 0, showText);
+            if (url) { allBc[cacheKey] = url; allBc[raw] = url; }
+          });
+        }),
     );
     setPrintBcUrls(allBc);
 
@@ -861,7 +865,7 @@ function ElProps({ el, onChange }: { el: LabelElement; onChange: (p: Partial<Lab
           <div className="mt-1 flex flex-wrap gap-1">{ALL_VARS.map(v=><button key={v} type="button" onClick={()=>onChange({value:v})} className="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">{v.replace(/[{}]/g,"")}</button>)}</div>
         </label>
         <label className="block"><span className={lbl}>Формат</span>{seg([{v:"CODE128",label:"Code128"},{v:"EAN13",label:"EAN-13"}],el.barcodeFormat,v=>onChange({barcodeFormat:v as "CODE128"|"EAN13"}))}</label>
-        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={el.showText??true} onChange={e=>onChange({showText:e.target.checked})} className="h-3.5 w-3.5"/><span className="text-xs text-[var(--text)]">Показувати текст</span></label>
+        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={el.showText??false} onChange={e=>onChange({showText:e.target.checked})} className="h-3.5 w-3.5"/><span className="text-xs text-[var(--text)]">Показувати текст під баркодом</span></label>
       </div>
     );
     case "image": return (
