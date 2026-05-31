@@ -195,7 +195,8 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   // ── Pre-render barcodes when template changes ──────────────────────────────
   useEffect(() => {
     if (!activeTpl) return;
-    const hPx = Math.round(activeTpl.height_mm * PX_PER_MM);
+    // Use print DPI (203) for high-quality barcode rendering
+    const hPx = Math.round(activeTpl.height_mm * 203 / 25.4);
     activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
       items.slice(0, 20).forEach(item => {
         const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
@@ -518,18 +519,19 @@ ${labelHtml}
                         left: `${el.x}mm`, top: `${el.y}mm`,
                         width: `${el.w}mm`, height: `${hMm}mm`,
                         cursor: "move",
-                        outline: isSel ? "0.35mm solid #06b6d4" : "0.25mm dashed rgba(100,100,100,0.3)",
-                        boxSizing: "border-box", zIndex: isSel ? 10 : 1,
+                        outline: isSel ? "0.5mm solid #06b6d4" : "0.3mm dashed rgba(150,150,150,0.4)",
+                        boxSizing: "border-box", zIndex: isSel ? 100 : 1,
                       }} onMouseDown={e => onElMouseDown(e, el)}>
                         {isSel && HANDLES.map(h => {
                           const { left, top } = handlePos(h, el.w * PX_PER_MM, hMm * PX_PER_MM);
                           return (
                             <div key={h} style={{
                               position: "absolute",
-                              left: left - 4, top: top - 4,
-                              width: `${HSZ}mm`, height: `${HSZ}mm`,
-                              background: "#fff", border: "0.3mm solid #06b6d4",
-                              borderRadius: "0.3mm", cursor: HANDLE_CURSOR[h], zIndex: 20,
+                              left: left - 5, top: top - 5,
+                              width: 10, height: 10,
+                              background: "#06b6d4", border: "1.5px solid #fff",
+                              borderRadius: 2, cursor: HANDLE_CURSOR[h], zIndex: 20,
+                              boxShadow: "0 0 0 1px #06b6d4",
                             }} onMouseDown={e => onHandleMouseDown(e, el, h)} />
                           );
                         })}

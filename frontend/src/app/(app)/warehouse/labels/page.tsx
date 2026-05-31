@@ -108,7 +108,7 @@ export default function LabelsPage() {
   useEffect(() => {
     if (!editing) return;
     const vars = SAMPLE_VARS[editing.item_type] ?? SAMPLE_VARS.universal;
-    const hPx  = Math.round(editing.height_mm * PX_PER_MM);
+    const hPx  = Math.round(editing.height_mm * 203 / 25.4);
     editing.elements.filter(e => e.type === "barcode").forEach(el => {
       const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
       if (!raw || bcUrls[raw]) return;
@@ -426,9 +426,9 @@ export default function LabelsPage() {
                     left: lPx, top: tPx,
                     width: wPx, height: Math.max(hPx, 4),
                     cursor: "move",
-                    outline: isSel ? "1.5px solid #06b6d4" : "1px dashed transparent",
+                    outline: isSel ? "2px solid #06b6d4" : "1px dashed rgba(150,150,150,0.4)",
                     boxSizing: "border-box",
-                    zIndex: isSel ? 10 : 1,
+                    zIndex: isSel ? 100 : 1,
                   }}
                   onMouseDown={e => onElMouseDown(e, el)}
                 >
@@ -439,13 +439,14 @@ export default function LabelsPage() {
                       <div key={h}
                         style={{
                           position: "absolute",
-                          left: left - 4, top: top - 4,
-                          width: 8, height: 8,
-                          background: "#fff",
-                          border: "1.5px solid #06b6d4",
+                          left: left - 5, top: top - 5,
+                          width: 10, height: 10,
+                          background: "#06b6d4",
+                          border: "1.5px solid #fff",
                           borderRadius: 2,
                           cursor: HANDLE_CURSOR[h],
                           zIndex: 20,
+                          boxShadow: "0 0 0 1px #06b6d4",
                         }}
                         onMouseDown={e => onHandleMouseDown(e, el, h)}
                       />
