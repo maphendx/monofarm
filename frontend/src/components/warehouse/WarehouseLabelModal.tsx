@@ -9,8 +9,9 @@ import { API_URL, getToken } from "@/lib/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type WarehouseLabelItem =
-  | { type: "cell"; id: number; code: string; zone_name: string; notes?: string | null }
-  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[] };
+  | { type: "cell";    id: number; code: string; zone_name: string; notes?: string | null }
+  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[] }
+  | { type: "action";  id: number; code: string; label: string };
 
 type LabelSize   = "50x25" | "57x32" | "100x30" | "100x50" | "100x100";
 type PrintMode   = "zebra" | "a4";
@@ -27,13 +28,16 @@ const SIZES = [
 ];
 
 const DEFAULT_SIZE: Record<PrintMode, LabelSize> = { a4: "100x30", zebra: "57x32" };
+const DEFAULT_SIZE_ACTION: Record<PrintMode, LabelSize> = { a4: "100x100", zebra: "57x32" };
 const DEFAULT_FIELDS: LabelFields = { secondary: true, photo: true };
 const PX_PER_MM = 96 / 25.4;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function defaultQr(item: WarehouseLabelItem): string {
-  return item.type === "cell" ? `CELL:${item.id}` : (item.barcode || item.sku);
+  if (item.type === "cell")    return `CELL:${item.id}`;
+  if (item.type === "action")  return item.code;
+  return item.barcode || item.sku;
 }
 
 async function fetchDataUrl(src: string): Promise<string | null> {
@@ -84,8 +88,12 @@ function buildZpl(
   const safe = (s: string) => s.replace(/[\\^~]/g, "").slice(0, 28);
 
   return items.map((item, i) => {
-    const primary   = item.type === "cell" ? item.code : safe(item.name);
-    const secondary = item.type === "cell" ? item.zone_name : item.sku;
+    const primary   = item.type === "cell"   ? item.code      :
+                      item.type === "action" ? safe(item.label) :
+                                               safe(item.name);
+    const secondary = item.type === "cell"   ? item.zone_name :
+                      item.type === "action" ? item.code       :
+                                               item.sku;
     const cats      = item.type === "product" ? (item.categories?.slice(0, 2).join(", ") ?? "") : "";
 
     return [
@@ -157,6 +165,48 @@ function LabelCard({
   const fsPrimary = `${Math.min(maxLinesMm * 1.2, Math.max(3, cfg.hMm * 0.20))}mm`;
   const fsSub     = `${Math.min(maxLinesMm * 0.85, Math.max(2, cfg.hMm * 0.14))}mm`;
   const gap       = `${Math.max(0.3, pad * 0.25)}mm`;
+
+  // ── Action QR (square: QR top, label bottom; wide: QR left, label right) ────
+  if (item.type === "action") {
+    const isWide = cfg.wMm / cfg.hMm >= 1.8;
+    if (isWide) {
+      // E.g. 57×32 or 100×50 — horizontal layout
+      return (
+        <div style={outer}>
+          {qrEl}
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
+            <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.label}
+            </div>
+            <div style={{ fontSize: fsSub, color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.code}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Square (e.g. 100×100) — QR on top, text below
+    const innerH = cfg.hMm - pad * 2;
+    const qrSqMm = innerH * 0.62;
+    const fsAction = `${Math.max(4, cfg.hMm * 0.10)}mm`;
+    const fsCode   = `${Math.max(2.5, cfg.hMm * 0.06)}mm`;
+    return (
+      <div style={{ ...outer, flexDirection: "column", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ width: `${qrSqMm}mm`, height: `${qrSqMm}mm`, flexShrink: 0 }}>
+          <QRCode value={qrVal || " "} level="M" size={128}
+            style={{ width: "100%", height: "100%", display: "block" }} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap, overflow: "hidden", width: "100%" }}>
+          <div style={{ fontWeight: "bold", fontSize: fsAction, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
+            {item.label}
+          </div>
+          <div style={{ fontSize: fsCode, color: "#999", fontFamily: "monospace", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
+            {item.code}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Cell (QR left, text right) ──────────────────────────────────────────────
   if (item.type === "cell") {
@@ -269,10 +319,12 @@ export function WarehouseLabelModal({
   onClose: () => void;
 }) {
   const isProduct = items[0]?.type === "product";
-  const initMode: PrintMode = isProduct ? "a4" : "zebra";
+  const isAction  = items[0]?.type === "action";
+  const initMode: PrintMode = (isProduct || isAction) ? "a4" : "zebra";
+  const sizeMap   = isAction ? DEFAULT_SIZE_ACTION : DEFAULT_SIZE;
 
   const [mode,     setMode]     = useState<PrintMode>(initMode);
-  const [sizeKey,  setSizeKey]  = useState<LabelSize>(() => DEFAULT_SIZE[initMode]);
+  const [sizeKey,  setSizeKey]  = useState<LabelSize>(() => sizeMap[initMode]);
   const [fields,   setFields]   = useState<LabelFields>(DEFAULT_FIELDS);
   const [customQr, setCustomQr] = useState(() => defaultQr(items[0]));
   const [status,   setStatus]   = useState<string | null>(null);
@@ -314,7 +366,7 @@ export function WarehouseLabelModal({
 
   function switchMode(m: PrintMode) {
     setMode(m);
-    setSizeKey(DEFAULT_SIZE[m]);
+    setSizeKey(sizeMap[m]);
   }
 
   function getQrVal(item: WarehouseLabelItem): string {
@@ -371,12 +423,12 @@ ${labelHtml}
 
   const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm font-mono outline-none focus:border-[var(--border-focus)]";
 
-  const previewItem  = items[0];
-  const previewImg   = previewItem.type === "product" ? imgUrls[previewItem.id]     : undefined;
-  const previewBC    = previewItem.type === "product" ? barcodeUrls[previewItem.id] : undefined;
+  const previewItem = items[0];
+  const previewImg  = previewItem.type === "product" ? imgUrls[previewItem.id]     : undefined;
+  const previewBC   = previewItem.type === "product" ? barcodeUrls[previewItem.id] : undefined;
 
   // Field toggles depend on item type and mode
-  const fieldRows = [
+  const fieldRows = isAction ? [] : [
     ...(isProduct && mode === "a4" ? [{ key: "photo"     as keyof LabelFields, label: "Фото" }] : []),
     ...(isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Категорії" }] : []),
     ...(!isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Назва зони" }] : []),
@@ -390,10 +442,12 @@ ${labelHtml}
         size="lg"
         title={
           items.length > 1
-            ? `Мітки — ${items.length} ${isProduct ? "позицій" : "комірок"}`
-            : `Мітка — ${isProduct
-                ? (items[0] as Extract<WarehouseLabelItem, { type: "product" }>).name
-                : (items[0] as Extract<WarehouseLabelItem, { type: "cell" }>).code}`
+            ? `Мітки — ${items.length} ${isProduct ? "позицій" : isAction ? "дій" : "комірок"}`
+            : `Мітка — ${
+                isProduct ? (items[0] as Extract<WarehouseLabelItem, { type: "product" }>).name :
+                isAction  ? (items[0] as Extract<WarehouseLabelItem, { type: "action"  }>).label :
+                            (items[0] as Extract<WarehouseLabelItem, { type: "cell"    }>).code
+              }`
         }
         footer={
           <>
@@ -445,8 +499,8 @@ ${labelHtml}
           {/* Settings */}
           <div className="space-y-4">
 
-            {/* Mode toggle (products only) */}
-            {isProduct && (
+            {/* Mode toggle (products and actions) */}
+            {(isProduct || isAction) && (
               <div>
                 <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Формат</p>
                 <div className="grid grid-cols-2 gap-1.5">

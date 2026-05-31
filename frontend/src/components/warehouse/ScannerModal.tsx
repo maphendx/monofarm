@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { WarehouseLabelModal, type WarehouseLabelItem } from "@/components/warehouse/WarehouseLabelModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -60,36 +61,18 @@ const ACTION_QR: Record<string, ScanAction> = {
   SALE_OUT: "sale_out", DEFECT: "defect", PRODUCTION_IN: "production_in", PRODUCTION_OUT: "production_out",
 };
 
-// ── Action-QR print sheet (wall poster) ─────────────────────────────────────────
+// ── Action-QR label items ────────────────────────────────────────────────────
 
-function printActionSheet() {
-  const items = [
-    { code: "ACTION:WRITE_OFF",      label: "Списання" },
-    { code: "ACTION:TRANSFER",       label: "Переміщення" },
-    { code: "ACTION:RECEIVE",        label: "Прийом" },
-    { code: "ACTION:STOCKTAKE",      label: "Інвентаризація" },
-    { code: "ACTION:SALE_OUT",       label: "Відвантаження" },
-    { code: "ACTION:DEFECT",         label: "Брак" },
-    { code: "ACTION:PRODUCTION_IN",  label: "Оприбуткування" },
-    { code: "ACTION:PRODUCTION_OUT", label: "Видача у виробництво" },
-  ];
-  const cards = items.map((it) => `
-    <div style="display:inline-flex;flex-direction:column;align-items:center;border:1px solid #ccc;padding:18px;margin:10px;border-radius:8px;width:220px">
-      <div id="qr-${it.code}"></div>
-      <p style="font-family:sans-serif;font-size:22px;font-weight:bold;margin:12px 0 2px">${it.label}</p>
-      <p style="font-family:monospace;font-size:11px;color:#888;margin:0">${it.code}</p>
-    </div>`).join("");
-  const w = window.open("", "_blank");
-  if (!w) return;
-  w.document.write(`<html><head><title>QR дій складу</title></head><body>
-    <h2 style="font-family:sans-serif">Функціональні QR-коди дій</h2>
-    <div style="display:flex;flex-wrap:wrap">${cards}</div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script>${items.map((it) => `new QRCode(document.getElementById('qr-${it.code}'),{text:'${it.code}',width:170,height:170});`).join("")}</script>
-  </body></html>`);
-  w.document.close();
-  setTimeout(() => w.print(), 800);
-}
+const ACTION_LABEL_ITEMS: WarehouseLabelItem[] = [
+  { type: "action", id: 0, code: "ACTION:WRITE_OFF",      label: "Списання" },
+  { type: "action", id: 1, code: "ACTION:TRANSFER",       label: "Переміщення" },
+  { type: "action", id: 2, code: "ACTION:RECEIVE",        label: "Прийом" },
+  { type: "action", id: 3, code: "ACTION:STOCKTAKE",      label: "Інвентаризація" },
+  { type: "action", id: 4, code: "ACTION:SALE_OUT",       label: "Відвантаження" },
+  { type: "action", id: 5, code: "ACTION:DEFECT",         label: "Брак" },
+  { type: "action", id: 6, code: "ACTION:PRODUCTION_IN",  label: "Оприбуткування" },
+  { type: "action", id: 7, code: "ACTION:PRODUCTION_OUT", label: "Видача у виробництво" },
+];
 
 // ── Scanned row ─────────────────────────────────────────────────────────────────
 
@@ -110,7 +93,8 @@ function ScanRow({
 
 export function ScannerModal({ onClose }: { onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value,   setValue]   = useState("");
+  const [value,        setValue]        = useState("");
+  const [actionLabelOpen, setActionLabelOpen] = useState(false);
   const [action,  setAction]  = useState<ScanAction | null>(null);
   const [cell,    setCell]    = useState<CellDetail | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
@@ -246,6 +230,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   const canShip  = !!order && SHIPPABLE.has(order.status);
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8vh]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
@@ -406,12 +391,20 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
 
         {/* Footer */}
         <div className="flex items-center gap-6 border-t border-[var(--border)] px-7 py-3 text-sm text-[var(--text-faint)]">
-          <button onClick={printActionSheet} className="hover:text-[var(--text)] transition-colors">🖨 Друк QR дій</button>
+          <button onClick={() => setActionLabelOpen(true)} className="hover:text-[var(--text)] transition-colors">🏷 Мітки QR дій</button>
           <span className="ml-auto"><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">↵</kbd> підтвердити</span>
           <span><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">esc</kbd> закрити</span>
           <span className="opacity-60">монофарм · сканер</span>
         </div>
       </div>
     </div>
+
+    {actionLabelOpen && (
+      <WarehouseLabelModal
+        items={ACTION_LABEL_ITEMS}
+        onClose={() => { setActionLabelOpen(false); inputRef.current?.focus(); }}
+      />
+    )}
+    </>
   );
 }
