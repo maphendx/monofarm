@@ -8,7 +8,6 @@ import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
-import { PrintLabelModal } from "@/components/labels/PrintLabelModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -255,7 +254,6 @@ function CellModal({
   const [relocate,   setRelocate]   = useState<CellStockItem | null>(null);
   const [notes,      setNotes]      = useState(cell.notes ?? "");
   const [err,        setErr]        = useState<string | null>(null);
-  const [printCellOpen, setPrintCellOpen] = useState(false);
 
   // assign any product (not just unassigned pool)
   const [assignOpen,   setAssignOpen]   = useState(false);
@@ -357,7 +355,19 @@ function CellModal({
           <div className="flex items-start gap-3 min-w-0 flex-1">
             {/* QR code for this cell */}
             <div className="shrink-0 cursor-pointer" title={`QR: CELL:${cell.id}`}
-              onClick={() => setPrintCellOpen(true)}>
+              onClick={() => {
+                const w = window.open("", "_blank");
+                if (w) {
+                  w.document.write(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;gap:8px">
+                    <div id="qr"></div>
+                    <p style="font-size:18px;font-weight:bold">${cell.code}</p>
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                    <script>new QRCode(document.getElementById('qr'),{text:'CELL:${cell.id}',width:200,height:200});</script>
+                  </body></html>`);
+                  w.document.close();
+                  setTimeout(() => w.print(), 600);
+                }
+              }}>
               <QRCode value={`CELL:${cell.id}`} size={64} level="M" />
               <p className="mt-0.5 text-center font-mono text-[9px] text-[var(--text-faint)]">🖨 друк</p>
             </div>
@@ -543,19 +553,6 @@ function CellModal({
           onDone={() => { setRelocate(null); onChanged(); onClose(); }}
         />
       )}
-
-      {printCellOpen && (
-        <PrintLabelModal
-          targetType="cell"
-          variables={{
-            code: cell.code,
-            zone: cell.code.split('-')[0] || "",
-            qr_code: `CELL:${cell.id}`,
-            barcode: `CELL:${cell.id}`,
-          }}
-          onClose={() => setPrintCellOpen(false)}
-        />
-      )}
     </div>
   );
 }
@@ -575,7 +572,6 @@ function ZoneAccordion({
   const [open,       setOpen]       = useState(false);
   const [activeCell, setActiveCell] = useState<Cell | null>(null);
   const [search,     setSearch]     = useState("");
-  const [printZoneOpen, setPrintZoneOpen] = useState(false);
 
   const cells = zone.cells;
   const q = search.trim().toLowerCase();
@@ -610,7 +606,24 @@ function ZoneAccordion({
         </button>
         <button
           title="Друк QR-міток зони"
-          onClick={() => setPrintZoneOpen(true)}
+          onClick={() => {
+            const rows = cells.map((c) => `
+              <div style="display:inline-flex;flex-direction:column;align-items:center;border:1px solid #ccc;padding:6px;margin:4px;border-radius:4px;width:100px">
+                <div id="qr-${c.id}"></div>
+                <p style="font-family:monospace;font-size:11px;font-weight:bold;margin:2px 0">${c.code}</p>
+                <p style="font-family:monospace;font-size:9px;color:#888;margin:0">${zone.name}</p>
+              </div>`).join("");
+            const w = window.open("", "_blank");
+            if (w) {
+              w.document.write(`<html><head><title>Мітки ${zone.name}</title></head><body>
+                <div style="display:flex;flex-wrap:wrap">${rows}</div>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                <script>${cells.map((c) => `new QRCode(document.getElementById('qr-${c.id}'),{text:'CELL:${c.id}',width:80,height:80});`).join("")}</script>
+              </body></html>`);
+              w.document.close();
+              setTimeout(() => w.print(), 800);
+            }
+          }}
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
@@ -714,19 +727,6 @@ function ZoneAccordion({
           flatCells={flatCells}
           onClose={() => setActiveCell(null)}
           onChanged={onChanged}
-        />
-      )}
-
-      {printZoneOpen && (
-        <PrintLabelModal
-          targetType="cell"
-          variablesList={cells.map(c => ({
-            code: c.code,
-            zone: zone.name,
-            qr_code: `CELL:${c.id}`,
-            barcode: `CELL:${c.id}`,
-          }))}
-          onClose={() => setPrintZoneOpen(false)}
         />
       )}
     </div>

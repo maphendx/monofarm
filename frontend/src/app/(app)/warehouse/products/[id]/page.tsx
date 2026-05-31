@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
-import { PrintLabelModal } from "@/components/labels/PrintLabelModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -315,7 +314,6 @@ export default function ProductDetailPage() {
   const [loading,  setLoading]  = useState(true);
   const [costBusy, setCostBusy] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [printModalOpen, setPrintModalOpen] = useState(false);
   const delBusy = useRef(false);
 
   const load = useCallback(async () => {
@@ -432,32 +430,12 @@ export default function ProductDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setPrintModalOpen(true)}
-            className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hi)]">
-            Друк етикетки
-          </button>
           <button onClick={computeCost} disabled={!spec || costBusy}
             className="rounded-md border border-[var(--border)] px-3 py-1.5 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50">
             {costBusy ? "Рахую…" : "↻ Собівартість"}
           </button>
         </div>
       </div>
-
-      {printModalOpen && product && (
-        <PrintLabelModal
-          targetType="product"
-          variables={{
-            name: product.name,
-            sku: product.sku,
-            unit: product.unit,
-            sale_price: product.sale_price ?? "",
-            cost_price: product.cost_price ?? "",
-            barcode: product.sku || product.id.toString(),
-            qr_code: product.sku || product.id.toString(),
-          }}
-          onClose={() => setPrintModalOpen(false)}
-        />
-      )}
 
       {/* Tabs */}
       <div className="flex gap-0.5 border-b border-[var(--border)]">
