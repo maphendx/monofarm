@@ -301,12 +301,15 @@ export default function ProductionPage() {
         onCreated={(b) => setBatches((prev) => [b, ...prev])}
       />
 
-      <CloseBatchModal
-        batch={batchToClose}
-        open={!!batchToClose}
-        onClose={() => setBatchToClose(null)}
-        onClosed={(b) => setBatches((prev) => prev.map((x) => x.id === b.id ? b : x))}
-      />
+      {batchToClose && (
+        <CloseBatchModal
+          key={batchToClose.id}
+          batch={batchToClose}
+          open
+          onClose={() => setBatchToClose(null)}
+          onClosed={(b) => setBatches((prev) => prev.map((x) => x.id === b.id ? b : x))}
+        />
+      )}
     </div>
   );
 }
