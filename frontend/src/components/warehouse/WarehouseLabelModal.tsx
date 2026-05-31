@@ -152,9 +152,11 @@ function LabelCard({
     </div>
   );
 
-  const fsPrimary = `${Math.max(3.5, cfg.hMm * 0.27)}mm`;
-  const fsSub     = `${Math.max(2.2, cfg.hMm * 0.16)}mm`;
-  const gap       = `${pad * 0.4}mm`;
+  // Font sizes capped so 3 lines always fit inside the label height
+  const maxLinesMm = (sqMm - pad) / 3.2;  // distribute height across ~3 text rows
+  const fsPrimary = `${Math.min(maxLinesMm * 1.2, Math.max(3, cfg.hMm * 0.20))}mm`;
+  const fsSub     = `${Math.min(maxLinesMm * 0.85, Math.max(2, cfg.hMm * 0.14))}mm`;
+  const gap       = `${Math.max(0.3, pad * 0.25)}mm`;
 
   // ── Cell (QR left, text right) ──────────────────────────────────────────────
   if (item.type === "cell") {
@@ -204,10 +206,10 @@ function LabelCard({
 
   // ── Product A4 (photo | name+categories | Code128 barcode) ──────────────────
   //
-  //   [photo sqMm×sqMm] | [flex-1 text] | [barcode]
+  //   [photo sqMm×sqMm] | [flex-1 text] | [barcode ~sqMm wide]
   //
-  const bcAreaH = `${sqMm * 0.88}mm`;   // barcode image height
-  const bcAreaW = `${cfg.wMm * 0.38}mm`; // barcode column width
+  // Barcode column: proportional to height so it stays readable on small labels
+  const bcColMm = Math.max(sqMm * 1.1, 26);
 
   return (
     <div style={outer}>
@@ -220,22 +222,21 @@ function LabelCard({
         }}>
           {imgDataUrl
             ? <img src={imgDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            : <span style={{ fontSize: `${Math.max(2, sqMm * 0.22)}mm`, color: "#ccc" }}>фото</span>
+            : <span style={{ fontSize: `${Math.max(2, sqMm * 0.18)}mm`, color: "#ccc" }}>фото</span>
           }
         </div>
       )}
 
-      {/* Name + categories */}
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
+      {/* Name + categories + sku */}
+      <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
         <div style={{
-          fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.2,
-          overflow: "hidden",
-          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+          fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.15,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {item.name}
         </div>
         {fields.secondary && item.categories?.length ? (
-          <div style={{ fontSize: fsSub, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: fsSub, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {item.categories.slice(0, 3).join(" · ")}
           </div>
         ) : null}
@@ -245,11 +246,12 @@ function LabelCard({
       </div>
 
       {/* Code128 barcode */}
-      <div style={{ flexShrink: 0, width: bcAreaW, height: `${sqMm}mm`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ flexShrink: 0, width: `${bcColMm}mm`, height: `${sqMm}mm`, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {barcodeDataUrl
-          ? <img src={barcodeDataUrl} alt={item.barcode || item.sku} style={{ height: bcAreaH, width: "100%", objectFit: "contain", display: "block" }} />
-          : <div style={{ width: "100%", height: bcAreaH, background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: `${Math.max(1.8, sqMm * 0.14)}mm`, color: "#bbb" }}>штрих-код</span>
+          ? <img src={barcodeDataUrl} alt={item.barcode || item.sku}
+              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+          : <div style={{ width: "100%", height: "100%", background: "#f5f5f5", borderRadius: "0.5mm", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: `${Math.max(2, sqMm * 0.14)}mm`, color: "#bbb" }}>штрих-код</span>
             </div>
         }
       </div>
@@ -287,23 +289,28 @@ export function WarehouseLabelModal({
   useEffect(() => {
     if (!isProduct) return;
 
-    const hPx = Math.round(cfg.hMm * (96 / 25.4));
+    // Fetch images once (they don't change with size)
+    items.forEach(item => {
+      if (item.type !== "product" || !item.image_url) return;
+      fetchDataUrl(item.image_url).then(url => {
+        if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
+      });
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Re-render Code128 whenever label height changes (size picker)
+  useEffect(() => {
+    if (!isProduct) return;
+    const hPx = Math.round(cfg.hMm * (96 / 25.4));
+    setBarcodeUrls({});
     items.forEach(item => {
       if (item.type !== "product") return;
-
-      if (item.image_url) {
-        fetchDataUrl(item.image_url).then(url => {
-          if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
-        });
-      }
-
       const barcodeText = item.barcode || item.sku || `PROD:${item.id}`;
       generateCode128Url(barcodeText, hPx).then(url => {
         if (url) setBarcodeUrls(prev => ({ ...prev, [item.id]: url }));
       });
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sizeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function switchMode(m: PrintMode) {
     setMode(m);
