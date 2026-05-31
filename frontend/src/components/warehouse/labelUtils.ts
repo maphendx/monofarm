@@ -6,13 +6,14 @@ export async function generateCode128Url(text: string, hPx: number): Promise<str
       el: HTMLCanvasElement, v: string, o: object,
     ) => void;
     const canvas = document.createElement("canvas");
-    // Generate at 3× resolution for crisp display at any scale
-    const h = Math.round(hPx * 3);
+    // Generate at 2× resolution. Keep bars shorter so image isn't portrait-heavy.
+    const h = Math.round(hPx * 2);
+    const barH = Math.round(h * 0.52);
+    const fontSize = Math.max(10, Math.round(h * 0.13));
     JsBarcode(canvas, text, {
       format: "CODE128", displayValue: true,
-      fontSize: Math.max(14, Math.round(h * 0.14)),
-      textMargin: 3, margin: 6,
-      width: 3, height: Math.round(h * 0.62),
+      fontSize, textMargin: 2, margin: 4,
+      width: 2, height: barH,
       background: "#ffffff", lineColor: "#000000",
     });
     return canvas.toDataURL("image/png");

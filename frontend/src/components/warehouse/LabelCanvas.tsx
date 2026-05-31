@@ -134,9 +134,9 @@ function ElementRenderer({
       const bcVal = substituteVars(el.value ?? "", vars);
       const bcUrl = barcodeUrls?.[bcVal];
       return (
-        <div style={{ ...pos, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ ...pos }}>
           {bcUrl
-            ? <img src={bcUrl} alt={bcVal} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+            ? <img src={bcUrl} alt={bcVal} style={{ width: "100%", height: "100%", objectFit: "fill", display: "block" }} />
             : <div style={{ width: "100%", height: "100%", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ fontSize: `${Math.max(2, el.h * 0.14)}mm`, color: "#bbb", fontFamily: "Arial" }}>{bcVal || "штрих-код"}</span>
               </div>
