@@ -1,100 +1,76 @@
 "use client";
 
+/**
+ * WarehouseLabelModal — full-screen label editor + printer.
+ *
+ * Opens as a full-screen overlay (like ScannerModal) so you get the
+ * full editor experience right from the "🏷 Мітки" button.
+ *
+ * Modes:
+ *   preview  — canvas with real item data, template selector, print buttons
+ *   edit     — drag+resize canvas elements, element list, properties panel
+ */
+
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import QRCode from "react-qr-code";
-import { Modal } from "@/components/ui/Modal";
 import { API_URL, api, getToken } from "@/lib/api";
 import { generateCode128Url } from "@/components/warehouse/labelUtils";
 import {
   LabelCanvas,
   substituteVars,
   type LabelDataVars,
+  type LabelElement,
   type LabelTemplate,
 } from "@/components/warehouse/LabelCanvas";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Public types ─────────────────────────────────────────────────────────────
 
 export type WarehouseLabelItem =
   | { type: "cell";    id: number; code: string; zone_name: string; notes?: string | null }
   | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[] }
   | { type: "action";  id: number; code: string; label: string };
 
-type LabelSize   = "50x25" | "57x32" | "100x30" | "100x50" | "100x100";
-type PrintMode   = "zebra" | "a4";
-type LabelFields = { secondary: boolean; photo: boolean };
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SIZES = [
-  { key: "100x30"  as LabelSize, label: "100×30 мм",  wMm: 100, hMm: 30  },
-  { key: "100x50"  as LabelSize, label: "100×50 мм",  wMm: 100, hMm: 50  },
-  { key: "50x25"   as LabelSize, label: "50×25 мм",   wMm: 50,  hMm: 25  },
-  { key: "57x32"   as LabelSize, label: "57×32 мм",   wMm: 57,  hMm: 32  },
-  { key: "100x100" as LabelSize, label: "100×100 мм", wMm: 100, hMm: 100 },
+const PX_PER_MM = 96 / 25.4;
+const CANVAS_W  = 520;         // canvas preview width in px
+const GRID_MM   = 0.5;
+
+const EL_ICONS: Record<string, string> = { text: "T", qr: "▦", barcode: "▐▌", image: "🖼", rect: "□", line: "─" };
+const EL_LABELS: Record<string, string> = { text: "Текст", qr: "QR", barcode: "Штрих-код", image: "Фото", rect: "Рамка", line: "Лінія" };
+
+// ─── ZPL (fallback when no template or for Zebra) ─────────────────────────────
+
+const ZPL_SIZES = [
+  { key: "57x32",   wMm: 57,  hMm: 32  },
+  { key: "50x25",   wMm: 50,  hMm: 25  },
+  { key: "100x50",  wMm: 100, hMm: 50  },
+  { key: "100x100", wMm: 100, hMm: 100 },
 ];
 
-const DEFAULT_SIZE: Record<PrintMode, LabelSize> = { a4: "100x30", zebra: "57x32" };
-const DEFAULT_SIZE_ACTION: Record<PrintMode, LabelSize> = { a4: "100x100", zebra: "57x32" };
-const DEFAULT_FIELDS: LabelFields = { secondary: true, photo: true };
-const PX_PER_MM = 96 / 25.4;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function defaultQr(item: WarehouseLabelItem): string {
-  if (item.type === "cell")    return `CELL:${item.id}`;
-  if (item.type === "action")  return item.code;
-  return item.barcode || item.sku;
-}
-
-async function fetchDataUrl(src: string): Promise<string | null> {
-  if (src.startsWith("http")) return src;
-  try {
-    const r = await fetch(API_URL + src, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } });
-    if (!r.ok) return null;
-    const blob = await r.blob();
-    return await new Promise<string>(res => {
-      const reader = new FileReader();
-      reader.onload = () => res(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  } catch { return null; }
-}
-
-
-function buildZpl(
-  items: WarehouseLabelItem[],
-  qrVals: string[],
-  sizeKey: LabelSize,
-  fields: LabelFields,
-): string {
-  const cfg = SIZES.find(s => s.key === sizeKey)!;
-  const d = (mm: number) => Math.round(mm * 203 / 25.4);
+function buildZpl(items: WarehouseLabelItem[], qrVals: string[], tpl: LabelTemplate | null): string {
+  const fallback = ZPL_SIZES[0];
+  const cfg = { wMm: tpl?.width_mm ?? fallback.wMm, hMm: tpl?.height_mm ?? fallback.hMm };
+  const d   = (mm: number) => Math.round(mm * 203 / 25.4);
   const W = d(cfg.wMm), H = d(cfg.hMm), pad = d(2);
   const mag = Math.min(10, Math.max(2, Math.floor((H - pad * 2) / 21)));
-  const qrD = mag * 21;
-  const qrY = Math.floor((H - qrD) / 2);
+  const qrD = mag * 21, qrY = Math.floor((H - qrD) / 2);
   const txX = pad + qrD + pad;
   const fsP = Math.min(60, Math.floor(H * 0.30));
   const fsS = Math.min(36, Math.floor(H * 0.18));
   const safe = (s: string) => s.replace(/[\\^~]/g, "").slice(0, 28);
 
   return items.map((item, i) => {
-    const primary   = item.type === "cell"   ? item.code      :
-                      item.type === "action" ? safe(item.label) :
-                                               safe(item.name);
-    const secondary = item.type === "cell"   ? item.zone_name :
-                      item.type === "action" ? item.code       :
-                                               item.sku;
-    const cats      = item.type === "product" ? (item.categories?.slice(0, 2).join(", ") ?? "") : "";
-
+    const qrVal  = safe(qrVals[i] ?? defaultQr(item));
+    const p1     = item.type === "cell" ? item.code : item.type === "action" ? safe(item.label) : safe(item.name);
+    const p2     = item.type === "cell" ? item.zone_name : item.type === "action" ? item.code : item.sku;
+    const p3     = item.type === "product" ? (item.categories?.slice(0, 2).join(", ") ?? "") : "";
     return [
       "^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0",
-      `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${safe(qrVals[i] ?? defaultQr(item))}^FS`,
-      `^FO${txX},${Math.floor(H * 0.30)}^A0N,${fsP},${fsP}^FD${safe(primary)}^FS`,
-      fields.secondary && secondary
-        ? `^FO${txX},${Math.floor(H * 0.58)}^A0N,${fsS},${fsS}^FD${safe(secondary)}^FS` : "",
-      cats ? `^FO${txX},${Math.floor(H * 0.78)}^A0N,${fsS},${fsS}^FD${safe(cats)}^FS` : "",
+      `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${qrVal}^FS`,
+      `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safe(p1)}^FS`,
+      p2 ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safe(p2)}^FS` : "",
+      p3 ? `^FO${txX},${Math.floor(H * 0.80)}^A0N,${fsS},${fsS}^FD${safe(p3)}^FS` : "",
       "^XZ",
     ].filter(Boolean).join("\n");
   }).join("\n");
@@ -106,582 +82,638 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
     if (!dr.ok) return "not_available";
     const device = await dr.json() as Record<string, unknown>;
     const wr = await fetch("http://localhost:9090/write", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device, data: zpl }),
-      signal: AbortSignal.timeout(3000),
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
     });
     return wr.ok ? "ok" : "error";
   } catch { return "not_available"; }
 }
 
-// ─── LabelCard ────────────────────────────────────────────────────────────────
-//
-//  Cell:              [QR] | [code (big) + zone]
-//  Product zebra:     [QR] | [name + sku]
-//  Product a4:        [photo?] | [full name + categories] | [Code128 barcode]
-//
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function LabelCard({
-  item, qrVal, cfg, fields, mode, imgDataUrl, barcodeDataUrl,
-}: {
-  item: WarehouseLabelItem;
-  qrVal: string;
-  cfg: (typeof SIZES)[number];
-  fields: LabelFields;
-  mode: PrintMode;
-  imgDataUrl?: string;
-  barcodeDataUrl?: string;
-}) {
-  const pad   = 1.5;
-  const sqMm  = cfg.hMm - pad * 2;   // side-column square size (mm)
-
-  const outer: React.CSSProperties = {
-    width: `${cfg.wMm}mm`, height: `${cfg.hMm}mm`,
-    border: "0.3mm solid #ccc", borderRadius: "1mm",
-    display: "flex", flexDirection: "row", alignItems: "center",
-    padding: `${pad}mm`, gap: `${pad}mm`,
-    boxSizing: "border-box", background: "#fff", overflow: "hidden",
-    fontFamily: "Arial, Helvetica, sans-serif",
-  };
-
-  const qrEl = (
-    <div style={{ width: `${sqMm}mm`, height: `${sqMm}mm`, flexShrink: 0 }}>
-      <QRCode value={qrVal || " "} level="M" size={128}
-        style={{ width: "100%", height: "100%", display: "block" }} />
-    </div>
-  );
-
-  // Font sizes capped so 3 lines always fit inside the label height
-  const maxLinesMm = (sqMm - pad) / 3.2;  // distribute height across ~3 text rows
-  const fsPrimary = `${Math.min(maxLinesMm * 1.2, Math.max(3, cfg.hMm * 0.20))}mm`;
-  const fsSub     = `${Math.min(maxLinesMm * 0.85, Math.max(2, cfg.hMm * 0.14))}mm`;
-  const gap       = `${Math.max(0.3, pad * 0.25)}mm`;
-
-  // ── Action QR (square: QR top, label bottom; wide: QR left, label right) ────
-  if (item.type === "action") {
-    const isWide = cfg.wMm / cfg.hMm >= 1.8;
-    if (isWide) {
-      // E.g. 57×32 or 100×50 — horizontal layout
-      return (
-        <div style={outer}>
-          {qrEl}
-          <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
-            <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.label}
-            </div>
-            <div style={{ fontSize: fsSub, color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.code}
-            </div>
-          </div>
-        </div>
-      );
-    }
-    // Square (e.g. 100×100) — QR on top, text below
-    const innerH = cfg.hMm - pad * 2;
-    const qrSqMm = innerH * 0.62;
-    const fsAction = `${Math.max(4, cfg.hMm * 0.10)}mm`;
-    const fsCode   = `${Math.max(2.5, cfg.hMm * 0.06)}mm`;
-    return (
-      <div style={{ ...outer, flexDirection: "column", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ width: `${qrSqMm}mm`, height: `${qrSqMm}mm`, flexShrink: 0 }}>
-          <QRCode value={qrVal || " "} level="M" size={128}
-            style={{ width: "100%", height: "100%", display: "block" }} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap, overflow: "hidden", width: "100%" }}>
-          <div style={{ fontWeight: "bold", fontSize: fsAction, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
-            {item.label}
-          </div>
-          <div style={{ fontSize: fsCode, color: "#999", fontFamily: "monospace", textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>
-            {item.code}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Cell (QR left, text right) ──────────────────────────────────────────────
-  if (item.type === "cell") {
-    return (
-      <div style={outer}>
-        {qrEl}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
-          <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.code}
-          </div>
-          {fields.secondary && (
-            <div style={{ fontSize: fsSub, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.zone_name}
-            </div>
-          )}
-          {item.notes && (
-            <div style={{ fontSize: fsSub, color: "#999", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.notes}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Product Zebra (QR left, name + sku right) ────────────────────────────────
-  if (mode === "zebra") {
-    return (
-      <div style={outer}>
-        {qrEl}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
-          <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.name}
-          </div>
-          <div style={{ fontSize: fsSub, color: "#555", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.sku}
-          </div>
-          {item.categories?.length ? (
-            <div style={{ fontSize: fsSub, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {item.categories.slice(0, 2).join(", ")}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Product A4 (photo | name+categories | Code128 barcode) ──────────────────
-  //
-  //   [photo sqMm×sqMm] | [flex-1 text] | [barcode ~sqMm wide]
-  //
-  // Barcode column: proportional to height so it stays readable on small labels
-  const bcColMm = Math.max(sqMm * 1.1, 26);
-
-  return (
-    <div style={outer}>
-      {/* Photo (optional) */}
-      {fields.photo && (
-        <div style={{
-          width: `${sqMm}mm`, height: `${sqMm}mm`, flexShrink: 0,
-          overflow: "hidden", borderRadius: "0.5mm",
-          background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          {imgDataUrl
-            ? <img src={imgDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-            : <span style={{ fontSize: `${Math.max(2, sqMm * 0.18)}mm`, color: "#ccc" }}>фото</span>
-          }
-        </div>
-      )}
-
-      {/* Name + categories + sku */}
-      <div style={{ flex: 1, minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
-        <div style={{
-          fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.15,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {item.name}
-        </div>
-        {fields.secondary && item.categories?.length ? (
-          <div style={{ fontSize: fsSub, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {item.categories.slice(0, 3).join(" · ")}
-          </div>
-        ) : null}
-        <div style={{ fontSize: fsSub, color: "#999", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.sku}
-        </div>
-      </div>
-
-      {/* Code128 barcode */}
-      <div style={{ flexShrink: 0, width: `${bcColMm}mm`, height: `${sqMm}mm`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {barcodeDataUrl
-          ? <img src={barcodeDataUrl} alt={item.barcode || item.sku}
-              style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
-          : <div style={{ width: "100%", height: "100%", background: "#f5f5f5", borderRadius: "0.5mm", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: `${Math.max(2, sqMm * 0.14)}mm`, color: "#bbb" }}>штрих-код</span>
-            </div>
-        }
-      </div>
-    </div>
-  );
+function defaultQr(item: WarehouseLabelItem): string {
+  if (item.type === "cell")   return `CELL:${item.id}`;
+  if (item.type === "action") return item.code;
+  return item.barcode || item.sku;
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
+async function fetchDataUrl(src: string): Promise<string | null> {
+  if (src.startsWith("http")) return src;
+  try {
+    const r = await fetch(API_URL + src, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } });
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return await new Promise<string>(res => { const rd = new FileReader(); rd.onload = () => res(rd.result as string); rd.readAsDataURL(blob); });
+  } catch { return null; }
+}
 
-export function WarehouseLabelModal({
-  items,
-  onClose,
-}: {
-  items: WarehouseLabelItem[];
-  onClose: () => void;
-}) {
-  const isProduct = items[0]?.type === "product";
-  const isAction  = items[0]?.type === "action";
-  const initMode: PrintMode = (isProduct || isAction) ? "a4" : "zebra";
-  const sizeMap   = isAction ? DEFAULT_SIZE_ACTION : DEFAULT_SIZE;
+function itemToVars(item: WarehouseLabelItem, qrVal: string, imgUrl?: string): LabelDataVars {
+  if (item.type === "cell")   return { code: item.code, zone_name: item.zone_name, notes: item.notes ?? "", CELL_QR: qrVal };
+  if (item.type === "action") return { label: item.label, code: item.code, ACTION_QR: qrVal };
+  return { name: item.name, sku: item.sku, barcode: item.barcode ?? "", categories: item.categories?.join(" · ") ?? "", PROD_QR: qrVal, product_image: imgUrl };
+}
 
-  const [mode,      setMode]      = useState<PrintMode>(initMode);
-  const [sizeKey,   setSizeKey]   = useState<LabelSize>(() => sizeMap[initMode]);
-  const [fields,    setFields]    = useState<LabelFields>(DEFAULT_FIELDS);
-  const [customQr,  setCustomQr]  = useState(() => defaultQr(items[0]));
-  const [status,    setStatus]    = useState<string | null>(null);
-  const [busy,      setBusy]      = useState(false);
-  const [imgUrls,       setImgUrls]      = useState<Record<number, string>>({});
-  const [barcodeUrls,   setBarcodeUrls]  = useState<Record<number, string>>({});
-  const [templates,     setTemplates]    = useState<LabelTemplate[]>([]);
-  const [templateId,    setTemplateId]   = useState<number | null>(null);
-  const hiddenRef = useRef<HTMLDivElement>(null);
-  const inFlight  = useRef(false);
+function uid() { return Math.random().toString(36).slice(2, 8); }
+function snap(v: number) { return Math.round(v / GRID_MM) * GRID_MM; }
+function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
-  const activeTpl = templateId !== null ? templates.find(t => t.id === templateId) : null;
+function defaultEl(type: LabelElement["type"], tpl: LabelTemplate): LabelElement {
+  const cx = Math.round(tpl.width_mm / 2 - 15), cy = Math.round(tpl.height_mm / 2 - 5);
+  switch (type) {
+    case "text":    return { id: uid(), type, x: cx, y: cy, w: 30, h: 7,  text: "{{name}}", fontSize: 4.5, fontWeight: "normal", color: "#111111", align: "left" };
+    case "qr":      return { id: uid(), type, x: cx, y: cy, w: 20, h: 20, value: "{{CELL_QR}}", level: "M" };
+    case "barcode": return { id: uid(), type, x: cx, y: cy, w: 35, h: 15, value: "{{PROD_QR}}", barcodeFormat: "CODE128", showText: true };
+    case "image":   return { id: uid(), type, x: cx, y: cy, w: 20, h: 20, source: "product_image", objectFit: "cover" };
+    case "rect":    return { id: uid(), type, x: cx, y: cy, w: 30, h: 10, borderColor: "#cccccc", borderWidth: 0.3, fillColor: "transparent", borderRadius: 0 };
+    case "line":    return { id: uid(), type, x: cx, y: cy, w: 40, h: 0.5, strokeColor: "#cccccc", strokeWidth: 0.5, orientation: "horizontal" };
+  }
+}
 
-  const cfg      = SIZES.find(s => s.key === sizeKey)!;
-  const isSingle = items.length === 1;
+type Handle = "nw"|"n"|"ne"|"e"|"se"|"s"|"sw"|"w";
+const HANDLES: Handle[] = ["nw","n","ne","e","se","s","sw","w"];
+const HANDLE_CURSOR: Record<Handle,string> = { nw:"nw-resize",n:"n-resize",ne:"ne-resize",e:"e-resize",se:"se-resize",s:"s-resize",sw:"sw-resize",w:"w-resize" };
+function handlePos(h: Handle, w: number, hh: number) {
+  const cx = w/2, cy = hh/2;
+  const m: Record<Handle,[number,number]> = { nw:[0,0],n:[cx,0],ne:[w,0],e:[w,cy],se:[w,hh],s:[cx,hh],sw:[0,hh],w:[0,cy] };
+  return { left: m[h][0], top: m[h][1] };
+}
 
-  // Load templates + pre-fetch images
+const ALL_VARS = ["{{name}}","{{sku}}","{{barcode}}","{{categories}}","{{PROD_QR}}","{{code}}","{{zone_name}}","{{notes}}","{{CELL_QR}}","{{label}}","{{ACTION_QR}}"];
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelItem[]; onClose: () => void }) {
+  const itemType = items[0]?.type ?? "product";
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [templates,   setTemplates]   = useState<LabelTemplate[]>([]);
+  const [tplId,       setTplId]       = useState<number | null>(null);
+  const [editMode,    setEditMode]    = useState(false);
+  const [localTpl,    setLocalTpl]    = useState<LabelTemplate | null>(null); // mutable copy during edit
+  const [selId,       setSelId]       = useState<string | null>(null);
+  const [previewIdx,  setPreviewIdx]  = useState(0);
+  const [customQr,    setCustomQr]    = useState<string>("");
+  const [imgUrls,     setImgUrls]     = useState<Record<number,string>>({});
+  const [bcUrls,      setBcUrls]      = useState<Record<string,string>>({});
+  const [status,      setStatus]      = useState<string | null>(null);
+  const [busy,        setBusy]        = useState(false);
+  const [saving,      setSaving]      = useState(false);
+
+  const canvasBoxRef = useRef<HTMLDivElement>(null);
+  const dragRef      = useRef<{id:string;startCX:number;startCY:number;origX:number;origY:number}|null>(null);
+  const resizeRef    = useRef<{id:string;handle:Handle;startCX:number;startCY:number;origEl:LabelElement}|null>(null);
+  const inFlight     = useRef(false);
+
+  const activeTpl  = localTpl ?? templates.find(t => t.id === tplId) ?? null;
+  const isSingle   = items.length === 1;
+  const previewItem = items[Math.min(previewIdx, items.length - 1)];
+  const qrVal      = customQr || defaultQr(previewItem);
+  const previewVars = itemToVars(previewItem, qrVal, previewItem.type === "product" ? imgUrls[previewItem.id] : undefined);
+
+  // canvas scale
+  const scale   = activeTpl ? CANVAS_W / (activeTpl.width_mm * PX_PER_MM) : 1;
+  const canvasH = activeTpl ? Math.round(activeTpl.height_mm * PX_PER_MM * scale) : 0;
+
+  // ── Load templates on mount ────────────────────────────────────────────────
   useEffect(() => {
-    const type = items[0]?.type ?? "universal";
-    api<LabelTemplate[]>(`/api/warehouse/label-templates?item_type=${type}`)
+    api<LabelTemplate[]>(`/api/warehouse/label-templates?item_type=${itemType}`)
       .then(data => {
         setTemplates(data);
-        const def = data.find(t => t.is_default);
-        if (def) setTemplateId(def.id);
-      })
-      .catch(() => {});
+        const def = data.find(t => t.is_default) ?? data[0];
+        if (def) { setTplId(def.id); }
+      }).catch(() => {});
 
-    if (!isProduct) return;
-    items.forEach(item => {
-      if (item.type !== "product" || !item.image_url) return;
-      fetchDataUrl(item.image_url).then(url => {
-        if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
+    if (itemType === "product") {
+      items.forEach(item => {
+        if (item.type !== "product" || !item.image_url) return;
+        fetchDataUrl(item.image_url).then(url => { if (url) setImgUrls(p => ({ ...p, [item.id]: url })); });
       });
-    });
+    }
+    setCustomQr(defaultQr(items[0]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-render Code128 whenever label height changes (size picker)
+  // ── Pre-render barcodes when template changes ──────────────────────────────
   useEffect(() => {
-    if (!isProduct) return;
-    const hPx = Math.round(cfg.hMm * (96 / 25.4));
-    setBarcodeUrls({});
-    items.forEach(item => {
-      if (item.type !== "product") return;
-      const barcodeText = item.barcode || item.sku || `PROD:${item.id}`;
-      generateCode128Url(barcodeText, hPx).then(url => {
-        if (url) setBarcodeUrls(prev => ({ ...prev, [item.id]: url }));
+    if (!activeTpl) return;
+    const hPx = Math.round(activeTpl.height_mm * PX_PER_MM);
+    activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+      items.slice(0, 20).forEach(item => {
+        const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+        const raw  = substituteVars(el.value ?? "", vars as Record<string,string>);
+        if (!raw || bcUrls[raw]) return;
+        generateCode128Url(raw, hPx).then(url => { if (url) setBcUrls(p => ({ ...p, [raw]: url })); });
       });
     });
-  }, [sizeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTpl?.id, activeTpl?.elements]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function switchMode(m: PrintMode) {
-    setMode(m);
-    setSizeKey(sizeMap[m]);
+  // ── Enter edit mode ────────────────────────────────────────────────────────
+  function enterEdit() {
+    if (!activeTpl) return;
+    setLocalTpl(JSON.parse(JSON.stringify(activeTpl)));
+    setEditMode(true);
+    setSelId(null);
   }
 
-  function getQrVal(item: WarehouseLabelItem): string {
-    return isSingle ? (customQr || defaultQr(item)) : defaultQr(item);
+  function exitEdit() {
+    setEditMode(false);
+    setLocalTpl(null);
+    setSelId(null);
   }
 
-  function itemToVars(item: WarehouseLabelItem): LabelDataVars {
-    if (item.type === "cell") return {
-      code: item.code, zone_name: item.zone_name, notes: item.notes ?? "",
-      CELL_QR: getQrVal(item),
-    };
-    if (item.type === "action") return {
-      label: item.label, code: item.code, ACTION_QR: getQrVal(item),
-    };
-    return {
-      name: item.name, sku: item.sku, barcode: item.barcode ?? "",
-      categories: item.categories?.join(" · ") ?? "",
-      PROD_QR: getQrVal(item),
-      product_image: imgUrls[item.id],
-    };
+  // ── Element mutations (edit mode) ─────────────────────────────────────────
+  function patchEl(id: string, patch: Partial<LabelElement>) {
+    setLocalTpl(p => p ? ({ ...p, elements: p.elements.map(e => e.id === id ? { ...e, ...patch } : e) }) : null);
+  }
+  function addEl(type: LabelElement["type"]) {
+    if (!localTpl) return;
+    const el = defaultEl(type, localTpl);
+    setLocalTpl(p => p ? ({ ...p, elements: [...p.elements, el] }) : null);
+    setSelId(el.id);
+  }
+  function deleteEl(id: string) {
+    setLocalTpl(p => p ? ({ ...p, elements: p.elements.filter(e => e.id !== id) }) : null);
+    if (selId === id) setSelId(null);
+  }
+  function moveEl(id: string, dir: -1|1) {
+    setLocalTpl(prev => {
+      if (!prev) return null;
+      const arr = [...prev.elements];
+      const i = arr.findIndex(e => e.id === id), j = i + dir;
+      if (j < 0 || j >= arr.length) return prev;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      return { ...prev, elements: arr };
+    });
   }
 
-  // Resolve barcode data URL for a single element value given item vars
-  function getBcUrl(elValue: string, item: WarehouseLabelItem): string | undefined {
-    const vars = itemToVars(item);
-    const resolved = substituteVars(elValue, vars);
-    return (barcodeUrls as Record<string, string>)[resolved];
+  // ── Canvas drag + resize (edit mode) ─────────────────────────────────────
+  function onElMouseDown(e: React.MouseEvent, el: LabelElement) {
+    e.stopPropagation(); e.preventDefault();
+    setSelId(el.id);
+    dragRef.current = { id: el.id, startCX: e.clientX, startCY: e.clientY, origX: el.x, origY: el.y };
+  }
+  function onHandleMouseDown(e: React.MouseEvent, el: LabelElement, handle: Handle) {
+    e.stopPropagation(); e.preventDefault();
+    resizeRef.current = { id: el.id, handle, startCX: e.clientX, startCY: e.clientY, origEl: { ...el } };
   }
 
-  // ── A4 print ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!editMode) return;
+    function onMove(e: MouseEvent) {
+      if (dragRef.current && localTpl) {
+        const { id, startCX, startCY, origX, origY } = dragRef.current;
+        const el = localTpl.elements.find(e => e.id === id); if (!el) return;
+        patchEl(id, {
+          x: snap(clamp(origX + (e.clientX - startCX) / scale / PX_PER_MM, 0, localTpl.width_mm  - el.w)),
+          y: snap(clamp(origY + (e.clientY - startCY) / scale / PX_PER_MM, 0, localTpl.height_mm - el.h)),
+        });
+      }
+      if (resizeRef.current && localTpl) {
+        const { id, handle, startCX, startCY, origEl: o } = resizeRef.current;
+        const dxMm = (e.clientX - startCX) / scale / PX_PER_MM;
+        const dyMm = (e.clientY - startCY) / scale / PX_PER_MM;
+        const MIN = 2; let { x, y, w, h } = o;
+        if (handle.includes("e"))  w = snap(Math.max(MIN, o.w + dxMm));
+        if (handle.includes("w"))  { const d = snap(Math.min(o.w - MIN, dxMm)); x = o.x + d; w = o.w - d; }
+        if (handle.includes("s"))  h = snap(Math.max(MIN, o.h + dyMm));
+        if (handle.includes("n"))  { const d = snap(Math.min(o.h - MIN, dyMm)); y = o.y + d; h = o.h - d; }
+        patchEl(id, { x, y, w, h });
+      }
+    }
+    function onUp() { dragRef.current = null; resizeRef.current = null; }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup",   onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, [editMode, localTpl, scale]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keyboard shortcuts (edit mode)
+  useEffect(() => {
+    if (!editMode) return;
+    function onKey(e: KeyboardEvent) {
+      if (!selId || !localTpl || (e.target as HTMLElement).tagName === "INPUT") return;
+      const el = localTpl.elements.find(e => e.id === selId); if (!el) return;
+      const s = e.shiftKey ? 5 : 0.5;
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteEl(selId); }
+      else if (e.key === "ArrowLeft")  { e.preventDefault(); patchEl(selId, { x: snap(el.x - s) }); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); patchEl(selId, { x: snap(el.x + s) }); }
+      else if (e.key === "ArrowUp")    { e.preventDefault(); patchEl(selId, { y: snap(el.y - s) }); }
+      else if (e.key === "ArrowDown")  { e.preventDefault(); patchEl(selId, { y: snap(el.y + s) }); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editMode, selId, localTpl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Save template ──────────────────────────────────────────────────────────
+  async function saveTemplate() {
+    if (!localTpl || inFlight.current) return;
+    inFlight.current = true; setSaving(true);
+    try {
+      const body = { name: localTpl.name, item_type: localTpl.item_type, width_mm: localTpl.width_mm, height_mm: localTpl.height_mm, elements: localTpl.elements, is_default: localTpl.is_default };
+      let saved: LabelTemplate;
+      if (localTpl.id <= 0) {
+        saved = await api<LabelTemplate>("/api/warehouse/label-templates", { method: "POST", body: JSON.stringify({ ...body, name: localTpl.name + " (копія)" }) });
+      } else if (localTpl.is_builtin) {
+        saved = await api<LabelTemplate>("/api/warehouse/label-templates", { method: "POST", body: JSON.stringify({ ...body, name: localTpl.name + " (копія)" }) });
+      } else {
+        saved = await api<LabelTemplate>(`/api/warehouse/label-templates/${localTpl.id}`, { method: "PUT", body: JSON.stringify(body) });
+      }
+      setTemplates(p => {
+        const exists = p.find(t => t.id === saved.id);
+        return exists ? p.map(t => t.id === saved.id ? saved : t) : [...p, saved];
+      });
+      setTplId(saved.id);
+      setLocalTpl(null);
+      setEditMode(false);
+      setSelId(null);
+    } finally { inFlight.current = false; setSaving(false); }
+  }
+
+  // ── A4 print ──────────────────────────────────────────────────────────────
   function printA4() {
-    const container = hiddenRef.current;
+    const container = document.getElementById("wl-print-capture");
     if (!container) return;
-
-    // Strip explicit SVG width/height attrs so CSS can control sizing
-    const labelHtml = Array.from(container.children)
-      .map(el => el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1"))
-      .join("");
-
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   @page{size:A4;margin:8mm}
-  body{display:flex;flex-wrap:wrap;gap:1.5mm;align-content:flex-start;background:#fff;padding:0}
+  body{display:flex;flex-wrap:wrap;gap:1.5mm;align-content:flex-start;background:#fff}
   svg{width:100%!important;height:100%!important;display:block!important}
   img{display:block}
 </style></head><body>
-${labelHtml}
+${Array.from(container.children).map(el => el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1")).join("")}
 <script>window.onload=function(){setTimeout(function(){window.print();},500);}</script>
 </body></html>`;
-
     const w = window.open("", "_blank");
     if (w) { w.document.open(); w.document.write(html); w.document.close(); }
   }
 
-  // ── Zebra ZPL ────────────────────────────────────────────────────────────────
+  // ── Zebra ZPL ─────────────────────────────────────────────────────────────
   async function printZebra() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setStatus(null);
-
-    const zpl = buildZpl(items, items.map(getQrVal), sizeKey, fields);
+    const qrVals = items.map((item, i) => i === 0 && isSingle ? qrVal : defaultQr(item));
+    const zpl = buildZpl(items, qrVals, activeTpl ?? null);
     const result = await sendToBrowserPrint(zpl);
-    setStatus(
-      result === "ok"            ? "✓ Відправлено на Zebra"             :
-      result === "not_available" ? "✗ Zebra Browser Print не знайдено" :
-                                   "✗ Помилка відправки",
-    );
+    setStatus(result === "ok" ? "✓ Відправлено на Zebra" : result === "not_available" ? "✗ Zebra Browser Print не знайдено" : "✗ Помилка");
     inFlight.current = false; setBusy(false);
   }
 
-  // ── Preview ──────────────────────────────────────────────────────────────────
-  const PREVIEW_W = 260;
-  const naturalW  = cfg.wMm * PX_PER_MM;
-  const naturalH  = cfg.hMm * PX_PER_MM;
-  const scale     = PREVIEW_W / naturalW;
-  const previewH  = Math.round(naturalH * scale);
+  // ── Barcode url map for current preview ───────────────────────────────────
+  const previewBcUrls: Record<string,string> = {};
+  if (activeTpl) {
+    activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+      const raw = substituteVars(el.value ?? "", previewVars as Record<string,string>);
+      if (bcUrls[raw]) previewBcUrls[raw] = bcUrls[raw];
+    });
+  }
 
-  const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm font-mono outline-none focus:border-[var(--border-focus)]";
+  // ── Render ────────────────────────────────────────────────────────────────
+  const selEl = editMode ? (localTpl?.elements.find(e => e.id === selId) ?? null) : null;
+  const displayTpl = editMode ? localTpl : activeTpl;
 
-  const previewItem = items[0];
-  const previewImg  = previewItem.type === "product" ? imgUrls[previewItem.id]     : undefined;
-  const previewBC   = previewItem.type === "product" ? barcodeUrls[previewItem.id] : undefined;
-
-  // Field toggles depend on item type and mode
-  const fieldRows = isAction ? [] : [
-    ...(isProduct && mode === "a4" ? [{ key: "photo"     as keyof LabelFields, label: "Фото" }] : []),
-    ...(isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Категорії" }] : []),
-    ...(!isProduct ? [{ key: "secondary" as keyof LabelFields, label: "Назва зони" }] : []),
-  ];
+  const inputCls = "rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]";
 
   return (
     <>
-      <Modal
-        open
-        onClose={onClose}
-        size="lg"
-        title={
-          items.length > 1
-            ? `Мітки — ${items.length} ${isProduct ? "позицій" : isAction ? "дій" : "комірок"}`
-            : `Мітка — ${
-                isProduct ? (items[0] as Extract<WarehouseLabelItem, { type: "product" }>).name :
-                isAction  ? (items[0] as Extract<WarehouseLabelItem, { type: "action"  }>).label :
-                            (items[0] as Extract<WarehouseLabelItem, { type: "cell"    }>).code
-              }`
-        }
-        footer={
+    {/* Full-screen overlay */}
+    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg-elevated)]">
+
+      {/* ── Top bar ───────────────────────────────────────────────────────── */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-3">
+        <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">✕</button>
+        <div className="h-4 w-px bg-[var(--border)]" />
+        <span className="font-medium text-sm">
+          {items.length > 1 ? `Мітки — ${items.length} ${itemType === "product" ? "позицій" : itemType === "action" ? "дій" : "комірок"}` : `Мітка`}
+        </span>
+
+        {/* Template selector */}
+        <select value={tplId ?? ""} onChange={e => { setTplId(e.target.value ? Number(e.target.value) : null); setLocalTpl(null); setEditMode(false); }}
+          className="ml-2 min-w-[180px] rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]">
+          <option value="">— Оберіть шаблон —</option>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+
+        {/* Edit / Save / Cancel */}
+        {!editMode ? (
+          <button onClick={enterEdit} disabled={!activeTpl}
+            className="btn btn-secondary btn-sm disabled:opacity-40">
+            Редагувати шаблон
+          </button>
+        ) : (
           <>
-            {status && (
-              <span className={`mr-auto text-xs truncate max-w-xs ${status.startsWith("✓") ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>
-                {status}
-              </span>
-            )}
-            <button onClick={onClose} className="btn btn-ghost">Закрити</button>
-            <button onClick={printZebra} disabled={busy} className="btn btn-secondary disabled:opacity-50">
-              {busy ? "…" : "Zebra (ZPL)"}
+            <button onClick={saveTemplate} disabled={saving} className="btn btn-primary btn-sm disabled:opacity-50">
+              {saving ? "…" : localTpl?.is_builtin ? "Зберегти як копію" : "Зберегти"}
             </button>
-            <button onClick={printA4} className="btn btn-primary">
-              🖨 Друк A4
-            </button>
+            <button onClick={exitEdit} className="btn btn-ghost btn-sm">Скасувати</button>
           </>
-        }
-      >
-        <div className="grid grid-cols-[auto_1fr] gap-6">
+        )}
 
-          {/* Preview */}
-          <div>
-            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Превью</p>
-            <div
-              className="flex items-center justify-center rounded-lg bg-[var(--surface-hi)] p-3"
-              style={{ width: PREVIEW_W + 24 }}
-            >
-              {activeTpl ? (() => {
-                const tplW = activeTpl.width_mm * PX_PER_MM;
-                const tplH = activeTpl.height_mm * PX_PER_MM;
-                const tplScale = PREVIEW_W / tplW;
-                return (
-                  <div style={{ width: PREVIEW_W, height: Math.round(tplH * tplScale), overflow: "hidden" }}>
-                    <div style={{ transform: `scale(${tplScale})`, transformOrigin: "top left", width: tplW, height: tplH }}>
-                      <LabelCanvas template={activeTpl} vars={itemToVars(previewItem)}
-                        barcodeUrls={Object.fromEntries(
-                          activeTpl.elements.filter(e => e.type === "barcode" && e.value).map(e => {
-                            const raw = substituteVars(e.value!, itemToVars(previewItem));
-                            return [raw, (barcodeUrls as Record<string, string>)[raw] ?? ""] as [string, string];
-                          })
-                        )} />
-                    </div>
-                  </div>
-                );
-              })() : (
-                <div style={{ width: PREVIEW_W, height: previewH, overflow: "hidden" }}>
-                  <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: naturalW, height: naturalH }}>
-                    <LabelCard
-                      item={previewItem}
-                      qrVal={getQrVal(previewItem)}
-                      cfg={cfg}
-                      fields={fields}
-                      mode={mode}
-                      imgDataUrl={previewImg}
-                      barcodeDataUrl={previewBC}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            {items.length > 1 && (
-              <p className="mt-1.5 text-center text-[10px] text-[var(--text-faint)]">
-                {items.length} міток · показано першу
-              </p>
-            )}
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Status */}
+        {status && <span className={`text-xs ${status.startsWith("✓") ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>{status}</span>}
+
+        {/* QR override (single item, not editing) */}
+        {isSingle && !editMode && (
+          <input value={customQr} onChange={e => setCustomQr(e.target.value)}
+            className={`${inputCls} w-40 font-mono text-xs`}
+            placeholder="Вміст QR" />
+        )}
+
+        {/* Item navigation (multiple items) */}
+        {items.length > 1 && !editMode && (
+          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+            <button onClick={() => setPreviewIdx(p => Math.max(0, p - 1))} disabled={previewIdx === 0}
+              className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-hi)] disabled:opacity-30">◀</button>
+            <span>{previewIdx + 1} / {items.length}</span>
+            <button onClick={() => setPreviewIdx(p => Math.min(items.length - 1, p + 1))} disabled={previewIdx === items.length - 1}
+              className="rounded px-1.5 py-0.5 hover:bg-[var(--surface-hi)] disabled:opacity-30">▶</button>
           </div>
+        )}
 
-          {/* Settings */}
-          <div className="space-y-4">
+        {/* Print buttons */}
+        <button onClick={printZebra} disabled={busy || !activeTpl} className="btn btn-secondary btn-sm disabled:opacity-40">
+          {busy ? "…" : "Zebra (ZPL)"}
+        </button>
+        <button onClick={printA4} disabled={!activeTpl} className="btn btn-primary btn-sm disabled:opacity-40">
+          🖨 A4
+        </button>
+      </div>
 
-            {/* Template selector */}
-            {templates.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Шаблон</p>
-                <select
-                  value={templateId ?? ""}
-                  onChange={e => setTemplateId(e.target.value ? Number(e.target.value) : null)}
-                  className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
-                >
-                  <option value="">— Без шаблону (стандартний) —</option>
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                {activeTpl && (
-                  <p className="mt-1 text-[10px] text-[var(--text-faint)]">
-                    {activeTpl.width_mm}×{activeTpl.height_mm} мм · {activeTpl.elements.length} ел.
-                  </p>
-                )}
-              </div>
-            )}
+      {/* ── Body ───────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
 
-            {/* Mode toggle (products and actions) */}
-            {!activeTpl && (isProduct || isAction) && (
-              <div>
-                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Формат</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {([
-                    { key: "a4" as PrintMode,    label: "A4 / фото папір" },
-                    { key: "zebra" as PrintMode,  label: "Zebra (термо)"  },
-                  ]).map(m => (
-                    <button key={m.key} type="button" onClick={() => switchMode(m.key)}
-                      className={[
-                        "rounded-lg border py-1.5 text-xs font-medium transition",
-                        mode === m.key
-                          ? "border-[var(--border-strong)] bg-[var(--accent)] text-white"
-                          : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
-                      ].join(" ")}>
-                      {m.label}
-                    </button>
-                  ))}
+        {/* LEFT — element list (edit mode only) */}
+        {editMode && (
+          <div className="flex w-48 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-elevated)]">
+            <div className="border-b border-[var(--border)] px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Елементи</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+              {(localTpl?.elements ?? []).map((el, i) => (
+                <div key={el.id}
+                  className={["flex items-center gap-1.5 rounded-lg px-2.5 py-2 cursor-pointer text-xs transition select-none",
+                    selId === el.id ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "hover:bg-[var(--surface-hi)] text-[var(--text)]",
+                  ].join(" ")}
+                  onClick={() => setSelId(el.id === selId ? null : el.id)}>
+                  <span className="text-base leading-none">{EL_ICONS[el.type]}</span>
+                  <span className="flex-1 truncate">{el.type === "text" ? el.text : el.type === "image" ? "Фото" : el.value ?? EL_LABELS[el.type]}</span>
+                  <button onClick={e => { e.stopPropagation(); moveEl(el.id, -1); }} disabled={i === 0} className="text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 text-[10px]">▲</button>
+                  <button onClick={e => { e.stopPropagation(); moveEl(el.id, 1); }} disabled={i === (localTpl?.elements.length ?? 0) - 1} className="text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 text-[10px]">▼</button>
                 </div>
-              </div>
-            )}
-
-            {/* Size (hidden when template active — template defines its own size) */}
-            {!activeTpl && <div>
-              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Розмір</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {SIZES.map(s => (
-                  <button key={s.key} type="button" onClick={() => setSizeKey(s.key)}
-                    className={[
-                      "rounded-lg border py-1.5 text-xs font-medium transition",
-                      sizeKey === s.key
-                        ? "border-[var(--border-strong)] bg-[var(--accent)] text-white"
-                        : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
-                    ].join(" ")}>
-                    {s.label}
+              ))}
+            </div>
+            <div className="border-t border-[var(--border)] p-2">
+              <p className="mb-1.5 px-1 text-[9px] text-[var(--text-faint)]">Додати</p>
+              <div className="grid grid-cols-3 gap-1">
+                {(["text","qr","barcode","image","rect","line"] as LabelElement["type"][]).map(t => (
+                  <button key={t} onClick={() => addEl(t)} title={EL_LABELS[t]}
+                    className="flex flex-col items-center gap-0.5 rounded-lg border border-[var(--border)] py-1.5 text-[10px] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
+                    <span className="text-base leading-none">{EL_ICONS[t]}</span>
+                    <span>{EL_LABELS[t]}</span>
                   </button>
                 ))}
               </div>
-            </div>}
+            </div>
+          </div>
+        )}
 
-            {/* QR / barcode content (single item) */}
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">
-                {mode === "a4" && isProduct ? "Вміст штрих-коду" : "Вміст QR"}
+        {/* CENTER — canvas */}
+        <div className="flex flex-1 flex-col items-center justify-start overflow-auto bg-[var(--surface-hi)] p-8 gap-4"
+          onClick={() => editMode && setSelId(null)}>
+          {!displayTpl ? (
+            <div className="flex flex-col items-center justify-center gap-3 text-center">
+              <p className="text-[var(--text-muted)]">Оберіть шаблон мітки зверху</p>
+              {templates.length === 0 && <p className="text-xs text-[var(--text-faint)]">Спочатку запустіть міграцію бази даних</p>}
+            </div>
+          ) : (
+            <>
+              {/* Canvas box */}
+              <div style={{ position: "relative", width: CANVAS_W, height: canvasH, flexShrink: 0 }}
+                className="shadow-xl" onClick={e => e.stopPropagation()}>
+                {/* Rendered label */}
+                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: displayTpl.width_mm * PX_PER_MM, height: displayTpl.height_mm * PX_PER_MM, position: "absolute" }}>
+                  <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls} />
+                </div>
+                {/* Interaction overlays (edit mode) */}
+                {editMode && (localTpl?.elements ?? []).map(el => {
+                  const lp = el.x * PX_PER_MM * scale, tp = el.y * PX_PER_MM * scale;
+                  const wp = el.w * PX_PER_MM * scale, hp = Math.max(el.h * PX_PER_MM * scale, 4);
+                  const isSel = selId === el.id;
+                  return (
+                    <div key={el.id} style={{ position: "absolute", left: lp, top: tp, width: wp, height: hp, cursor: "move", outline: isSel ? "1.5px solid #06b6d4" : "1px dashed rgba(100,100,100,0.25)", boxSizing: "border-box", zIndex: isSel ? 10 : 1 }}
+                      onMouseDown={e => onElMouseDown(e, el)}>
+                      {isSel && HANDLES.map(h => {
+                        const { left, top } = handlePos(h, wp, hp);
+                        return (
+                          <div key={h} style={{ position: "absolute", left: left - 4, top: top - 4, width: 8, height: 8, background: "#fff", border: "1.5px solid #06b6d4", borderRadius: 2, cursor: HANDLE_CURSOR[h], zIndex: 20 }}
+                            onMouseDown={e => onHandleMouseDown(e, el, h)} />
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Info below canvas */}
+              <p className="text-[10px] text-[var(--text-faint)]">
+                {displayTpl.width_mm}×{displayTpl.height_mm} мм
+                {editMode && " · Перетягуй елементи · Стрілки 0.5мм · Shift+стрілки 5мм · Del видалити"}
               </p>
-              {isSingle ? (
+            </>
+          )}
+        </div>
+
+        {/* RIGHT — properties (edit) or template info (preview) */}
+        <div className="flex w-64 shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)]">
+          <div className="border-b border-[var(--border)] px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+              {editMode ? (selEl ? `${EL_LABELS[selEl.type]} — властивості` : "Властивості") : "Налаштування"}
+            </p>
+          </div>
+
+          {editMode ? (
+            // ── Edit mode: element properties ─────────────────────────────
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              {selEl ? (
                 <>
-                  <input
-                    value={customQr}
-                    onChange={e => setCustomQr(e.target.value)}
-                    className={`${inputCls} w-full text-xs`}
-                  />
-                  {customQr !== defaultQr(items[0]) && (
-                    <button type="button"
-                      onClick={() => setCustomQr(defaultQr(items[0]))}
-                      className="mt-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] underline underline-offset-2">
-                      Скинути до {defaultQr(items[0])}
-                    </button>
-                  )}
+                  {/* Position + size */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Позиція і розмір (мм)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["x","y","w","h"] as const).map(k => (
+                        <label key={k} className="flex items-center gap-1.5">
+                          <span className="w-4 shrink-0 font-mono text-[10px] uppercase text-[var(--text-faint)]">{k}</span>
+                          <input type="number" step={0.5} value={+(selEl[k] as number).toFixed(2)}
+                            onChange={e => patchEl(selEl.id, { [k]: parseFloat(e.target.value) || 0 })}
+                            className="flex-1 rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs font-mono outline-none focus:border-[var(--accent)]" />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <ElProps el={selEl} onChange={p => patchEl(selEl.id, p)} />
+                  <button onClick={() => deleteEl(selEl.id)} className="w-full rounded-lg border border-[rgba(239,68,68,.3)] py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.06)] transition-colors">
+                    Видалити елемент
+                  </button>
                 </>
               ) : (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs text-[var(--text-faint)]">
-                  {items[0].type === "cell"
-                    ? <>Кожна: <span className="font-mono">CELL:{"{id}"}</span></>
-                    : <>Кожна: штрих-код або <span className="font-mono">{"{sku}"}</span></>
-                  }
-                </div>
+                <>
+                  {localTpl && (
+                    <div className="space-y-2.5">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">Шаблон</p>
+                      <label className="block">
+                        <span className="mb-1 block text-[10px] text-[var(--text-faint)]">Назва</span>
+                        <input value={localTpl.name} onChange={e => setLocalTpl(p => p ? { ...p, name: e.target.value } : null)} className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]" />
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] text-[var(--text-faint)]">Ш мм</span>
+                          <input type="number" step={0.5} value={localTpl.width_mm} onChange={e => setLocalTpl(p => p ? { ...p, width_mm: parseFloat(e.target.value) || p.width_mm } : null)} className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs font-mono outline-none focus:border-[var(--accent)]" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] text-[var(--text-faint)]">В мм</span>
+                          <input type="number" step={0.5} value={localTpl.height_mm} onChange={e => setLocalTpl(p => p ? { ...p, height_mm: parseFloat(e.target.value) || p.height_mm } : null)} className="w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs font-mono outline-none focus:border-[var(--accent)]" />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-[var(--text-faint)] text-center py-4">Клікни елемент на полотні</p>
+                </>
               )}
             </div>
-
-            {/* Field toggles */}
-            {fieldRows.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Показувати</p>
-                <div className="space-y-2">
-                  {fieldRows.map(({ key, label }) => (
-                    <label key={key} className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={fields[key]}
-                        onChange={() => setFields(prev => ({ ...prev, [key]: !prev[key] }))}
-                        className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-neutral-900 dark:accent-neutral-100"
-                      />
-                      <span className="text-xs text-[var(--text)]">{label}</span>
-                    </label>
-                  ))}
+          ) : (
+            // ── Preview mode: print settings ─────────────────────────────
+            <div className="flex-1 overflow-y-auto p-3 space-y-4">
+              {activeTpl && (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 space-y-1 text-xs">
+                  <p className="font-medium">{activeTpl.name}</p>
+                  <p className="text-[var(--text-faint)]">{activeTpl.width_mm}×{activeTpl.height_mm} мм · {activeTpl.elements.length} ел.</p>
+                  {activeTpl.is_builtin && <span className="inline-block rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px]">вбудований</span>}
                 </div>
-              </div>
-            )}
+              )}
 
-          </div>
+              {/* QR override for single item */}
+              {isSingle && activeTpl && (
+                <div>
+                  <p className="mb-1.5 text-[10px] font-medium text-[var(--text-muted)]">Вміст QR / штрих-коду</p>
+                  <input value={customQr} onChange={e => setCustomQr(e.target.value)} className={`${inputCls} w-full font-mono`} />
+                  {customQr !== defaultQr(previewItem) && (
+                    <button onClick={() => setCustomQr(defaultQr(previewItem))} className="mt-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] underline underline-offset-2">
+                      Скинути до {defaultQr(previewItem)}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {items.length > 1 && (
+                <p className="text-xs text-[var(--text-faint)]">
+                  Всього {items.length} міток. A4 — всі разом, Zebra — по одній.
+                </p>
+              )}
+
+              {!activeTpl && templates.length > 0 && (
+                <p className="text-sm text-[var(--text-muted)] text-center py-6">Оберіть шаблон зверху</p>
+              )}
+            </div>
+          )}
         </div>
-      </Modal>
+      </div>
+    </div>
 
-      {/* Hidden labels for A4 print capture — rendered in portal so they are outside the modal's overflow */}
-      {createPortal(
-        <div
-          ref={hiddenRef}
-          style={{ position: "fixed", top: 0, left: 0, opacity: 0, pointerEvents: "none", zIndex: -1 }}
-        >
-          {items.map((item, i) => (
-            <LabelCard
-              key={i}
-              item={item}
-              qrVal={getQrVal(item)}
-              cfg={cfg}
-              fields={fields}
-              mode={mode}
-              imgDataUrl={item.type === "product" ? imgUrls[item.id]     : undefined}
-              barcodeDataUrl={item.type === "product" ? barcodeUrls[item.id] : undefined}
-            />
-          ))}
-        </div>,
-        document.body,
-      )}
+    {/* Hidden print capture portal */}
+    {activeTpl && createPortal(
+      <div id="wl-print-capture" style={{ position: "fixed", top: 0, left: 0, opacity: 0, pointerEvents: "none", zIndex: -1 }}>
+        {items.map((item, i) => {
+          const vars = itemToVars(item, isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+          const bcu: Record<string,string> = {};
+          activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+            const raw = substituteVars(el.value ?? "", vars as Record<string,string>);
+            if (bcUrls[raw]) bcu[raw] = bcUrls[raw];
+          });
+          return <LabelCanvas key={i} template={activeTpl} vars={vars} barcodeUrls={bcu} />;
+        })}
+      </div>,
+      document.body,
+    )}
     </>
   );
+}
+
+// ─── Element properties ───────────────────────────────────────────────────────
+
+function ElProps({ el, onChange }: { el: LabelElement; onChange: (p: Partial<LabelElement>) => void }) {
+  const inp = "w-full rounded border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-xs outline-none focus:border-[var(--accent)]";
+  const lbl = "mb-1 block text-[10px] text-[var(--text-faint)]";
+  const seg = (opts: {v:string;label:string}[], cur:string|undefined, set:(v:string)=>void) => (
+    <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+      {opts.map(o => <button key={o.v} onClick={() => set(o.v)} className={["flex-1 py-1.5 text-xs transition", cur===o.v?"bg-[var(--accent)] text-white":"text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"].join(" ")}>{o.label}</button>)}
+    </div>
+  );
+
+  switch (el.type) {
+    case "text": return (
+      <div className="space-y-3">
+        <label className="block"><span className={lbl}>Текст</span>
+          <input value={el.text??""} onChange={e=>onChange({text:e.target.value})} className={inp}/>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {ALL_VARS.map(v=><button key={v} type="button" onClick={()=>onChange({text:(el.text??"")+v})}
+              className="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">{v.replace(/[{}]/g,"")}</button>)}
+          </div>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block"><span className={lbl}>Розмір (мм)</span><input type="number" step={0.5} min={1} value={el.fontSize??4} onChange={e=>onChange({fontSize:parseFloat(e.target.value)||4})} className={inp}/></label>
+          <label className="block"><span className={lbl}>Жирний</span>{seg([{v:"bold",label:"Жирний"},{v:"normal",label:"Звичайний"}],el.fontWeight,v=>onChange({fontWeight:v as "bold"|"normal"}))}</label>
+        </div>
+        <label className="block"><span className={lbl}>Колір</span>
+          <div className="flex gap-1.5"><input type="color" value={el.color??"#111111"} onChange={e=>onChange({color:e.target.value})} className="h-8 w-9 cursor-pointer rounded border border-[var(--border)]"/>
+          <input value={el.color??"#111111"} onChange={e=>onChange({color:e.target.value})} className={`${inp} flex-1 font-mono`} maxLength={7}/></div>
+        </label>
+        <label className="block"><span className={lbl}>Вирівнювання</span>{seg([{v:"left",label:"◀ Ліво"},{v:"center",label:"◈ Центр"},{v:"right",label:"Право ▶"}],el.align,v=>onChange({align:v as "left"|"center"|"right"}))}</label>
+      </div>
+    );
+    case "qr": return (
+      <div className="space-y-3">
+        <label className="block"><span className={lbl}>Вміст</span>
+          <input value={el.value??""} onChange={e=>onChange({value:e.target.value})} className={`${inp} font-mono`}/>
+          <div className="mt-1 flex flex-wrap gap-1">{ALL_VARS.map(v=><button key={v} type="button" onClick={()=>onChange({value:v})} className="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">{v.replace(/[{}]/g,"")}</button>)}</div>
+        </label>
+        <label className="block"><span className={lbl}>Рівень корекції</span>{seg([{v:"L",label:"L"},{v:"M",label:"M"},{v:"Q",label:"Q"},{v:"H",label:"H"}],el.level,v=>onChange({level:v as "L"|"M"|"Q"|"H"}))}</label>
+      </div>
+    );
+    case "barcode": return (
+      <div className="space-y-3">
+        <label className="block"><span className={lbl}>Вміст</span>
+          <input value={el.value??""} onChange={e=>onChange({value:e.target.value})} className={`${inp} font-mono`}/>
+          <div className="mt-1 flex flex-wrap gap-1">{ALL_VARS.map(v=><button key={v} type="button" onClick={()=>onChange({value:v})} className="rounded border border-[var(--border)] px-1 py-0.5 font-mono text-[9px] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">{v.replace(/[{}]/g,"")}</button>)}</div>
+        </label>
+        <label className="block"><span className={lbl}>Формат</span>{seg([{v:"CODE128",label:"Code128"},{v:"EAN13",label:"EAN-13"}],el.barcodeFormat,v=>onChange({barcodeFormat:v as "CODE128"|"EAN13"}))}</label>
+        <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={el.showText??true} onChange={e=>onChange({showText:e.target.checked})} className="h-3.5 w-3.5"/><span className="text-xs text-[var(--text)]">Показувати текст</span></label>
+      </div>
+    );
+    case "image": return (
+      <div className="space-y-3">
+        <p className="text-xs text-[var(--text-faint)]">Джерело: фото товару</p>
+        <label className="block"><span className={lbl}>Заповнення</span>{seg([{v:"cover",label:"Обрізати"},{v:"contain",label:"Вмістити"}],el.objectFit,v=>onChange({objectFit:v as "cover"|"contain"}))}</label>
+      </div>
+    );
+    case "rect": return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block"><span className={lbl}>Колір рамки</span><div className="flex gap-1"><input type="color" value={el.borderColor??"#cccccc"} onChange={e=>onChange({borderColor:e.target.value})} className="h-8 w-9 cursor-pointer rounded border border-[var(--border)]"/><input value={el.borderColor??"#cccccc"} onChange={e=>onChange({borderColor:e.target.value})} className={`${inp} flex-1 font-mono text-[10px]`}/></div></label>
+          <label className="block"><span className={lbl}>Товщина (мм)</span><input type="number" step={0.1} min={0} value={el.borderWidth??0.3} onChange={e=>onChange({borderWidth:parseFloat(e.target.value)||0})} className={inp}/></label>
+          <label className="block"><span className={lbl}>Заливка</span><div className="flex gap-1"><input type="color" value={el.fillColor&&el.fillColor!=="transparent"?el.fillColor:"#ffffff"} onChange={e=>onChange({fillColor:e.target.value})} className="h-8 w-9 cursor-pointer rounded border border-[var(--border)]"/><button onClick={()=>onChange({fillColor:"transparent"})} className="flex-1 rounded border border-[var(--border)] text-[10px] text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">прозора</button></div></label>
+          <label className="block"><span className={lbl}>Радіус (мм)</span><input type="number" step={0.5} min={0} value={el.borderRadius??0} onChange={e=>onChange({borderRadius:parseFloat(e.target.value)||0})} className={inp}/></label>
+        </div>
+      </div>
+    );
+    case "line": return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block"><span className={lbl}>Колір</span><div className="flex gap-1"><input type="color" value={el.strokeColor??"#cccccc"} onChange={e=>onChange({strokeColor:e.target.value})} className="h-8 w-9 cursor-pointer rounded border border-[var(--border)]"/><input value={el.strokeColor??"#cccccc"} onChange={e=>onChange({strokeColor:e.target.value})} className={`${inp} flex-1 font-mono text-[10px]`}/></div></label>
+          <label className="block"><span className={lbl}>Товщина (мм)</span><input type="number" step={0.1} min={0.1} value={el.strokeWidth??0.5} onChange={e=>onChange({strokeWidth:parseFloat(e.target.value)||0.5})} className={inp}/></label>
+        </div>
+        <label className="block"><span className={lbl}>Орієнтація</span>{seg([{v:"horizontal",label:"─ Горизонт."},{v:"vertical",label:"│ Вертикал."}],el.orientation,v=>onChange({orientation:v as "horizontal"|"vertical"}))}</label>
+      </div>
+    );
+    default: return null;
+  }
 }
