@@ -2,6 +2,22 @@
 
 BUILTIN_TEMPLATES = [
     {
+        "id": -7,
+        "name": "Клітинка — 58×40мм (Zebra термо)",
+        "item_type": "cell",
+        "width_mm": 58.0,
+        "height_mm": 40.0,
+        "is_builtin": True,
+        "is_default": False,
+        "elements": [
+            {"id": "qr",   "type": "qr",   "x": 2,   "y": 2,  "w": 36, "h": 36, "value": "{{CELL_QR}}", "level": "M"},
+            {"id": "code", "type": "text", "x": 40,  "y": 5,  "w": 16, "h": 10, "text": "{{code}}",      "fontSize": 7.5, "fontWeight": "bold",   "color": "#111", "align": "left"},
+            {"id": "zone", "type": "text", "x": 40,  "y": 17, "w": 16, "h": 7,  "text": "{{zone_name}}", "fontSize": 4.5, "fontWeight": "normal", "color": "#555", "align": "left"},
+            {"id": "note", "type": "text", "x": 40,  "y": 26, "w": 16, "h": 5,  "text": "{{notes}}",     "fontSize": 3.5, "fontWeight": "normal", "color": "#999", "align": "left"},
+            {"id": "div",  "type": "line", "x": 39,  "y": 2,  "w": 0.5,"h": 36, "strokeColor": "#ccc",   "strokeWidth": 0.3, "orientation": "vertical"},
+        ],
+    },
+    {
         "id": -1,
         "name": "Клітинка — 57×32мм",
         "item_type": "cell",
@@ -39,11 +55,11 @@ BUILTIN_TEMPLATES = [
         "is_builtin": True,
         "is_default": False,
         "elements": [
-            {"id": "img",  "type": "image",   "x": 1.5, "y": 1.5, "w": 27, "h": 27, "source": "product_image", "objectFit": "cover"},
-            {"id": "name", "type": "text",    "x": 30,  "y": 3,   "w": 37, "h": 7,  "text": "{{name}}",        "fontSize": 5, "fontWeight": "bold",   "color": "#111", "align": "left"},
-            {"id": "cats", "type": "text",    "x": 30,  "y": 12,  "w": 37, "h": 5,  "text": "{{categories}}",  "fontSize": 3.5, "fontWeight": "normal", "color": "#555", "align": "left"},
-            {"id": "sku",  "type": "text",    "x": 30,  "y": 19,  "w": 37, "h": 5,  "text": "{{sku}}",         "fontSize": 3.5, "fontWeight": "normal", "color": "#999", "align": "left"},
-            {"id": "bc",   "type": "barcode", "x": 69,  "y": 2,   "w": 29, "h": 26, "value": "{{PROD_QR}}",    "format": "CODE128", "showText": True},
+            {"id": "img",  "type": "image",   "x": 1.5, "y": 1.5, "w": 20, "h": 27, "source": "product_image", "objectFit": "cover"},
+            {"id": "name", "type": "text",    "x": 23,  "y": 3,   "w": 29, "h": 7,  "text": "{{name}}",        "fontSize": 4.5, "fontWeight": "bold",   "color": "#111", "align": "left"},
+            {"id": "cats", "type": "text",    "x": 23,  "y": 12,  "w": 29, "h": 5,  "text": "{{categories}}",  "fontSize": 3.5, "fontWeight": "normal", "color": "#555", "align": "left"},
+            {"id": "sku",  "type": "text",    "x": 23,  "y": 19,  "w": 29, "h": 5,  "text": "{{sku}}",         "fontSize": 3.5, "fontWeight": "normal", "color": "#999", "align": "left"},
+            {"id": "bc",   "type": "barcode", "x": 54,  "y": 2,   "w": 44, "h": 26, "value": "{{PROD_QR}}",    "format": "CODE128", "showText": True},
         ],
     },
     {

@@ -39,38 +39,88 @@ const GRID_MM   = 0.5;
 const EL_ICONS: Record<string, string> = { text: "T", qr: "▦", barcode: "▐▌", image: "🖼", rect: "□", line: "─" };
 const EL_LABELS: Record<string, string> = { text: "Текст", qr: "QR", barcode: "Штрих-код", image: "Фото", rect: "Рамка", line: "Лінія" };
 
-// ─── ZPL (fallback when no template or for Zebra) ─────────────────────────────
+// ─── ZPL generation from template elements ────────────────────────────────────
 
-const ZPL_SIZES = [
-  { key: "57x32",   wMm: 57,  hMm: 32  },
-  { key: "50x25",   wMm: 50,  hMm: 25  },
-  { key: "100x50",  wMm: 100, hMm: 50  },
-  { key: "100x100", wMm: 100, hMm: 100 },
-];
+const ZPL_DPI = 203;
+const d = (mm: number) => Math.round(mm * ZPL_DPI / 25.4);
 
-function buildZpl(items: WarehouseLabelItem[], qrVals: string[], tpl: LabelTemplate | null): string {
-  const fallback = ZPL_SIZES[0];
-  const cfg = { wMm: tpl?.width_mm ?? fallback.wMm, hMm: tpl?.height_mm ?? fallback.hMm };
-  const d   = (mm: number) => Math.round(mm * 203 / 25.4);
-  const W = d(cfg.wMm), H = d(cfg.hMm), pad = d(2);
+function safeZpl(s: string): string {
+  return s.replace(/[\\^~]/g, "").slice(0, 40);
+}
+
+function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
+  const x = d(el.x), y = d(el.y), w = d(el.w), h = d(el.h);
+
+  switch (el.type) {
+    case "text": {
+      const text = safeZpl(substituteVars(el.text ?? "", vars));
+      if (!text) return "";
+      const fh = Math.max(8, d(el.fontSize ?? 4));
+      const bold = el.fontWeight === "bold" ? "^FB" : "";
+      return `^FO${x},${y}${bold}^A0N,${fh},${fh}^FD${text}^FS`;
+    }
+    case "qr": {
+      const val = safeZpl(substituteVars(el.value ?? "", vars));
+      if (!val) return "";
+      const mag = Math.min(10, Math.max(1, Math.floor(h / 21)));
+      const ecc = el.level ?? "M";
+      return `^FO${x},${y}^BQN,2,${mag}^FD${ecc}A,${val}^FS`;
+    }
+    case "barcode": {
+      const val = safeZpl(substituteVars(el.value ?? "", vars));
+      if (!val) return "";
+      const narrow = Math.max(1, Math.min(3, Math.round(w / 60)));
+      const showTxt = el.showText !== false ? "Y" : "N";
+      // Code128: ^BY<narrow>,<ratio>,<height> then ^BCN (normal orient, height, print below, no checksum, no start/stop)
+      return `^FO${x},${y}^BY${narrow},3,${Math.round(h * 0.7)}^BCN,${Math.round(h * 0.7)},${showTxt},N,N^FD${val}^FS`;
+    }
+    case "rect": {
+      const border = Math.max(1, d(el.borderWidth ?? 0.3));
+      return `^FO${x},${y}^GB${w},${h},${border}^FS`;
+    }
+    case "line": {
+      const sw = Math.max(1, d(el.strokeWidth ?? 0.5));
+      return el.orientation === "vertical"
+        ? `^FO${x},${y}^GB${sw},${h},${sw}^FS`
+        : `^FO${x},${y}^GB${w},${sw},${sw}^FS`;
+    }
+    default: return ""; // image: ZPL doesn't support raster images from web
+  }
+}
+
+function buildZplFromTemplate(
+  tpl: LabelTemplate,
+  items: WarehouseLabelItem[],
+  varsList: LabelDataVars[],
+): string {
+  const W = d(tpl.width_mm), H = d(tpl.height_mm);
+  return items.map((_, i) => {
+    const vars = varsList[i];
+    const elLines = tpl.elements
+      .map(el => elementToZpl(el, vars))
+      .filter(Boolean);
+    return ["^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0", ...elLines, "^XZ"].join("\n");
+  }).join("\n");
+}
+
+// Fallback ZPL when no template is selected
+function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: number, hMm: number): string {
+  const W = d(wMm), H = d(hMm), pad = d(2);
   const mag = Math.min(10, Math.max(2, Math.floor((H - pad * 2) / 21)));
   const qrD = mag * 21, qrY = Math.floor((H - qrD) / 2);
   const txX = pad + qrD + pad;
   const fsP = Math.min(60, Math.floor(H * 0.30));
   const fsS = Math.min(36, Math.floor(H * 0.18));
-  const safe = (s: string) => s.replace(/[\\^~]/g, "").slice(0, 28);
 
   return items.map((item, i) => {
-    const qrVal  = safe(qrVals[i] ?? defaultQr(item));
-    const p1     = item.type === "cell" ? item.code : item.type === "action" ? safe(item.label) : safe(item.name);
-    const p2     = item.type === "cell" ? item.zone_name : item.type === "action" ? item.code : item.sku;
-    const p3     = item.type === "product" ? (item.categories?.slice(0, 2).join(", ") ?? "") : "";
+    const qrVal = safeZpl(qrVals[i] ?? defaultQr(item));
+    const p1 = item.type === "cell" ? item.code : item.type === "action" ? safeZpl(item.label) : safeZpl(item.name);
+    const p2 = item.type === "cell" ? item.zone_name : item.type === "action" ? item.code : item.sku;
     return [
       "^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0",
       `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${qrVal}^FS`,
-      `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safe(p1)}^FS`,
-      p2 ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safe(p2)}^FS` : "",
-      p3 ? `^FO${txX},${Math.floor(H * 0.80)}^A0N,${fsS},${fsS}^FD${safe(p3)}^FS` : "",
+      `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safeZpl(p1)}^FS`,
+      p2 ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safeZpl(p2)}^FS` : "",
       "^XZ",
     ].filter(Boolean).join("\n");
   }).join("\n");
@@ -212,7 +262,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   // ── Enter edit mode ────────────────────────────────────────────────────────
   function enterEdit() {
     if (!activeTpl) return;
-    setLocalTpl(JSON.parse(JSON.stringify(activeTpl)));
+    if (!localTpl) setLocalTpl(JSON.parse(JSON.stringify(activeTpl)));
     setEditMode(true);
     setSelId(null);
   }
@@ -361,14 +411,30 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     setTimeout(cleanup, 30_000);
   }
 
-  // ── Zebra ZPL ─────────────────────────────────────────────────────────────
+  // ── Zebra ZPL — uses template elements for universal output ──────────────
   async function printZebra() {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setStatus(null);
-    const qrVals = items.map((item, i) => i === 0 && isSingle ? qrVal : defaultQr(item));
-    const zpl = buildZpl(items, qrVals, activeTpl ?? null);
+
+    let zpl: string;
+    if (activeTpl) {
+      // Template-based: each element type → correct ZPL command
+      const varsList = items.map((item, i) =>
+        itemToVars(item, i === 0 && isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+      );
+      zpl = buildZplFromTemplate(activeTpl, items, varsList);
+    } else {
+      // Fallback: simple QR + text
+      const qrVals = items.map((item, i) => i === 0 && isSingle ? qrVal : defaultQr(item));
+      zpl = buildZplFallback(items, qrVals, 57, 32);
+    }
+
     const result = await sendToBrowserPrint(zpl);
-    setStatus(result === "ok" ? "✓ Відправлено на Zebra" : result === "not_available" ? "✗ Zebra Browser Print не знайдено" : "✗ Помилка");
+    setStatus(
+      result === "ok"            ? "✓ Відправлено на Zebra"             :
+      result === "not_available" ? "✗ Zebra Browser Print не знайдено" :
+                                   "✗ Помилка відправки",
+    );
     inFlight.current = false; setBusy(false);
   }
 
@@ -405,8 +471,42 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         <select value={tplId ?? ""} onChange={e => { setTplId(e.target.value ? Number(e.target.value) : null); setLocalTpl(null); setEditMode(false); }}
           className="ml-2 min-w-[180px] rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]">
           <option value="">— Оберіть шаблон —</option>
-          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {templates.map(t => <option key={t.id} value={t.id}>{t.is_builtin ? `📌 ${t.name}` : t.name}</option>)}
         </select>
+
+        {/* Delete custom template */}
+        {activeTpl && !activeTpl.is_builtin && !editMode && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Видалити шаблон «${activeTpl.name}»?`)) return;
+              await api(`/api/warehouse/label-templates/${activeTpl.id}`, { method: "DELETE" });
+              setTemplates(p => p.filter(t => t.id !== activeTpl.id));
+              setTplId(null);
+            }}
+            title="Видалити шаблон"
+            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]">
+            🗑
+          </button>
+        )}
+
+        {/* New blank template with custom size */}
+        {!editMode && (
+          <button
+            onClick={() => {
+              const w = parseFloat(prompt("Ширина (мм):", "100") ?? "0") || 100;
+              const h = parseFloat(prompt("Висота (мм):",  "30") ?? "0") || 30;
+              const name = prompt("Назва шаблону:", `${w}×${h}мм`) ?? `${w}×${h}мм`;
+              const newTpl: LabelTemplate = { id: 0, name, item_type: itemType, width_mm: w, height_mm: h, elements: [], is_builtin: false, is_default: false };
+              setLocalTpl(newTpl);
+              setTplId(null);
+              setEditMode(true);
+              setSelId(null);
+            }}
+            title="Новий шаблон з довільним розміром"
+            className="btn btn-ghost btn-sm text-xs">
+            + Свій розмір
+          </button>
+        )}
 
         {/* Edit / Save / Cancel */}
         {!editMode ? (
