@@ -110,7 +110,6 @@ export function LabelGeneratorModal({
 
   useEffect(() => {
     if (!preview) return;
-    setQr(null);
     api<LabelData>(`/api/materials/${preview.id}/label-data`)
       .then(d => setQr(d.qr_code_base64))
       .catch(() => {});

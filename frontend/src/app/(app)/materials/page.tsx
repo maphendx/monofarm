@@ -807,7 +807,7 @@ export default function FilamentPage() {
       <AdjustModal filament={adjustFilament}
         onClose={() => setAdjustFilament(null)} onSaved={upsert} />
       {labelFilaments && (
-        <LabelGeneratorModal filaments={labelFilaments} onClose={() => setLabelFilaments(null)} />
+        <LabelGeneratorModal key={labelFilaments[0]?.id ?? "labels"} filaments={labelFilaments} onClose={() => setLabelFilaments(null)} />
       )}
 
       {filaments.length > 0 && (
