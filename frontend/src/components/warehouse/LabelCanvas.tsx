@@ -213,12 +213,15 @@ export function LabelCanvas({
   barcodeUrls,
   selected,
   onSelect,
+  noBorder,
 }: {
   template: LabelTemplate;
   vars: LabelDataVars;
   barcodeUrls?: Record<string, string>;
   selected?: string;
   onSelect?: (id: string) => void;
+  /** Pass true in editor to remove the border — it shifts absolute positions */
+  noBorder?: boolean;
 }) {
   return (
     <div style={{
@@ -226,8 +229,8 @@ export function LabelCanvas({
       width: `${template.width_mm}mm`,
       height: `${template.height_mm}mm`,
       background: "#fff",
-      border: "0.3mm solid #ccc",
-      borderRadius: "1mm",
+      border: noBorder ? "none" : "0.3mm solid #ccc",
+      borderRadius: noBorder ? "0" : "1mm",
       overflow: "hidden",
       fontFamily: "Arial, Helvetica, sans-serif",
     }}>

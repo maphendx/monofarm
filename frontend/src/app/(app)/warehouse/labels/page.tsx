@@ -418,9 +418,13 @@ export default function LabelsPage() {
               position: "absolute",
               top: 0, left: 0,
             }}>
+              {/* noBorder so elements are at exact 0,0 position */}
               <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-                <LabelCanvas template={editing} vars={previewVars} barcodeUrls={previewBcUrls} />
+                <LabelCanvas template={editing} vars={previewVars} barcodeUrls={previewBcUrls} noBorder />
               </div>
+
+              {/* Decorative border (doesn't affect abs positioning) */}
+              <div style={{ position: "absolute", inset: 0, pointerEvents: "none", border: "0.3mm solid #ccc", borderRadius: "1mm", zIndex: 1 }} />
 
               {editing.elements.map(el => {
                 const isSel = selId === el.id;
@@ -433,11 +437,12 @@ export default function LabelsPage() {
                       left: `${el.x}mm`, top: `${el.y}mm`,
                       width: `${el.w}mm`, height: `${hMm}mm`,
                       cursor: "move",
-                      outline: isSel ? "0.4mm solid #06b6d4" : "0.2mm dashed rgba(120,120,120,0.4)",
+                      boxShadow: isSel ? "inset 0 0 0 0.4mm #06b6d4" : "inset 0 0 0 0.2mm rgba(120,120,120,0.35)",
                       boxSizing: "border-box",
                       zIndex: isSel ? 200 : 10,
                     }}
                     onMouseDown={e => { e.stopPropagation(); onElMouseDown(e, el); }}
+                    onClick={e => e.stopPropagation()}
                   >
                     {isSel && HANDLES.map(h => {
                       const hx = h.includes("e") ? el.w : h.includes("w") ? 0 : el.w / 2;
