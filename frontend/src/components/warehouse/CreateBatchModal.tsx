@@ -46,7 +46,7 @@ export function CreateBatchModal({
   const [dueDate,     setDueDate]     = useState("");
   const [notes,       setNotes]       = useState("");
   const [printTaskId, setPrintTaskId] = useState("");
-  const [orderId,     setOrderId]     = useState<number | undefined>(initialOrderId);
+  const orderId = initialOrderId;
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -159,7 +159,7 @@ export function CreateBatchModal({
                 Задача на фермі <span className="text-[var(--text-faint)]">(опційно)</span>
               </span>
               <select value={printTaskId} onChange={e => setPrintTaskId(e.target.value)} className={inputCls}>
-                <option value="">— не прив'язано —</option>
+                <option value="">— не прив’язано —</option>
                 {linked.map(t => (
                   <option key={t.id} value={t.id}>#{t.id} · {t.title} ×{t.quantity}</option>
                 ))}
