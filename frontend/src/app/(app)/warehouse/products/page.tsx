@@ -1977,7 +1977,6 @@ export default function ProductsPage() {
           { label: "Відновити",        onClick: restoreSelected,    disabled: deleting, variant: "default" },
           { label: "Видалити назавжди", onClick: hardDeleteSelected, disabled: deleting, variant: "danger"  },
         ] : [
-          { label: "🖨 Картки",   onClick: printProductCards,       disabled: deleting, variant: "ghost"  },
           { label: "🏷 Мітки",   onClick: () => setLabelModal(true), disabled: deleting, variant: "ghost"  },
           { label: "Архівувати",  onClick: archiveSelected,          disabled: deleting, variant: "ghost"  },
           { label: "Видалити",    onClick: hardDeleteSelected,        disabled: deleting, variant: "danger"  },
@@ -1987,7 +1986,7 @@ export default function ProductsPage() {
       {labelModal && (() => {
         const labelItems: WarehouseLabelItem[] = products
           .filter(p => selected.has(p.id))
-          .map(p => ({ type: "product" as const, id: p.id, name: p.name, sku: p.sku, barcode: p.barcode }));
+          .map(p => ({ type: "product" as const, id: p.id, name: p.name, sku: p.sku, barcode: p.barcode, image_url: p.image_url }));
         return labelItems.length > 0
           ? <WarehouseLabelModal items={labelItems} onClose={() => setLabelModal(false)} />
           : null;

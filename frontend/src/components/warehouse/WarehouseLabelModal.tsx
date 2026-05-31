@@ -1,18 +1,20 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { Modal } from "@/components/ui/Modal";
+import { API_URL, getToken } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type WarehouseLabelItem =
   | { type: "cell"; id: number; code: string; zone_name: string; notes?: string | null }
-  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null };
+  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null };
 
-type LabelSize = "50x25" | "57x32" | "100x50" | "100x100";
-type LabelFields = { secondary: boolean; tertiary: boolean };
+type LabelSize  = "50x25" | "57x32" | "100x50" | "100x100";
+type PrintMode  = "zebra" | "a4";
+type LabelFields = { secondary: boolean; tertiary: boolean; photo: boolean };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,13 +25,32 @@ const SIZES = [
   { key: "100x100" as LabelSize, label: "100×100 мм", wMm: 100, hMm: 100 },
 ];
 
-const DEFAULT_FIELDS: LabelFields = { secondary: true, tertiary: false };
+const DEFAULT_SIZE: Record<PrintMode, LabelSize> = { zebra: "57x32", a4: "100x50" };
+const DEFAULT_FIELDS: LabelFields = { secondary: true, tertiary: false, photo: true };
 const PX_PER_MM = 96 / 25.4;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function defaultQr(item: WarehouseLabelItem): string {
   return item.type === "cell" ? `CELL:${item.id}` : (item.barcode || `PROD:${item.sku}`);
+}
+
+async function toDataUrl(src: string): Promise<string | null> {
+  if (src.startsWith("http")) return src; // absolute URL (S3) — use as-is
+  try {
+    const r = await fetch(API_URL + src, {
+      headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+    });
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return await new Promise<string>(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 function buildZpl(
@@ -59,11 +80,9 @@ function buildZpl(
       `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${safe(qrVals[i] ?? defaultQr(item))}^FS`,
       `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safe(primary)}^FS`,
       fields.secondary && secondary
-        ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safe(secondary)}^FS`
-        : "",
+        ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safe(secondary)}^FS` : "",
       fields.tertiary && tertiary
-        ? `^FO${txX},${Math.floor(H * 0.80)}^A0N,${fsS},${fsS}^FD${safe(tertiary)}^FS`
-        : "",
+        ? `^FO${txX},${Math.floor(H * 0.80)}^A0N,${fsS},${fsS}^FD${safe(tertiary)}^FS` : "",
       "^XZ",
     ].filter(Boolean).join("\n");
   }).join("\n");
@@ -87,69 +106,126 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
 }
 
 // ─── LabelCard ────────────────────────────────────────────────────────────────
+// Cell:            [QR | code + zone]
+// Product zebra:   [QR | name + sku]
+// Product a4:      [photo | name + sku + barcode | QR]
 
 function LabelCard({
-  item, qrVal, cfg, fields,
+  item, qrVal, cfg, fields, mode, imgDataUrl,
 }: {
   item: WarehouseLabelItem;
   qrVal: string;
   cfg: (typeof SIZES)[number];
   fields: LabelFields;
+  mode: PrintMode;
+  imgDataUrl?: string;
 }) {
-  const pad    = 1.5;
-  const qrMm   = cfg.hMm - pad * 2;
-  const primary   = item.type === "cell" ? item.code : item.name;
-  const secondary = item.type === "cell" ? item.zone_name : item.sku;
-  const tertiary  = item.type === "cell" ? item.notes    : item.barcode;
+  const pad = 1.5;
+  const qrMm = cfg.hMm - pad * 2;
+
+  const base: React.CSSProperties = {
+    width: `${cfg.wMm}mm`, height: `${cfg.hMm}mm`,
+    border: "0.3mm solid #ccc", borderRadius: "1mm",
+    display: "flex", flexDirection: "row", alignItems: "center",
+    padding: `${pad}mm`, gap: `${pad}mm`,
+    boxSizing: "border-box", background: "#fff", overflow: "hidden",
+    fontFamily: "Arial, Helvetica, sans-serif",
+  };
+
+  const qrEl = (
+    <div style={{ width: `${qrMm}mm`, height: `${qrMm}mm`, flexShrink: 0 }}>
+      <QRCode value={qrVal || " "} level="M" size={128}
+        style={{ width: "100%", height: "100%", display: "block" }} />
+    </div>
+  );
 
   const fsPrimary = `${Math.max(3.5, cfg.hMm * 0.27)}mm`;
   const fsSub     = `${Math.max(2.2, cfg.hMm * 0.16)}mm`;
   const gap       = `${pad * 0.4}mm`;
 
-  return (
-    <div style={{
-      width: `${cfg.wMm}mm`, height: `${cfg.hMm}mm`,
-      border: "0.3mm solid #ccc", borderRadius: "1mm",
-      display: "flex", flexDirection: "row", alignItems: "center",
-      padding: `${pad}mm`, gap: `${pad}mm`,
-      boxSizing: "border-box", background: "#fff", overflow: "hidden",
-      fontFamily: "Arial, Helvetica, sans-serif",
-    }}>
-      <div style={{ width: `${qrMm}mm`, height: `${qrMm}mm`, flexShrink: 0 }}>
-        <QRCode
-          value={qrVal || " "}
-          level="M"
-          size={128}
-          style={{ width: "100%", height: "100%", display: "block" }}
-        />
-      </div>
-      <div style={{
-        flex: 1, overflow: "hidden",
-        display: "flex", flexDirection: "column", justifyContent: "center", gap,
-      }}>
-        <div style={{
-          fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>
-          {primary}
+  // ── Cell ────────────────────────────────────────────────────────────────────
+  if (item.type === "cell") {
+    return (
+      <div style={base}>
+        {qrEl}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
+          <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.code}
+          </div>
+          {fields.secondary && (
+            <div style={{ fontSize: fsSub, color: "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.zone_name}
+            </div>
+          )}
+          {fields.tertiary && item.notes && (
+            <div style={{ fontSize: fsSub, color: "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.notes}
+            </div>
+          )}
         </div>
-        {fields.secondary && secondary && (
-          <div style={{
-            fontSize: fsSub, color: "#444",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {secondary}
+      </div>
+    );
+  }
+
+  // ── Product — Zebra (QR left, text right, no photo) ─────────────────────────
+  if (mode === "zebra") {
+    return (
+      <div style={base}>
+        {qrEl}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
+          <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.name}
+          </div>
+          {fields.secondary && (
+            <div style={{ fontSize: fsSub, color: "#444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.sku}
+            </div>
+          )}
+          {fields.tertiary && item.barcode && (
+            <div style={{ fontSize: fsSub, color: "#888", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {item.barcode}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Product — A4 (photo left, text center, QR right) ────────────────────────
+  const photoMm = qrMm;
+  const showPhoto = fields.photo && (imgDataUrl || true); // always reserve space if photo enabled
+
+  return (
+    <div style={base}>
+      {/* Photo */}
+      {showPhoto && (
+        <div style={{ width: `${photoMm}mm`, height: `${photoMm}mm`, flexShrink: 0, overflow: "hidden", borderRadius: "0.5mm", background: "#f5f5f5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {imgDataUrl
+            ? <img src={imgDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            : <div style={{ fontSize: `${Math.max(2, cfg.hMm * 0.15)}mm`, color: "#bbb", textAlign: "center" }}>фото</div>
+          }
+        </div>
+      )}
+
+      {/* Text */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center", gap }}>
+        <div style={{ fontWeight: "bold", fontSize: fsPrimary, lineHeight: 1.15, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+          {item.name}
+        </div>
+        {fields.secondary && (
+          <div style={{ fontSize: fsSub, color: "#444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.sku}
           </div>
         )}
-        {fields.tertiary && tertiary && (
-          <div style={{
-            fontSize: fsSub, color: "#888", fontFamily: "monospace",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {tertiary}
+        {fields.tertiary && item.barcode && (
+          <div style={{ fontSize: fsSub, color: "#888", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {item.barcode}
           </div>
         )}
       </div>
+
+      {/* QR */}
+      {qrEl}
     </div>
   );
 }
@@ -163,13 +239,34 @@ export function WarehouseLabelModal({
   items: WarehouseLabelItem[];
   onClose: () => void;
 }) {
-  const [sizeKey,  setSizeKey]  = useState<LabelSize>("57x32");
+  const isProduct = items[0]?.type === "product";
+  const initMode: PrintMode = isProduct ? "a4" : "zebra";
+
+  const [mode,     setMode]     = useState<PrintMode>(initMode);
+  const [sizeKey,  setSizeKey]  = useState<LabelSize>(() => DEFAULT_SIZE[initMode]);
   const [fields,   setFields]   = useState<LabelFields>(DEFAULT_FIELDS);
   const [customQr, setCustomQr] = useState(() => defaultQr(items[0]));
   const [status,   setStatus]   = useState<string | null>(null);
   const [busy,     setBusy]     = useState(false);
+  const [imgUrls,  setImgUrls]  = useState<Record<number, string>>({});
   const hiddenRef = useRef<HTMLDivElement>(null);
   const inFlight  = useRef(false);
+
+  // Pre-fetch product images as data URLs for A4 print capture
+  useEffect(() => {
+    if (!isProduct) return;
+    items.forEach(item => {
+      if (item.type !== "product" || !item.image_url) return;
+      toDataUrl(item.image_url).then(url => {
+        if (url) setImgUrls(prev => ({ ...prev, [item.id]: url }));
+      });
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function switchMode(m: PrintMode) {
+    setMode(m);
+    setSizeKey(DEFAULT_SIZE[m]);
+  }
 
   const cfg      = SIZES.find(s => s.key === sizeKey)!;
   const isSingle = items.length === 1;
@@ -190,9 +287,10 @@ export function WarehouseLabelModal({
   @page{size:A4;margin:10mm}
   body{display:flex;flex-wrap:wrap;gap:2mm;align-content:flex-start;background:#fff}
   svg{width:100%!important;height:100%!important;display:block}
+  img{display:block;max-width:100%;max-height:100%}
 </style></head><body>
 ${labelHtml}
-<script>window.onload=()=>setTimeout(()=>window.print(),300)</script>
+<script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
 </body></html>`;
 
     const w = window.open("", "_blank");
@@ -207,24 +305,41 @@ ${labelHtml}
     const zpl = buildZpl(items, items.map(getQrVal), sizeKey, fields);
     const result = await sendToBrowserPrint(zpl);
     setStatus(
-      result === "ok"            ? "✓ Відправлено на Zebra"              :
-      result === "not_available" ? "✗ Zebra Browser Print не знайдено"  :
+      result === "ok"            ? "✓ Відправлено на Zebra"             :
+      result === "not_available" ? "✗ Zebra Browser Print не знайдено" :
                                    "✗ Помилка відправки",
     );
     inFlight.current = false; setBusy(false);
   }
 
   // ── Preview ─────────────────────────────────────────────────────────────────
-  const PREVIEW_W   = 248;
-  const naturalW    = cfg.wMm * PX_PER_MM;
-  const naturalH    = cfg.hMm * PX_PER_MM;
-  const scale       = PREVIEW_W / naturalW;
-  const previewH    = Math.round(naturalH * scale);
+  const PREVIEW_W = 248;
+  const naturalW  = cfg.wMm * PX_PER_MM;
+  const naturalH  = cfg.hMm * PX_PER_MM;
+  const scale     = PREVIEW_W / naturalW;
+  const previewH  = Math.round(naturalH * scale);
 
   const inputCls = "rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-sm font-mono outline-none focus:border-[var(--border-focus)]";
 
-  const secondaryLabel = items[0].type === "cell" ? "Назва зони" : "Артикул (SKU)";
-  const tertiaryLabel  = items[0].type === "cell" ? "Нотатка"   : "Штрих-код (текст)";
+  // Field labels depend on item type
+  const fieldDefs = items[0].type === "cell"
+    ? [
+        { key: "secondary" as const, label: "Назва зони" },
+        { key: "tertiary"  as const, label: "Нотатка"    },
+      ]
+    : mode === "a4"
+      ? [
+          { key: "photo"     as const, label: "Фото"              },
+          { key: "secondary" as const, label: "Артикул (SKU)"     },
+          { key: "tertiary"  as const, label: "Штрих-код (текст)" },
+        ]
+      : [
+          { key: "secondary" as const, label: "Артикул (SKU)"     },
+          { key: "tertiary"  as const, label: "Штрих-код (текст)" },
+        ];
+
+  const previewItem = items[0];
+  const previewImgUrl = previewItem.type === "product" ? imgUrls[previewItem.id] : undefined;
 
   return (
     <>
@@ -234,8 +349,8 @@ ${labelHtml}
         size="lg"
         title={
           items.length > 1
-            ? `Мітки — ${items.length} ${items[0].type === "cell" ? "комірок" : "позицій"}`
-            : `Мітка — ${items[0].type === "cell" ? items[0].code : items[0].name}`
+            ? `Мітки — ${items.length} ${isProduct ? "позицій" : "комірок"}`
+            : `Мітка — ${isProduct ? (items[0] as { name: string }).name : (items[0] as { code: string }).code}`
         }
         footer={
           <>
@@ -264,13 +379,15 @@ ${labelHtml}
               style={{ width: PREVIEW_W + 24 }}
             >
               <div style={{ width: PREVIEW_W, height: previewH, overflow: "hidden" }}>
-                <div style={{
-                  transform: `scale(${scale})`,
-                  transformOrigin: "top left",
-                  width: naturalW,
-                  height: naturalH,
-                }}>
-                  <LabelCard item={items[0]} qrVal={getQrVal(items[0])} cfg={cfg} fields={fields} />
+                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: naturalW, height: naturalH }}>
+                  <LabelCard
+                    item={previewItem}
+                    qrVal={getQrVal(previewItem)}
+                    cfg={cfg}
+                    fields={fields}
+                    mode={mode}
+                    imgDataUrl={previewImgUrl}
+                  />
                 </div>
               </div>
             </div>
@@ -283,6 +400,29 @@ ${labelHtml}
 
           {/* Settings */}
           <div className="space-y-4">
+
+            {/* Mode toggle (products only) */}
+            {isProduct && (
+              <div>
+                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Формат</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    { key: "a4"    as PrintMode, label: "A4 / фото папір" },
+                    { key: "zebra" as PrintMode, label: "Zebra (термо)"   },
+                  ]).map(m => (
+                    <button key={m.key} type="button" onClick={() => switchMode(m.key)}
+                      className={[
+                        "rounded-lg border py-1.5 text-xs font-medium transition",
+                        mode === m.key
+                          ? "border-[var(--border-strong)] bg-[var(--accent)] text-white"
+                          : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                      ].join(" ")}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Size */}
             <div>
@@ -334,10 +474,7 @@ ${labelHtml}
             <div>
               <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Показувати</p>
               <div className="space-y-2">
-                {([
-                  { key: "secondary" as const, label: secondaryLabel },
-                  { key: "tertiary"  as const, label: tertiaryLabel  },
-                ]).map(({ key, label }) => (
+                {fieldDefs.map(({ key, label }) => (
                   <label key={key} className="flex cursor-pointer items-center gap-2">
                     <input
                       type="checkbox"
@@ -355,14 +492,22 @@ ${labelHtml}
         </div>
       </Modal>
 
-      {/* Hidden labels used for A4 print capture (portal outside modal DOM) */}
+      {/* Hidden labels for A4 print capture */}
       {createPortal(
         <div
           ref={hiddenRef}
           style={{ position: "fixed", top: 0, left: 0, opacity: 0, pointerEvents: "none", zIndex: -1 }}
         >
           {items.map((item, i) => (
-            <LabelCard key={i} item={item} qrVal={getQrVal(item)} cfg={cfg} fields={fields} />
+            <LabelCard
+              key={i}
+              item={item}
+              qrVal={getQrVal(item)}
+              cfg={cfg}
+              fields={fields}
+              mode={mode}
+              imgDataUrl={item.type === "product" ? imgUrls[item.id] : undefined}
+            />
           ))}
         </div>,
         document.body,
