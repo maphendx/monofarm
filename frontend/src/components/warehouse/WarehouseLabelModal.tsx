@@ -158,6 +158,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [status,      setStatus]      = useState<string | null>(null);
   const [busy,        setBusy]        = useState(false);
   const [saving,      setSaving]      = useState(false);
+  const [printing,    setPrinting]    = useState(false);
 
   const canvasBoxRef = useRef<HTMLDivElement>(null);
   const dragRef      = useRef<{id:string;startCX:number;startCY:number;origX:number;origY:number}|null>(null);
@@ -328,32 +329,20 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     } finally { inFlight.current = false; setSaving(false); }
   }
 
-  // ── A4 print ──────────────────────────────────────────────────────────────
-  function printA4() {
-    const container = document.getElementById("wl-print-capture");
-    if (!container) return;
-    const labelHtml = Array.from(container.children)
-      .map(el => `<div class="lbl">${el.outerHTML.replace(/<svg ([^>]*?)width="\d+" height="\d+"/g, "<svg $1")}</div>`)
-      .join("");
-    const tplW = activeTpl ? `${activeTpl.width_mm}mm` : "100mm";
-    const tplH = activeTpl ? `${activeTpl.height_mm}mm` : "30mm";
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:A4;margin:8mm}
-  html,body{background:#fff;font-family:Arial,Helvetica,sans-serif}
-  body{display:flex;flex-wrap:wrap;gap:2mm;align-content:flex-start;padding:0}
-  .lbl{display:inline-flex;flex-shrink:0;width:${tplW};height:${tplH};break-inside:avoid;page-break-inside:avoid}
-  .lbl>*{width:100%;height:100%}
-  svg{width:100%!important;height:100%!important;display:block!important}
-  img{display:block;max-width:100%;max-height:100%}
-  span,div{word-break:break-word;overflow-wrap:break-word}
-</style></head><body>
-${labelHtml}
-<script>window.onload=function(){setTimeout(function(){window.print();},600);}</script>
-</body></html>`;
-    const w = window.open("", "_blank");
-    if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+  // ── A4 print — renders React labels directly into DOM, uses window.print() ──
+  async function printA4() {
+    if (!activeTpl || printing) return;
+    setPrinting(true);
+    // Let React render the print portal before triggering print
+    await new Promise(r => setTimeout(r, 250));
+    const cleanup = () => {
+      setPrinting(false);
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+    // Fallback: clean up after 30s if afterprint never fires
+    setTimeout(cleanup, 30_000);
   }
 
   // ── Zebra ZPL ─────────────────────────────────────────────────────────────
@@ -646,19 +635,44 @@ ${labelHtml}
     </div>
     </div>  {/* end modal dialog */}
 
-    {/* Hidden print capture portal */}
-    {activeTpl && createPortal(
-      <div id="wl-print-capture" style={{ position: "fixed", top: 0, left: 0, opacity: 0, pointerEvents: "none", zIndex: -1 }}>
-        {items.map((item, i) => {
-          const vars = itemToVars(item, isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
-          const bcu: Record<string,string> = {};
-          activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
-            const raw = substituteVars(el.value ?? "", vars as Record<string,string>);
-            if (bcUrls[raw]) bcu[raw] = bcUrls[raw];
-          });
-          return <LabelCanvas key={i} template={activeTpl} vars={vars} barcodeUrls={bcu} />;
-        })}
-      </div>,
+    {/* Print portal — rendered only during print, hidden on screen */}
+    {printing && activeTpl && createPortal(
+      <>
+        {/* eslint-disable-next-line react/no-danger */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            body > *:not(#wl-a4-print) { display: none !important; }
+            @page { size: A4; margin: 8mm; }
+          }
+          @media screen { #wl-a4-print { display: none !important; } }
+        ` }} />
+        <div id="wl-a4-print" style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "2mm",
+          alignContent: "flex-start",
+          background: "#fff",
+          fontFamily: "Arial, Helvetica, sans-serif",
+        }}>
+          {items.map((item, i) => {
+            const vars = itemToVars(
+              item,
+              isSingle && i === 0 ? qrVal : defaultQr(item),
+              item.type === "product" ? imgUrls[item.id] : undefined,
+            );
+            const bcu: Record<string, string> = {};
+            activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+              const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
+              if (bcUrls[raw]) bcu[raw] = bcUrls[raw];
+            });
+            return (
+              <div key={i} style={{ breakInside: "avoid", pageBreakInside: "avoid", flexShrink: 0 }}>
+                <LabelCanvas template={activeTpl} vars={vars} barcodeUrls={bcu} />
+              </div>
+            );
+          })}
+        </div>
+      </>,
       document.body,
     )}
     </>
