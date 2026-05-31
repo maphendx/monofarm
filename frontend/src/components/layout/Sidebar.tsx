@@ -162,12 +162,8 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* Learn + Settings (admin only) + Support (everyone) */}
+      {/* Settings (admin only) + Support + Learn (everyone) */}
       <div className="px-2 py-2">
-        <Link href="/learn" title={t("nav.learn")} className={linkCls("/learn")}>
-          <Icon d={ICONS.learn} />
-          <span className={`whitespace-nowrap ${txt}`}>{t("nav.learn")}</span>
-        </Link>
         {isAdmin && (
           <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
             <Icon d={ICONS.settings} />
@@ -177,6 +173,10 @@ export function Sidebar({
         <Link href="/support" title={t("nav.support")} className={linkCls("/support")}>
           <Icon d={ICONS.support} />
           <span className={`whitespace-nowrap ${txt}`}>{t("nav.support")}</span>
+        </Link>
+        <Link href="/learn" title={t("nav.learn")} className={linkCls("/learn")}>
+          <Icon d={ICONS.learn} />
+          <span className={`whitespace-nowrap ${txt}`}>{t("nav.learn")}</span>
         </Link>
       </div>
 
