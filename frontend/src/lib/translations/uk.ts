@@ -11,6 +11,7 @@ const uk = {
     users: "Користувачі",
     settings: "Налаштування",
     warehouse: "Склад",
+    learn: "Навчання",
     support: "Підтримка",
   },
   common: {

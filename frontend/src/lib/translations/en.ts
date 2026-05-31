@@ -11,6 +11,7 @@ const en = {
     users: "Users",
     settings: "Settings",
     warehouse: "Warehouse",
+    learn: "Learning Center",
     support: "Support",
   },
   common: {
