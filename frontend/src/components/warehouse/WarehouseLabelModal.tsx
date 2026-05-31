@@ -4,7 +4,14 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 import { Modal } from "@/components/ui/Modal";
-import { API_URL, getToken } from "@/lib/api";
+import { API_URL, api, getToken } from "@/lib/api";
+import { generateCode128Url } from "@/components/warehouse/labelUtils";
+import {
+  LabelCanvas,
+  substituteVars,
+  type LabelDataVars,
+  type LabelTemplate,
+} from "@/components/warehouse/LabelCanvas";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,21 +61,6 @@ async function fetchDataUrl(src: string): Promise<string | null> {
   } catch { return null; }
 }
 
-async function generateCode128Url(text: string, hPx: number): Promise<string | null> {
-  try {
-    const mod = await import("jsbarcode");
-    const JsBarcode = ((mod as { default?: unknown }).default ?? mod) as (el: HTMLCanvasElement, v: string, o: object) => void;
-    const canvas = document.createElement("canvas");
-    JsBarcode(canvas, text, {
-      format: "CODE128", displayValue: true,
-      fontSize: Math.max(8, Math.round(hPx * 0.18)),
-      textMargin: 2, margin: 4,
-      width: 2, height: Math.round(hPx * 0.62),
-      background: "#ffffff", lineColor: "#000000",
-    });
-    return canvas.toDataURL("image/png");
-  } catch { return null; }
-}
 
 function buildZpl(
   items: WarehouseLabelItem[],
@@ -323,25 +315,36 @@ export function WarehouseLabelModal({
   const initMode: PrintMode = (isProduct || isAction) ? "a4" : "zebra";
   const sizeMap   = isAction ? DEFAULT_SIZE_ACTION : DEFAULT_SIZE;
 
-  const [mode,     setMode]     = useState<PrintMode>(initMode);
-  const [sizeKey,  setSizeKey]  = useState<LabelSize>(() => sizeMap[initMode]);
-  const [fields,   setFields]   = useState<LabelFields>(DEFAULT_FIELDS);
-  const [customQr, setCustomQr] = useState(() => defaultQr(items[0]));
-  const [status,   setStatus]   = useState<string | null>(null);
-  const [busy,     setBusy]     = useState(false);
-  const [imgUrls,      setImgUrls]      = useState<Record<number, string>>({});
-  const [barcodeUrls,  setBarcodeUrls]  = useState<Record<number, string>>({});
+  const [mode,      setMode]      = useState<PrintMode>(initMode);
+  const [sizeKey,   setSizeKey]   = useState<LabelSize>(() => sizeMap[initMode]);
+  const [fields,    setFields]    = useState<LabelFields>(DEFAULT_FIELDS);
+  const [customQr,  setCustomQr]  = useState(() => defaultQr(items[0]));
+  const [status,    setStatus]    = useState<string | null>(null);
+  const [busy,      setBusy]      = useState(false);
+  const [imgUrls,       setImgUrls]      = useState<Record<number, string>>({});
+  const [barcodeUrls,   setBarcodeUrls]  = useState<Record<number, string>>({});
+  const [templates,     setTemplates]    = useState<LabelTemplate[]>([]);
+  const [templateId,    setTemplateId]   = useState<number | null>(null);
   const hiddenRef = useRef<HTMLDivElement>(null);
   const inFlight  = useRef(false);
+
+  const activeTpl = templateId !== null ? templates.find(t => t.id === templateId) : null;
 
   const cfg      = SIZES.find(s => s.key === sizeKey)!;
   const isSingle = items.length === 1;
 
-  // Pre-fetch images + pre-render Code128 barcodes for A4 print capture
+  // Load templates + pre-fetch images
   useEffect(() => {
-    if (!isProduct) return;
+    const type = items[0]?.type ?? "universal";
+    api<LabelTemplate[]>(`/api/warehouse/label-templates?item_type=${type}`)
+      .then(data => {
+        setTemplates(data);
+        const def = data.find(t => t.is_default);
+        if (def) setTemplateId(def.id);
+      })
+      .catch(() => {});
 
-    // Fetch images once (they don't change with size)
+    if (!isProduct) return;
     items.forEach(item => {
       if (item.type !== "product" || !item.image_url) return;
       fetchDataUrl(item.image_url).then(url => {
@@ -371,6 +374,29 @@ export function WarehouseLabelModal({
 
   function getQrVal(item: WarehouseLabelItem): string {
     return isSingle ? (customQr || defaultQr(item)) : defaultQr(item);
+  }
+
+  function itemToVars(item: WarehouseLabelItem): LabelDataVars {
+    if (item.type === "cell") return {
+      code: item.code, zone_name: item.zone_name, notes: item.notes ?? "",
+      CELL_QR: getQrVal(item),
+    };
+    if (item.type === "action") return {
+      label: item.label, code: item.code, ACTION_QR: getQrVal(item),
+    };
+    return {
+      name: item.name, sku: item.sku, barcode: item.barcode ?? "",
+      categories: item.categories?.join(" · ") ?? "",
+      PROD_QR: getQrVal(item),
+      product_image: imgUrls[item.id],
+    };
+  }
+
+  // Resolve barcode data URL for a single element value given item vars
+  function getBcUrl(elValue: string, item: WarehouseLabelItem): string | undefined {
+    const vars = itemToVars(item);
+    const resolved = substituteVars(elValue, vars);
+    return (barcodeUrls as Record<string, string>)[resolved];
   }
 
   // ── A4 print ─────────────────────────────────────────────────────────────────
@@ -475,19 +501,38 @@ ${labelHtml}
               className="flex items-center justify-center rounded-lg bg-[var(--surface-hi)] p-3"
               style={{ width: PREVIEW_W + 24 }}
             >
-              <div style={{ width: PREVIEW_W, height: previewH, overflow: "hidden" }}>
-                <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: naturalW, height: naturalH }}>
-                  <LabelCard
-                    item={previewItem}
-                    qrVal={getQrVal(previewItem)}
-                    cfg={cfg}
-                    fields={fields}
-                    mode={mode}
-                    imgDataUrl={previewImg}
-                    barcodeDataUrl={previewBC}
-                  />
+              {activeTpl ? (() => {
+                const tplW = activeTpl.width_mm * PX_PER_MM;
+                const tplH = activeTpl.height_mm * PX_PER_MM;
+                const tplScale = PREVIEW_W / tplW;
+                return (
+                  <div style={{ width: PREVIEW_W, height: Math.round(tplH * tplScale), overflow: "hidden" }}>
+                    <div style={{ transform: `scale(${tplScale})`, transformOrigin: "top left", width: tplW, height: tplH }}>
+                      <LabelCanvas template={activeTpl} vars={itemToVars(previewItem)}
+                        barcodeUrls={Object.fromEntries(
+                          activeTpl.elements.filter(e => e.type === "barcode" && e.value).map(e => {
+                            const raw = substituteVars(e.value!, itemToVars(previewItem));
+                            return [raw, (barcodeUrls as Record<string, string>)[raw] ?? ""] as [string, string];
+                          })
+                        )} />
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div style={{ width: PREVIEW_W, height: previewH, overflow: "hidden" }}>
+                  <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: naturalW, height: naturalH }}>
+                    <LabelCard
+                      item={previewItem}
+                      qrVal={getQrVal(previewItem)}
+                      cfg={cfg}
+                      fields={fields}
+                      mode={mode}
+                      imgDataUrl={previewImg}
+                      barcodeDataUrl={previewBC}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             {items.length > 1 && (
               <p className="mt-1.5 text-center text-[10px] text-[var(--text-faint)]">
@@ -499,8 +544,30 @@ ${labelHtml}
           {/* Settings */}
           <div className="space-y-4">
 
+            {/* Template selector */}
+            {templates.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Шаблон</p>
+                <select
+                  value={templateId ?? ""}
+                  onChange={e => setTemplateId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]"
+                >
+                  <option value="">— Без шаблону (стандартний) —</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {activeTpl && (
+                  <p className="mt-1 text-[10px] text-[var(--text-faint)]">
+                    {activeTpl.width_mm}×{activeTpl.height_mm} мм · {activeTpl.elements.length} ел.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Mode toggle (products and actions) */}
-            {(isProduct || isAction) && (
+            {!activeTpl && (isProduct || isAction) && (
               <div>
                 <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Формат</p>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -522,8 +589,8 @@ ${labelHtml}
               </div>
             )}
 
-            {/* Size */}
-            <div>
+            {/* Size (hidden when template active — template defines its own size) */}
+            {!activeTpl && <div>
               <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Розмір</p>
               <div className="grid grid-cols-2 gap-1.5">
                 {SIZES.map(s => (
@@ -538,7 +605,7 @@ ${labelHtml}
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
 
             {/* QR / barcode content (single item) */}
             <div>

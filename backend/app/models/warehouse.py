@@ -410,3 +410,19 @@ class CashTransaction(Base):
     transaction_date: Mapped[date]             = mapped_column(Date, nullable=False, index=True)
     created_by_id:    Mapped[int | None]       = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:       Mapped[datetime]         = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ── Label Templates ───────────────────────────────────────────────────────────
+
+class LabelTemplate(Base):
+    __tablename__ = "wh_label_templates"
+
+    id:              Mapped[int]         = mapped_column(primary_key=True)
+    organization_id: Mapped[int]         = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name:            Mapped[str]         = mapped_column(String(100), nullable=False)
+    item_type:       Mapped[str]         = mapped_column(String(20), nullable=False, default="universal")  # cell|product|action|universal
+    width_mm:        Mapped[float]       = mapped_column(Numeric(8, 2), nullable=False, default=57.0)
+    height_mm:       Mapped[float]       = mapped_column(Numeric(8, 2), nullable=False, default=32.0)
+    elements:        Mapped[list]        = mapped_column(JSONB, nullable=False, default=list)
+    is_default:      Mapped[bool]        = mapped_column(Boolean, nullable=False, default=False)
+    created_at:      Mapped[datetime]    = mapped_column(DateTime(timezone=True), server_default=func.now())

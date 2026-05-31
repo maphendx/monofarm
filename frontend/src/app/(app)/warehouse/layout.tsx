@@ -25,6 +25,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/warehouse/specs",      label: "Специфікації" },
       { href: "/warehouse/stock",      label: "Залишки" },
       { href: "/warehouse/categories", label: "Категорії" },
+      { href: "/warehouse/labels",     label: "Шаблони міток" },
     ],
   },
   {

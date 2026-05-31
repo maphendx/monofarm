@@ -19,11 +19,12 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
-    CellMoveKind, CellMovement, CellStock, Counterparty, MovementType, Order, OrderItem, OrderPayment,
+    CellMoveKind, CellMovement, CellStock, Counterparty, LabelTemplate, MovementType, Order, OrderItem, OrderPayment,
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseZone, Product,
 )
+from app.services.label_templates import BUILTIN_TEMPLATES
 from app.schemas.warehouse import (
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
     CashFlowSummary, CashTxCreate, CashTxOut,
@@ -3866,3 +3867,123 @@ def get_analytics(
         material_costs=material_costs,
         cash_flow=cash_flow,
     )
+
+
+# ── Label Templates ───────────────────────────────────────────────────────────
+
+class LabelTemplateCreate(BaseModel):
+    name: str
+    item_type: str = "universal"
+    width_mm: float = 57.0
+    height_mm: float = 32.0
+    elements: list = []
+    is_default: bool = False
+
+class LabelTemplateUpdate(BaseModel):
+    name: str | None = None
+    item_type: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    elements: list | None = None
+    is_default: bool | None = None
+
+class LabelTemplateOut(BaseModel):
+    id: int
+    name: str
+    item_type: str
+    width_mm: float
+    height_mm: float
+    elements: list
+    is_default: bool
+    is_builtin: bool = False
+    model_config = {"from_attributes": True}
+
+
+@router.get("/label-templates", response_model=list[LabelTemplateOut])
+def list_label_templates(
+    item_type: str | None = None,
+    org=Depends(get_current_org),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(LabelTemplate).filter(LabelTemplate.organization_id == org.id).all()
+    custom = [
+        LabelTemplateOut(
+            id=r.id, name=r.name, item_type=r.item_type,
+            width_mm=float(r.width_mm), height_mm=float(r.height_mm),
+            elements=r.elements, is_default=r.is_default, is_builtin=False,
+        )
+        for r in rows
+    ]
+    builtins = [
+        LabelTemplateOut(**{**t, "is_default": False, "is_builtin": True})
+        for t in BUILTIN_TEMPLATES
+        if not item_type or t["item_type"] in (item_type, "universal")
+    ]
+    result = builtins + custom
+    if item_type:
+        result = [t for t in result if t.item_type in (item_type, "universal")]
+    return result
+
+
+@router.post("/label-templates", response_model=LabelTemplateOut, status_code=201)
+def create_label_template(
+    body: LabelTemplateCreate,
+    org=Depends(get_current_org),
+    db: Session = Depends(get_db),
+):
+    tpl = LabelTemplate(
+        organization_id=org.id,
+        name=body.name, item_type=body.item_type,
+        width_mm=body.width_mm, height_mm=body.height_mm,
+        elements=body.elements, is_default=body.is_default,
+    )
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return LabelTemplateOut(
+        id=tpl.id, name=tpl.name, item_type=tpl.item_type,
+        width_mm=float(tpl.width_mm), height_mm=float(tpl.height_mm),
+        elements=tpl.elements, is_default=tpl.is_default, is_builtin=False,
+    )
+
+
+@router.put("/label-templates/{tpl_id}", response_model=LabelTemplateOut)
+def update_label_template(
+    tpl_id: int,
+    body: LabelTemplateUpdate,
+    org=Depends(get_current_org),
+    db: Session = Depends(get_db),
+):
+    tpl = db.query(LabelTemplate).filter(
+        LabelTemplate.id == tpl_id, LabelTemplate.organization_id == org.id
+    ).first()
+    if not tpl:
+        raise HTTPException(404, "Template not found")
+    if body.name is not None:       tpl.name = body.name
+    if body.item_type is not None:  tpl.item_type = body.item_type
+    if body.width_mm is not None:   tpl.width_mm = body.width_mm
+    if body.height_mm is not None:  tpl.height_mm = body.height_mm
+    if body.elements is not None:   tpl.elements = body.elements
+    if body.is_default is not None: tpl.is_default = body.is_default
+    db.commit()
+    db.refresh(tpl)
+    return LabelTemplateOut(
+        id=tpl.id, name=tpl.name, item_type=tpl.item_type,
+        width_mm=float(tpl.width_mm), height_mm=float(tpl.height_mm),
+        elements=tpl.elements, is_default=tpl.is_default, is_builtin=False,
+    )
+
+
+@router.delete("/label-templates/{tpl_id}", status_code=204)
+def delete_label_template(
+    tpl_id: int,
+    org=Depends(get_current_org),
+    db: Session = Depends(get_db),
+):
+    tpl = db.query(LabelTemplate).filter(
+        LabelTemplate.id == tpl_id, LabelTemplate.organization_id == org.id
+    ).first()
+    if not tpl:
+        raise HTTPException(404, "Template not found")
+    db.delete(tpl)
+    db.commit()
