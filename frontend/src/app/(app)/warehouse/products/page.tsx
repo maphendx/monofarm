@@ -13,6 +13,7 @@ import {
   TableSettingsButton,
   type ColDef,
 } from "@/components/warehouse/TableSettings";
+import { WarehouseLabelModal, type WarehouseLabelItem } from "@/components/warehouse/WarehouseLabelModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1235,6 +1236,8 @@ export default function ProductsPage() {
   const colVis = useColumnVisibility("products", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
+  const [labelModal, setLabelModal] = useState(false);
+
   // Modal state
   const [editProduct,   setEditProduct]   = useState<Product | null | "create">(null);
   const [copyTemplate,  setCopyTemplate]  = useState<Partial<Product> | null>(null);
@@ -1974,11 +1977,22 @@ export default function ProductsPage() {
           { label: "Відновити",        onClick: restoreSelected,    disabled: deleting, variant: "default" },
           { label: "Видалити назавжди", onClick: hardDeleteSelected, disabled: deleting, variant: "danger"  },
         ] : [
-          { label: "🖨 Картки",   onClick: printProductCards,  disabled: deleting, variant: "ghost"  },
-          { label: "Архівувати",  onClick: archiveSelected,    disabled: deleting, variant: "ghost"  },
-          { label: "Видалити",    onClick: hardDeleteSelected,  disabled: deleting, variant: "danger"  },
+          { label: "🖨 Картки",   onClick: printProductCards,       disabled: deleting, variant: "ghost"  },
+          { label: "🏷 Мітки",   onClick: () => setLabelModal(true), disabled: deleting, variant: "ghost"  },
+          { label: "Архівувати",  onClick: archiveSelected,          disabled: deleting, variant: "ghost"  },
+          { label: "Видалити",    onClick: hardDeleteSelected,        disabled: deleting, variant: "danger"  },
         ]}
       />
+
+      {labelModal && (() => {
+        const labelItems: WarehouseLabelItem[] = products
+          .filter(p => selected.has(p.id))
+          .map(p => ({ type: "product" as const, id: p.id, name: p.name, sku: p.sku, barcode: p.barcode }));
+        return labelItems.length > 0
+          ? <WarehouseLabelModal items={labelItems} onClose={() => setLabelModal(false)} />
+          : null;
+      })()}
+
       {dialog}
     </>
   );
