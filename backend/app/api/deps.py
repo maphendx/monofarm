@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models.organization import OrgPlan, Organization
+from app.models.organization import OrgPlan, Organization, WAREHOUSE_FULL_PLANS
 from app.models.user import User, UserRole
 
 
@@ -73,3 +73,13 @@ def require_roles(*roles: UserRole):
         return user
 
     return checker
+
+
+def require_warehouse_full(org: Organization = Depends(get_current_org)) -> Organization:
+    """Blocks free-plan orgs from full warehouse access (stock, orders, batches, etc.)."""
+    if org.plan not in WAREHOUSE_FULL_PLANS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Повний доступ до складу потребує тарифу Starter або вище",
+        )
+    return org

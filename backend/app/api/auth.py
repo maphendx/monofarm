@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_org, get_current_user
 from app.core.db import get_db
 from app.core.security import create_access_token, verify_password
+from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import LoginRequest, TokenResponse, UserOut
 
@@ -23,5 +24,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user)) -> User:
-    return user
+def me(
+    user: User         = Depends(get_current_user),
+    org:  Organization = Depends(get_current_org),
+) -> dict:
+    return {
+        "id":               user.id,
+        "email":            user.email,
+        "name":             user.name,
+        "role":             user.role,
+        "org_plan":         org.plan,
+        "created_at":       user.created_at,
+        "telegram_chat_id": user.telegram_chat_id,
+    }

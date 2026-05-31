@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr
 
+from app.models.organization import OrgPlan
 from app.models.user import UserRole
 
 
@@ -20,6 +21,7 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
+    org_plan: OrgPlan
     created_at: datetime
     telegram_chat_id: int | None = None
 

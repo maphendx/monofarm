@@ -1,5 +1,7 @@
 export type UserRole = "admin" | "operator" | "manager";
 
+export type OrgPlan = "free" | "starter" | "pro" | "farm";
+
 export type PrinterKind = "snapmaker_u1" | "bambu" | "other";
 
 export type PrintTaskStatus = "queued" | "in_progress" | "done" | "cancelled";
@@ -10,6 +12,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  org_plan: OrgPlan;
   created_at: string;
   telegram_chat_id: number | null;
 }

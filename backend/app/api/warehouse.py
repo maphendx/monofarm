@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org, require_roles
+from app.api.deps import get_current_org, require_roles, require_warehouse_full
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.user import User, UserRole
@@ -46,6 +46,10 @@ from app.schemas.warehouse import (
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
+# All routes that require Starter plan or above (full warehouse access).
+# Free plan can only access /products and /categories.
+_full = APIRouter(dependencies=[Depends(require_warehouse_full)])
+
 _ELECTRICITY_RATE  = Decimal("4.5")   # ₴/кВт·год
 _LABOR_RATE        = Decimal("150")   # ₴/год
 _PRINTER_WATTS     = 200              # Вт
@@ -74,7 +78,7 @@ def _make_product_out(p: Product, org_id: int) -> ProductOut:
 
 # ── Product categories ────────────────────────────────────────────────────────
 
-@router.get("/scan", response_model=ScanResult)
+@_full.get("/scan", response_model=ScanResult)
 def scan(
     q:   str,
     db:  Session      = Depends(get_db),
@@ -608,13 +612,13 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
 
 # ── Warehouses ────────────────────────────────────────────────────────────────
 
-@router.get("/warehouses", response_model=list[WarehouseOut])
+@_full.get("/warehouses", response_model=list[WarehouseOut])
 def list_warehouses(db: Session = Depends(get_db), org: Organization = Depends(get_current_org)) -> list[WarehouseOut]:
     rows = db.query(Warehouse).filter(Warehouse.organization_id == org.id).order_by(Warehouse.name).all()
     return [WarehouseOut.model_validate(r) for r in rows]
 
 
-@router.post("/warehouses", response_model=WarehouseOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/warehouses", response_model=WarehouseOut, status_code=status.HTTP_201_CREATED)
 def create_warehouse(
     payload: WarehouseCreate,
     db:  Session      = Depends(get_db),
@@ -628,7 +632,7 @@ def create_warehouse(
     return WarehouseOut.model_validate(wh)
 
 
-@router.patch("/warehouses/{wh_id}", response_model=WarehouseOut)
+@_full.patch("/warehouses/{wh_id}", response_model=WarehouseOut)
 def update_warehouse(
     wh_id:   int,
     payload: WarehouseUpdate,
@@ -644,7 +648,7 @@ def update_warehouse(
     return WarehouseOut.model_validate(wh)
 
 
-@router.delete("/warehouses/{wh_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/warehouses/{wh_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_warehouse(
     wh_id: int,
     db:  Session      = Depends(get_db),
@@ -704,7 +708,7 @@ def _zone_out(zone: WarehouseZone, db: Session) -> ZoneOut:
     )
 
 
-@router.get("/zones", response_model=list[ZoneOverviewOut])
+@_full.get("/zones", response_model=list[ZoneOverviewOut])
 def list_all_zones(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -738,7 +742,7 @@ def list_all_zones(
     ]
 
 
-@router.get("/warehouses/{wh_id}/zones", response_model=list[ZoneOut])
+@_full.get("/warehouses/{wh_id}/zones", response_model=list[ZoneOut])
 def list_zones(
     wh_id: int,
     db:  Session      = Depends(get_db),
@@ -752,7 +756,7 @@ def list_zones(
     return [_zone_out(z, db) for z in zones]
 
 
-@router.post("/warehouses/{wh_id}/zones", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/warehouses/{wh_id}/zones", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
 def create_zone(
     wh_id:   int,
     payload: ZoneCreate,
@@ -771,7 +775,7 @@ def create_zone(
     return _zone_out(zone, db)
 
 
-@router.patch("/warehouses/{wh_id}/zones/{zone_id}", response_model=ZoneOut)
+@_full.patch("/warehouses/{wh_id}/zones/{zone_id}", response_model=ZoneOut)
 def update_zone(
     wh_id:   int,
     zone_id: int,
@@ -814,7 +818,7 @@ def update_zone(
     return _zone_out(zone, db)
 
 
-@router.delete("/warehouses/{wh_id}/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/warehouses/{wh_id}/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_zone(
     wh_id:   int,
     zone_id: int,
@@ -855,7 +859,7 @@ def _cell_stock_out(cs: CellStock) -> CellStockOut:
     )
 
 
-@router.get("/zones/{zone_id}/cells", response_model=ZoneWithCellsOut)
+@_full.get("/zones/{zone_id}/cells", response_model=ZoneWithCellsOut)
 def get_zone_cells(
     zone_id: int,
     db:  Session      = Depends(get_db),
@@ -887,7 +891,7 @@ def get_zone_cells(
     )
 
 
-@router.get("/warehouses/{wh_id}/zones-with-cells", response_model=list[ZoneWithCellsOut])
+@_full.get("/warehouses/{wh_id}/zones-with-cells", response_model=list[ZoneWithCellsOut])
 def list_zones_with_cells(
     wh_id: int,
     db:  Session      = Depends(get_db),
@@ -920,7 +924,7 @@ def list_zones_with_cells(
     return result
 
 
-@router.put("/cells/{cell_id}/stock", response_model=CellStockOut)
+@_full.put("/cells/{cell_id}/stock", response_model=CellStockOut)
 def set_cell_stock(
     cell_id: int,
     payload: CellStockSet,
@@ -967,7 +971,7 @@ def set_cell_stock(
     )
 
 
-@router.delete("/cells/{cell_id}/stock/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/cells/{cell_id}/stock/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_cell_stock(
     cell_id:    int,
     product_id: int,
@@ -984,7 +988,7 @@ def remove_cell_stock(
     db.commit()
 
 
-@router.post("/cells/{cell_id}/assign", response_model=CellStockOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/cells/{cell_id}/assign", response_model=CellStockOut, status_code=status.HTTP_201_CREATED)
 def assign_cell_product(
     cell_id: int,
     payload: CellAssign,
@@ -1028,7 +1032,7 @@ def assign_cell_product(
     )
 
 
-@router.patch("/cells/{cell_id}", response_model=CellOut)
+@_full.patch("/cells/{cell_id}", response_model=CellOut)
 def update_cell(
     cell_id: int,
     payload: CellNotesUpdate,
@@ -1049,7 +1053,7 @@ def update_cell(
 
 # ── Putaway / relocate / locations ────────────────────────────────────────────
 
-@router.get("/warehouses/{wh_id}/unassigned", response_model=list[UnassignedItemOut])
+@_full.get("/warehouses/{wh_id}/unassigned", response_model=list[UnassignedItemOut])
 def list_unassigned(
     wh_id: int,
     db:  Session      = Depends(get_db),
@@ -1086,7 +1090,7 @@ def list_unassigned(
     return out
 
 
-@router.post("/cells/{cell_id}/putaway", response_model=CellStockOut)
+@_full.post("/cells/{cell_id}/putaway", response_model=CellStockOut)
 def putaway_to_cell(
     cell_id: int,
     payload: PutawayRequest,
@@ -1120,7 +1124,7 @@ def putaway_to_cell(
     )
 
 
-@router.post("/cells/relocate", status_code=status.HTTP_204_NO_CONTENT)
+@_full.post("/cells/relocate", status_code=status.HTTP_204_NO_CONTENT)
 def relocate_between_cells(
     payload: RelocateRequest,
     db:   Session      = Depends(get_db),
@@ -1157,7 +1161,7 @@ def relocate_between_cells(
     db.commit()
 
 
-@router.post("/scan-action", response_model=ScanActionResult)
+@_full.post("/scan-action", response_model=ScanActionResult)
 def scan_action(
     payload: ScanActionRequest,
     db:   Session      = Depends(get_db),
@@ -1338,7 +1342,7 @@ def scan_action(
     return ScanActionResult(message=f"Інвентаризація {cell.code}: {current} → {payload.quantity} {product.unit}")
 
 
-@router.get("/products/{product_id}/locations", response_model=ProductLocationsOut)
+@_full.get("/products/{product_id}/locations", response_model=ProductLocationsOut)
 def product_locations(
     product_id: int,
     db:  Session      = Depends(get_db),
@@ -1379,7 +1383,7 @@ def product_locations(
     return ProductLocationsOut(product_id=product_id, warehouses=warehouses)
 
 
-@router.get("/products/{product_id}/cell-history", response_model=list[CellMovementOut])
+@_full.get("/products/{product_id}/cell-history", response_model=list[CellMovementOut])
 def product_cell_history(
     product_id: int,
     limit: int = Query(50, le=200),
@@ -1419,7 +1423,7 @@ def product_cell_history(
 
 # ── Counterparties ────────────────────────────────────────────────────────────
 
-@router.get("/counterparties", response_model=list[CounterpartyOut])
+@_full.get("/counterparties", response_model=list[CounterpartyOut])
 def list_counterparties(
     cp_type: str | None = Query(None, alias="type"),
     search:  str | None = Query(None),
@@ -1435,7 +1439,7 @@ def list_counterparties(
     return [CounterpartyOut.model_validate(r) for r in rows]
 
 
-@router.post("/counterparties", response_model=CounterpartyOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/counterparties", response_model=CounterpartyOut, status_code=status.HTTP_201_CREATED)
 def create_counterparty(
     payload: CounterpartyCreate,
     db:   Session      = Depends(get_db),
@@ -1449,7 +1453,7 @@ def create_counterparty(
     return CounterpartyOut.model_validate(cp)
 
 
-@router.get("/counterparties/{cp_id}", response_model=CounterpartyOut)
+@_full.get("/counterparties/{cp_id}", response_model=CounterpartyOut)
 def get_counterparty(
     cp_id: int,
     db:  Session      = Depends(get_db),
@@ -1458,7 +1462,7 @@ def get_counterparty(
     return CounterpartyOut.model_validate(_get_counterparty(cp_id, org, db))
 
 
-@router.patch("/counterparties/{cp_id}", response_model=CounterpartyOut)
+@_full.patch("/counterparties/{cp_id}", response_model=CounterpartyOut)
 def update_counterparty(
     cp_id:   int,
     payload: CounterpartyUpdate,
@@ -1474,7 +1478,7 @@ def update_counterparty(
     return CounterpartyOut.model_validate(cp)
 
 
-@router.delete("/counterparties/{cp_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/counterparties/{cp_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_counterparty(
     cp_id: int,
     db:  Session      = Depends(get_db),
@@ -1488,7 +1492,7 @@ def delete_counterparty(
     db.commit()
 
 
-@router.post("/counterparties/{cp_id}/adjust-balance", response_model=CounterpartyOut)
+@_full.post("/counterparties/{cp_id}/adjust-balance", response_model=CounterpartyOut)
 def adjust_balance(
     cp_id:   int,
     payload: CounterpartyBalanceAdjust,
@@ -1526,6 +1530,19 @@ def list_products(
     return [_make_product_out(r, org.id) for r in rows]
 
 
+def _check_product_limit(org: Organization, db: Session) -> None:
+    from app.models.organization import WAREHOUSE_PRODUCT_LIMIT
+    limit = WAREHOUSE_PRODUCT_LIMIT[org.plan]
+    if limit is None:
+        return
+    count = db.query(func.count(Product.id)).filter(Product.organization_id == org.id).scalar() or 0
+    if count >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Досягнуто ліміт {limit} номенклатур для тарифу {org.plan.value}",
+        )
+
+
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     payload: ProductCreate,
@@ -1533,6 +1550,7 @@ def create_product(
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin)),
 ) -> ProductOut:
+    _check_product_limit(org, db)
     p = Product(**payload.model_dump(), organization_id=org.id, created_by_id=user.id)
     db.add(p)
     db.commit()
@@ -2140,7 +2158,7 @@ def update_thresholds(
 
 # ── Specifications ────────────────────────────────────────────────────────────
 
-@router.get("/products/{product_id}/specs", response_model=list[SpecOut])
+@_full.get("/products/{product_id}/specs", response_model=list[SpecOut])
 def list_specs(
     product_id: int,
     db:  Session      = Depends(get_db),
@@ -2151,7 +2169,7 @@ def list_specs(
     return [_spec_to_out(s, db) for s in specs]
 
 
-@router.post("/products/{product_id}/specs", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/products/{product_id}/specs", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
 def create_spec(
     product_id: int,
     payload:    SpecCreate,
@@ -2178,7 +2196,7 @@ _SPEC_TSV_HEADER = "\t".join([
 ])
 
 
-@router.get("/specs/export")
+@_full.get("/specs/export")
 def export_ordage_specs(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -2309,7 +2327,7 @@ class OrdageSpecImportResult(BaseModel):
     errors:  list[dict]
 
 
-@router.post("/specs/import", response_model=OrdageSpecImportResult)
+@_full.post("/specs/import", response_model=OrdageSpecImportResult)
 def import_ordage_specs(
     file: UploadFile      = File(...),
     db:   Session         = Depends(get_db),
@@ -2367,7 +2385,7 @@ def import_ordage_specs(
     return OrdageSpecImportResult(updated=updated, skipped=skipped, errors=errors)
 
 
-@router.get("/specs/{spec_id}", response_model=SpecOut)
+@_full.get("/specs/{spec_id}", response_model=SpecOut)
 def get_spec(
     spec_id: int,
     db:  Session      = Depends(get_db),
@@ -2376,7 +2394,7 @@ def get_spec(
     return _spec_to_out(_get_spec(spec_id, org, db), db)
 
 
-@router.post("/specs/{spec_id}/set-default", response_model=SpecOut)
+@_full.post("/specs/{spec_id}/set-default", response_model=SpecOut)
 def set_default_spec(
     spec_id: int,
     db:  Session      = Depends(get_db),
@@ -2391,7 +2409,7 @@ def set_default_spec(
     return _spec_to_out(spec, db)
 
 
-@router.post("/specs/{spec_id}/components", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/specs/{spec_id}/components", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
 def add_component(
     spec_id: int,
     payload: SpecComponentCreate,
@@ -2406,7 +2424,7 @@ def add_component(
     return _spec_to_out(spec, db)
 
 
-@router.delete("/specs/{spec_id}/components/{comp_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/specs/{spec_id}/components/{comp_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_component(
     spec_id: int,
     comp_id: int,
@@ -2422,7 +2440,7 @@ def remove_component(
     db.commit()
 
 
-@router.post("/specs/{spec_id}/operations", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/specs/{spec_id}/operations", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
 def add_operation(
     spec_id: int,
     payload: SpecOperationCreate,
@@ -2437,7 +2455,7 @@ def add_operation(
     return _spec_to_out(spec, db)
 
 
-@router.delete("/specs/{spec_id}/operations/{op_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/specs/{spec_id}/operations/{op_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_operation(
     spec_id: int,
     op_id:   int,
@@ -2453,7 +2471,7 @@ def remove_operation(
     db.commit()
 
 
-@router.get("/products/{product_id}/cost", response_model=CostBreakdown)
+@_full.get("/products/{product_id}/cost", response_model=CostBreakdown)
 def compute_cost(
     product_id: int,
     db:  Session      = Depends(get_db),
@@ -2478,7 +2496,7 @@ def compute_cost(
 
 # ── Stock ─────────────────────────────────────────────────────────────────────
 
-@router.get("/stock", response_model=list[StockEntryOut])
+@_full.get("/stock", response_model=list[StockEntryOut])
 def list_stock(
     warehouse_id: int | None = Query(None),
     product_id:   int | None = Query(None),
@@ -2607,7 +2625,7 @@ class _ReplenishRequest(BaseModel):
     items: list[_ReplenishItem]
 
 
-@router.get("/stock/replenish-preview", response_model=list[_ReplenishPreviewItem])
+@_full.get("/stock/replenish-preview", response_model=list[_ReplenishPreviewItem])
 def replenish_preview(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -2667,7 +2685,7 @@ def replenish_preview(
     return result
 
 
-@router.post("/stock/replenish")
+@_full.post("/stock/replenish")
 def replenish_stock(
     payload: _ReplenishRequest,
     db:   Session      = Depends(get_db),
@@ -2729,7 +2747,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, int]:
     return datetime.fromisoformat(created_iso), int(id_str)
 
 
-@router.get("/movements", response_model=MovementListOut)
+@_full.get("/movements", response_model=MovementListOut)
 def list_movements(
     movement_type: MovementType | None = Query(None),
     product_id:    int | None          = Query(None),
@@ -2810,7 +2828,7 @@ def list_movements(
     return MovementListOut(items=items, next_cursor=next_cursor, has_more=has_more, total=total)
 
 
-@router.post("/movements", response_model=MovementOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/movements", response_model=MovementOut, status_code=status.HTTP_201_CREATED)
 def create_movement(
     payload: MovementCreate,
     db:   Session      = Depends(get_db),
@@ -2947,7 +2965,7 @@ def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
     )
 
 
-@router.get("/batches", response_model=list[BatchOut])
+@_full.get("/batches", response_model=list[BatchOut])
 def list_batches(
     batch_status: BatchStatus | None = Query(None),
     product_id:   int | None         = Query(None),
@@ -2963,7 +2981,7 @@ def list_batches(
     return [_batch_to_out(b, db) for b in rows]
 
 
-@router.post("/batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
 def create_batch(
     payload: BatchCreate,
     db:   Session      = Depends(get_db),
@@ -2983,7 +3001,7 @@ def create_batch(
     return _batch_to_out(b, db)
 
 
-@router.get("/batches/{batch_id}", response_model=BatchOut)
+@_full.get("/batches/{batch_id}", response_model=BatchOut)
 def get_batch(
     batch_id: int,
     db:  Session      = Depends(get_db),
@@ -2995,7 +3013,7 @@ def get_batch(
     return _batch_to_out(b, db)
 
 
-@router.patch("/batches/{batch_id}", response_model=BatchOut)
+@_full.patch("/batches/{batch_id}", response_model=BatchOut)
 def update_batch(
     batch_id: int,
     payload:  BatchUpdate,
@@ -3013,7 +3031,7 @@ def update_batch(
     return _batch_to_out(b, db)
 
 
-@router.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_batch(
     batch_id: int,
     db:  Session      = Depends(get_db),
@@ -3032,7 +3050,7 @@ def delete_batch(
     db.commit()
 
 
-@router.patch("/batches/{batch_id}/progress", response_model=BatchOut)
+@_full.patch("/batches/{batch_id}/progress", response_model=BatchOut)
 def update_progress(
     batch_id:   int,
     printed_qty: int = Query(..., ge=0),
@@ -3053,7 +3071,7 @@ def update_progress(
     return _batch_to_out(b, db)
 
 
-@router.post("/batches/{batch_id}/close", response_model=BatchOut)
+@_full.post("/batches/{batch_id}/close", response_model=BatchOut)
 def close_batch(
     batch_id: int,
     payload:  BatchClose,
@@ -3130,7 +3148,7 @@ def close_batch(
 
 # ── Orders ────────────────────────────────────────────────────────────────────
 
-@router.get("/orders", response_model=list[OrderOut])
+@_full.get("/orders", response_model=list[OrderOut])
 def list_orders(
     order_status: OrderStatus | None = Query(None),
     counterparty_id: int | None      = Query(None),
@@ -3146,7 +3164,7 @@ def list_orders(
     return [_order_to_out(o, db) for o in rows]
 
 
-@router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def create_order(
     payload: OrderCreate,
     db:   Session      = Depends(get_db),
@@ -3190,7 +3208,7 @@ def create_order(
     return _order_to_out(o, db)
 
 
-@router.get("/orders/{order_id}", response_model=OrderOut)
+@_full.get("/orders/{order_id}", response_model=OrderOut)
 def get_order(
     order_id: int,
     db:  Session      = Depends(get_db),
@@ -3202,7 +3220,7 @@ def get_order(
     return _order_to_out(o, db)
 
 
-@router.patch("/orders/{order_id}", response_model=OrderOut)
+@_full.patch("/orders/{order_id}", response_model=OrderOut)
 def update_order(
     order_id: int,
     payload:  OrderUpdate,
@@ -3222,7 +3240,7 @@ def update_order(
     return _order_to_out(o, db)
 
 
-@router.post("/orders/{order_id}/reserve", response_model=OrderOut)
+@_full.post("/orders/{order_id}/reserve", response_model=OrderOut)
 def reserve_order(
     order_id: int,
     payload:  ReserveRequest,
@@ -3292,7 +3310,7 @@ def reserve_order(
     return _order_to_out(o, db)
 
 
-@router.post("/orders/{order_id}/ship", response_model=OrderOut)
+@_full.post("/orders/{order_id}/ship", response_model=OrderOut)
 def ship_order(
     order_id: int,
     payload: ShipRequest | None = None,
@@ -3388,7 +3406,7 @@ def ship_order(
     return _order_to_out(o, db)
 
 
-@router.post("/orders/{order_id}/cancel", response_model=OrderOut)
+@_full.post("/orders/{order_id}/cancel", response_model=OrderOut)
 def cancel_order(
     order_id: int,
     db:   Session      = Depends(get_db),
@@ -3430,7 +3448,7 @@ def cancel_order(
 
 # ── Order Payments ────────────────────────────────────────────────────────────
 
-@router.post("/orders/{order_id}/payments", response_model=OrderPaymentOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/orders/{order_id}/payments", response_model=OrderPaymentOut, status_code=status.HTTP_201_CREATED)
 def record_payment(
     order_id: int,
     payload:  OrderPaymentCreate,
@@ -3496,7 +3514,7 @@ def record_payment(
     return OrderPaymentOut.model_validate(payment)
 
 
-@router.get("/orders/{order_id}/payments", response_model=list[OrderPaymentOut])
+@_full.get("/orders/{order_id}/payments", response_model=list[OrderPaymentOut])
 def list_payments(
     order_id: int,
     db:  Session      = Depends(get_db),
@@ -3514,7 +3532,7 @@ def list_payments(
     return [OrderPaymentOut.model_validate(p) for p in rows]
 
 
-@router.delete("/orders/{order_id}/payments/{payment_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@_full.delete("/orders/{order_id}/payments/{payment_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_payment(
     order_id:   int,
     payment_id: int,
@@ -3587,7 +3605,7 @@ def _tx_to_out(tx: CashTransaction, db: Session) -> CashTxOut:
     )
 
 
-@router.get("/cashflow", response_model=list[CashTxOut])
+@_full.get("/cashflow", response_model=list[CashTxOut])
 def list_cashflow(
     tx_type:    str | None = Query(None, alias="type"),
     date_from:  date | None = Query(None),
@@ -3610,7 +3628,7 @@ def list_cashflow(
     return [_tx_to_out(tx, db) for tx in rows]
 
 
-@router.post("/cashflow", response_model=CashTxOut, status_code=status.HTTP_201_CREATED)
+@_full.post("/cashflow", response_model=CashTxOut, status_code=status.HTTP_201_CREATED)
 def create_cash_tx(
     payload: CashTxCreate,
     db:   Session      = Depends(get_db),
@@ -3635,7 +3653,7 @@ def create_cash_tx(
     return _tx_to_out(tx, db)
 
 
-@router.delete("/cashflow/{tx_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_full.delete("/cashflow/{tx_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cash_tx(
     tx_id: int,
     db:  Session      = Depends(get_db),
@@ -3649,7 +3667,7 @@ def delete_cash_tx(
     db.commit()
 
 
-@router.get("/cashflow/summary", response_model=CashFlowSummary)
+@_full.get("/cashflow/summary", response_model=CashFlowSummary)
 def cashflow_summary(
     date_from: date | None = Query(None),
     date_to:   date | None = Query(None),
@@ -3727,7 +3745,7 @@ def _period_range(period: str) -> tuple[date, date]:
     return start, today
 
 
-@router.get("/analytics", response_model=WarehouseAnalytics)
+@_full.get("/analytics", response_model=WarehouseAnalytics)
 def get_analytics(
     period: str          = Query("month", pattern="^(month|quarter|year)$"),
     db:     Session      = Depends(get_db),
@@ -3899,7 +3917,7 @@ class LabelTemplateOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.get("/label-templates", response_model=list[LabelTemplateOut])
+@_full.get("/label-templates", response_model=list[LabelTemplateOut])
 def list_label_templates(
     item_type: str | None = None,
     org=Depends(get_current_org),
@@ -3925,7 +3943,7 @@ def list_label_templates(
     return result
 
 
-@router.post("/label-templates", response_model=LabelTemplateOut, status_code=201)
+@_full.post("/label-templates", response_model=LabelTemplateOut, status_code=201)
 def create_label_template(
     body: LabelTemplateCreate,
     org=Depends(get_current_org),
@@ -3947,7 +3965,7 @@ def create_label_template(
     )
 
 
-@router.put("/label-templates/{tpl_id}", response_model=LabelTemplateOut)
+@_full.put("/label-templates/{tpl_id}", response_model=LabelTemplateOut)
 def update_label_template(
     tpl_id: int,
     body: LabelTemplateUpdate,
@@ -3974,7 +3992,7 @@ def update_label_template(
     )
 
 
-@router.delete("/label-templates/{tpl_id}", status_code=204)
+@_full.delete("/label-templates/{tpl_id}", status_code=204)
 def delete_label_template(
     tpl_id: int,
     org=Depends(get_current_org),
@@ -3987,3 +4005,6 @@ def delete_label_template(
         raise HTTPException(404, "Template not found")
     db.delete(tpl)
     db.commit()
+
+
+router.include_router(_full)

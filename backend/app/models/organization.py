@@ -29,6 +29,17 @@ PLAN_LIMITS: dict[OrgPlan, dict[str, int]] = {
     OrgPlan.farm:    {"printers": 20, "users": 999},
 }
 
+# None = unlimited
+WAREHOUSE_PRODUCT_LIMIT: dict[OrgPlan, int | None] = {
+    OrgPlan.free:    100,
+    OrgPlan.starter: 200,
+    OrgPlan.pro:     1000,
+    OrgPlan.farm:    None,
+}
+
+# Plans with full warehouse access (all modules: stock, orders, batches, etc.)
+WAREHOUSE_FULL_PLANS = {OrgPlan.starter, OrgPlan.pro, OrgPlan.farm}
+
 # Hard cap — max printers even with extra slots (None = unlimited)
 PLAN_MAX_PRINTERS: dict[OrgPlan, int | None] = {
     OrgPlan.free:    2,
