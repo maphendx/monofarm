@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
-import { SpecModal } from "@/components/warehouse/SpecModal";
+import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
   useColumnVisibility,
@@ -169,21 +169,6 @@ export default function SpecsPage() {
   const withoutSpec = products.length - withSpec;
 
   const colSpan = 1 + COLS.filter((c) => colVis.isVisible(c.key)).length;
-
-  function Th({ col, children, className = "" }: { col: SortKey; children: React.ReactNode; className?: string }) {
-    const active = sortKey === col;
-    return (
-      <th
-        onClick={() => toggleSort(col)}
-        className={`cursor-pointer select-none px-4 py-3 font-medium text-[var(--text-muted)] hover:text-[var(--text)] ${className}`}
-      >
-        {children}
-        <span className={`ml-1 text-xs ${active ? "text-[var(--accent)]" : "opacity-30"}`}>
-          {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
-        </span>
-      </th>
-    );
-  }
 
   return (
     <div className="space-y-4">
