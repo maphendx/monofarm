@@ -956,6 +956,23 @@ export default function OrdersPage() {
                   )}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => {
+                          const w = window.open("", "_blank");
+                          if (!w) return;
+                          w.document.write(`<html><head><title>QR ${o.order_number}</title></head><body style="text-align:center;font-family:sans-serif">
+                            <div id="qr" style="display:inline-block;margin-top:40px"></div>
+                            <h2 style="font-family:monospace">${o.order_number}</h2>
+                            <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+                            <script>new QRCode(document.getElementById('qr'),{text:'ORDER:${o.id}',width:220,height:220});</script>
+                          </body></html>`);
+                          w.document.close();
+                          setTimeout(() => w.print(), 600);
+                        }}
+                        title="Друк QR для сканера"
+                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                        ⊞
+                      </button>
                       {o.status === "new" && (
                         <button
                           onClick={() => setReserveOrder(o)}
