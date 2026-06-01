@@ -369,6 +369,7 @@ export default function StockPage() {
   const [movementLines,     setMovementLines]     = useState<{ productId: string; quantity: string }[] | undefined>(undefined);
   const [batchProductId,    setBatchProductId]    = useState<string | null>(null);
   const [colSettingsOpen,   setColSettingsOpen]   = useState(false);
+  const [hideZero,          setHideZero]          = useState(false);
   const [replenishOpen,     setReplenishOpen]     = useState(false);
 
   const colVis = useColumnVisibility("stock", COLS);
@@ -409,6 +410,7 @@ export default function StockPage() {
   const lowCount   = stock.filter((e) => getStatus(e) === "low").length;
 
   const filtered = stock.filter((e) => {
+    if (hideZero && parseFloat(e.quantity) === 0) return false;
     if (whFilter !== "Всі" && e.warehouse_name !== whFilter) return false;
     const st = getStatus(e);
     if (mode === "out"   && st !== "out") return false;
@@ -583,6 +585,16 @@ export default function StockPage() {
             </div>
           )}
         </FilterDropdown>
+        <button
+          onClick={() => setHideZero((v) => !v)}
+          className={["rounded-md border px-2.5 py-1.5 text-xs transition-colors",
+            hideZero
+              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+              : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+          ].join(" ")}
+        >
+          {hideZero ? "✓ " : ""}Сховати нульові
+        </button>
         <TableSettingsButton onClick={() => setColSettingsOpen(true)} />
         <button onClick={load}
           className="ml-auto rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs hover:bg-[var(--surface-hi)]">
