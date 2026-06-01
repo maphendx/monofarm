@@ -56,22 +56,29 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
       const text = safeZpl(substituteVars(el.text ?? "", vars));
       if (!text) return "";
       const fh = Math.max(8, d(el.fontSize ?? 4));
-      const bold = el.fontWeight === "bold" ? "^FB" : "";
-      return `^FO${x},${y}${bold}^A0N,${fh},${fh}^FD${text}^FS`;
+      // ^A0N,height,width — use same value for square-proportioned glyphs
+      return `^FO${x},${y}^A0N,${fh},${fh}^FD${text}^FS`;
     }
     case "qr": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
       if (!val) return "";
-      const mag = Math.min(10, Math.max(1, Math.floor(h / 21)));
+      // QR total size ≈ mag × 21 dots (for model 2, ~21 modules).
+      // Canvas renders QR filling the entire el.w × el.h box.
+      // Calculate mag to best fill the box, then center-offset the QR.
+      const boxDots = Math.min(w, h);
+      const mag = Math.min(10, Math.max(1, Math.round(boxDots / 21)));
+      const qrDots = mag * 21;
+      // Center the QR within the bounding box
+      const ox = Math.max(0, Math.round((w - qrDots) / 2));
+      const oy = Math.max(0, Math.round((h - qrDots) / 2));
       const ecc = el.level ?? "M";
-      return `^FO${x},${y}^BQN,2,${mag}^FD${ecc}A,${val}^FS`;
+      return `^FO${x + ox},${y + oy}^BQN,2,${mag}^FD${ecc}A,${val}^FS`;
     }
     case "barcode": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
       if (!val) return "";
       const narrow = Math.max(1, Math.min(3, Math.round(w / 60)));
       const showTxt = el.showText !== false ? "Y" : "N";
-      // Code128: ^BY<narrow>,<ratio>,<height> then ^BCN (normal orient, height, print below, no checksum, no start/stop)
       return `^FO${x},${y}^BY${narrow},3,${Math.round(h * 0.7)}^BCN,${Math.round(h * 0.7)},${showTxt},N,N^FD${val}^FS`;
     }
     case "rect": {
