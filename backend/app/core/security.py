@@ -31,3 +31,18 @@ def decode_token(token: str) -> dict | None:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
         return None
+
+
+def create_reset_token(user: object) -> str:
+    """JWT reset token. Includes pwh so it auto-invalidates after password change."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES)
+    pwh: str = getattr(user, "password_hash", "") or ""
+    payload = {
+        "sub": str(getattr(user, "id")),
+        "typ": "pwd_reset",
+        "pwh": pwh[:16],
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+

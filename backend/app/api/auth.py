@@ -1,12 +1,26 @@
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user
+from app.core.config import settings
 from app.core.db import get_db
-from app.core.security import create_access_token, verify_password
+from app.core.security import (
+    create_access_token,
+    create_reset_token,
+    hash_password,
+    verify_password,
+)
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserOut
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserOut,
+)
+from app.services import email
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -21,6 +35,38 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Користувача деактивовано")
     token = create_access_token(subject=str(user.id), role=user.role.value, org_id=user.organization_id)
     return TokenResponse(access_token=token)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user and user.is_active:
+        token = create_reset_token(user)
+        reset_url = f"{settings.FARM_PUBLIC_URL}/reset-password?token={token}"
+        email.send_password_reset(user.email, user.name, reset_url)
+    # Always same response — anti-enumeration
+    return {"ok": True}
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)) -> dict:
+    _bad = HTTPException(status_code=400, detail="Посилання недійсне або застаріло")
+    try:
+        data = jwt.decode(payload.token, settings.SECRET_KEY, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise _bad
+    if data.get("typ") != "pwd_reset":
+        raise _bad
+    try:
+        uid = int(data["sub"])
+    except (KeyError, ValueError):
+        raise _bad
+    user = db.get(User, uid)
+    if not user or data.get("pwh") != (user.password_hash or "")[:16]:
+        raise _bad
+    user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserOut)

@@ -18,11 +18,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (getToken()) router.replace("/dashboard");
-  }, [router]);
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("reset") === "1") setInfo(t("auth.resetSuccess"));
+  }, [router, t]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,7 +89,12 @@ export default function LoginPage() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm">{t("auth.password")}</span>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm">{t("auth.password")}</span>
+              <Link href="/forgot-password" className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-hi)]">
+                {t("auth.forgotPassword")}
+              </Link>
+            </div>
             <input
               type="password"
               required
@@ -98,9 +106,8 @@ export default function LoginPage() {
           </label>
         </div>
 
-        {error && (
-          <p className="text-sm text-[var(--state-error)]">{error}</p>
-        )}
+        {info && <p className="text-sm text-[var(--state-ok)]">{info}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
 
         <button
           type="submit"

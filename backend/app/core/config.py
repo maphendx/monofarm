@@ -59,6 +59,12 @@ class Settings(BaseSettings):
 
     REDIS_URL: str = ""             # e.g. redis://localhost:6379 — empty = in-process fallback
 
+    # Resend transactional email (https://resend.com). Empty = log-only (dev).
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "MonoFarm <noreply@monofarm.app>"
+    EMAIL_REPLY_TO: str = "support@monofarm.app"
+    PASSWORD_RESET_TTL_MINUTES: int = 30
+
     # S3-compatible storage (Cloudflare R2 / AWS S3). Empty = local disk.
     S3_ENDPOINT_URL: str = ""       # e.g. https://ACCOUNT.r2.cloudflarestorage.com
     S3_ACCESS_KEY: str = ""
