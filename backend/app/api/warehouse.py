@@ -1916,13 +1916,22 @@ def export_products(
     db:     Session      = Depends(get_db),
     org:    Organization = Depends(get_current_org),
 ) -> Response:
+    import traceback as _tb
     q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
     if ids:
         id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
         q = q.filter(Product.id.in_(id_list))
     rows = q.order_by(Product.name).all()
     ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
-    return _export_xlsx(rows, org.id, ts) if format == "xlsx" else _export_tsv(rows, ts)
+    if format == "xlsx":
+        try:
+            return _export_xlsx(rows, org.id, ts)
+        except Exception as exc:
+            # Fallback to TSV — error visible in X-Export-Error header for debugging
+            resp = _export_tsv(rows, ts)
+            resp.headers["X-Export-Error"] = _tb.format_exc()[-300:]
+            return resp
+    return _export_tsv(rows, ts)
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
