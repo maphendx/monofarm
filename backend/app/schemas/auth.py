@@ -32,6 +32,7 @@ class UserOut(BaseModel):
     role: UserRole
     org_plan: OrgPlan
     created_at: datetime
+    email_verified_at: datetime | None = None
     telegram_chat_id: int | None = None
 
     class Config:

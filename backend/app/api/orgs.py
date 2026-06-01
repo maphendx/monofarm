@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
 from app.core.ratelimit import limiter
-from app.core.security import create_access_token, hash_password
+from app.core.security import create_access_token, create_verify_token, hash_password
+from app.services import email as email_svc
 from app.models.organization import Organization, _slugify
 from app.models.user import User, UserRole
 from app.schemas.auth import TokenResponse
@@ -75,6 +76,15 @@ def register(request: Request, payload: OrgRegisterRequest, db: Session = Depend
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Best-effort verification email — never fail registration if email errors
+    try:
+        from app.core.config import settings as _s
+        vtoken = create_verify_token(user.id)
+        verify_url = f"{_s.FARM_PUBLIC_URL}/verify-email?token={vtoken}"
+        email_svc.send_email_verification(user.email, user.name, verify_url)
+    except Exception:
+        pass
 
     token = create_access_token(subject=str(user.id), role=user.role.value, org_id=org.id)
     return TokenResponse(access_token=token)

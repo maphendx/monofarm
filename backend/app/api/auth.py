@@ -9,7 +9,9 @@ from app.core.db import get_db
 from app.core.security import (
     create_access_token,
     create_reset_token,
+    create_verify_token,
     decode_invite_token,
+    decode_verify_token,
     hash_password,
     verify_password,
 )
@@ -81,14 +83,47 @@ def me(
     org:  Organization = Depends(get_current_org),
 ) -> dict:
     return {
-        "id":               user.id,
-        "email":            user.email,
-        "name":             user.name,
-        "role":             user.role,
-        "org_plan":         org.plan,
-        "created_at":       user.created_at,
-        "telegram_chat_id": user.telegram_chat_id,
+        "id":                user.id,
+        "email":             user.email,
+        "name":              user.name,
+        "role":              user.role,
+        "org_plan":          org.plan,
+        "created_at":        user.created_at,
+        "email_verified_at": user.email_verified_at,
+        "telegram_chat_id":  user.telegram_chat_id,
     }
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@router.post("/verify-email", status_code=status.HTTP_200_OK)
+def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)) -> dict:
+    uid = decode_verify_token(payload.token)
+    if not uid:
+        raise HTTPException(status_code=400, detail="Посилання недійсне або застаріло")
+    user = db.get(User, uid)
+    if not user:
+        raise HTTPException(status_code=400, detail="Посилання недійсне або застаріло")
+    if user.email_verified_at is None:
+        from datetime import datetime, timezone
+        user.email_verified_at = datetime.now(timezone.utc)
+        db.commit()
+    return {"ok": True}
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+def resend_verification(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    if current_user.email_verified_at is not None:
+        return {"ok": True}
+    token = create_verify_token(current_user.id)
+    verify_url = f"{settings.FARM_PUBLIC_URL}/verify-email?token={token}"
+    email.send_email_verification(current_user.email, current_user.name, verify_url)
+    return {"ok": True}
 
 
 class InviteInfo(BaseModel):

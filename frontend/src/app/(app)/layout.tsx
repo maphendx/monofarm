@@ -23,6 +23,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [pinned,      setPinned]      = useState(false);
   const [searchOpen,  setSearchOpen]  = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [verifyDismissed, setVerifyDismissed] = useState(false);
 
   // Restore pinned state from localStorage after mount
   useEffect(() => {
@@ -79,6 +80,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           "flex-1 min-w-0 transition-[padding-left] duration-200 ease-out",
           pinned ? "pl-[220px]" : "pl-14",
         ].join(" ")}>
+          {user && !user.email_verified_at && !verifyDismissed && (
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--state-warn)]/30 bg-[var(--state-warn)]/10 px-6 py-2 text-sm text-[var(--state-warn)]">
+              <span>Підтвердіть ваш email для повного доступу</span>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  onClick={() => api("/api/auth/resend-verification", { method: "POST" })}
+                  className="underline hover:no-underline"
+                >
+                  Надіслати знову
+                </button>
+                <button onClick={() => setVerifyDismissed(true)} className="opacity-60 hover:opacity-100">✕</button>
+              </div>
+            </div>
+          )}
           <div className="px-6 py-6">
             {children}
           </div>

@@ -33,6 +33,25 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
+def create_verify_token(user_id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(hours=72)
+    payload = {"sub": str(user_id), "typ": "email_verify", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_verify_token(token: str) -> int | None:
+    try:
+        data = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if data.get("typ") != "email_verify":
+        return None
+    try:
+        return int(data["sub"])
+    except (KeyError, ValueError):
+        return None
+
+
 def create_invite_token(user_id: int, org_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=7)
     payload = {"sub": str(user_id), "org": org_id, "typ": "invite", "exp": expire}

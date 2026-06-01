@@ -14,6 +14,7 @@ export interface User {
   role: UserRole;
   org_plan: OrgPlan;
   created_at: string;
+  email_verified_at: string | null;
   telegram_chat_id: number | null;
 }
 

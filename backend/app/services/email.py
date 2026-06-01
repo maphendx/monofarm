@@ -47,6 +47,10 @@ def send_welcome(to: str, name: str) -> bool:
     return _send(to, "Вітаємо у MonoFarm", _render_welcome(name or to))
 
 
+def send_email_verification(to: str, name: str, verify_url: str) -> bool:
+    return _send(to, "Підтвердіть email у MonoFarm", _render_verify(name or to, verify_url))
+
+
 def send_invite(to: str, inviter_name: str, org_name: str, invite_url: str) -> bool:
     return _send(to, f"Запрошення до {org_name} у MonoFarm", _render_invite(inviter_name, org_name, invite_url))
 
@@ -96,6 +100,25 @@ def _render_reset(name: str, reset_url: str) -> str:
         Якщо ви не запитували скидання — проігноруйте цей лист.
       </p>"""
     return _base("Відновлення паролю MonoFarm", body)
+
+
+def _render_verify(name: str, verify_url: str) -> str:
+    body = f"""
+      <h2 style="margin:0 0 8px;font-size:18px;color:#fff">Підтвердіть ваш email</h2>
+      <p style="margin:0 0 24px;color:#a3a3a3">Привіт, {name}!</p>
+      <p style="margin:0 0 24px;color:#a3a3a3">
+        Натисніть кнопку нижче щоб підтвердити адресу email.
+        Посилання дійсне 72&nbsp;години.
+      </p>
+      <a href="{verify_url}"
+         style="display:inline-block;padding:12px 24px;background:#0891b2;color:#fff;
+                text-decoration:none;border-radius:8px;font-weight:500">
+        Підтвердити email
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#525252">
+        Якщо ви не реєструвались — проігноруйте цей лист.
+      </p>"""
+    return _base("Підтвердіть email — MonoFarm", body)
 
 
 def _render_invite(inviter_name: str, org_name: str, invite_url: str) -> str:
