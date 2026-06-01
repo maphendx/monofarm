@@ -361,10 +361,12 @@ export default function StockPage() {
   const [mode,     setMode]     = useState<FilterMode>("all");
   const [search,   setSearch]   = useState("");
 
+  const [selectedRows,      setSelectedRows]      = useState<Set<string>>(new Set());
   const [movementOpen,      setMovementOpen]      = useState(false);
   const [movementType,      setMovementType]      = useState<MovementType>("PURCHASE_IN");
   const [movementProductId, setMovementProductId] = useState<string | null>(null);
   const [movementQuantity,  setMovementQuantity]  = useState<string | null>(null);
+  const [movementLines,     setMovementLines]     = useState<{ productId: string; quantity: string }[] | undefined>(undefined);
   const [batchProductId,    setBatchProductId]    = useState<string | null>(null);
   const [colSettingsOpen,   setColSettingsOpen]   = useState(false);
   const [replenishOpen,     setReplenishOpen]     = useState(false);
@@ -383,7 +385,22 @@ export default function StockPage() {
   }
 
   function openMovement(type: MovementType) {
+    setMovementLines(undefined);
+    setMovementProductId(null);
+    setMovementQuantity(null);
     setMovementType(type);
+    setMovementOpen(true);
+  }
+
+  function openWriteOffSelected() {
+    const lines = filtered
+      .filter((e) => selectedRows.has(e.id + "_" + e.warehouse_id))
+      .map((e) => ({ productId: String(e.product_id), quantity: e.available }));
+    if (!lines.length) return;
+    setMovementLines(lines);
+    setMovementProductId(null);
+    setMovementQuantity(null);
+    setMovementType("WRITE_OFF");
     setMovementOpen(true);
   }
 
@@ -545,6 +562,21 @@ export default function StockPage() {
         <span className="text-xs text-[var(--text-faint)]">{filtered.length} рядків</span>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedRows.size > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2.5">
+          <span className="text-sm text-[var(--text-muted)]">{selectedRows.size} обрано</span>
+          <button onClick={openWriteOffSelected}
+            className="btn btn-sm bg-[var(--state-error)] hover:bg-red-600 border-none text-white">
+            Списати вибране
+          </button>
+          <button onClick={() => setSelectedRows(new Set())}
+            className="ml-auto text-sm text-[var(--text-faint)] hover:text-[var(--text)]">
+            Скасувати вибір
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
         <div className="overflow-x-auto">
@@ -552,7 +584,15 @@ export default function StockPage() {
             <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-faint)]">
               <tr>
                 <th className="px-3 py-3 font-medium">
-                  <input type="checkbox" className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]" />
+                  <input type="checkbox"
+                    className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]"
+                    checked={filtered.length > 0 && filtered.every((e) => selectedRows.has(e.id + "_" + e.warehouse_id))}
+                    onChange={(ev) => {
+                      setSelectedRows(ev.target.checked
+                        ? new Set(filtered.map((e) => e.id + "_" + e.warehouse_id))
+                        : new Set());
+                    }}
+                  />
                 </th>
                 {colVis.isVisible("name")          && <th className="px-3 py-3 font-medium">Назва</th>}
                 {colVis.isVisible("barcode")        && <th className="px-3 py-3 font-medium">Код</th>}
@@ -586,7 +626,15 @@ export default function StockPage() {
                 return (
                   <tr key={e.id} className={["transition-colors hover:bg-[var(--surface-hi)]", meta.row].join(" ")}>
                     <td className="px-3 py-2.5">
-                      <input type="checkbox" className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]" />
+                      <input type="checkbox"
+                        className="rounded bg-[var(--surface-hi)] border-[var(--border)] text-[var(--accent)]"
+                        checked={selectedRows.has(e.id + "_" + e.warehouse_id)}
+                        onChange={(ev) => setSelectedRows((prev) => {
+                          const next = new Set(prev);
+                          ev.target.checked ? next.add(e.id + "_" + e.warehouse_id) : next.delete(e.id + "_" + e.warehouse_id);
+                          return next;
+                        })}
+                      />
                     </td>
                     {colVis.isVisible("name") && (
                       <td className="px-3 py-2.5">
@@ -762,13 +810,14 @@ export default function StockPage() {
 
       {movementOpen && (
         <CreateMovementModal
-          key={`${movementType}-${movementProductId ?? "any"}`}
+          key={`${movementType}-${movementProductId ?? "bulk"}-${movementLines?.length ?? 0}`}
           open
-          onClose={() => { setMovementOpen(false); setMovementProductId(null); setMovementQuantity(null); }}
+          onClose={() => { setMovementOpen(false); setMovementProductId(null); setMovementQuantity(null); setMovementLines(undefined); }}
           initialType={movementType}
           initialProductId={movementProductId ?? undefined}
           initialQuantity={movementQuantity ?? undefined}
-          onCreated={() => { load(); }}
+          initialLines={movementLines}
+          onCreated={() => { load(); setSelectedRows(new Set()); }}
         />
       )}
 

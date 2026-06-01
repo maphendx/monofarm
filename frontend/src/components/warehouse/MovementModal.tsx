@@ -119,15 +119,18 @@ function ProductSearch({
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
+type InitialLine = { productId: string; quantity: string };
+
 export function CreateMovementModal({
-  open, onClose, onCreated, initialType = "PURCHASE_IN", initialProductId, initialQuantity,
+  open, onClose, onCreated, initialType = "PURCHASE_IN", initialProductId, initialQuantity, initialLines: initialLinesProp,
 }: {
-  open:              boolean;
-  onClose:           () => void;
-  onCreated:         (m: Movement) => void;
-  initialType?:      MovementType;
-  initialProductId?: string;
-  initialQuantity?:  string;
+  open:               boolean;
+  onClose:            () => void;
+  onCreated:          (m: Movement) => void;
+  initialType?:       MovementType;
+  initialProductId?:  string;
+  initialQuantity?:   string;
+  initialLines?:      InitialLine[];
 }) {
   const [products,      setProducts]      = useState<Product[]>([]);
   const [warehouses,    setWarehouses]    = useState<Warehouse[]>([]);
@@ -138,6 +141,9 @@ export function CreateMovementModal({
   const [whToId,        setWhToId]        = useState("");
   const [counterpartyId, setCounterpartyId] = useState("");
   const [lines,         setLines]         = useState<LineItem[]>(() => {
+    if (initialLinesProp?.length) {
+      return initialLinesProp.map((l) => ({ ...newLine(), productId: l.productId, quantity: l.quantity }));
+    }
     const first = newLine();
     if (initialProductId) {
       first.productId = initialProductId;
@@ -153,7 +159,6 @@ export function CreateMovementModal({
   const inFlight = useRef(false);
 
   useEffect(() => {
-    const first = lines[0];
     Promise.all([
       api<Product[]>("/api/warehouse/products"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
@@ -162,10 +167,12 @@ export function CreateMovementModal({
       setProducts(p);
       setWarehouses(w);
       setCounterparties(c);
-      if (initialProductId) {
-        const prod = p.find((x) => String(x.id) === initialProductId);
-        if (prod) setLines([{ ...first, search: prod.name, unit: prod.unit }]);
-      }
+      // fill in product names/units for pre-filled lines
+      setLines((prev) => prev.map((l) => {
+        if (!l.productId) return l;
+        const prod = p.find((x) => String(x.id) === l.productId);
+        return prod ? { ...l, search: prod.name, unit: prod.unit } : l;
+      }));
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
