@@ -1819,22 +1819,30 @@ def _fetch_image_safe(key: str, org_id: int) -> bytes | None:
 
 def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
     import concurrent.futures
-    from openpyxl.drawing.image import Image as XlImg
+    try:
+        from openpyxl.drawing.image import Image as XlImg
+        _images_supported = True
+    except Exception:
+        _images_supported = False
 
-    # Fetch all images in parallel (max 8 workers, 10s timeout per image)
+    # Fetch all images in parallel (max 8 workers, 30s total timeout)
     keys = [p.image_key for p in rows]
     images: dict[str, bytes | None] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        futures = {
-            pool.submit(_fetch_image_safe, key, org_id): key
-            for key in keys if key
-        }
-        for fut in concurrent.futures.as_completed(futures, timeout=30):
-            key = futures[fut]
-            try:
-                images[key] = fut.result()
-            except Exception:
-                images[key] = None
+    if _images_supported and any(keys):
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+                futures = {
+                    pool.submit(_fetch_image_safe, key, org_id): key
+                    for key in keys if key
+                }
+                for fut in concurrent.futures.as_completed(futures, timeout=30):
+                    key = futures[fut]
+                    try:
+                        images[key] = fut.result()
+                    except Exception:
+                        images[key] = None
+        except Exception:
+            pass  # timeout or pool error — proceed without images
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1862,7 +1870,7 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
         ws.row_dimensions[ri].height = _ROW_H
 
         img_bytes = images.get(p.image_key) if p.image_key else None
-        if img_bytes:
+        if img_bytes and _images_supported:
             try:
                 xl_img = XlImg(io.BytesIO(img_bytes))
                 xl_img.width  = _IMG_PX
