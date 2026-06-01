@@ -1529,11 +1529,12 @@ export default function ProductsPage() {
 
   function handleExport() {
     const token = getToken();
-    const params = selected.size > 0 ? `?ids=${[...selected].join(",")}` : "";
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    fetch(`${API_URL}/api/warehouse/products/export${params}`, {
+    const qs = new URLSearchParams({ format: "xlsx" });
+    if (selected.size > 0) qs.set("ids", [...selected].join(","));
+    fetch(`${API_URL}/api/warehouse/products/export?${qs}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((r) => r.blob())
@@ -1541,7 +1542,7 @@ export default function ProductsPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `номенклатури_${ts}.tsv`;
+        a.download = `номенклатури_${ts}.xlsx`;
         a.click();
         URL.revokeObjectURL(url);
       });

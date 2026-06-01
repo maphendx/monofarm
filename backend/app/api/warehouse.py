@@ -1785,18 +1785,7 @@ def import_products(
     return {"created": created, "updated": updated, "skipped": skipped, "hidden": hidden, "new_categories": new_cats}
 
 
-@router.get("/products/export")
-def export_products(
-    ids: str | None   = Query(None, description="Comma-separated product IDs to export; omit for all"),
-    db:  Session      = Depends(get_db),
-    org: Organization = Depends(get_current_org),
-) -> Response:
-    q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
-    if ids:
-        id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
-        q = q.filter(Product.id.in_(id_list))
-    rows = q.order_by(Product.name).all()
-
+def _export_tsv(rows: list, ts: str) -> Response:
     buf = io.StringIO()
     buf.write("﻿")  # UTF-8 BOM for Excel compatibility
     writer = csv.writer(buf, delimiter="\t", lineterminator="\r\n")
@@ -1812,13 +1801,77 @@ def export_products(
             str(p.sale_price) if p.sale_price is not None else "",
             p.description or "",
         ])
-    ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
     filename = f"номенклатури_{ts}.tsv"
     return Response(
         content=buf.getvalue().encode("utf-8"),
         media_type="text/tab-separated-values; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
+
+
+def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
+    from openpyxl.drawing.image import Image as XlImg
+    from app.services import storage as storage_svc
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Номенклатури"
+
+    ws.append(["Фото"] + list(_EXPORT_HEADERS))
+    ws.row_dimensions[1].height = 18
+    ws.column_dimensions["A"].width = 10
+
+    _IMG_PX = 64
+    _ROW_H  = 50  # Excel height units ≈ 67 px
+
+    for ri, p in enumerate(rows, start=2):
+        ws.append([
+            "",
+            p.name or "",
+            ", ".join(p.categories or []),
+            p.sku or "",
+            p.barcode or "",
+            p.unit or "",
+            str(p.cost_price) if p.cost_price is not None else "",
+            str(p.sale_price) if p.sale_price is not None else "",
+            p.description or "",
+        ])
+        ws.row_dimensions[ri].height = _ROW_H
+
+        if p.image_key:
+            try:
+                img_bytes = storage_svc.get_bytes(p.image_key, org_id, prefix=_IMAGE_PREFIX)
+                xl_img = XlImg(io.BytesIO(img_bytes))
+                xl_img.width  = _IMG_PX
+                xl_img.height = _IMG_PX
+                ws.add_image(xl_img, f"A{ri}")
+            except Exception:
+                pass
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    filename = f"номенклатури_{ts}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@router.get("/products/export")
+def export_products(
+    ids:    str | None = Query(None, description="Comma-separated product IDs; omit for all"),
+    format: str        = Query("xlsx", pattern="^(tsv|xlsx)$"),
+    db:     Session      = Depends(get_db),
+    org:    Organization = Depends(get_current_org),
+) -> Response:
+    q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
+    if ids:
+        id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+        q = q.filter(Product.id.in_(id_list))
+    rows = q.order_by(Product.name).all()
+    ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    return _export_xlsx(rows, org.id, ts) if format == "xlsx" else _export_tsv(rows, ts)
 
 
 @router.get("/products/{product_id}", response_model=ProductOut)
