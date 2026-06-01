@@ -93,9 +93,8 @@ function ElementRenderer({
   barcodeUrls?: Record<string, string>;
 }) {
   const pos: React.CSSProperties = {
-    position: "absolute",
-    left: `${el.x}mm`, top: `${el.y}mm`,
-    width: `${el.w}mm`, height: `${el.h}mm`,
+    width: "100%",
+    height: "100%",
     overflow: "hidden",
   };
 
