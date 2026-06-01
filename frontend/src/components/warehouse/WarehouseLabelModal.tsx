@@ -60,7 +60,18 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
       // Explicit 0 width breaks Cyrillic fallback glyphs (renders them invisible).
       const just = el.align === "center" ? "C" : el.align === "right" ? "R" : "L";
       const fb = just !== "L" ? `^FB${w},1,0,${just}` : "";
-      return `^FO${x},${y}^A0N,${fh}${fb}^FD${text}^FS`;
+      
+      const cmd = `^A0N,${fh}${fb}^FD${text}^FS`;
+      if (el.fontWeight === "bold") {
+        const off = Math.max(1, Math.round(fh / 30)); // 1-3 dots offset depending on size
+        return [
+          `^FO${x},${y}${cmd}`,
+          `^FO${x + off},${y}${cmd}`,
+          `^FO${x},${y + off}${cmd}`,
+          `^FO${x + off},${y + off}${cmd}`,
+        ].join("\n");
+      }
+      return `^FO${x},${y}${cmd}`;
     }
     case "qr": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
