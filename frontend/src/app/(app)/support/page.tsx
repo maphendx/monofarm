@@ -2,8 +2,7 @@
 
 import { usePageTitle } from "@/lib/usePageTitle";
 
-// ── Налаштування контактів — заміни на свої ────────────────────────────────────
-const SUPPORT_EMAIL    = "support@monofarm.app";    // TODO: робочий email на домені
+const SUPPORT_EMAIL = "support@monofarm.app";
 
 export default function SupportPage() {
   usePageTitle("nav.support");
