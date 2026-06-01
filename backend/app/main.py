@@ -56,6 +56,12 @@ async def lifespan(_: FastAPI):
         seed_admin(db)
 
     if settings.INLINE_WORKERS:
+        import os
+        if os.environ.get("WEB_CONCURRENCY", "1") not in ("", "1"):
+            log.warning(
+                "INLINE_WORKERS=true with WEB_CONCURRENCY>1 — multiple schedulers will run! "
+                "Set INLINE_WORKERS=false and use a separate worker process instead."
+            )
         try:
             scheduler.start()
         except Exception:

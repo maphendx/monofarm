@@ -88,20 +88,35 @@ async def _refresh_bambu_subscriptions() -> None:
         log.exception("Bambu subscription refresh failed")
 
 
+async def _renew_loop(stop: asyncio.Event) -> None:
+    """Periodically renew scheduler leader lock; stop on loss."""
+    from app.core import leader
+    from app.services import scheduler as sched
+    while not stop.is_set():
+        await asyncio.sleep(leader.RENEW_INTERVAL)
+        if not leader.renew():
+            log.warning("Lost scheduler leadership — shutting down scheduler")
+            sched.shutdown()
+            return
+
+
 async def main() -> None:
     from app.services import bambu, scheduler
+    from app.core import leader
     from app.core.db import SessionLocal
     from app.models.organization import Organization
 
     # Redis command relay (runs in daemon thread — dies with the process)
     threading.Thread(target=_redis_cmd_relay, daemon=True, name="redis-cmd-relay").start()
 
-    # APScheduler (daily report + Bambu token refresh + print tracker)
-    try:
-        scheduler.start()
-        log.info("Scheduler started")
-    except Exception:
-        log.exception("Scheduler failed to start")
+    # APScheduler — only on the leader worker
+    is_leader = leader.try_acquire()
+    if is_leader:
+        try:
+            scheduler.start()
+            log.info("Scheduler started (leader)")
+        except Exception:
+            log.exception("Scheduler failed to start")
 
     # Bambu MQTT for all orgs
     try:
@@ -124,17 +139,24 @@ async def main() -> None:
             replace_existing=True,
         )
 
-    log.info("monofarm worker ready")
+    log.info("monofarm worker ready (leader=%s)", is_leader)
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 
+    # Start renew loop only if we're leader
+    renew_task = asyncio.create_task(_renew_loop(stop)) if is_leader else None
+
     await stop.wait()
+    if renew_task:
+        renew_task.cancel()
 
     log.info("Worker shutting down…")
-    scheduler.shutdown()
+    if is_leader:
+        scheduler.shutdown()
+        leader.release()
     try:
         await bambu.shutdown()
     except Exception:
