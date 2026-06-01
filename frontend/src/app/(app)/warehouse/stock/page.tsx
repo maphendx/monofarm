@@ -38,8 +38,6 @@ type StockEntry = {
   full_cost:          string | null;
   min_stock:          number | null;
   desired_stock:      number | null;
-  box_limit:          number | null;
-  boxes_to_order:     number | null;
   updated_at:         string;
 };
 
@@ -77,7 +75,6 @@ const COLS: ColDef[] = [
   { key: "unit_cost",     label: "Собівартість за од." },
   { key: "min_stock",     label: "Мін ✎" },
   { key: "desired_stock", label: "Бажаний ✎" },
-  { key: "box_limit",     label: "Коробка ✎" },
   { key: "order",         label: "Замовити" },
 ];
 
@@ -88,7 +85,7 @@ function ThresholdCell({
 }: {
   value:     number | null;
   productId: number;
-  field:     "min_stock" | "desired_stock" | "box_limit";
+  field:     "min_stock" | "desired_stock";
   onSaved:   (pid: number, field: string, val: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -407,14 +404,12 @@ export default function StockPage() {
   const warehouses = ["Всі", ...Array.from(new Set(stock.map((s) => s.warehouse_name)))];
   const outCount   = stock.filter((e) => getStatus(e) === "out").length;
   const lowCount   = stock.filter((e) => getStatus(e) === "low").length;
-  const orderCount = stock.filter((e) => e.boxes_to_order != null).length;
 
   const filtered = stock.filter((e) => {
     if (whFilter !== "Всі" && e.warehouse_name !== whFilter) return false;
     const st = getStatus(e);
     if (mode === "out"   && st !== "out") return false;
     if (mode === "low"   && (st !== "low" && st !== "out")) return false;
-    if (mode === "order" && e.boxes_to_order == null) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!e.product_name.toLowerCase().includes(q) &&
@@ -497,7 +492,7 @@ export default function StockPage() {
       </div>
 
       {/* Summary alert strip */}
-      {(outCount > 0 || lowCount > 0 || orderCount > 0) && (
+      {(outCount > 0 || lowCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {outCount > 0 && (
             <button onClick={() => setMode(mode === "out" ? "all" : "out")}
@@ -519,17 +514,6 @@ export default function StockPage() {
               ].join(" ")}>
               <span className="size-2 rounded-full bg-[var(--state-warn)]" />
               {lowCount} нижче мінімуму
-            </button>
-          )}
-          {orderCount > 0 && (
-            <button onClick={() => setMode(mode === "order" ? "all" : "order")}
-              className={["flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
-                mode === "order"
-                  ? "border-[var(--accent)] bg-[rgba(34,211,238,.10)] text-[var(--accent)]"
-                  : "border-[rgba(34,211,238,.3)] text-[var(--accent)] hover:bg-[rgba(34,211,238,.06)]",
-              ].join(" ")}>
-              <span>📦</span>
-              {orderCount} потребують замовлення
             </button>
           )}
         </div>
@@ -806,29 +790,9 @@ export default function StockPage() {
                         <ThresholdCell value={e.desired_stock} productId={e.product_id} field="desired_stock" onSaved={updateThreshold} />
                       </td>
                     )}
-                    {colVis.isVisible("box_limit") && (
-                      <td className="px-3 py-2.5 text-right">
-                        <ThresholdCell value={e.box_limit} productId={e.product_id} field="box_limit" onSaved={updateThreshold} />
-                      </td>
-                    )}
                     {colVis.isVisible("order") && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-3">
-                          {e.boxes_to_order != null ? (
-                            <button
-                              onClick={() => {
-                                setMovementProductId(e.product_id.toString());
-                                setMovementQuantity((e.boxes_to_order! * (e.box_limit || 1)).toString());
-                                setMovementType("PURCHASE_IN");
-                                setMovementOpen(true);
-                              }}
-                              className="inline-flex items-center gap-1 font-mono text-sm font-bold text-[var(--accent)] tabular-nums hover:underline"
-                              title="Створити рух 'Отримання' на цю кількість"
-                            >
-                              {e.boxes_to_order}
-                              <span className="text-base">📦</span>
-                            </button>
-                          ) : <span className="text-[var(--text-faint)] w-8 text-center">—</span>}
                           <button
                             onClick={() => setBatchProductId(e.product_id.toString())}
                             className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--accent)] hover:text-white hover:border-transparent transition-colors"

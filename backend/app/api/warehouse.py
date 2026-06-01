@@ -540,10 +540,6 @@ def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
     if target_qty <= 0:
         target_qty = 10
 
-    if p.box_limit and p.box_limit > 0:
-        boxes = math.ceil(target_qty / p.box_limit)
-        target_qty = boxes * p.box_limit
-
     target_qty = int(target_qty)
 
     spec = db.query(Specification).filter_by(product_id=pid, is_default=True).first()
@@ -1961,7 +1957,6 @@ def copy_product(
         sale_price=p.sale_price,
         min_stock=p.min_stock,
         desired_stock=p.desired_stock,
-        box_limit=p.box_limit,
     )
     db.add(copy)
     db.commit()
@@ -2196,7 +2191,6 @@ def delete_product(
 class StockThresholdsUpdate(BaseModel):
     min_stock:     int | None = None
     desired_stock: int | None = None
-    box_limit:     int | None = None
 
 
 @router.patch("/products/{product_id}/thresholds", response_model=ProductOut)
@@ -2618,11 +2612,6 @@ def list_stock(
     result = []
     for e, p, wh in rows:
         avail = e.quantity - e.reserved_qty
-        boxes_to_order = None
-        if (p.desired_stock is not None and p.box_limit and p.box_limit > 0
-                and avail < p.desired_stock):
-            boxes_to_order = math.ceil((p.desired_stock - float(avail)) / p.box_limit)
-
         total_stock = total_stock_map.get(e.product_id, Decimal(0))
         locations = cell_stock_map.get((e.product_id, e.warehouse_id), [])
         assigned = sum((Decimal(str(loc["quantity"])) for loc in locations), Decimal(0))
@@ -2647,8 +2636,6 @@ def list_stock(
             full_cost=p.full_cost,
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,
-            box_limit=p.box_limit,
-            boxes_to_order=boxes_to_order,
             updated_at=e.updated_at,
         ))
     return result

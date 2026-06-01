@@ -22,7 +22,7 @@ type Product = {
   unit: string; description: string | null; is_active: boolean;
   sale_price: string | null; cost_price: string | null;
   direct_cost: string | null; full_cost: string | null;
-  min_stock: number | null; desired_stock: number | null; box_limit: number | null;
+  min_stock: number | null; desired_stock: number | null;
   image_url: string | null;
 };
 
@@ -204,7 +204,6 @@ function ProductModal({
   const [desc,         setDesc]         = useState(src?.description ?? "");
   const [minStock,     setMinStock]     = useState(src?.min_stock?.toString() ?? "");
   const [desiredStock, setDesiredStock] = useState(src?.desired_stock?.toString() ?? "");
-  const [boxLimit,     setBoxLimit]     = useState(src?.box_limit?.toString() ?? "");
   const [busy,      setBusy]      = useState(false);
   const [err,       setErr]       = useState<string | null>(null);
   const [images,    setImages]    = useState<ProductImage[]>([]);
@@ -275,7 +274,6 @@ function ProductModal({
         description: desc.trim() || null,
         min_stock:     minStock     ? parseInt(minStock)     : null,
         desired_stock: desiredStock ? parseInt(desiredStock) : null,
-        box_limit:     boxLimit     ? parseInt(boxLimit)     : null,
       };
       const p = isEdit
         ? await api<Product>(`/api/warehouse/products/${product!.id}`, { method: "PATCH", body: JSON.stringify(body) })
@@ -487,12 +485,6 @@ function ProductModal({
               <input type="number" min="0" step="1" value={desiredStock}
                 onChange={(e) => setDesiredStock(e.target.value)}
                 placeholder="цільовий рівень"
-                className={INPUT} />
-            </FormRow>
-            <FormRow label="Ліміт в коробці">
-              <input type="number" min="1" step="1" value={boxLimit}
-                onChange={(e) => setBoxLimit(e.target.value)}
-                placeholder="шт / коробка"
                 className={INPUT} />
             </FormRow>
           </div>
@@ -1393,7 +1385,7 @@ export default function ProductsPage() {
   }
 
   function copyOne(p: Product) {
-    setCopyTemplate({ name: p.name + " (копія)", sku: p.sku + "-copy", categories: p.categories, unit: p.unit, description: p.description, sale_price: p.sale_price, min_stock: p.min_stock, desired_stock: p.desired_stock, box_limit: p.box_limit });
+    setCopyTemplate({ name: p.name + " (копія)", sku: p.sku + "-copy", categories: p.categories, unit: p.unit, description: p.description, sale_price: p.sale_price, min_stock: p.min_stock, desired_stock: p.desired_stock });
     setEditProduct("create");
   }
 

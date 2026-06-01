@@ -118,7 +118,6 @@ class ProductCreate(BaseModel):
     sale_price:    Decimal | None = None
     min_stock:     int | None = None
     desired_stock: int | None = None
-    box_limit:     int | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -132,7 +131,6 @@ class ProductUpdate(BaseModel):
     is_active:     bool | None = None
     min_stock:     int | None = None
     desired_stock: int | None = None
-    box_limit:     int | None = None
 
 
 class ProductOut(BaseModel):
@@ -150,7 +148,6 @@ class ProductOut(BaseModel):
     full_cost:     Decimal | None
     min_stock:     int | None
     desired_stock: int | None
-    box_limit:     int | None
     image_url:     str | None = None
     created_at:    datetime
 
@@ -296,8 +293,6 @@ class StockEntryOut(BaseModel):
     full_cost:      Decimal | None
     min_stock:      int | None
     desired_stock:  int | None
-    box_limit:      int | None
-    boxes_to_order: int | None   # ceil((desired - available) / box_limit) when available < desired
     updated_at:     datetime
 
     class Config:
