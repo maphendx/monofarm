@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.agent import router as agent_router
 from app.api.agent_tg import router as agent_tg_router
@@ -31,6 +33,7 @@ from app.api.warehouse import router as warehouse_router
 from app.api.keycrm import router as keycrm_router
 from app.api.search import router as search_router
 from app.core.config import settings
+from app.core.ratelimit import limiter
 from app.core.db import SessionLocal
 from app.models.organization import Organization
 from app.models.user import UserRole
@@ -80,6 +83,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Printfarm API", version="0.1.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

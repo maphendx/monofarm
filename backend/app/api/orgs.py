@@ -1,11 +1,12 @@
 
 import requests as _requests
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
+from app.core.ratelimit import limiter
 from app.core.security import create_access_token, hash_password
 from app.models.organization import Organization, _slugify
 from app.models.user import User, UserRole
@@ -53,7 +54,8 @@ def _unique_slug(db: Session, base: str) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: OrgRegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
+@limiter.limit("3/hour")
+def register(request: Request, payload: OrgRegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     """Create a new organization and its first admin user."""
     if db.query(User).filter(User.email == payload.admin_email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
