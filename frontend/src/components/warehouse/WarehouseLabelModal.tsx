@@ -109,7 +109,20 @@ function buildZplFromTemplate(
     const elLines = tpl.elements
       .map(el => elementToZpl(el, vars))
       .filter(Boolean);
-    return ["^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0", ...elLines, "^XZ"].join("\n");
+    return [
+      "^XA",
+      "^CI28",
+      "^CW0,E:TT0003M_.TTF", // Swiss 721 (standard Zebra Unicode font)
+      "^CW0,E:TT0003M_.FNT", 
+      "^CW0,E:ARI000.FNT",   // Arial (often uploaded by ZDesigner)
+      "^CW0,E:CYRILLIC.FNT",
+      "^CW0,E:ARIAL.FNT",
+      `^PW${W}`,
+      `^LL${H}`,
+      "^LH0,0",
+      ...elLines,
+      "^XZ"
+    ].join("\n");
   }).join("\n");
 }
 
@@ -127,7 +140,16 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
     const p1 = item.type === "cell" ? item.code : item.type === "action" ? safeZpl(item.label) : safeZpl(item.name);
     const p2 = item.type === "cell" ? item.zone_name : item.type === "action" ? item.code : item.sku;
     return [
-      "^XA", "^CI28", `^PW${W}`, `^LL${H}`, "^LH0,0",
+      "^XA",
+      "^CI28",
+      "^CW0,E:TT0003M_.TTF",
+      "^CW0,E:TT0003M_.FNT",
+      "^CW0,E:ARI000.FNT",
+      "^CW0,E:CYRILLIC.FNT",
+      "^CW0,E:ARIAL.FNT",
+      `^PW${W}`,
+      `^LL${H}`,
+      "^LH0,0",
       `^FO${pad},${qrY}^BQN,2,${mag}^FDMA,${qrVal}^FS`,
       `^FO${txX},${Math.floor(H * 0.32)}^A0N,${fsP},${fsP}^FD${safeZpl(p1)}^FS`,
       p2 ? `^FO${txX},${Math.floor(H * 0.60)}^A0N,${fsS},${fsS}^FD${safeZpl(p2)}^FS` : "",
