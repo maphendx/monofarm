@@ -61,17 +61,33 @@ function buildZpl(f: Filament, labelId: string, barcodeType: BarcodeType): strin
   return lines.filter(Boolean).join("\n");
 }
 
+let _bpLibLoaded = false;
+async function _loadBPLib(): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (_bpLibLoaded || (window as any).BrowserPrint) { _bpLibLoaded = true; return true; }
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "/BrowserPrint.min.js";
+    s.onload = () => { _bpLibLoaded = true; resolve(true); };
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+
 async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "blocked" | "error"> {
-  try {
-    const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(60_000) });
-    if (!dr.ok) return "not_available";
-    const device = await dr.json() as Record<string, unknown>;
-    const wr = await fetch("http://localhost:9090/write", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
-    });
-    return wr.ok ? "ok" : "error";
-  } catch { return "blocked"; }
+  const loaded = await _loadBPLib();
+  if (!loaded) return "not_available";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const BP = (window as any).BrowserPrint;
+  return new Promise((resolve) => {
+    BP.getDefaultDevice("printer",
+      (device: Record<string, unknown> & { send: Function }) => {
+        if (!device) { resolve("not_available"); return; }
+        device.send(zpl, () => resolve("ok"), () => resolve("error"));
+      },
+      () => resolve("blocked"),
+    );
+  });
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
