@@ -219,7 +219,18 @@ export default function WarehousesPage() {
                         await api(`/api/warehouse/warehouses/${w.id}`, { method: "DELETE" });
                         setWarehouses((prev) => prev.filter((x) => x.id !== w.id));
                       } catch (e: unknown) {
-                        toast.error(e instanceof Error ? e.message : "Помилка видалення");
+                        const msg = e instanceof Error ? e.message : "";
+                        if (msg.includes("рухів")) {
+                          if (!await confirm({ message: `${msg}\n\nВидалити разом з усією історією рухів?`, variant: "danger" })) return;
+                          try {
+                            await api(`/api/warehouse/warehouses/${w.id}?force=true`, { method: "DELETE" });
+                            setWarehouses((prev) => prev.filter((x) => x.id !== w.id));
+                          } catch (e2: unknown) {
+                            toast.error(e2 instanceof Error ? e2.message : "Помилка видалення");
+                          }
+                        } else {
+                          toast.error(msg || "Помилка видалення");
+                        }
                       }
                     }}
                     title="Видалити"

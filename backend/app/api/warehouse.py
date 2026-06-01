@@ -652,6 +652,7 @@ def update_warehouse(
 @_full.delete("/warehouses/{wh_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_warehouse(
     wh_id: int,
+    force: bool       = False,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _:   User         = Depends(require_roles(UserRole.admin)),
@@ -669,11 +670,16 @@ def delete_warehouse(
     has_movements = db.query(func.count(WarehouseMovement.id)).filter(
         (WarehouseMovement.warehouse_from_id == wh_id) | (WarehouseMovement.warehouse_to_id == wh_id)
     ).scalar() or 0
-    if has_movements:
+    if has_movements and not force:
         raise HTTPException(
             status_code=400,
-            detail="Не можна видалити склад — є рухи складу з цим складом. Деактивуйте склад замість видалення.",
+            detail=f"Є {has_movements} рухів пов'язаних з цим складом. Щоб видалити разом з історією, підтвердьте примусове видалення.",
         )
+    if force:
+        # nullify movement references so FK won't block deletion
+        db.query(WarehouseMovement).filter(WarehouseMovement.warehouse_from_id == wh_id).update({"warehouse_from_id": None})
+        db.query(WarehouseMovement).filter(WarehouseMovement.warehouse_to_id   == wh_id).update({"warehouse_to_id":   None})
+        db.query(StockEntry).filter(StockEntry.warehouse_id == wh_id).delete()
     db.delete(wh)
     db.commit()
 
