@@ -1801,11 +1801,12 @@ def _export_tsv(rows: list, ts: str) -> Response:
             str(p.sale_price) if p.sale_price is not None else "",
             p.description or "",
         ])
+    from urllib.parse import quote
     filename = f"номенклатури_{ts}.tsv"
     return Response(
         content=buf.getvalue().encode("utf-8"),
         media_type="text/tab-separated-values; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 
@@ -1828,13 +1829,14 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
             p.description or "",
         ])
 
+    from urllib.parse import quote
     buf = io.BytesIO()
     wb.save(buf)
     filename = f"номенклатури_{ts}.xlsx"
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 
@@ -1925,6 +1927,7 @@ def copy_product(
     p = _get_product(product_id, org, db)
     # Find a unique SKU: base-copy, base-copy-2, base-copy-3 …
     base = p.sku + "-copy"
+    
     taken = {
         row.sku for row in
         db.query(Product.sku).filter(Product.organization_id == org.id, Product.sku.like(base + "%")).all()
