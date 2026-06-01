@@ -101,7 +101,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [toCell,  setToCell]  = useState<CellDetail | null>(null);
   const [order,   setOrder]   = useState<OrderInfo | null>(null);
-  const [qty,     setQty]     = useState("1");
+  const [qty,     setQty]     = useState("0");
   const [price,   setPrice]   = useState("");
   const [loading, setLoading] = useState(false);
   const [busy,    setBusy]    = useState(false);
@@ -175,7 +175,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
     if (!ready || busy || !cell || !product) return;
     setBusy(true);
     try {
-      const quantity = parseFloat(qty) || 1;
+      const quantity = parseFloat(qty) || 0;
       if (!action) {
         await api(`/api/warehouse/cells/${cell.cell_id}/assign`, {
           method: "POST",
@@ -350,7 +350,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
                   <span className="text-lg text-[var(--text-muted)]">{meta ? meta.qtyLabel : "Кількість"}</span>
                   <input
                     ref={qtyRef}
-                    type="number" min="0.01" step="1" inputMode="numeric"
+                    type="number" min="0" step="1" inputMode="numeric"
                     value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirm(); } }}
