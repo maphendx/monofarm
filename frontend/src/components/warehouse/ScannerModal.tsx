@@ -93,6 +93,7 @@ function ScanRow({
 
 export function ScannerModal({ onClose }: { onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const qtyRef   = useRef<HTMLInputElement>(null);
   const [value,        setValue]        = useState("");
   const [actionLabelOpen, setActionLabelOpen] = useState(false);
   const [action,  setAction]  = useState<ScanAction | null>(null);
@@ -142,23 +143,31 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
     }
 
     setLoading(true);
+    let focusQty = false;
     try {
       const res = await api<ScanResult>(`/api/warehouse/scan?q=${encodeURIComponent(q)}`);
       if (res.type === "product" && res.product) {
         setProduct(res.product);
+        focusQty = !!cell && (!needsTo || !!toCell);
       } else if (res.type === "cell" && res.cell) {
         if (action === "transfer" && cell && res.cell.cell_id !== cell.cell_id) {
           setToCell(res.cell);
+          focusQty = !!product;
         } else {
           setCell(res.cell);
           if (action === "transfer") setToCell(null);
+          focusQty = !!product && !needsTo;
         }
       }
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Не знайдено");
     } finally {
       setLoading(false);
-      refocus();
+      if (focusQty) {
+        setTimeout(() => qtyRef.current?.focus(), 80);
+      } else {
+        refocus();
+      }
     }
   }
 
@@ -340,12 +349,12 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
                 <div className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] px-7 py-5">
                   <span className="text-lg text-[var(--text-muted)]">{meta ? meta.qtyLabel : "Кількість"}</span>
                   <input
+                    ref={qtyRef}
                     type="number" min="0.01" step="1" inputMode="numeric"
                     value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirm(); } }}
                     className="w-28 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-center font-mono text-xl outline-none focus:border-[var(--accent)]"
-                    autoFocus
                   />
                   {meta?.priceField && (
                     <>
