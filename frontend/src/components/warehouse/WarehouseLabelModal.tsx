@@ -128,18 +128,30 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
 
 // Encode ZPL field data as ^FH_ hex to survive Java printing charset conversion.
 // Only applied for the Browser Print path — downloaded ZPL stays human-readable.
+// ^FH_ must be placed directly before each ^FD that needs it (not as a standalone command).
+// QR code fields (^BQ...^FD) are left untouched — ^BQ expects raw "MA,<data>" format.
 function toZplBrowserPrint(zpl: string): string {
-  return zpl
-    .replace(/\^CI28/g, "^CI28\n^FH_")
-    .replace(/\^FD([^^]*)\^FS/g, (_, data: string) => {
-      const bytes = new TextEncoder().encode(data);
-      const encoded = Array.from(bytes).map(b => {
-        if (b === 0x5F) return "_5F";                          // escape _ itself
-        if (b >= 0x20 && b <= 0x7E) return String.fromCharCode(b); // safe ASCII
-        return `_${b.toString(16).toUpperCase().padStart(2, "0")}`;
-      }).join("");
-      return `^FD${encoded}^FS`;
-    });
+  return zpl.split("\n").map(line => {
+    // Skip lines without ^FD or lines with ^BQ (QR code — don't hex-encode)
+    if (!line.includes("^FD") || line.includes("^BQ")) return line;
+
+    return line.replace(
+      /\^FD((?:(?!\^FS)[\s\S])*)\^FS/g,
+      (match, data: string) => {
+        // Check if data has non-ASCII characters or underscores that need escaping
+        const needsHex = /[^\x00-\x7E]/.test(data) || data.includes("_");
+        if (!needsHex) return match;
+
+        const bytes = new TextEncoder().encode(data);
+        const encoded = Array.from(bytes).map(b => {
+          if (b === 0x5F) return "_5F";                          // escape _ itself
+          if (b >= 0x20 && b <= 0x7E) return String.fromCharCode(b); // safe ASCII
+          return `_${b.toString(16).toUpperCase().padStart(2, "0")}`;
+        }).join("");
+        return `^FH_^FD${encoded}^FS`;
+      },
+    );
+  }).join("\n");
 }
 
 // Load official Browser Print JS library (uses http://127.0.0.1:9100/ via XHR)
@@ -157,38 +169,52 @@ async function _loadBPLib(): Promise<boolean> {
 }
 
 async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "blocked" | "error"> {
-  const loaded = await _loadBPLib();
-  if (!loaded) return "not_available";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const BP = (window as any).BrowserPrint;
+  try {
+    const loaded = await _loadBPLib();
+    if (!loaded) return "not_available";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const BP = (window as any).BrowserPrint;
+    if (!BP) return "not_available";
 
-  // Split into individual label blocks (^XA … ^XZ) and batch them
-  // to avoid Java printing crashes on large jobs (60+ labels).
-  const labels = zpl.match(/\^XA[\s\S]*?\^XZ/g) ?? [zpl];
-  const BATCH = 10;
-  const batches: string[] = [];
-  for (let i = 0; i < labels.length; i += BATCH) {
-    batches.push(labels.slice(i, i + BATCH).join("\n"));
+    // Split into individual label blocks (^XA … ^XZ) and batch them
+    // to avoid Java printing crashes on large jobs (60+ labels).
+    const labels = zpl.match(/\^XA[\s\S]*?\^XZ/g) ?? [zpl];
+    const BATCH = 10;
+    const batches: string[] = [];
+    for (let i = 0; i < labels.length; i += BATCH) {
+      batches.push(labels.slice(i, i + BATCH).join("\n"));
+    }
+
+    return new Promise((resolve) => {
+      BP.getDefaultDevice("printer",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async (device: any) => {
+          if (!device) { resolve("not_available"); return; }
+          try {
+            for (let bi = 0; bi < batches.length; bi++) {
+              const ok = await new Promise<boolean>(res => {
+                device.send(batches[bi],
+                  () => res(true),
+                  (err: unknown) => { console.error("[ZPL] device.send error:", err); res(false); },
+                );
+              });
+              if (!ok) { resolve("error"); return; }
+              // Small delay between batches to let the printer queue drain
+              if (bi < batches.length - 1) await new Promise(r => setTimeout(r, 300));
+            }
+            resolve("ok");
+          } catch (e) {
+            console.error("[ZPL] send loop error:", e);
+            resolve("error");
+          }
+        },
+        (err: unknown) => { console.error("[ZPL] getDefaultDevice error:", err); resolve("blocked"); },
+      );
+    });
+  } catch (e) {
+    console.error("[ZPL] sendToBrowserPrint error:", e);
+    return "error";
   }
-
-  return new Promise((resolve) => {
-    BP.getDefaultDevice("printer",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      async (device: any) => {
-        if (!device) { resolve("not_available"); return; }
-        for (let bi = 0; bi < batches.length; bi++) {
-          const ok = await new Promise<boolean>(res => {
-            device.send(batches[bi], () => res(true), () => res(false));
-          });
-          if (!ok) { resolve("error"); return; }
-          // Small delay between batches to let the printer queue drain
-          if (bi < batches.length - 1) await new Promise(r => setTimeout(r, 300));
-        }
-        resolve("ok");
-      },
-      () => resolve("blocked"),
-    );
-  });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
