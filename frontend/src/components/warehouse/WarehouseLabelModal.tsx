@@ -56,12 +56,11 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
       const text = safeZpl(substituteVars(el.text ?? "", vars));
       if (!text) return "";
       const fh = Math.max(8, d(el.fontSize ?? 4));
-      // ^A0N,height,0 — width=0 means auto-proportional (natural glyph ratio)
-      // ^FB<w>,1,0,<L|C|R> — field block with alignment (must precede ^A)
-      // ^FO → ^A0 (font) → ^FB (field block with justify) → ^FD^FS
+      // Omitting width parameter makes it auto-proportional.
+      // Explicit 0 width breaks Cyrillic fallback glyphs (renders them invisible).
       const just = el.align === "center" ? "C" : el.align === "right" ? "R" : "L";
       const fb = just !== "L" ? `^FB${w},1,0,${just}` : "";
-      return `^FO${x},${y}^A0N,${fh},0${fb}^FD${text}^FS`;
+      return `^FO${x},${y}^A0N,${fh}${fb}^FD${text}^FS`;
     }
     case "qr": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
