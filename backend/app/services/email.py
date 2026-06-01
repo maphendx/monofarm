@@ -47,6 +47,10 @@ def send_welcome(to: str, name: str) -> bool:
     return _send(to, "Вітаємо у MonoFarm", _render_welcome(name or to))
 
 
+def send_invite(to: str, inviter_name: str, org_name: str, invite_url: str) -> bool:
+    return _send(to, f"Запрошення до {org_name} у MonoFarm", _render_invite(inviter_name, org_name, invite_url))
+
+
 # ── HTML templates ────────────────────────────────────────────────────────────
 
 def _base(title: str, body: str) -> str:
@@ -92,6 +96,24 @@ def _render_reset(name: str, reset_url: str) -> str:
         Якщо ви не запитували скидання — проігноруйте цей лист.
       </p>"""
     return _base("Відновлення паролю MonoFarm", body)
+
+
+def _render_invite(inviter_name: str, org_name: str, invite_url: str) -> str:
+    body = f"""
+      <h2 style="margin:0 0 8px;font-size:18px;color:#fff">Вас запрошено до {org_name}</h2>
+      <p style="margin:0 0 24px;color:#a3a3a3">
+        <strong style="color:#fff">{inviter_name}</strong> запрошує вас приєднатись до
+        команди <strong style="color:#fff">{org_name}</strong> у MonoFarm.
+      </p>
+      <a href="{invite_url}"
+         style="display:inline-block;padding:12px 24px;background:#0891b2;color:#fff;
+                text-decoration:none;border-radius:8px;font-weight:500">
+        Прийняти запрошення
+      </a>
+      <p style="margin:24px 0 0;font-size:13px;color:#525252">
+        Посилання дійсне 7 днів.
+      </p>"""
+    return _base(f"Запрошення до {org_name} — MonoFarm", body)
 
 
 def _render_welcome(name: str) -> str:

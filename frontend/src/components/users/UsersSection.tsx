@@ -8,6 +8,9 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import type { AdminUser, UserRole } from "@/lib/types";
+
+// Extend AdminUser locally for invite_pending field returned by the API
+type AdminUserWithInvite = AdminUser & { invite_pending?: boolean };
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -22,12 +25,12 @@ const ROLE_COLOR: Record<UserRole, string> = {
   manager: "badge badge-warn",
 };
 
-interface FormState { email: string; name: string; password: string; role: UserRole }
-const EMPTY_FORM: FormState = { email: "", name: "", password: "", role: "operator" };
+interface FormState { email: string; name: string; role: UserRole }
+const EMPTY_FORM: FormState = { email: "", name: "", role: "operator" };
 
 function UserFormModal({ open, initial, onClose, onSaved }: {
-  open: boolean; initial: AdminUser | null;
-  onClose: () => void; onSaved: (u: AdminUser) => void;
+  open: boolean; initial: AdminUserWithInvite | null;
+  onClose: () => void; onSaved: (u: AdminUserWithInvite) => void;
 }) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -35,7 +38,7 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
 
   useEffect(() => {
     if (open) {
-      setForm(initial ? { email: initial.email, name: initial.name, password: "", role: initial.role } : EMPTY_FORM);
+      setForm(initial ? { email: initial.email, name: initial.name, role: initial.role } : EMPTY_FORM);
       setError(null);
     }
   }, [open, initial]);
@@ -43,13 +46,11 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(null);
     try {
-      let saved: AdminUser;
+      let saved: AdminUserWithInvite;
       if (initial) {
-        const body: Record<string, unknown> = { name: form.name, role: form.role };
-        if (form.password) body.password = form.password;
-        saved = await api<AdminUser>(`/api/users/${initial.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        saved = await api<AdminUserWithInvite>(`/api/users/${initial.id}`, { method: "PATCH", body: JSON.stringify({ name: form.name, role: form.role }) });
       } else {
-        saved = await api<AdminUser>("/api/users", { method: "POST", body: JSON.stringify(form) });
+        saved = await api<AdminUserWithInvite>("/api/users", { method: "POST", body: JSON.stringify(form) });
       }
       onSaved(saved); onClose();
     } catch (err) { setError(err instanceof ApiError ? err.message : "Помилка"); }
@@ -58,11 +59,11 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }}
-      title={initial ? "Редагувати користувача" : "Додати користувача"}
+      title={initial ? "Редагувати користувача" : "Запросити користувача"}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost disabled:opacity-50">Скасувати</button>
         <button type="submit" form="user-form" disabled={busy} className="btn btn-primary disabled:opacity-50">
-          {busy ? "Зберігаю…" : initial ? "Зберегти" : "Створити"}
+          {busy ? "Зберігаю…" : initial ? "Зберегти" : "Запросити"}
         </button>
       </>}>
       <form id="user-form" onSubmit={submit} className="space-y-3 text-sm">
@@ -73,15 +74,11 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
         <label className="block"><span className="mb-1 block">Імʼя</span>
           <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             placeholder="Іван" className="input" /></label>
-        <label className="block">
-          <span className="mb-1 block">Пароль {initial && <span className="text-[var(--text-faint)]">(залиш порожнім — не міняти)</span>}</span>
-          <input type="password" required={!initial} minLength={6} value={form.password}
-            onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-            placeholder="мін. 6 символів" className="input" /></label>
         <label className="block"><span className="mb-1 block">Роль</span>
           <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))} className="input">
             {(Object.keys(ROLE_LABEL) as UserRole[]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select></label>
+        {!initial && <p className="text-xs text-[var(--text-muted)]">Запрошення надійде на email. Користувач сам встановить пароль.</p>}
         {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
     </Modal>
@@ -91,20 +88,20 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
 export function UsersSection() {
   const { confirm, dialog } = useConfirm();
   const me = useUser();
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<AdminUserWithInvite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [editing, setEditing] = useState<AdminUserWithInvite | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [tgLinkUser, setTgLinkUser] = useState<AdminUser | null>(null);
+  const [tgLinkUser, setTgLinkUser] = useState<AdminUserWithInvite | null>(null);
 
   const load = useCallback(async () => {
-    try { setUsers(await api<AdminUser[]>("/api/users")); }
+    try { setUsers(await api<AdminUserWithInvite[]>("/api/users")); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  function upsert(u: AdminUser) {
+  function upsert(u: AdminUserWithInvite) {
     setUsers(prev => {
       const idx = prev.findIndex(x => x.id === u.id);
       if (idx === -1) return [...prev, u];
@@ -112,23 +109,27 @@ export function UsersSection() {
     });
   }
 
-  async function toggleActive(u: AdminUser) {
+  async function toggleActive(u: AdminUserWithInvite) {
     if (u.id === me.id) return;
-    const updated = await api<AdminUser>(`/api/users/${u.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !u.is_active }) });
+    const updated = await api<AdminUserWithInvite>(`/api/users/${u.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !u.is_active }) });
     upsert(updated);
   }
 
-  async function remove(u: AdminUser) {
+  async function remove(u: AdminUserWithInvite) {
     if (u.id === me.id) return;
     if (!await confirm({ message: `Видалити користувача ${u.email}?`, variant: "danger" })) return;
     await api(`/api/users/${u.id}`, { method: "DELETE" });
     setUsers(prev => prev.filter(x => x.id !== u.id));
   }
 
-  async function unlinkTelegram(u: AdminUser) {
+  async function unlinkTelegram(u: AdminUserWithInvite) {
     if (!await confirm({ message: `Відвʼязати Telegram від ${u.email}?`, variant: "warn" })) return;
-    const updated = await api<AdminUser>(`/api/users/${u.id}/telegram`, { method: "DELETE" });
+    const updated = await api<AdminUserWithInvite>(`/api/users/${u.id}/telegram`, { method: "DELETE" });
     upsert(updated);
+  }
+
+  async function resendInvite(u: AdminUserWithInvite) {
+    await api(`/api/users/${u.id}/resend-invite`, { method: "POST" });
   }
 
   if (loading) return <PageSkeleton cols={5} rows={4} />;
@@ -166,9 +167,11 @@ export function UsersSection() {
                   <span className={`rounded px-1.5 py-0.5 text-xs ${ROLE_COLOR[u.role]}`}>{ROLE_LABEL[u.role]}</span>
                 </td>
                 <td className="px-4 py-3 text-xs">
-                  {u.is_active
-                    ? <span className="text-[var(--state-ok)]">● Активний</span>
-                    : <span className="text-[var(--text-faint)]">○ Деактивований</span>}
+                  {u.invite_pending
+                    ? <span className="text-[var(--state-warn)]">◌ Очікує</span>
+                    : u.is_active
+                      ? <span className="text-[var(--state-ok)]">● Активний</span>
+                      : <span className="text-[var(--text-faint)]">○ Деактивований</span>}
                 </td>
                 <td className="px-4 py-3 text-xs">
                   {u.telegram_chat_id ? (
@@ -179,13 +182,18 @@ export function UsersSection() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => { setEditing(u); setModalOpen(true); }}
-                      className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]" title="Редагувати">✎</button>
+                    {u.invite_pending
+                      ? <button onClick={() => resendInvite(u)}
+                          className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
+                          title="Надіслати запрошення знову">↻ Повторити</button>
+                      : <button onClick={() => { setEditing(u); setModalOpen(true); }}
+                          className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]" title="Редагувати">✎</button>
+                    }
                     {u.id !== me.id && (
                       <>
-                        <button onClick={() => toggleActive(u)}
+                        {!u.invite_pending && <button onClick={() => toggleActive(u)}
                           className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
-                          title={u.is_active ? "Деактивувати" : "Активувати"}>{u.is_active ? "⏸" : "▶"}</button>
+                          title={u.is_active ? "Деактивувати" : "Активувати"}>{u.is_active ? "⏸" : "▶"}</button>}
                         <button onClick={() => remove(u)}
                           className="rounded p-1 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]" title="Видалити">✕</button>
                       </>
@@ -199,7 +207,7 @@ export function UsersSection() {
       </div>
 
       <UserFormModal open={modalOpen} initial={editing} onClose={() => setModalOpen(false)} onSaved={upsert} />
-      {tgLinkUser && <TelegramLinkModal key={tgLinkUser.id} user={tgLinkUser} onClose={() => setTgLinkUser(null)} />}
+      {tgLinkUser && <TelegramLinkModal key={tgLinkUser.id} user={tgLinkUser as AdminUser} onClose={() => setTgLinkUser(null)} />}
       {dialog}
     </div>
   );

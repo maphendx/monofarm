@@ -1,5 +1,6 @@
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user
@@ -8,6 +9,7 @@ from app.core.db import get_db
 from app.core.security import (
     create_access_token,
     create_reset_token,
+    decode_invite_token,
     hash_password,
     verify_password,
 )
@@ -87,3 +89,46 @@ def me(
         "created_at":       user.created_at,
         "telegram_chat_id": user.telegram_chat_id,
     }
+
+
+class InviteInfo(BaseModel):
+    email: str
+    org_name: str
+    valid: bool
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+@router.get("/invite/{token}", response_model=InviteInfo)
+def get_invite(token: str, db: Session = Depends(get_db)) -> InviteInfo:
+    data = decode_invite_token(token)
+    if not data:
+        return InviteInfo(email="", org_name="", valid=False)
+    user = db.get(User, data["user_id"])
+    if not user or user.email_verified_at is not None:
+        return InviteInfo(email="", org_name="", valid=False)
+    org = db.get(Organization, data["org_id"])
+    return InviteInfo(email=user.email, org_name=org.name if org else "", valid=True)
+
+
+@router.post("/accept-invite", status_code=status.HTTP_200_OK)
+@limiter.limit("10/hour")
+def accept_invite(
+    request: Request,
+    payload: AcceptInviteRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    data = decode_invite_token(payload.token)
+    if not data:
+        raise HTTPException(status_code=400, detail="Посилання недійсне або застаріло")
+    user = db.get(User, data["user_id"])
+    if not user or user.email_verified_at is not None:
+        raise HTTPException(status_code=400, detail="Посилання вже використано")
+    from datetime import datetime, timezone
+    user.password_hash = hash_password(payload.password)
+    user.email_verified_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True}

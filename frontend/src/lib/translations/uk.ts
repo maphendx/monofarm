@@ -100,6 +100,11 @@ const uk = {
     resetInvalid: "Посилання недійсне або застаріло.",
     savePassword: "Зберегти пароль",
     savingPassword: "Зберігаємо…",
+    inviteTitle: "Прийняти запрошення",
+    inviteInvalid: "Посилання недійсне або застаріло.",
+    inviteAccepted: "Акаунт активовано. Увійдіть з новим паролем.",
+    acceptInvite: "Активувати акаунт",
+    acceptingInvite: "Активуємо…",
   },
   theme: {
     light: "Світла тема",

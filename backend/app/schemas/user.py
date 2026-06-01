@@ -1,13 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, computed_field
 
 from app.models.user import UserRole
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
     name: str = ""
     role: UserRole = UserRole.operator
 
@@ -26,7 +25,13 @@ class UserAdminOut(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+    email_verified_at: datetime | None = None
     telegram_chat_id: int | None = None
+
+    @computed_field
+    @property
+    def invite_pending(self) -> bool:
+        return self.email_verified_at is None
 
     class Config:
         from_attributes = True

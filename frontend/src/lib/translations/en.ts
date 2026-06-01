@@ -100,6 +100,11 @@ const en = {
     resetInvalid: "Link is invalid or has expired.",
     savePassword: "Save password",
     savingPassword: "Saving…",
+    inviteTitle: "Accept invitation",
+    inviteInvalid: "Link is invalid or has expired.",
+    inviteAccepted: "Account activated. Sign in with your new password.",
+    acceptInvite: "Activate account",
+    acceptingInvite: "Activating…",
   },
   theme: {
     light: "Light theme",

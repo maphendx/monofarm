@@ -33,6 +33,25 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
+def create_invite_token(user_id: int, org_id: int) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
+    payload = {"sub": str(user_id), "org": org_id, "typ": "invite", "exp": expire}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_invite_token(token: str) -> dict | None:
+    try:
+        data = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    if data.get("typ") != "invite":
+        return None
+    try:
+        return {"user_id": int(data["sub"]), "org_id": int(data["org"])}
+    except (KeyError, ValueError):
+        return None
+
+
 def create_reset_token(user: object) -> str:
     """JWT reset token. Includes pwh so it auto-invalidates after password change."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.PASSWORD_RESET_TTL_MINUTES)

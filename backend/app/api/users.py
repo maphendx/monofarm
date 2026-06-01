@@ -3,12 +3,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles
+from app.core.config import settings
 from app.core.db import get_db
-from app.core.security import hash_password
+from app.core.security import create_invite_token
 from app.models.organization import PLAN_LIMITS, Organization
 from app.models.user import User, UserRole
 from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
-from app.services import telegram_bot
+from app.services import email, telegram_bot
 
 
 class TelegramLinkOut(BaseModel):
@@ -51,13 +52,36 @@ def create_user(
     user = User(
         organization_id=org.id,
         email=payload.email,
-        password_hash=hash_password(payload.password),
+        password_hash="",  # set on accept-invite
         name=payload.name,
         role=payload.role,
+        email_verified_at=None,
     )
     db.add(user)
+    db.flush()
+    token = create_invite_token(user.id, org.id)
+    invite_url = f"{settings.FARM_PUBLIC_URL}/accept-invite?token={token}"
+    email.send_invite(user.email, admin.name or admin.email, org.name, invite_url)
     db.commit()
     db.refresh(user)
+    return user
+
+
+@router.post("/{user_id}/resend-invite", response_model=UserAdminOut)
+def resend_invite(
+    user_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    admin: User = Depends(require_roles(UserRole.admin)),
+) -> User:
+    user = db.query(User).filter(User.id == user_id, User.organization_id == org.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Користувача не знайдено")
+    if user.email_verified_at is not None:
+        raise HTTPException(status_code=400, detail="Користувач вже прийняв запрошення")
+    token = create_invite_token(user.id, org.id)
+    invite_url = f"{settings.FARM_PUBLIC_URL}/accept-invite?token={token}"
+    email.send_invite(user.email, admin.name or admin.email, org.name, invite_url)
     return user
 
 
