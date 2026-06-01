@@ -52,7 +52,7 @@ type CostBreakdown = {
   total: string; print_time_min: string; margin_pct: string | null;
 };
 
-type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin";
+type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin" | "margin_uah";
 type SortDir = "asc" | "desc";
 
 type ImportPreview = {
@@ -1316,6 +1316,10 @@ export default function ProductsPage() {
           if (sortKey === "margin")     {
             av = calcMargin(a.sale_price, a.full_cost) ?? -Infinity;
             bv = calcMargin(b.sale_price, b.full_cost) ?? -Infinity;
+          }
+          if (sortKey === "margin_uah") {
+            av = a.sale_price && a.full_cost ? parseFloat(a.sale_price) - parseFloat(a.full_cost) : -Infinity;
+            bv = b.sale_price && b.full_cost ? parseFloat(b.sale_price) - parseFloat(b.full_cost) : -Infinity;
           }
           return sortDir === "asc" ? av - bv : bv - av;
         }
