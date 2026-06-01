@@ -55,7 +55,7 @@ def _unique_slug(db: Session, base: str) -> str:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("3/hour")
+@limiter.limit("10/hour")
 def register(request: Request, payload: OrgRegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     """Create a new organization and its first admin user."""
     if db.query(User).filter(User.email == payload.admin_email).first():

@@ -44,7 +44,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("3/hour")
+@limiter.limit("10/hour")
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
     user = db.query(User).filter(User.email == payload.email).first()
     if user and user.is_active:
