@@ -52,7 +52,7 @@ type CostBreakdown = {
   total: string; print_time_min: string; margin_pct: string | null;
 };
 
-type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin" | "margin_uah";
+type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin" | "margin_currency";
 type SortDir = "asc" | "desc";
 
 type ImportPreview = {
@@ -79,7 +79,7 @@ const COLS: ColDef[] = [
   { key: "full_cost",  label: "Собівартість" },
   { key: "sale_price", label: "Ціна" },
   { key: "margin",     label: "Маржа %" },
-  { key: "margin_uah", label: "Маржа ₴" },
+  { key: "margin_currency", label: "Маржа ₴" },
 ];
 
 // ── PhotoPreview ──────────────────────────────────────────────────────────────
@@ -1317,7 +1317,7 @@ export default function ProductsPage() {
             av = calcMargin(a.sale_price, a.full_cost) ?? -Infinity;
             bv = calcMargin(b.sale_price, b.full_cost) ?? -Infinity;
           }
-          if (sortKey === "margin_uah") {
+          if (sortKey === "margin_currency") {
             av = a.sale_price && a.full_cost ? parseFloat(a.sale_price) - parseFloat(a.full_cost) : -Infinity;
             bv = b.sale_price && b.full_cost ? parseFloat(b.sale_price) - parseFloat(b.full_cost) : -Infinity;
           }
@@ -1718,7 +1718,7 @@ export default function ProductsPage() {
                       case "full_cost":  return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>;
                       case "sale_price": return <Th key="sale_price" col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>;
                       case "margin":     return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа %</Th>;
-                      case "margin_uah": return <Th key="margin_uah" col="margin_uah" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа ₴</Th>;
+                      case "margin_currency": return <Th key="margin_currency" col="margin_currency" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа ₴</Th>;
                       default: return null;
                     }
                   })}
@@ -1849,8 +1849,8 @@ export default function ProductsPage() {
                                 : "—"}
                             </td>
                           );
-                          case "margin_uah": return (
-                            <td key="margin_uah" className="px-4 py-3 text-right text-sm">
+                          case "margin_currency": return (
+                            <td key="margin_currency" className="px-4 py-3 text-right text-sm">
                               {marginUah !== null
                                 ? <span className={["font-medium tabular-nums",
                                     marginUah >= 0 ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"].join(" ")}>
