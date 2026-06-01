@@ -18,7 +18,7 @@ type Product = {
   id: number; name: string; sku: string; categories: string[];
   unit: string; sale_price: string | null;
   cost_price: string | null; direct_cost: string | null; full_cost: string | null;
-  min_stock: number | null; desired_stock: number | null;
+  min_stock: number | null; desired_stock: number | null; cell_limit: number | null;
 };
 
 type SpecImportResult = {

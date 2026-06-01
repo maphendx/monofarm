@@ -2191,6 +2191,7 @@ def delete_product(
 class StockThresholdsUpdate(BaseModel):
     min_stock:     int | None = None
     desired_stock: int | None = None
+    cell_limit:    int | None = None
 
 
 @router.patch("/products/{product_id}/thresholds", response_model=ProductOut)
@@ -2202,7 +2203,10 @@ def update_thresholds(
     _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> ProductOut:
     p = _get_product(product_id, org, db)
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "cell_limit" in data:
+        data["box_limit"] = data.pop("cell_limit")
+    for k, v in data.items():
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
@@ -2636,6 +2640,7 @@ def list_stock(
             full_cost=p.full_cost,
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,
+            cell_limit=p.box_limit,
             updated_at=e.updated_at,
         ))
     return result

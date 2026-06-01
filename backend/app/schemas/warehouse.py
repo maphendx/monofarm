@@ -118,6 +118,7 @@ class ProductCreate(BaseModel):
     sale_price:    Decimal | None = None
     min_stock:     int | None = None
     desired_stock: int | None = None
+    cell_limit:    int | None = None
 
 
 class ProductUpdate(BaseModel):
@@ -131,6 +132,7 @@ class ProductUpdate(BaseModel):
     is_active:     bool | None = None
     min_stock:     int | None = None
     desired_stock: int | None = None
+    cell_limit:    int | None = None
 
 
 class ProductOut(BaseModel):
@@ -148,8 +150,16 @@ class ProductOut(BaseModel):
     full_cost:     Decimal | None
     min_stock:     int | None
     desired_stock: int | None
+    cell_limit:    int | None = None
     image_url:     str | None = None
     created_at:    datetime
+
+    @classmethod
+    def model_validate(cls, obj, **kw):
+        inst = super().model_validate(obj, **kw)
+        if inst.cell_limit is None and hasattr(obj, "box_limit"):
+            inst.cell_limit = obj.box_limit
+        return inst
 
     class Config:
         from_attributes = True
@@ -293,6 +303,7 @@ class StockEntryOut(BaseModel):
     full_cost:      Decimal | None
     min_stock:      int | None
     desired_stock:  int | None
+    cell_limit:     int | None
     updated_at:     datetime
 
     class Config:

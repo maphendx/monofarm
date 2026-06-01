@@ -38,6 +38,7 @@ type StockEntry = {
   full_cost:          string | null;
   min_stock:          number | null;
   desired_stock:      number | null;
+  cell_limit:         number | null;
   updated_at:         string;
 };
 
@@ -75,6 +76,7 @@ const COLS: ColDef[] = [
   { key: "unit_cost",     label: "Собівартість за од." },
   { key: "min_stock",     label: "Мін ✎" },
   { key: "desired_stock", label: "Бажаний ✎" },
+  { key: "cell_limit",    label: "Ліміт комірки ✎" },
   { key: "order",         label: "Замовити" },
 ];
 
@@ -85,7 +87,7 @@ function ThresholdCell({
 }: {
   value:     number | null;
   productId: number;
-  field:     "min_stock" | "desired_stock";
+  field:     "min_stock" | "desired_stock" | "cell_limit";
   onSaved:   (pid: number, field: string, val: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -635,7 +637,7 @@ export default function StockPage() {
                 {colVis.isVisible("unit_cost")      && <th className="px-3 py-3 text-right font-medium">Собівартість за одиницю</th>}
                 {colVis.isVisible("min_stock")      && <th className="px-3 py-3 text-right font-medium text-[var(--state-warn)]">Мін ✎</th>}
                 {colVis.isVisible("desired_stock")  && <th className="px-3 py-3 text-right font-medium text-[var(--state-ok)]">Бажаний ✎</th>}
-                {colVis.isVisible("box_limit")      && <th className="px-3 py-3 text-right font-medium text-[var(--accent)]">Коробка ✎</th>}
+                {colVis.isVisible("cell_limit")     && <th className="px-3 py-3 text-right font-medium text-[var(--accent)]">Ліміт комірки ✎</th>}
                 {colVis.isVisible("order")          && <th className="px-3 py-3 text-right font-medium">Замовити</th>}
               </tr>
             </thead>
@@ -790,6 +792,11 @@ export default function StockPage() {
                         <ThresholdCell value={e.desired_stock} productId={e.product_id} field="desired_stock" onSaved={updateThreshold} />
                       </td>
                     )}
+                    {colVis.isVisible("cell_limit") && (
+                      <td className="px-3 py-2.5 text-right">
+                        <ThresholdCell value={e.cell_limit} productId={e.product_id} field="cell_limit" onSaved={updateThreshold} />
+                      </td>
+                    )}
                     {colVis.isVisible("order") && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-3">
@@ -812,7 +819,7 @@ export default function StockPage() {
       </div>
 
       <p className="text-xs text-[var(--text-faint)]">
-        ✎ Клікніть Мін / Бажаний / Коробка щоб редагувати прямо в таблиці · «Замовити» = кількість коробок до бажаного рівня
+        ✎ Клікніть Мін / Бажаний / Ліміт комірки щоб редагувати прямо в таблиці
       </p>
 
       {movementOpen && (
