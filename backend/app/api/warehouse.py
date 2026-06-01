@@ -1809,62 +1809,15 @@ def _export_tsv(rows: list, ts: str) -> Response:
     )
 
 
-def _fetch_image_safe(key: str, org_id: int) -> bytes | None:
-    """Download and thumbnail-resize image to ~10 KB PNG. Returns None on any error."""
-    try:
-        from PIL import Image as PILImage
-        from app.services import storage as storage_svc
-        raw = storage_svc.get_bytes(key, org_id, prefix=_IMAGE_PREFIX)
-        img = PILImage.open(io.BytesIO(raw))
-        img.thumbnail((80, 80), PILImage.LANCZOS)
-        buf = io.BytesIO()
-        img.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-    except Exception:
-        return None
-
-
 def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
-    import concurrent.futures
-    try:
-        from openpyxl.drawing.image import Image as XlImg
-        _images_supported = True
-    except Exception:
-        _images_supported = False
-
-    # Fetch all images in parallel (max 8 workers, 30s total timeout)
-    keys = [p.image_key for p in rows]
-    images: dict[str, bytes | None] = {}
-    if _images_supported and any(keys):
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-                futures = {
-                    pool.submit(_fetch_image_safe, key, org_id): key
-                    for key in keys if key
-                }
-                for fut in concurrent.futures.as_completed(futures, timeout=30):
-                    key = futures[fut]
-                    try:
-                        images[key] = fut.result()
-                    except Exception:
-                        images[key] = None
-        except Exception:
-            pass  # timeout or pool error — proceed without images
-
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Номенклатури"
 
-    ws.append(["Фото"] + list(_EXPORT_HEADERS))
-    ws.row_dimensions[1].height = 18
-    ws.column_dimensions["A"].width = 10
+    ws.append(list(_EXPORT_HEADERS))
 
-    _IMG_PX = 64
-    _ROW_H  = 50
-
-    for ri, p in enumerate(rows, start=2):
+    for p in rows:
         ws.append([
-            "",
             p.name or "",
             ", ".join(p.categories or []),
             p.sku or "",
@@ -1874,40 +1827,9 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
             str(p.sale_price) if p.sale_price is not None else "",
             p.description or "",
         ])
-        ws.row_dimensions[ri].height = _ROW_H
-
-        img_bytes = images.get(p.image_key) if p.image_key else None
-        if img_bytes and _images_supported:
-            try:
-                xl_img = XlImg(io.BytesIO(img_bytes))
-                xl_img.width  = _IMG_PX
-                xl_img.height = _IMG_PX
-                ws.add_image(xl_img, f"A{ri}")
-            except Exception:
-                pass
 
     buf = io.BytesIO()
-    try:
-        wb.save(buf)
-    except Exception:
-        # Fallback: save without images if workbook is corrupted
-        wb2 = openpyxl.Workbook()
-        ws2 = wb2.active
-        ws2.title = "Номенклатури"
-        ws2.append(list(_EXPORT_HEADERS))
-        for p in rows:
-            ws2.append([
-                p.name or "",
-                ", ".join(p.categories or []),
-                p.sku or "",
-                p.barcode or "",
-                p.unit or "",
-                str(p.cost_price) if p.cost_price is not None else "",
-                str(p.sale_price) if p.sale_price is not None else "",
-                p.description or "",
-            ])
-        buf = io.BytesIO()
-        wb2.save(buf)
+    wb.save(buf)
     filename = f"номенклатури_{ts}.xlsx"
     return Response(
         content=buf.getvalue(),
