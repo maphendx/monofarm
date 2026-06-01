@@ -1809,9 +1809,32 @@ def _export_tsv(rows: list, ts: str) -> Response:
     )
 
 
+def _fetch_image_safe(key: str, org_id: int) -> bytes | None:
+    try:
+        from app.services import storage as storage_svc
+        return storage_svc.get_bytes(key, org_id, prefix=_IMAGE_PREFIX)
+    except Exception:
+        return None
+
+
 def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
+    import concurrent.futures
     from openpyxl.drawing.image import Image as XlImg
-    from app.services import storage as storage_svc
+
+    # Fetch all images in parallel (max 8 workers, 10s timeout per image)
+    keys = [p.image_key for p in rows]
+    images: dict[str, bytes | None] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_fetch_image_safe, key, org_id): key
+            for key in keys if key
+        }
+        for fut in concurrent.futures.as_completed(futures, timeout=30):
+            key = futures[fut]
+            try:
+                images[key] = fut.result()
+            except Exception:
+                images[key] = None
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1822,7 +1845,7 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
     ws.column_dimensions["A"].width = 10
 
     _IMG_PX = 64
-    _ROW_H  = 50  # Excel height units ≈ 67 px
+    _ROW_H  = 50
 
     for ri, p in enumerate(rows, start=2):
         ws.append([
@@ -1838,9 +1861,9 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
         ])
         ws.row_dimensions[ri].height = _ROW_H
 
-        if p.image_key:
+        img_bytes = images.get(p.image_key) if p.image_key else None
+        if img_bytes:
             try:
-                img_bytes = storage_svc.get_bytes(p.image_key, org_id, prefix=_IMAGE_PREFIX)
                 xl_img = XlImg(io.BytesIO(img_bytes))
                 xl_img.width  = _IMG_PX
                 xl_img.height = _IMG_PX
@@ -1849,7 +1872,27 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
                 pass
 
     buf = io.BytesIO()
-    wb.save(buf)
+    try:
+        wb.save(buf)
+    except Exception:
+        # Fallback: save without images if workbook is corrupted
+        wb2 = openpyxl.Workbook()
+        ws2 = wb2.active
+        ws2.title = "Номенклатури"
+        ws2.append(list(_EXPORT_HEADERS))
+        for p in rows:
+            ws2.append([
+                p.name or "",
+                ", ".join(p.categories or []),
+                p.sku or "",
+                p.barcode or "",
+                p.unit or "",
+                str(p.cost_price) if p.cost_price is not None else "",
+                str(p.sale_price) if p.sale_price is not None else "",
+                p.description or "",
+            ])
+        buf = io.BytesIO()
+        wb2.save(buf)
     filename = f"номенклатури_{ts}.xlsx"
     return Response(
         content=buf.getvalue(),
