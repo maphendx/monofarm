@@ -62,25 +62,26 @@ function buildZpl(f: Filament, labelId: string, barcodeType: BarcodeType): strin
 }
 
 async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
-  const bases = ["https://localhost:9101", "http://localhost:9090"];
-  for (const base of bases) {
+  async function tryBase(base: string): Promise<"ok" | "error" | null> {
     try {
       const dr = await fetch(`${base}/default`, { signal: AbortSignal.timeout(1500) });
-      if (!dr.ok) continue;
+      if (!dr.ok) return null;
       const device = await dr.json() as Record<string, unknown>;
       const wr = await fetch(`${base}/write`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
       });
       return wr.ok ? "ok" : "error";
-    } catch (e: unknown) {
-      const msg = e instanceof TypeError ? e.message : "";
-      if (base.startsWith("https") && (msg.includes("cert") || msg.includes("SSL") || msg.includes("Failed to fetch"))) {
-        return "cert_needed";
-      }
-    }
+    } catch { return null; }
   }
-  return "not_available";
+
+  const httpsResult = await tryBase("https://localhost:9101");
+  if (httpsResult !== null) return httpsResult;
+
+  const httpResult = await tryBase("http://localhost:9090");
+  if (httpResult !== null) return httpResult;
+
+  return "cert_needed";
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
