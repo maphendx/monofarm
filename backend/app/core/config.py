@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # Resend transactional email (https://resend.com). Empty = log-only (dev).
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "MonoFarm <onboarding@resend.dev>"
+    EMAIL_FROM: str = "MonoFarm <noreply@monofarm.app>"
     EMAIL_REPLY_TO: str = "support@monofarm.app"
     PASSWORD_RESET_TTL_MINUTES: int = 30
 
