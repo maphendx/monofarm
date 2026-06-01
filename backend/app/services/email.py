@@ -5,7 +5,7 @@ not break the auth flow (anti-enumeration: caller always returns the same respon
 """
 import logging
 
-import httpx
+import requests
 
 from app.core.config import settings
 
@@ -18,7 +18,7 @@ def _send(to: str, subject: str, html: str) -> bool:
         log.info("[email dev] to=%s subj=%s\n%s", to, subject, html)
         return True
     try:
-        resp = httpx.post(
+        resp = requests.post(
             _RESEND_URL,
             headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
             json={
