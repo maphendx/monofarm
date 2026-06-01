@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { API_URL, api, getToken } from "@/lib/api";
 import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
@@ -453,9 +453,8 @@ export default function StockPage() {
         <h1 className="text-xl font-bold">Залишки на складі</h1>
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-ghost btn-sm flex items-center gap-1.5" onClick={async () => {
-            const token = localStorage.getItem("token");
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/warehouse/stock/export?fmt=xlsx`, {
-              headers: { Authorization: `Bearer ${token}` },
+            const res = await fetch(`${API_URL}/api/warehouse/stock/export?fmt=xlsx`, {
+              headers: { Authorization: `Bearer ${getToken()}` },
             });
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
