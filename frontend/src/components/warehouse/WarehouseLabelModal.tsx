@@ -456,6 +456,21 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     inFlight.current = false; setBusy(false);
   }
 
+  function downloadZpl() {
+    if (!activeTpl) return;
+    const varsList = items.map((item, i) =>
+      itemToVars(item, i === 0 && isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+    );
+    const zpl = buildZplFromTemplate(activeTpl, items, varsList);
+    const blob = new Blob([zpl], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `label_${Date.now()}.zpl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── Barcode url map for current preview ───────────────────────────────────
   const previewBcUrls: Record<string,string> = {};
   if (activeTpl) {
@@ -566,6 +581,9 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         )}
 
         {/* Print buttons */}
+        <button onClick={downloadZpl} disabled={!activeTpl} className="btn btn-ghost btn-sm disabled:opacity-40" title="Завантажити ZPL файл">
+          ↓ ZPL
+        </button>
         <button onClick={printZebra} disabled={busy || !activeTpl} className="btn btn-secondary btn-sm disabled:opacity-40">
           {busy ? "…" : "Zebra (ZPL)"}
         </button>
