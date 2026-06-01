@@ -78,7 +78,8 @@ const COLS: ColDef[] = [
   { key: "stock",      label: "Залишок" },
   { key: "full_cost",  label: "Собівартість" },
   { key: "sale_price", label: "Ціна" },
-  { key: "margin",     label: "Маржа" },
+  { key: "margin",     label: "Маржа %" },
+  { key: "margin_uah", label: "Маржа ₴" },
 ];
 
 // ── PhotoPreview ──────────────────────────────────────────────────────────────
@@ -1712,7 +1713,8 @@ export default function ProductsPage() {
                       case "stock":      return <Th key="stock" col="stock" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>;
                       case "full_cost":  return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>;
                       case "sale_price": return <Th key="sale_price" col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>;
-                      case "margin":     return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>;
+                      case "margin":     return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа %</Th>;
+                      case "margin_uah": return <Th key="margin_uah" col="margin_uah" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа ₴</Th>;
                       default: return null;
                     }
                   })}
@@ -1727,6 +1729,9 @@ export default function ProductsPage() {
                 ) : paginated.map((p) => {
                   const avail  = stockByProduct.get(p.id) ?? 0;
                   const margin = calcMargin(p.sale_price, p.full_cost ?? p.cost_price);
+                  const cost = parseFloat(p.full_cost ?? p.cost_price ?? "0") || 0;
+                  const sale = parseFloat(p.sale_price ?? "0") || 0;
+                  const marginUah = p.sale_price && (p.full_cost || p.cost_price) ? sale - cost : null;
                   const isOut  = avail === 0 && stock.some((s) => s.product_id === p.id);
                   return (
                     <tr key={p.id}
@@ -1836,6 +1841,16 @@ export default function ProductsPage() {
                                       : margin >= 20 ? "text-[var(--state-warn)]"
                                       : "text-[var(--state-error)]"].join(" ")}>
                                     {margin.toFixed(0)}%
+                                  </span>
+                                : "—"}
+                            </td>
+                          );
+                          case "margin_uah": return (
+                            <td key="margin_uah" className="px-4 py-3 text-right text-sm">
+                              {marginUah !== null
+                                ? <span className={["font-medium tabular-nums",
+                                    marginUah >= 0 ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"].join(" ")}>
+                                    {marginUah.toLocaleString("uk-UA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ₴
                                   </span>
                                 : "—"}
                             </td>
