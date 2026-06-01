@@ -1918,10 +1918,10 @@ def _export_xlsx(rows: list, org_id: int, ts: str) -> Response:
 
 @router.get("/products/export")
 def export_products(
-    ids:    str | None = Query(None, description="Comma-separated product IDs; omit for all"),
-    format: str        = Query("xlsx", pattern="^(tsv|xlsx)$"),
-    db:     Session      = Depends(get_db),
-    org:    Organization = Depends(get_current_org),
+    ids: str | None = Query(None, description="Comma-separated product IDs; omit for all"),
+    fmt: str        = Query("xlsx"),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
 ) -> Response:
     import traceback as _tb
     q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
@@ -1930,13 +1930,12 @@ def export_products(
         q = q.filter(Product.id.in_(id_list))
     rows = q.order_by(Product.name).all()
     ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
-    if format == "xlsx":
+    if fmt == "xlsx":
         try:
             return _export_xlsx(rows, org.id, ts)
-        except Exception as exc:
-            # Fallback to TSV — error visible in X-Export-Error header for debugging
+        except Exception:
             resp = _export_tsv(rows, ts)
-            resp.headers["X-Export-Error"] = _tb.format_exc()[-300:]
+            resp.headers["X-Export-Error"] = _tb.format_exc()[-400:]
             return resp
     return _export_tsv(rows, ts)
 

@@ -1532,7 +1532,7 @@ export default function ProductsPage() {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
     const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    const qs = new URLSearchParams({ format: "xlsx" });
+    const qs = new URLSearchParams({ fmt: "xlsx" });
     if (selected.size > 0) qs.set("ids", [...selected].join(","));
     fetch(`${API_URL}/api/warehouse/products/export?${qs}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
