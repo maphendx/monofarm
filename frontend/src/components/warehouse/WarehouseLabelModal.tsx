@@ -56,8 +56,8 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
       const text = safeZpl(substituteVars(el.text ?? "", vars));
       if (!text) return "";
       const fh = Math.max(8, d(el.fontSize ?? 4));
-      // ^A0N,height,width — use same value for square-proportioned glyphs
-      return `^FO${x},${y}^A0N,${fh},${fh}^FD${text}^FS`;
+      // ^A0N,height,0 — width=0 means auto-proportional (natural glyph ratio)
+      return `^FO${x},${y}^A0N,${fh},0^FD${text}^FS`;
     }
     case "qr": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
