@@ -61,19 +61,7 @@ function buildZpl(f: Filament, labelId: string, barcodeType: BarcodeType): strin
   return lines.filter(Boolean).join("\n");
 }
 
-async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
-  try {
-    const dr = await fetch("https://localhost:9101/default", { signal: AbortSignal.timeout(3000) });
-    if (dr.ok) {
-      const device = await dr.json() as Record<string, unknown>;
-      const wr = await fetch("https://localhost:9101/write", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
-      });
-      return wr.ok ? "ok" : "error";
-    }
-  } catch { /* fall through */ }
-
+async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "blocked" | "error"> {
   try {
     const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(60_000) });
     if (!dr.ok) return "not_available";
@@ -83,7 +71,7 @@ async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" 
       body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
     });
     return wr.ok ? "ok" : "error";
-  } catch { return "cert_needed"; }
+  } catch { return "blocked"; }
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -189,10 +177,10 @@ export function LabelGeneratorModal({
     const result = await sendViaBrowserPrint(zpl);
     if (result === "ok") {
       setPrintStatus("✓ Відправлено на принтер");
-    } else if (result === "cert_needed") {
-      setPrintStatus("⚠ Відкрийте https://localhost:9101 у браузері, прийміть сертифікат і спробуйте знову");
     } else if (result === "not_available") {
-      setPrintStatus("✗ Zebra Browser Print не знайдено. Встановіть застосунок із zebra.com/browserprint");
+      setPrintStatus("✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint");
+    } else if (result === "blocked") {
+      setPrintStatus("✗ Chrome заблокував доступ. Відкрийте chrome://flags/#block-insecure-private-network-requests → Disabled");
     } else {
       setPrintStatus("✗ Помилка відправки");
     }

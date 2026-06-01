@@ -126,25 +126,10 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
   }).join("\n");
 }
 
-// Chrome Private Network Access: from HTTPS page to http://localhost, Chrome
-// shows a permission prompt "Allow site to connect to local devices?".
-// We must NOT timeout too quickly — the user needs time to click Allow.
-async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
-  // Try HTTPS port first (works if user accepted the self-signed cert once)
-  try {
-    const dr = await fetch("https://localhost:9101/default", { signal: AbortSignal.timeout(3000) });
-    if (dr.ok) {
-      const device = await dr.json() as Record<string, unknown>;
-      const wr = await fetch("https://localhost:9101/write", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
-      });
-      return wr.ok ? "ok" : "error";
-    }
-  } catch { /* fall through to HTTP */ }
-
-  // HTTP port — Chrome may show "Allow local network access?" prompt.
-  // Use 60s timeout so the user has time to respond to the Chrome permission dialog.
+// Browser Print communicates via http://localhost:9090.
+// From an HTTPS page, Chrome may show a "Allow local network access?" permission prompt.
+// 60s timeout gives the user time to click Allow in that Chrome dialog.
+async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "blocked" | "error"> {
   try {
     const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(60_000) });
     if (!dr.ok) return "not_available";
@@ -154,7 +139,9 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
       body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
     });
     return wr.ok ? "ok" : "error";
-  } catch { return "cert_needed"; }
+  } catch {
+    return "blocked";
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -455,8 +442,8 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     const result = await sendToBrowserPrint(zpl);
     setStatus(
       result === "ok"           ? "✓ Відправлено на Zebra" :
-      result === "cert_needed"  ? "⚠ Якщо Chrome показав запит дозволу — натисніть «Дозволити». Або відкрийте https://localhost:9101 і прийміть сертифікат" :
       result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint" :
+      result === "blocked"      ? "✗ Chrome заблокував доступ. Відкрийте chrome://flags/#block-insecure-private-network-requests → Disabled, перезапустіть Chrome" :
                                   "✗ Помилка відправки",
     );
     inFlight.current = false; setBusy(false);
