@@ -129,22 +129,21 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
 // Encode ZPL field data as ^FH_ hex to survive Java printing charset conversion.
 // Only applied for the Browser Print path — downloaded ZPL stays human-readable.
 // ^FH_ must be placed directly before each ^FD that needs it (not as a standalone command).
-// QR code fields (^BQ...^FD) are left untouched — ^BQ expects raw "MA,<data>" format.
+// Barcode/QR fields (^BQ, ^BC) are left untouched — they expect raw data.
 function toZplBrowserPrint(zpl: string): string {
-  return zpl.split("\n").map(line => {
-    // Skip lines without ^FD or lines with ^BQ (QR code — don't hex-encode)
-    if (!line.includes("^FD") || line.includes("^BQ")) return line;
+  const result = zpl.split("\n").map(line => {
+    // Skip lines without ^FD, or lines with barcode/QR commands
+    if (!line.includes("^FD") || line.includes("^BQ") || line.includes("^BC")) return line;
 
     return line.replace(
       /\^FD((?:(?!\^FS)[\s\S])*)\^FS/g,
       (match, data: string) => {
-        // Check if data has non-ASCII characters or underscores that need escaping
-        const needsHex = /[^\x00-\x7E]/.test(data) || data.includes("_");
-        if (!needsHex) return match;
+        // Only hex-encode when there are actual non-ASCII characters
+        if (!/[^\x00-\x7E]/.test(data)) return match;
 
         const bytes = new TextEncoder().encode(data);
         const encoded = Array.from(bytes).map(b => {
-          if (b === 0x5F) return "_5F";                          // escape _ itself
+          if (b === 0x5F) return "_5F";                          // escape _ itself (required when ^FH_ is active)
           if (b >= 0x20 && b <= 0x7E) return String.fromCharCode(b); // safe ASCII
           return `_${b.toString(16).toUpperCase().padStart(2, "0")}`;
         }).join("");
@@ -152,6 +151,8 @@ function toZplBrowserPrint(zpl: string): string {
       },
     );
   }).join("\n");
+  console.log("[ZPL] Sending to Browser Print:\n", result);
+  return result;
 }
 
 // Load official Browser Print JS library (uses http://127.0.0.1:9100/ via XHR)
