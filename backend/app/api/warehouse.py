@@ -1810,9 +1810,16 @@ def _export_tsv(rows: list, ts: str) -> Response:
 
 
 def _fetch_image_safe(key: str, org_id: int) -> bytes | None:
+    """Download and thumbnail-resize image to ~10 KB PNG. Returns None on any error."""
     try:
+        from PIL import Image as PILImage
         from app.services import storage as storage_svc
-        return storage_svc.get_bytes(key, org_id, prefix=_IMAGE_PREFIX)
+        raw = storage_svc.get_bytes(key, org_id, prefix=_IMAGE_PREFIX)
+        img = PILImage.open(io.BytesIO(raw))
+        img.thumbnail((80, 80), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
     except Exception:
         return None
 
