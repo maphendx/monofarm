@@ -568,6 +568,7 @@ class CellStockOut(BaseModel):
     product_name: str
     product_sku:  str
     quantity:     Decimal
+    image_url:    str | None = None
 
     class Config:
         from_attributes = True

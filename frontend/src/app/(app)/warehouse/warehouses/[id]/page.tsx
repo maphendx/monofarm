@@ -16,7 +16,7 @@ type WarehouseType = "raw" | "wip" | "finished" | "defect";
 type Warehouse = { id: number; name: string; type: WarehouseType; location: string | null; is_active: boolean };
 
 type Zone = { id: number; name: string; rows: number; cols: number; sort_order: number; cell_count: number };
-type CellStockItem = { product_id: number; product_name: string; product_sku: string; quantity: string };
+type CellStockItem = { product_id: number; product_name: string; product_sku: string; quantity: string; image_url?: string | null };
 type Cell = { id: number; code: string; notes: string | null; stock: CellStockItem[] };
 type ZoneWithCells = Zone & { cells: Cell[] };
 
@@ -684,6 +684,10 @@ function ZoneAccordion({
                     </div>
                     {filled ? (
                       <div className="mt-1 w-full min-w-0">
+                        {cell.stock[0].image_url && (
+                          <img src={cell.stock[0].image_url} alt=""
+                            className="mb-1 h-10 w-full rounded object-contain" />
+                        )}
                         <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
                           {cell.stock[0].product_name}
                           {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}

@@ -110,6 +110,7 @@ def scan(
                 stock_out.append(CellStockOut(
                     product_id=cs.product_id, product_name=p.name,
                     product_sku=p.sku, quantity=cs.quantity,
+                    image_url=_product_image_url(p, org.id),
                 ))
         detail = CellDetailOut(
             cell_id=cell.id, cell_code=cell.code, cell_notes=cell.notes,
@@ -850,12 +851,13 @@ def delete_zone(
 
 # ── Cells ─────────────────────────────────────────────────────────────────────
 
-def _cell_stock_out(cs: CellStock) -> CellStockOut:
+def _cell_stock_out(cs: CellStock, org_id: int) -> CellStockOut:
     return CellStockOut(
         product_id=cs.product_id,
         product_name=cs.product.name,
         product_sku=cs.product.sku,
         quantity=cs.quantity,
+        image_url=_product_image_url(cs.product, org_id),
     )
 
 
@@ -881,7 +883,7 @@ def get_zone_cells(
         stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
         cells_out.append(CellOut(
             id=cell.id, code=cell.code, notes=cell.notes,
-            stock=[_cell_stock_out(cs) for cs in stock_rows],
+            stock=[_cell_stock_out(cs, org.id) for cs in stock_rows],
         ))
     count = len(cells)
     return ZoneWithCellsOut(
@@ -914,7 +916,7 @@ def list_zones_with_cells(
             stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
             cells_out.append(CellOut(
                 id=cell.id, code=cell.code, notes=cell.notes,
-                stock=[_cell_stock_out(cs) for cs in stock_rows],
+                stock=[_cell_stock_out(cs, org.id) for cs in stock_rows],
             ))
         result.append(ZoneWithCellsOut(
             id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
@@ -968,6 +970,7 @@ def set_cell_stock(
     return CellStockOut(
         product_id=payload.product_id, product_name=product.name,
         product_sku=product.sku, quantity=payload.quantity,
+        image_url=_product_image_url(product, org.id),
     )
 
 
@@ -1030,6 +1033,7 @@ def assign_cell_product(
         product_name=product.name,
         product_sku=product.sku,
         quantity=cs.quantity if cs else Decimal("0"),
+        image_url=_product_image_url(product, org.id),
     )
 
 
@@ -1048,7 +1052,7 @@ def update_cell(
     stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
     return CellOut(
         id=cell.id, code=cell.code, notes=cell.notes,
-        stock=[_cell_stock_out(cs) for cs in stock_rows],
+        stock=[_cell_stock_out(cs, org.id) for cs in stock_rows],
     )
 
 
@@ -1122,6 +1126,7 @@ def putaway_to_cell(
     return CellStockOut(
         product_id=payload.product_id, product_name=product.name,
         product_sku=product.sku, quantity=cs.quantity if cs else Decimal("0"),
+        image_url=_product_image_url(product, org.id),
     )
 
 
