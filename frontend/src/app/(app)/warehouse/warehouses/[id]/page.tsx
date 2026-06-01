@@ -385,6 +385,9 @@ function CellModal({
             <div className="space-y-1">
               {stock.map((s) => (
                 <div key={s.product_id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+                  {s.image_url && (
+                    <img src={s.image_url} alt="" className="size-10 shrink-0 rounded object-contain" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{s.product_name}</p>
                     <p className="font-mono text-xs text-[var(--text-faint)]">{s.product_sku}</p>
@@ -683,17 +686,18 @@ function ZoneAccordion({
                       )}
                     </div>
                     {filled ? (
-                      <div className="mt-1 w-full min-w-0">
+                      <div className="mt-0.5 flex w-full min-w-0 items-center gap-1">
                         {cell.stock[0].image_url && (
                           <img src={cell.stock[0].image_url} alt=""
-                            className="mb-1 h-10 w-full rounded object-contain" />
+                            className="size-8 shrink-0 rounded object-contain" />
                         )}
-                        <p className="truncate text-[11px] font-medium leading-tight text-[var(--text)]">
-                          {cell.stock[0].product_name}
-                          {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
-                        </p>
-                        <p className="truncate font-mono text-[9px] leading-tight text-[var(--text-faint)]">{cell.stock[0].product_sku}</p>
-                        <p className="font-mono text-[10px] font-semibold leading-tight text-[var(--accent)]">{totalQty} шт</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-[10px] font-medium leading-tight text-[var(--text)]">
+                            {cell.stock[0].product_name}
+                            {multi && <span className="text-[var(--text-faint)]">{" "}+{cell.stock.length - 1}</span>}
+                          </p>
+                          <p className="font-mono text-[9px] leading-tight text-[var(--accent)]">{totalQty} шт</p>
+                        </div>
                       </div>
                     ) : (
                       <span className="text-[10px] leading-none text-[var(--text-faint)] opacity-0 group-hover:opacity-100">+</span>
