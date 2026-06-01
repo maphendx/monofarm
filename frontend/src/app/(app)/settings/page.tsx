@@ -1489,6 +1489,7 @@ function ProfileSection() {
   const user = useUser();
   const router = useRouter();
   const [name, setName] = useState(user.name);
+  const [newEmail, setNewEmail] = useState(user.email);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [plan, setPlan] = useState<string | null>(null);
@@ -1504,7 +1505,9 @@ function ProfileSection() {
       .catch(() => {});
   }, []);
 
-  const changed = name.trim() !== user.name && name.trim().length >= 2;
+  const nameChanged = name.trim() !== user.name && name.trim().length >= 2;
+  const emailChanged = newEmail.trim() !== user.email && newEmail.includes("@");
+  const changed = nameChanged || emailChanged;
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -1512,13 +1515,24 @@ function ProfileSection() {
     inFlight.current = true;
     setSaving(true);
     try {
-      await api(`/api/users/${user.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: name.trim() }),
-      });
+      if (nameChanged) {
+        await api(`/api/users/${user.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: name.trim() }),
+        });
+      }
+      if (emailChanged) {
+        await api("/api/auth/me/email", {
+          method: "PATCH",
+          body: JSON.stringify({ new_email: newEmail.trim() }),
+        });
+        toast.success("Перевірте нову пошту — надіслали лист для підтвердження");
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Помилка збереження");
+    } finally {
       setSaving(false);
       inFlight.current = false;
     }
@@ -1584,7 +1598,17 @@ function ProfileSection() {
             </div>
             <div>
               <label className="mb-2 block text-base text-[var(--text-muted)]">Email адреса</label>
-              <input value={user.email} readOnly className="input cursor-default opacity-60" />
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="input"
+              />
+              {emailChanged && (
+                <p className="mt-1 text-xs text-[var(--state-warn)]">
+                  Після збереження надішлемо лист для підтвердження
+                </p>
+              )}
             </div>
           </div>
           <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-5">
@@ -1596,7 +1620,7 @@ function ProfileSection() {
               </svg>
               Вийти
             </button>
-            <button type="submit" disabled={!changed || saving} className="btn btn-primary disabled:opacity-50">
+            <button type="submit" disabled={(!changed) || saving} className="btn btn-primary disabled:opacity-50">
               {saved ? "✓ Збережено" : saving ? "…" : "Зберегти зміни"}
             </button>
           </div>

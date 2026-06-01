@@ -1,6 +1,6 @@
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, get_current_user
@@ -94,6 +94,10 @@ def me(
     }
 
 
+class ChangeEmailRequest(BaseModel):
+    new_email: EmailStr
+
+
 class VerifyEmailRequest(BaseModel):
     token: str
 
@@ -123,6 +127,27 @@ def resend_verification(
     token = create_verify_token(current_user.id)
     verify_url = f"{settings.FARM_PUBLIC_URL}/verify-email?token={token}"
     email.send_email_verification(current_user.email, current_user.name, verify_url)
+    return {"ok": True}
+
+
+@router.patch("/me/email", status_code=status.HTTP_200_OK)
+def change_email(
+    payload: ChangeEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    new_email = payload.new_email.lower()
+    if new_email == current_user.email.lower():
+        raise HTTPException(status_code=400, detail="Це вже ваш поточний email")
+    if db.query(User).filter(User.email == new_email).first():
+        raise HTTPException(status_code=409, detail="Email вже використовується")
+    from datetime import datetime, timezone
+    current_user.email = new_email
+    current_user.email_verified_at = None
+    db.commit()
+    token = create_verify_token(current_user.id)
+    verify_url = f"{settings.FARM_PUBLIC_URL}/verify-email?token={token}"
+    email.send_email_verification(new_email, current_user.name, verify_url)
     return {"ok": True}
 
 
