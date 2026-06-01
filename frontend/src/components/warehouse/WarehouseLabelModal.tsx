@@ -221,6 +221,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [printBcUrls, setPrintBcUrls] = useState<Record<string,string>>({});
   const [status,      setStatus]      = useState<string | null>(null);
   const [busy,        setBusy]        = useState(false);
+  const [printerIp,   setPrinterIp]   = useState("");
   const [saving,      setSaving]      = useState(false);
   const [printing,    setPrinting]    = useState(false);
 
@@ -456,6 +457,32 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     inFlight.current = false; setBusy(false);
   }
 
+  async function printTcp() {
+    if (inFlight.current || !printerIp.trim()) return;
+    inFlight.current = true; setBusy(true); setStatus(null);
+    let zpl: string;
+    if (activeTpl) {
+      const varsList = items.map((item, i) =>
+        itemToVars(item, i === 0 && isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+      );
+      zpl = buildZplFromTemplate(activeTpl, items, varsList);
+    } else {
+      const qrVals = items.map((item, i) => i === 0 && isSingle ? qrVal : defaultQr(item));
+      zpl = buildZplFallback(items, qrVals, 57, 32);
+    }
+    try {
+      const r = await api<{ ok: boolean }>("/api/agent/print-zpl", {
+        method: "POST",
+        body: JSON.stringify({ ip: printerIp.trim(), port: 9100, zpl }),
+      });
+      setStatus(r.ok ? "✓ Відправлено на принтер" : "✗ Помилка відправки");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus(msg.includes("503") ? "✗ Агент не підключений" : `✗ ${msg}`);
+    }
+    inFlight.current = false; setBusy(false);
+  }
+
   // ── Barcode url map for current preview ───────────────────────────────────
   const previewBcUrls: Record<string,string> = {};
   if (activeTpl) {
@@ -569,6 +596,18 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         <button onClick={printZebra} disabled={busy || !activeTpl} className="btn btn-secondary btn-sm disabled:opacity-40">
           {busy ? "…" : "Zebra (ZPL)"}
         </button>
+        <div className="flex items-center gap-1">
+          <input
+            value={printerIp}
+            onChange={e => setPrinterIp(e.target.value)}
+            placeholder="192.168.1.100"
+            className="h-7 w-32 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 font-mono text-xs outline-none focus:border-[var(--border-strong)]"
+            title="IP мережевого принтера (порт 9100)"
+          />
+          <button onClick={printTcp} disabled={busy || !activeTpl || !printerIp.trim()} className="btn btn-secondary btn-sm disabled:opacity-40" title="Надіслати ZPL напряму по TCP:9100 через агент">
+            {busy ? "…" : "TCP 9100"}
+          </button>
+        </div>
         <button onClick={printA4} disabled={!activeTpl} className="btn btn-primary btn-sm disabled:opacity-40">
           🖨 A4
         </button>

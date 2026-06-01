@@ -38,7 +38,7 @@ except ImportError:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-AGENT_VERSION      = "0.4.7"
+AGENT_VERSION      = "0.4.9"
 UI_HTTP_PORT       = 4747   # browser navigates here for the HTML page
 UI_WS_PORT         = 4748   # browser WebSocket connects here for live updates
 CONFIG_DIR         = pathlib.Path.home() / ".monofarm-agent"

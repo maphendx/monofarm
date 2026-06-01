@@ -6,7 +6,8 @@ and then serve as HTTP proxies for Moonraker (and other local services).
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from app.api.deps import get_current_org
 from app.core.security import decode_token
@@ -17,7 +18,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.4.8"
+AGENT_VERSION = "0.4.9"
 
 
 @router.get("/api/agent/version")
@@ -30,6 +31,32 @@ def agent_version() -> dict:
 def agent_status(org: Organization = Depends(get_current_org)) -> dict:
     """Check whether a local agent is connected for this org."""
     return {"connected": tunnel.has_tunnel(org.id)}
+
+
+class PrintZplRequest(BaseModel):
+    ip:   str
+    port: int = 9100
+    zpl:  str
+
+
+@router.post("/api/agent/print-zpl")
+async def agent_print_zpl(
+    payload: PrintZplRequest,
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    """Send ZPL to a network printer via the local farm agent (raw TCP)."""
+    if not tunnel.has_tunnel(org.id):
+        raise HTTPException(status_code=503, detail="Агент не підключений")
+    result = await tunnel.proxy_request(
+        org.id,
+        method="PRINT_ZPL",
+        url="",
+        body={"ip": payload.ip, "port": payload.port, "zpl": payload.zpl},
+        timeout=10,
+    )
+    if result.get("status") != 200:
+        raise HTTPException(status_code=502, detail=result.get("error") or "Помилка друку")
+    return {"ok": True}
 
 
 @router.websocket("/api/agent/connect")
