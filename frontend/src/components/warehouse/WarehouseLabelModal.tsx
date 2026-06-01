@@ -126,6 +126,22 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
   }).join("\n");
 }
 
+// Encode ZPL field data as ^FH_ hex to survive Java printing charset conversion.
+// Only applied for the Browser Print path — downloaded ZPL stays human-readable.
+function toZplBrowserPrint(zpl: string): string {
+  return zpl
+    .replace(/\^CI28/g, "^CI28\n^FH_")
+    .replace(/\^FD([^^]*)\^FS/g, (_, data: string) => {
+      const bytes = new TextEncoder().encode(data);
+      const encoded = Array.from(bytes).map(b => {
+        if (b === 0x5F) return "_5F";                          // escape _ itself
+        if (b >= 0x20 && b <= 0x7E) return String.fromCharCode(b); // safe ASCII
+        return `_${b.toString(16).toUpperCase().padStart(2, "0")}`;
+      }).join("");
+      return `^FD${encoded}^FS`;
+    });
+}
+
 // Load official Browser Print JS library (uses http://127.0.0.1:9100/ via XHR)
 let _bpLibLoaded = false;
 async function _loadBPLib(): Promise<boolean> {
@@ -145,11 +161,30 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
   if (!loaded) return "not_available";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const BP = (window as any).BrowserPrint;
+
+  // Split into individual label blocks (^XA … ^XZ) and batch them
+  // to avoid Java printing crashes on large jobs (60+ labels).
+  const labels = zpl.match(/\^XA[\s\S]*?\^XZ/g) ?? [zpl];
+  const BATCH = 10;
+  const batches: string[] = [];
+  for (let i = 0; i < labels.length; i += BATCH) {
+    batches.push(labels.slice(i, i + BATCH).join("\n"));
+  }
+
   return new Promise((resolve) => {
     BP.getDefaultDevice("printer",
-      (device: Record<string, unknown> & { send: Function }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (device: any) => {
         if (!device) { resolve("not_available"); return; }
-        device.send(zpl, () => resolve("ok"), () => resolve("error"));
+        for (let bi = 0; bi < batches.length; bi++) {
+          const ok = await new Promise<boolean>(res => {
+            device.send(batches[bi], () => res(true), () => res(false));
+          });
+          if (!ok) { resolve("error"); return; }
+          // Small delay between batches to let the printer queue drain
+          if (bi < batches.length - 1) await new Promise(r => setTimeout(r, 300));
+        }
+        resolve("ok");
       },
       () => resolve("blocked"),
     );
@@ -228,6 +263,10 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [saving,      setSaving]      = useState(false);
   const [printing,    setPrinting]    = useState(false);
 
+  // Per-item print quantity and enabled state
+  const [labelQty,     setLabelQty]     = useState<Record<number, number>>(() => Object.fromEntries(items.map(it => [it.id, 1])));
+  const [labelEnabled, setLabelEnabled] = useState<Record<number, boolean>>(() => Object.fromEntries(items.map(it => [it.id, true])));
+
   const canvasBoxRef = useRef<HTMLDivElement>(null);
   const dragRef      = useRef<{id:string;startCX:number;startCY:number;origX:number;origY:number}|null>(null);
   const resizeRef    = useRef<{id:string;handle:Handle;startCX:number;startCY:number;origEl:LabelElement}|null>(null);
@@ -237,6 +276,14 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const isSingle   = items.length === 1;
   const previewItem = items[Math.min(previewIdx, items.length - 1)];
   const qrVal      = customQr || defaultQr(previewItem);
+
+  // Expand items × copies, skip disabled — used by all print paths
+  const printItems: WarehouseLabelItem[] = items.flatMap(it =>
+    labelEnabled[it.id] !== false
+      ? Array.from({ length: Math.max(1, labelQty[it.id] ?? 1) }, () => it)
+      : [],
+  );
+  const totalLabels = printItems.length;
   const previewVars = itemToVars(previewItem, qrVal, previewItem.type === "product" ? imgUrls[previewItem.id] : undefined);
 
   // canvas scale
@@ -402,7 +449,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
 
   // ── A4 print — renders React labels into DOM, uses window.print() ──────────
   async function printA4() {
-    if (!activeTpl || printing) return;
+    if (!activeTpl || printing || totalLabels === 0) return;
 
     // 1. Generate ALL barcode SVGs before rendering (SVG — no hPx needed)
     const allBc: Record<string, string> = { ...bcUrls };
@@ -411,7 +458,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         .filter(e => e.type === "barcode")
         .flatMap(el => {
           const showText = el.showText ?? false;
-          return items.map(async item => {
+          return printItems.map(async item => {
             const vars     = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
             const raw      = substituteVars(el.value ?? "", vars as Record<string, string>);
             const cacheKey = `${raw}__${showText ? "1" : "0"}`;
@@ -434,24 +481,24 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
 
   // ── Zebra ZPL — uses template elements for universal output ──────────────
   async function printZebra() {
-    if (inFlight.current) return;
+    if (inFlight.current || totalLabels === 0) return;
     inFlight.current = true; setBusy(true); setStatus(null);
 
     let zpl: string;
     if (activeTpl) {
       // Template-based: each element type → correct ZPL command
-      const varsList = items.map((item, i) =>
-        itemToVars(item, i === 0 && isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+      const varsList = printItems.map(item =>
+        itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
       );
-      zpl = buildZplFromTemplate(activeTpl, items, varsList);
+      zpl = buildZplFromTemplate(activeTpl, printItems, varsList);
     } else {
       // Fallback: simple QR + text
-      const qrVals = items.map((item, i) => i === 0 && isSingle ? qrVal : defaultQr(item));
-      zpl = buildZplFallback(items, qrVals, 57, 32);
+      const qrVals = printItems.map(item => defaultQr(item));
+      zpl = buildZplFallback(printItems, qrVals, 57, 32);
     }
 
     setStatus("Підключення до Zebra Browser Print…");
-    const result = await sendToBrowserPrint(zpl);
+    const result = await sendToBrowserPrint(toZplBrowserPrint(zpl));
     setStatus(
       result === "ok"           ? "✓ Відправлено на Zebra" :
       result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint" :
@@ -462,11 +509,11 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   }
 
   function downloadZpl() {
-    if (!activeTpl) return;
-    const varsList = items.map((item, i) =>
-      itemToVars(item, i === 0 && isSingle ? qrVal : defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+    if (!activeTpl || totalLabels === 0) return;
+    const varsList = printItems.map(item =>
+      itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
     );
-    const zpl = buildZplFromTemplate(activeTpl, items, varsList);
+    const zpl = buildZplFromTemplate(activeTpl, printItems, varsList);
     const blob = new Blob([zpl], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -586,14 +633,14 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         )}
 
         {/* Print buttons */}
-        <button onClick={downloadZpl} disabled={!activeTpl} className="btn btn-ghost btn-sm disabled:opacity-40" title="Завантажити ZPL файл">
+        <button onClick={downloadZpl} disabled={!activeTpl || totalLabels === 0} className="btn btn-ghost btn-sm disabled:opacity-40" title="Завантажити ZPL файл">
           ↓ ZPL
         </button>
-        <button onClick={printZebra} disabled={busy || !activeTpl} className="btn btn-secondary btn-sm disabled:opacity-40">
-          {busy ? "…" : "Zebra (ZPL)"}
+        <button onClick={printZebra} disabled={busy || !activeTpl || totalLabels === 0} className="btn btn-secondary btn-sm disabled:opacity-40">
+          {busy ? "…" : `Zebra${totalLabels > 1 ? ` (${totalLabels})` : ""}`}
         </button>
-        <button onClick={printA4} disabled={!activeTpl} className="btn btn-primary btn-sm disabled:opacity-40">
-          🖨 A4
+        <button onClick={printA4} disabled={!activeTpl || totalLabels === 0} className="btn btn-primary btn-sm disabled:opacity-40">
+          {`🖨 A4${totalLabels > 1 ? ` (${totalLabels})` : ""}`}
         </button>
       </div>
 
@@ -805,10 +852,106 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
                 </div>
               )}
 
-              {items.length > 1 && (
-                <p className="text-xs text-[var(--text-faint)]">
-                  Всього {items.length} міток. A4 — всі разом, Zebra — по одній.
-                </p>
+              {/* ── Label list with per-item qty + enable/disable ──────── */}
+              {items.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                      Мітки до друку
+                    </p>
+                    <span className="rounded-full bg-[var(--accent)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
+                      {totalLabels} шт
+                    </span>
+                  </div>
+
+                  {/* Select all / deselect all */}
+                  {items.length > 1 && (
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setLabelEnabled(Object.fromEntries(items.map(it => [it.id, true])))}
+                        className="flex-1 rounded-md border border-[var(--border)] py-1 text-[10px] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        Всі
+                      </button>
+                      <button
+                        onClick={() => setLabelEnabled(Object.fromEntries(items.map(it => [it.id, false])))}
+                        className="flex-1 rounded-md border border-[var(--border)] py-1 text-[10px] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        Жодної
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Per-item rows */}
+                  <div className="space-y-1 max-h-[45vh] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+                    {items.map((item, idx) => {
+                      const enabled = labelEnabled[item.id] !== false;
+                      const qty = labelQty[item.id] ?? 1;
+                      const name = item.type === "cell" ? item.code
+                        : item.type === "action" ? item.label
+                        : item.name;
+                      const sub = item.type === "cell" ? item.zone_name
+                        : item.type === "action" ? item.code
+                        : item.sku;
+                      return (
+                        <div
+                          key={item.id}
+                          className={[
+                            "flex items-center gap-2 px-2.5 py-2 transition-colors cursor-pointer",
+                            idx > 0 ? "border-t border-[var(--border)]" : "",
+                            previewIdx === idx && items.length > 1 ? "bg-[var(--accent)]/5" : "",
+                            !enabled ? "opacity-40" : "",
+                          ].join(" ")}
+                          onClick={() => { if (items.length > 1) setPreviewIdx(idx); }}
+                        >
+                          {/* Checkbox */}
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={e => {
+                              e.stopPropagation();
+                              setLabelEnabled(p => ({ ...p, [item.id]: !enabled }));
+                            }}
+                            onClick={e => e.stopPropagation()}
+                            className="h-3.5 w-3.5 shrink-0 accent-[var(--accent)] cursor-pointer"
+                          />
+
+                          {/* Name + subtitle */}
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate text-xs font-medium leading-tight">{name}</p>
+                            {sub && <p className="truncate text-[10px] text-[var(--text-faint)] leading-tight">{sub}</p>}
+                          </div>
+
+                          {/* Quantity controls */}
+                          <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => setLabelQty(p => ({ ...p, [item.id]: Math.max(1, qty - 1) }))}
+                              disabled={qty <= 1}
+                              className="flex size-5 items-center justify-center rounded text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-20 transition-colors"
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              max={99}
+                              value={qty}
+                              onChange={e => setLabelQty(p => ({ ...p, [item.id]: Math.max(1, Math.min(99, parseInt(e.target.value) || 1)) }))}
+                              className="w-7 rounded border border-[var(--border)] bg-transparent px-0 py-0.5 text-center text-[10px] font-mono outline-none focus:border-[var(--accent)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <button
+                              onClick={() => setLabelQty(p => ({ ...p, [item.id]: Math.min(99, qty + 1) }))}
+                              disabled={qty >= 99}
+                              className="flex size-5 items-center justify-center rounded text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-20 transition-colors"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
               {!activeTpl && templates.length > 0 && (
@@ -851,10 +994,10 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
               background: "#fff",
               fontFamily: "Arial, Helvetica, sans-serif",
             }}>
-              {items.map((item, i) => {
+              {printItems.map((item, i) => {
                 const vars = itemToVars(
                   item,
-                  isSingle && i === 0 ? qrVal : defaultQr(item),
+                  defaultQr(item),
                   item.type === "product" ? imgUrls[item.id] : undefined,
                 );
                 const bcu: Record<string, string> = {};
