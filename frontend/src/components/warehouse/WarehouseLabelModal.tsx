@@ -126,30 +126,35 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
   }).join("\n");
 }
 
-// Chrome blocks http://localhost from HTTPS origins (Private Network Access).
-// Zebra Browser Print also listens on https://localhost:9101 — try both ports.
+// Chrome Private Network Access: from HTTPS page to http://localhost, Chrome
+// shows a permission prompt "Allow site to connect to local devices?".
+// We must NOT timeout too quickly — the user needs time to click Allow.
 async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
-  async function tryBase(base: string): Promise<"ok" | "error" | null> {
-    try {
-      const dr = await fetch(`${base}/default`, { signal: AbortSignal.timeout(1500) });
-      if (!dr.ok) return null;
+  // Try HTTPS port first (works if user accepted the self-signed cert once)
+  try {
+    const dr = await fetch("https://localhost:9101/default", { signal: AbortSignal.timeout(3000) });
+    if (dr.ok) {
       const device = await dr.json() as Record<string, unknown>;
-      const wr = await fetch(`${base}/write`, {
+      const wr = await fetch("https://localhost:9101/write", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
+        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
       });
       return wr.ok ? "ok" : "error";
-    } catch { return null; }
-  }
+    }
+  } catch { /* fall through to HTTP */ }
 
-  const httpsResult = await tryBase("https://localhost:9101");
-  if (httpsResult !== null) return httpsResult;
-
-  const httpResult = await tryBase("http://localhost:9090");
-  if (httpResult !== null) return httpResult;
-
-  // Both failed — HTTPS cert is likely not accepted yet
-  return "cert_needed";
+  // HTTP port — Chrome may show "Allow local network access?" prompt.
+  // Use 60s timeout so the user has time to respond to the Chrome permission dialog.
+  try {
+    const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(60_000) });
+    if (!dr.ok) return "not_available";
+    const device = await dr.json() as Record<string, unknown>;
+    const wr = await fetch("http://localhost:9090/write", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
+    });
+    return wr.ok ? "ok" : "error";
+  } catch { return "cert_needed"; }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -446,11 +451,12 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
       zpl = buildZplFallback(items, qrVals, 57, 32);
     }
 
+    setStatus("Підключення до Zebra Browser Print…");
     const result = await sendToBrowserPrint(zpl);
     setStatus(
       result === "ok"           ? "✓ Відправлено на Zebra" :
-      result === "cert_needed"  ? "⚠ Відкрийте https://localhost:9101 у браузері, прийміть сертифікат і спробуйте знову" :
-      result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть застосунок із zebra.com/browserprint" :
+      result === "cert_needed"  ? "⚠ Якщо Chrome показав запит дозволу — натисніть «Дозволити». Або відкрийте https://localhost:9101 і прийміть сертифікат" :
+      result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint" :
                                   "✗ Помилка відправки",
     );
     inFlight.current = false; setBusy(false);

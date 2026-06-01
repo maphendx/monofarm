@@ -62,26 +62,28 @@ function buildZpl(f: Filament, labelId: string, barcodeType: BarcodeType): strin
 }
 
 async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
-  async function tryBase(base: string): Promise<"ok" | "error" | null> {
-    try {
-      const dr = await fetch(`${base}/default`, { signal: AbortSignal.timeout(1500) });
-      if (!dr.ok) return null;
+  try {
+    const dr = await fetch("https://localhost:9101/default", { signal: AbortSignal.timeout(3000) });
+    if (dr.ok) {
       const device = await dr.json() as Record<string, unknown>;
-      const wr = await fetch(`${base}/write`, {
+      const wr = await fetch("https://localhost:9101/write", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
+        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
       });
       return wr.ok ? "ok" : "error";
-    } catch { return null; }
-  }
+    }
+  } catch { /* fall through */ }
 
-  const httpsResult = await tryBase("https://localhost:9101");
-  if (httpsResult !== null) return httpsResult;
-
-  const httpResult = await tryBase("http://localhost:9090");
-  if (httpResult !== null) return httpResult;
-
-  return "cert_needed";
+  try {
+    const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(60_000) });
+    if (!dr.ok) return "not_available";
+    const device = await dr.json() as Record<string, unknown>;
+    const wr = await fetch("http://localhost:9090/write", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(5000),
+    });
+    return wr.ok ? "ok" : "error";
+  } catch { return "cert_needed"; }
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
