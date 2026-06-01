@@ -1010,24 +1010,30 @@ def assign_cell_product(
         raise HTTPException(status_code=400, detail="Кількість не може бути від'ємною")
 
     wh_id = _cell_warehouse_id(cell, db)
-
     if payload.quantity > 0:
         _lock_stock_row(payload.product_id, wh_id, db)
-        m = WarehouseMovement(
-            organization_id=org.id,
-            type=MovementType.ADJUSTMENT,
-            product_id=payload.product_id,
-            warehouse_to_id=wh_id,
-            quantity=payload.quantity,
-            reason=f"Призначення в комірку {cell.code}",
-            created_by_id=user.id,
-        )
-        db.add(m)
-        db.flush()
-        _apply_movement(m, db)
+    mtype = MovementType.PURCHASE_IN if payload.quantity > 0 else MovementType.ADJUSTMENT
+    reason = (
+        f"Отримання в комірку {cell.code}"
+        if payload.quantity > 0
+        else f"Реєстрація в комірку {cell.code}"
+    )
+    m = WarehouseMovement(
+        organization_id=org.id,
+        type=mtype,
+        product_id=payload.product_id,
+        warehouse_to_id=wh_id,
+        quantity=payload.quantity,
+        reason=reason,
+        created_by_id=user.id,
+    )
+    db.add(m)
+    db.flush()
+    _apply_movement(m, db)
+    if payload.quantity > 0:
         _putaway(cell, payload.product_id, payload.quantity, org.id, db,
                  kind=CellMoveKind.putaway, movement_id=m.id, created_by_id=user.id)
-        db.commit()
+    db.commit()
 
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     return CellStockOut(
