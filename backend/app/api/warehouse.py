@@ -1001,7 +1001,7 @@ def assign_cell_product(
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> CellStockOut:
-    """Assign any product directly to a cell via ADJUSTMENT — no prior stock required."""
+    """Assign a product to a cell. qty=0 → ADJUSTMENT (register only); qty>0 → PURCHASE_IN."""
     cell = _get_cell(cell_id, org, db)
     product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
     if not product:
