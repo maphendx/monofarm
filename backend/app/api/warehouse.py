@@ -1001,34 +1001,35 @@ def assign_cell_product(
     product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    if payload.quantity <= 0:
-        raise HTTPException(status_code=400, detail="Кількість має бути > 0")
+    if payload.quantity < 0:
+        raise HTTPException(status_code=400, detail="Кількість не може бути від'ємною")
 
     wh_id = _cell_warehouse_id(cell, db)
-    _lock_stock_row(payload.product_id, wh_id, db)
 
-    m = WarehouseMovement(
-        organization_id=org.id,
-        type=MovementType.ADJUSTMENT,
-        product_id=payload.product_id,
-        warehouse_to_id=wh_id,
-        quantity=payload.quantity,
-        reason=f"Призначення в комірку {cell.code}",
-        created_by_id=user.id,
-    )
-    db.add(m)
-    db.flush()
-    _apply_movement(m, db)
-    _putaway(cell, payload.product_id, payload.quantity, org.id, db,
-             kind=CellMoveKind.putaway, movement_id=m.id, created_by_id=user.id)
-    db.commit()
+    if payload.quantity > 0:
+        _lock_stock_row(payload.product_id, wh_id, db)
+        m = WarehouseMovement(
+            organization_id=org.id,
+            type=MovementType.ADJUSTMENT,
+            product_id=payload.product_id,
+            warehouse_to_id=wh_id,
+            quantity=payload.quantity,
+            reason=f"Призначення в комірку {cell.code}",
+            created_by_id=user.id,
+        )
+        db.add(m)
+        db.flush()
+        _apply_movement(m, db)
+        _putaway(cell, payload.product_id, payload.quantity, org.id, db,
+                 kind=CellMoveKind.putaway, movement_id=m.id, created_by_id=user.id)
+        db.commit()
 
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     return CellStockOut(
         product_id=payload.product_id,
         product_name=product.name,
         product_sku=product.sku,
-        quantity=cs.quantity if cs else payload.quantity,
+        quantity=cs.quantity if cs else Decimal("0"),
     )
 
 
