@@ -128,6 +128,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
   const [antOn, setAntOn] = useState(true);
   const [waveFrame, setWaveFrame] = useState(false);
   const [isWaving, setIsWaving] = useState(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const pos = useRef({ x: 80, y: 140 });
   const target = useRef({ x: 200, y: 200 });
   const targetId = useRef<number | null>(null);
@@ -139,6 +140,8 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
   const waveStopTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasAlertRef = useRef(false);
   const isMovingRef = useRef(false);
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     try { setHidden(localStorage.getItem(STORAGE_HIDE) === "1"); } catch { /* ignore */ }
@@ -188,6 +191,31 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
     return () => window.removeEventListener("wheel", onScroll);
   }, []);
 
+  /* Drag — pointer events (mouse + touch unified) */
+  useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (!isDragging.current) return;
+      const nx = Math.max(15, Math.min(window.innerWidth - 15, e.clientX - dragOffset.current.x));
+      const ny = Math.max(20, Math.min(window.innerHeight - 20, e.clientY - dragOffset.current.y));
+      pos.current = { x: nx, y: ny };
+      target.current = { x: nx, y: ny };
+      setRenderPos({ x: Math.round(nx), y: Math.round(ny) });
+    };
+    const onPointerUp = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      setIsDraggingState(false);
+      setIsWaving(false);
+      setIsMoving(false);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
   const pickTarget = useCallback(() => {
     const ids = needsAttentionPrinterIds(printers);
     if (ids.length === 0) {
@@ -232,6 +260,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
     let lastT = performance.now();
 
     function step(now: number) {
+      if (isDragging.current) { raf = requestAnimationFrame(step); return; }
       const dt = Math.min(48, now - lastT) / 1000;
       lastT = now;
       const p = pos.current;
@@ -336,10 +365,19 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
           </button>
 
           <div
-            className={isMoving ? "" : "pet-idle"}
-            style={{ filter: "drop-shadow(0 3px 8px rgba(0,0,0,0.55))" }}
+            className={isMoving || isDraggingState ? "" : "pet-idle"}
+            style={{ filter: "drop-shadow(0 3px 8px rgba(0,0,0,0.55))", cursor: isDraggingState ? "grabbing" : "grab" }}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              isDragging.current = true;
+              setIsDraggingState(true);
+              dragOffset.current = { x: e.clientX - pos.current.x, y: e.clientY - pos.current.y };
+              setIsWaving(true);
+              setIsMoving(false);
+              (e.target as HTMLElement).setPointerCapture(e.pointerId);
+            }}
           >
-            <PixelSprite hasAlert={hasAlert} flip={flip} walkFrame={walkFrame} antOn={antOn} waveFrame={waveFrame} isWaving={isWaving} />
+            <PixelSprite hasAlert={hasAlert} flip={flip} walkFrame={walkFrame} antOn={antOn} waveFrame={waveFrame} isWaving={isWaving || isDraggingState} />
           </div>
 
           {hasAlert && (
