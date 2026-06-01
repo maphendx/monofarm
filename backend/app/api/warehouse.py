@@ -2793,6 +2793,163 @@ def replenish_stock(
     return {"batches": batches_created, "movements": movements_created}
 
 
+# ── Stock export / import ──────────────────────────────────────────────────────
+
+_STOCK_HEADERS = ("SKU", "Назва", "Склад", "В наявності", "Одиниця")
+
+
+@_full.get("/stock/export")
+def export_stock(
+    fmt: str        = Query("xlsx"),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> Response:
+    from urllib.parse import quote
+    rows = (
+        db.query(StockEntry, Product, Warehouse)
+        .join(Product,   StockEntry.product_id   == Product.id)
+        .join(Warehouse, StockEntry.warehouse_id  == Warehouse.id)
+        .filter(StockEntry.organization_id == org.id)
+        .order_by(Product.name)
+        .all()
+    )
+    ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+
+    if fmt == "xlsx":
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Залишки"
+        ws.append(list(_STOCK_HEADERS))
+        for se, p, wh in rows:
+            ws.append([p.sku, p.name, wh.name, float(se.quantity), p.unit or "шт"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        filename = f"залишки_{ts}.xlsx"
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+        )
+
+    buf = io.StringIO()
+    buf.write("﻿")
+    writer = csv.writer(buf, delimiter="\t", lineterminator="\r\n")
+    writer.writerow(_STOCK_HEADERS)
+    for se, p, wh in rows:
+        writer.writerow([p.sku, p.name, wh.name, float(se.quantity), p.unit or "шт"])
+    filename = f"залишки_{ts}.tsv"
+    return Response(
+        content=buf.getvalue().encode("utf-8"),
+        media_type="text/tab-separated-values; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+class _StockImportResult(BaseModel):
+    updated: int
+    skipped: int
+    errors:  list[str]
+
+
+@_full.post("/stock/import", response_model=_StockImportResult)
+def import_stock(
+    file: UploadFile   = File(...),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> _StockImportResult:
+    """Stocktake import — reads SKU / Warehouse / Quantity and adjusts stock to match."""
+    content = file.file.read()
+    try:
+        if file.filename and file.filename.endswith(".xlsx"):
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb.active
+            raw_rows = [
+                [str(c.value).strip() if c.value is not None else "" for c in row]
+                for row in ws.iter_rows(min_row=2)
+            ]
+        else:
+            text = content.decode("utf-8-sig").replace("\r\n", "\n")
+            delimiter = "\t" if "\t" in text else ","
+            raw_rows = [r for r in csv.reader(text.splitlines(), delimiter=delimiter)][1:]
+    except Exception as e:
+        raise HTTPException(400, detail=f"Помилка читання файлу: {e}")
+
+    wh_cache:  dict[str, Warehouse] = {}
+    sku_cache: dict[str, Product]   = {}
+    updated = skipped = 0
+    errors: list[str] = []
+
+    for i, row in enumerate(raw_rows, start=2):
+        if not any(row):
+            continue
+        if len(row) < 4:
+            errors.append(f"Рядок {i}: замало колонок (потрібно SKU, Назва, Склад, Кількість)")
+            skipped += 1
+            continue
+
+        sku, wh_name, qty_raw = row[0].strip(), row[2].strip(), row[3].strip()
+
+        # resolve SKU
+        if sku not in sku_cache:
+            p = db.query(Product).filter_by(sku=sku, organization_id=org.id).first()
+            if not p:
+                errors.append(f"Рядок {i}: SKU «{sku}» не знайдено")
+                skipped += 1
+                continue
+            sku_cache[sku] = p
+        product = sku_cache[sku]
+
+        # resolve warehouse
+        if wh_name not in wh_cache:
+            wh = db.query(Warehouse).filter(
+                Warehouse.organization_id == org.id,
+                func.lower(Warehouse.name) == wh_name.lower(),
+            ).first()
+            if not wh:
+                errors.append(f"Рядок {i}: склад «{wh_name}» не знайдено")
+                skipped += 1
+                continue
+            wh_cache[wh_name] = wh
+        warehouse = wh_cache[wh_name]
+
+        try:
+            target = Decimal(qty_raw.replace(",", "."))
+        except Exception:
+            errors.append(f"Рядок {i}: невірна кількість «{qty_raw}»")
+            skipped += 1
+            continue
+
+        entry = db.query(StockEntry).filter_by(product_id=product.id, warehouse_id=warehouse.id).first()
+        current = entry.quantity if entry else Decimal("0")
+        delta = target - current
+        if delta == 0:
+            skipped += 1
+            continue
+
+        if delta > 0:
+            m = WarehouseMovement(
+                organization_id=org.id, type=MovementType.ADJUSTMENT,
+                product_id=product.id, warehouse_to_id=warehouse.id,
+                quantity=delta, reason="Імпорт залишків",
+                created_by_id=user.id,
+            )
+        else:
+            m = WarehouseMovement(
+                organization_id=org.id, type=MovementType.ADJUSTMENT,
+                product_id=product.id, warehouse_from_id=warehouse.id,
+                quantity=-delta, reason="Імпорт залишків",
+                created_by_id=user.id,
+            )
+        db.add(m)
+        db.flush()
+        _apply_movement(m, db)
+        updated += 1
+
+    db.commit()
+    return _StockImportResult(updated=updated, skipped=skipped, errors=errors[:50])
+
+
 # ── Movements ─────────────────────────────────────────────────────────────────
 
 def _encode_cursor(created_at: datetime, row_id: int) -> str:

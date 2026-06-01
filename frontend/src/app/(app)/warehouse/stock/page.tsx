@@ -426,6 +426,25 @@ export default function StockPage() {
 
   const colSpan = 1 + COLS.filter((c) => colVis.isVisible(c.key)).length;
 
+  async function importStock(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await api<{ updated: number; skipped: number; errors: string[] }>(
+        "/api/warehouse/stock/import", { method: "POST", body: form }
+      );
+      const msg = `Оновлено: ${res.updated}, пропущено: ${res.skipped}`;
+      if (res.errors.length) {
+        toast.warning(`${msg}. Помилки: ${res.errors.slice(0, 3).join("; ")}`);
+      } else {
+        toast.success(msg);
+      }
+      load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Помилка імпорту");
+    }
+  }
+
   if (loading) return <PageSkeleton cols={6} />;
 
   return (
@@ -435,6 +454,30 @@ export default function StockPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-bold">Залишки на складі</h1>
         <div className="flex flex-wrap gap-2">
+          <button className="btn btn-ghost btn-sm flex items-center gap-1.5" onClick={async () => {
+            const token = localStorage.getItem("token");
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/warehouse/stock/export?fmt=xlsx`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url;
+            a.download = `залишки_${new Date().toISOString().slice(0,10)}.xlsx`;
+            a.click(); URL.revokeObjectURL(url);
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Експорт
+          </button>
+          <label className="btn btn-ghost btn-sm flex cursor-pointer items-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Імпорт
+            <input type="file" accept=".xlsx,.tsv,.csv" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) { importStock(f); e.target.value = ""; } }} />
+          </label>
           <button onClick={() => setReplenishOpen(true)} className="btn btn-ghost btn-sm flex items-center gap-1.5">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2v20M2 12h20"/><path d="M17 7 12 2l-5 5"/>
