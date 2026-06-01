@@ -61,24 +61,26 @@ function buildZpl(f: Filament, labelId: string, barcodeType: BarcodeType): strin
   return lines.filter(Boolean).join("\n");
 }
 
-async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "error"> {
-  try {
-    const devResp = await fetch("http://localhost:9090/default", {
-      signal: AbortSignal.timeout(1200),
-    });
-    if (!devResp.ok) return "not_available";
-    const device = await devResp.json() as Record<string, unknown>;
-
-    const writeResp = await fetch("http://localhost:9090/write", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device, data: zpl }),
-      signal: AbortSignal.timeout(3000),
-    });
-    return writeResp.ok ? "ok" : "error";
-  } catch {
-    return "not_available";
+async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
+  const bases = ["https://localhost:9101", "http://localhost:9090"];
+  for (const base of bases) {
+    try {
+      const dr = await fetch(`${base}/default`, { signal: AbortSignal.timeout(1500) });
+      if (!dr.ok) continue;
+      const device = await dr.json() as Record<string, unknown>;
+      const wr = await fetch(`${base}/write`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
+      });
+      return wr.ok ? "ok" : "error";
+    } catch (e: unknown) {
+      const msg = e instanceof TypeError ? e.message : "";
+      if (base.startsWith("https") && (msg.includes("cert") || msg.includes("SSL") || msg.includes("Failed to fetch"))) {
+        return "cert_needed";
+      }
+    }
   }
+  return "not_available";
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -184,8 +186,10 @@ export function LabelGeneratorModal({
     const result = await sendViaBrowserPrint(zpl);
     if (result === "ok") {
       setPrintStatus("✓ Відправлено на принтер");
+    } else if (result === "cert_needed") {
+      setPrintStatus("⚠ Відкрийте https://localhost:9101 у браузері, прийміть сертифікат і спробуйте знову");
     } else if (result === "not_available") {
-      setPrintStatus("✗ Zebra Browser Print не знайдено. Встановіть застосунок.");
+      setPrintStatus("✗ Zebra Browser Print не знайдено. Встановіть застосунок із zebra.com/browserprint");
     } else {
       setPrintStatus("✗ Помилка відправки");
     }

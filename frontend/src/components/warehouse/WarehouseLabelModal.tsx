@@ -126,17 +126,29 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
   }).join("\n");
 }
 
-async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "error"> {
-  try {
-    const dr = await fetch("http://localhost:9090/default", { signal: AbortSignal.timeout(1200) });
-    if (!dr.ok) return "not_available";
-    const device = await dr.json() as Record<string, unknown>;
-    const wr = await fetch("http://localhost:9090/write", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
-    });
-    return wr.ok ? "ok" : "error";
-  } catch { return "not_available"; }
+// Chrome blocks http://localhost from HTTPS origins (Private Network Access).
+// Zebra Browser Print also listens on https://localhost:9101 — try that first.
+async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "cert_needed" | "error"> {
+  const bases = ["https://localhost:9101", "http://localhost:9090"];
+  for (const base of bases) {
+    try {
+      const dr = await fetch(`${base}/default`, { signal: AbortSignal.timeout(1500) });
+      if (!dr.ok) continue;
+      const device = await dr.json() as Record<string, unknown>;
+      const wr = await fetch(`${base}/write`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device, data: zpl }), signal: AbortSignal.timeout(3000),
+      });
+      return wr.ok ? "ok" : "error";
+    } catch (e: unknown) {
+      const msg = e instanceof TypeError ? e.message : "";
+      // Self-signed cert not yet trusted → user must open URL once in browser
+      if (base.startsWith("https") && (msg.includes("cert") || msg.includes("SSL") || msg.includes("Failed to fetch"))) {
+        return "cert_needed";
+      }
+    }
+  }
+  return "not_available";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -435,9 +447,10 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
 
     const result = await sendToBrowserPrint(zpl);
     setStatus(
-      result === "ok"            ? "✓ Відправлено на Zebra"             :
-      result === "not_available" ? "✗ Zebra Browser Print не знайдено" :
-                                   "✗ Помилка відправки",
+      result === "ok"           ? "✓ Відправлено на Zebra" :
+      result === "cert_needed"  ? "⚠ Відкрийте https://localhost:9101 у браузері, прийміть сертифікат і спробуйте знову" :
+      result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть застосунок із zebra.com/browserprint" :
+                                  "✗ Помилка відправки",
     );
     inFlight.current = false; setBusy(false);
   }
