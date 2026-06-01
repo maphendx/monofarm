@@ -1787,15 +1787,16 @@ def import_products(
 
 @router.get("/products/export")
 def export_products(
+    ids: str | None   = Query(None, description="Comma-separated product IDs to export; omit for all"),
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> Response:
-    rows = (
-        db.query(Product)
-        .filter(Product.organization_id == org.id, Product.is_active)
-        .order_by(Product.name)
-        .all()
-    )
+    q = db.query(Product).filter(Product.organization_id == org.id, Product.is_active)
+    if ids:
+        id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+        q = q.filter(Product.id.in_(id_list))
+    rows = q.order_by(Product.name).all()
+
     buf = io.StringIO()
     buf.write("﻿")  # UTF-8 BOM for Excel compatibility
     writer = csv.writer(buf, delimiter="\t", lineterminator="\r\n")
@@ -1811,10 +1812,12 @@ def export_products(
             str(p.sale_price) if p.sale_price is not None else "",
             p.description or "",
         ])
+    ts = datetime.utcnow().strftime("%Y-%m-%d_%H-%M")
+    filename = f"номенклатури_{ts}.tsv"
     return Response(
         content=buf.getvalue().encode("utf-8"),
         media_type="text/tab-separated-values; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=products.tsv"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
 
 

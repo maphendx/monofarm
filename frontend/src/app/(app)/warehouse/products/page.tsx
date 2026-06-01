@@ -1529,7 +1529,11 @@ export default function ProductsPage() {
 
   function handleExport() {
     const token = getToken();
-    fetch(`${API_URL}/api/warehouse/products/export`, {
+    const params = selected.size > 0 ? `?ids=${[...selected].join(",")}` : "";
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    fetch(`${API_URL}/api/warehouse/products/export${params}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((r) => r.blob())
@@ -1537,7 +1541,7 @@ export default function ProductsPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "products.tsv";
+        a.download = `номенклатури_${ts}.tsv`;
         a.click();
         URL.revokeObjectURL(url);
       });
@@ -1604,10 +1608,10 @@ export default function ProductsPage() {
             />
             <button
               onClick={handleExport}
-              className="btn btn-ghost btn-sm"
-              title="Експорт TSV (Ordage)"
+              className={["btn btn-sm", selected.size > 0 ? "btn-secondary" : "btn-ghost"].join(" ")}
+              title={selected.size > 0 ? `Експорт ${selected.size} вибраних` : "Експорт всіх номенклатур"}
             >
-              ↓ Експорт
+              ↓ {selected.size > 0 ? `Експорт (${selected.size})` : "Експорт"}
             </button>
             <button
               onClick={() => importRef.current?.click()}
