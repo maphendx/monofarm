@@ -142,7 +142,6 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
   const isMovingRef = useRef(false);
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
-  const posInitialized = useRef(false);
 
   useEffect(() => {
     try { setHidden(localStorage.getItem(STORAGE_HIDE) === "1"); } catch { /* ignore */ }
@@ -252,13 +251,10 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
   }, []);
 
   useEffect(() => {
-    if (hidden) { posInitialized.current = false; return; }
-    if (!posInitialized.current) {
-      const w = typeof window !== "undefined" ? window.innerWidth : 400;
-      pos.current = { x: Math.round(w - 80), y: 140 };
-      setRenderPos({ x: pos.current.x, y: pos.current.y });
-      posInitialized.current = true;
-    }
+    if (hidden) return;
+    const w = typeof window !== "undefined" ? window.innerWidth : 400;
+    pos.current = { x: Math.round(w - 80), y: 140 };
+    setRenderPos({ x: pos.current.x, y: pos.current.y });
 
     let raf = 0;
     let lastT = performance.now();
@@ -315,7 +311,7 @@ export function DashboardPet({ printers }: { printers: Printer[] }) {
       cancelAnimationFrame(raf);
       if (blinkTimer.current) { clearInterval(blinkTimer.current); blinkTimer.current = null; }
     };
-  }, [hidden, printers]);
+  }, [hidden]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function hide() {
     setHidden(true);
