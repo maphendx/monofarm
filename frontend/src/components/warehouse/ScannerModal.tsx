@@ -190,6 +190,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         toast.success(r.message);
       }
       setDone(true);
+      new BroadcastChannel("wh_cell_updated").postMessage(1);
       setTimeout(() => { clearContext(); refocus(); }, 1200);   // keep action for repeats
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Помилка");

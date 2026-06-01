@@ -811,6 +811,13 @@ export default function WarehouseDetailPage() {
   // After any cell change, refresh cell quantities and the unassigned pool.
   const refresh = useCallback(() => { loadZones(); loadUnassigned(); }, [loadZones, loadUnassigned]);
 
+  // Listen for scanner updates from other tabs.
+  useEffect(() => {
+    const ch = new BroadcastChannel("wh_cell_updated");
+    ch.onmessage = () => refresh();
+    return () => ch.close();
+  }, [refresh]);
+
   const flatCells: FlatCell[] = useMemo(
     () => zones.flatMap((z) => z.cells.map((c) => ({ id: c.id, label: `${z.name} ${c.code}` }))),
     [zones]
