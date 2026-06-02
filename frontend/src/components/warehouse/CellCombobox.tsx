@@ -24,24 +24,12 @@ export function CellCombobox({
   const selected = cells.find((c) => String(c.id) === value);
   const q = search.toLowerCase().trim();
 
-  // When searching: flat filtered list. When browsing: all cells (no slice limit).
   const filtered: CellOption[] = q
     ? cells.filter((c) =>
         c.label.toLowerCase().includes(q) ||
         (c.zone ?? "").toLowerCase().includes(q)
       )
     : cells;
-
-  // Group by zone for the browse view (no search term)
-  const grouped: { zone: string; items: CellOption[] }[] = !q
-    ? Object.entries(
-        filtered.reduce<Record<string, CellOption[]>>((acc, c) => {
-          const z = c.zone ?? "";
-          (acc[z] ||= []).push(c);
-          return acc;
-        }, {})
-      ).map(([zone, items]) => ({ zone, items }))
-    : [];
 
   useEffect(() => {
     if (!open) return;
@@ -108,42 +96,20 @@ export function CellCombobox({
               — {emptyLabel} —
             </button>
           )}
-          {q ? (
-            // flat filtered list
-            filtered.length === 0 ? (
-              <p className="px-3 py-2.5 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
-            ) : (
-              filtered.map((c) => (
-                <button key={c.id} type="button"
-                  onMouseDown={(e) => { e.preventDefault(); pick(String(c.id)); }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]">
-                  {c.zone && <span className="text-[11px] text-[var(--text-faint)] shrink-0">{c.zone}</span>}
-                  <span className="font-mono">{c.label}</span>
-                </button>
-              ))
-            )
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2.5 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
           ) : (
-            // grouped by zone
-            grouped.length === 0 ? (
-              <p className="px-3 py-2.5 text-xs text-[var(--text-faint)]">Немає комірок</p>
-            ) : (
-              grouped.map(({ zone, items }) => (
-                <div key={zone}>
-                  {zone && (
-                    <div className="sticky top-0 bg-[var(--surface-hi)] px-3 py-1 text-[10.5px] font-semibold text-[var(--text-muted)]">
-                      {zone}
-                    </div>
-                  )}
-                  {items.map((c) => (
-                    <button key={c.id} type="button"
-                      onMouseDown={(e) => { e.preventDefault(); pick(String(c.id)); }}
-                      className="flex w-full items-center px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]">
-                      <span className="font-mono">{c.label}</span>
-                    </button>
-                  ))}
-                </div>
-              ))
-            )
+            filtered.map((c) => (
+              <button key={c.id} type="button"
+                onMouseDown={(e) => { e.preventDefault(); pick(String(c.id)); }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]">
+                {c.zone && (
+                  <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{c.zone}</span>
+                )}
+                {c.zone && <span className="text-[var(--border-strong)]">·</span>}
+                <span className="font-mono font-medium">{c.label}</span>
+              </button>
+            ))
           )}
         </div>
       )}
