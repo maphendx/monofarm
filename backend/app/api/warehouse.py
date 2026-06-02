@@ -968,6 +968,12 @@ def set_cell_stock(
         _pick_from_cell(cell, payload.product_id, -delta, org.id, db,
                         kind=CellMoveKind.adjust, created_by_id=user.id)
 
+    # Keep the CellStock row even when quantity reaches 0 so the product
+    # stays registered in the cell.
+    cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
+    if cs is None:
+        db.add(CellStock(cell_id=cell_id, product_id=payload.product_id, quantity=Decimal("0")))
+
     db.commit()
     return CellStockOut(
         product_id=payload.product_id, product_name=product.name,
@@ -1033,6 +1039,10 @@ def assign_cell_product(
     if payload.quantity > 0:
         _putaway(cell, payload.product_id, payload.quantity, org.id, db,
                  kind=CellMoveKind.putaway, movement_id=m.id, created_by_id=user.id)
+    else:
+        cs_existing = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
+        if not cs_existing:
+            db.add(CellStock(cell_id=cell.id, product_id=payload.product_id, quantity=Decimal("0")))
     db.commit()
 
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()

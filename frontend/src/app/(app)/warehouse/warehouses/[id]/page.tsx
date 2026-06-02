@@ -312,9 +312,7 @@ function CellModal({
       method: "PUT",
       body: JSON.stringify({ product_id: pid, quantity: qty }),
     }).then((updated) => {
-      setStock((prev) => qty <= 0
-        ? prev.filter((s) => s.product_id !== pid)
-        : prev.map((s) => s.product_id === pid ? updated : s));
+      setStock((prev) => prev.map((s) => s.product_id === pid ? updated : s));
       onChanged();
     }).catch((e: unknown) => {
       setErr(e instanceof Error ? e.message : "Помилка");
