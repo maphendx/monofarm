@@ -994,8 +994,10 @@ def remove_cell_stock(
     cell = _get_cell(cell_id, org, db)
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=product_id).first()
     if cs:
-        _pick_from_cell(cell, product_id, cs.quantity, org.id, db,
-                        kind=CellMoveKind.adjust, created_by_id=user.id)
+        took = _pick_from_cell(cell, product_id, cs.quantity, org.id, db,
+                               kind=CellMoveKind.adjust, created_by_id=user.id)
+        if took == 0:
+            db.delete(cs)
     db.commit()
 
 
@@ -1204,7 +1206,7 @@ def scan_action(
     production_out — issue components to production from a cell (PRODUCTION_OUT).
     """
     product = _get_product(payload.product_id, org, db)
-    if payload.quantity <= 0:
+    if payload.quantity < 0 or (payload.quantity == 0 and payload.action != ScanAction.stocktake):
         raise HTTPException(status_code=400, detail="Кількість має бути > 0")
 
     cell  = _get_cell(payload.cell_id, org, db)
@@ -1336,6 +1338,9 @@ def scan_action(
     current = cs.quantity if cs else Decimal("0")
     delta   = payload.quantity - current
     if delta == 0:
+        if cs is None:
+            db.add(CellStock(cell_id=cell.id, product_id=payload.product_id, quantity=Decimal("0")))
+            db.commit()
         return ScanActionResult(message=f"{cell.code}: без змін ({current} {product.unit})")
     if delta > 0:
         m = WarehouseMovement(
