@@ -808,12 +808,18 @@ function ZoneAccordion({
                               </div>
                             </div>
                           ) : (
-                            <div className="mt-1 min-w-0">
-                              <p className="truncate text-[10.5px] font-medium leading-tight text-[var(--text)]">
-                                {cell.stock[0].product_name}
-                                {multi && <span className="text-[var(--text-faint)]"> +{cell.stock.length - 1}</span>}
-                              </p>
-                              <p className="font-mono text-[10px] text-[var(--accent)] mt-0.5">{totalQty} шт</p>
+                            <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                              {cell.stock[0].image_url && (
+                                <img src={cell.stock[0].image_url} alt="" loading="lazy" decoding="async"
+                                  className="size-6 shrink-0 rounded object-contain" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="truncate text-[10.5px] font-medium leading-tight text-[var(--text)]">
+                                  {cell.stock[0].product_name}
+                                  {multi && <span className="text-[var(--text-faint)]"> +{cell.stock.length - 1}</span>}
+                                </p>
+                                <p className="font-mono text-[10px] text-[var(--accent)]">{totalQty} шт</p>
+                              </div>
                             </div>
                           )
                         ) : (
