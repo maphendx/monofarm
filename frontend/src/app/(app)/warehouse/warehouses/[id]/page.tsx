@@ -21,7 +21,7 @@ type Cell = { id: number; code: string; notes: string | null; stock: CellStockIt
 type ZoneWithCells = Zone & { cells: Cell[] };
 
 type Unassigned = { product_id: number; product_name: string; product_sku: string; unit: string; unassigned: string };
-type FlatCell = { id: number; label: string };
+type FlatCell = { id: number; label: string; zone?: string };
 
 const TYPE_LABEL: Record<WarehouseType, string> = {
   finished: "Готова продукція", raw: "Сировина", wip: "В процесі", defect: "Брак",
@@ -817,7 +817,7 @@ export default function WarehouseDetailPage() {
   }, [refresh]);
 
   const flatCells: FlatCell[] = useMemo(
-    () => zones.flatMap((z) => z.cells.map((c) => ({ id: c.id, label: `${z.name} ${c.code}` }))),
+    () => zones.flatMap((z) => z.cells.map((c) => ({ id: c.id, label: c.code, zone: z.name }))),
     [zones]
   );
 
