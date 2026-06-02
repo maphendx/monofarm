@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
+import { FlowView } from "@/components/dashboard/FlowView";
 import { PrinterCard } from "@/components/printers/PrinterCard";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
@@ -395,7 +396,7 @@ export default function DashboardPage() {
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
-  const [view, setView] = useState<"cards" | "photos">("cards");
+  const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
 
   const load = useCallback(async () => {
     setError(null);
@@ -571,6 +572,13 @@ export default function DashboardPage() {
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
             </button>
+            <button
+              onClick={() => setView("flow")}
+              title="Потік виробництва"
+              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "flow" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
+            </button>
           </div>
 
           {user.role === "admin" && (
@@ -591,7 +599,9 @@ export default function DashboardPage() {
       )}
 
       {/* ── content ── */}
-      {loading && printers.length === 0 ? (
+      {view === "flow" ? (
+        <FlowView printers={printers} />
+      ) : loading && printers.length === 0 ? (
         <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-muted)] ">
