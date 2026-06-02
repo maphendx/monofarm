@@ -51,9 +51,26 @@ export function CellCombobox({
         autoComplete="off"
         className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)]"
         onFocus={() => { setSearch(""); setOpen(true); }}
-        onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+        onChange={(e) => {
+          const v = e.target.value;
+          // QR code format "CELL:{id}" — auto-select by id immediately
+          const qr = v.match(/^CELL:(\d+)$/i);
+          if (qr) {
+            const cell = cells.find((c) => String(c.id) === qr[1]);
+            if (cell) { pick(String(cell.id)); return; }
+          }
+          setSearch(v); setOpen(true);
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && filtered.length > 0) { e.preventDefault(); pick(String(filtered[0].id)); }
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          // QR code arrived as full string before Enter
+          const qr = search.match(/^CELL:(\d+)$/i);
+          if (qr) {
+            const cell = cells.find((c) => String(c.id) === qr[1]);
+            if (cell) { pick(String(cell.id)); return; }
+          }
+          if (filtered.length > 0) pick(String(filtered[0].id));
         }}
       />
       {selected && (
