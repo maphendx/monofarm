@@ -574,17 +574,17 @@ function cellFillLevel(cell: Cell): FillLevel {
 
 const FILL_CELL_CLS: Record<string, string> = {
   "0": "border-dashed border-[var(--border)] bg-transparent hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
-  "r": "border-[rgba(245,158,11,.20)] bg-[rgba(245,158,11,.03)] hover:bg-[rgba(245,158,11,.06)]",
-  "1": "border-[rgba(34,211,238,.15)] bg-[rgba(34,211,238,.02)] hover:bg-[rgba(34,211,238,.06)]",
-  "2": "border-[rgba(34,211,238,.25)] bg-[rgba(34,211,238,.05)] hover:bg-[rgba(34,211,238,.09)]",
-  "3": "border-[rgba(34,211,238,.38)] bg-[rgba(34,211,238,.08)] hover:bg-[rgba(34,211,238,.12)]",
-  "4": "border-[rgba(34,211,238,.55)] bg-[rgba(34,211,238,.12)] hover:bg-[rgba(34,211,238,.17)]",
+  "r": "border-[rgba(245,158,11,.28)] bg-[rgba(245,158,11,.05)] hover:bg-[rgba(245,158,11,.09)]",
+  "1": "border-[rgba(34,211,238,.22)] bg-[rgba(34,211,238,.04)] hover:bg-[rgba(34,211,238,.09)]",
+  "2": "border-[rgba(34,211,238,.42)] bg-[rgba(34,211,238,.08)] hover:bg-[rgba(34,211,238,.13)]",
+  "3": "border-[rgba(34,211,238,.65)] bg-[rgba(34,211,238,.13)] hover:bg-[rgba(34,211,238,.19)]",
+  "4": "border-[var(--accent)] bg-[rgba(34,211,238,.20)] hover:bg-[rgba(34,211,238,.27)]",
 };
 
 const FILL_BAR_COLOR: Record<string, string> = {
-  "0": "", "r": "rgba(245,158,11,.45)",
-  "1": "rgba(34,211,238,.30)", "2": "rgba(34,211,238,.45)",
-  "3": "rgba(34,211,238,.60)", "4": "rgba(34,211,238,.80)",
+  "0": "", "r": "rgba(245,158,11,.55)",
+  "1": "rgba(34,211,238,.40)", "2": "rgba(34,211,238,.58)",
+  "3": "rgba(34,211,238,.76)", "4": "var(--accent)",
 };
 
 // mini-map dot color per fill level
