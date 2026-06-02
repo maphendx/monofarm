@@ -384,7 +384,7 @@ function CellModal({
               {stock.map((s) => (
                 <div key={s.product_id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
                   {s.image_url && (
-                    <img src={s.image_url} alt="" className="size-10 shrink-0 rounded object-contain" />
+                    <img src={s.image_url} alt="" loading="lazy" decoding="async" className="size-10 shrink-0 rounded object-contain" />
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{s.product_name}</p>
@@ -574,17 +574,17 @@ function cellFillLevel(cell: Cell): FillLevel {
 
 const FILL_CELL_CLS: Record<string, string> = {
   "0": "border-dashed border-[var(--border)] bg-transparent hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
-  "r": "border-[rgba(245,158,11,.35)] bg-[rgba(245,158,11,.05)] hover:bg-[rgba(245,158,11,.10)]",
-  "1": "border-[rgba(34,211,238,.28)] bg-[rgba(34,211,238,.04)] hover:bg-[rgba(34,211,238,.10)]",
-  "2": "border-[rgba(34,211,238,.50)] bg-[rgba(34,211,238,.09)] hover:bg-[rgba(34,211,238,.15)]",
-  "3": "border-[var(--accent)] bg-[rgba(34,211,238,.15)] hover:bg-[rgba(34,211,238,.21)]",
-  "4": "border-[var(--accent)] bg-[rgba(34,211,238,.24)] hover:bg-[rgba(34,211,238,.32)]",
+  "r": "border-[rgba(245,158,11,.20)] bg-[rgba(245,158,11,.03)] hover:bg-[rgba(245,158,11,.06)]",
+  "1": "border-[rgba(34,211,238,.15)] bg-[rgba(34,211,238,.02)] hover:bg-[rgba(34,211,238,.06)]",
+  "2": "border-[rgba(34,211,238,.25)] bg-[rgba(34,211,238,.05)] hover:bg-[rgba(34,211,238,.09)]",
+  "3": "border-[rgba(34,211,238,.38)] bg-[rgba(34,211,238,.08)] hover:bg-[rgba(34,211,238,.12)]",
+  "4": "border-[rgba(34,211,238,.55)] bg-[rgba(34,211,238,.12)] hover:bg-[rgba(34,211,238,.17)]",
 };
 
 const FILL_BAR_COLOR: Record<string, string> = {
-  "0": "", "r": "var(--state-warn)",
-  "1": "rgba(34,211,238,.45)", "2": "rgba(34,211,238,.60)",
-  "3": "rgba(34,211,238,.80)", "4": "var(--accent)",
+  "0": "", "r": "rgba(245,158,11,.45)",
+  "1": "rgba(34,211,238,.30)", "2": "rgba(34,211,238,.45)",
+  "3": "rgba(34,211,238,.60)", "4": "rgba(34,211,238,.80)",
 };
 
 // mini-map dot color per fill level
@@ -607,7 +607,7 @@ function ZoneAccordion({
   onDelete: (id: number) => void;
   onChanged: () => void;
 }) {
-  const [open,        setOpen]       = useState(false);
+  const [open,        setOpen]       = useState(true);
   const [activeCell,  setActiveCell] = useState<Cell | null>(null);
   const [search,      setSearch]     = useState("");
   const [density,     setDensity]    = useState<"compact" | "comfy">("compact");
@@ -797,7 +797,8 @@ function ZoneAccordion({
                           density === "comfy" ? (
                             <div className="flex items-center gap-1.5 mt-1 min-w-0">
                               {cell.stock[0].image_url && (
-                                <img src={cell.stock[0].image_url} alt="" className="size-7 shrink-0 rounded object-contain" />
+                                <img src={cell.stock[0].image_url} alt="" loading="lazy" decoding="async"
+                                  className="size-7 shrink-0 rounded object-contain" />
                               )}
                               <div className="min-w-0 flex-1">
                                 <p className="line-clamp-2 text-[10px] font-medium leading-tight text-[var(--text)]">
@@ -808,11 +809,9 @@ function ZoneAccordion({
                             </div>
                           ) : (
                             <div className="flex items-end justify-between mt-0.5 min-w-0">
-                              {cell.stock[0].image_url ? (
-                                <img src={cell.stock[0].image_url} alt="" className="size-5 rounded object-contain opacity-80" />
-                              ) : (
-                                <span className="text-[9px] text-[var(--text-faint)] truncate max-w-[60%]">{cell.stock[0].product_name.slice(0, 10)}</span>
-                              )}
+                              <span className="text-[9px] text-[var(--text-faint)] truncate max-w-[65%] leading-tight">
+                                {cell.stock[0].product_name.slice(0, 12)}
+                              </span>
                               <span className="font-mono text-[11px] font-semibold text-[var(--accent)] shrink-0">{totalQty}</span>
                             </div>
                           )
