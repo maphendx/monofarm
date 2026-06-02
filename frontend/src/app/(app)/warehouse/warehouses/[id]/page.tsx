@@ -629,7 +629,7 @@ function ZoneAccordion({
   const fillPct = zone.cell_count > 0 ? Math.round((filledCount / zone.cell_count) * 100) : 0;
 
   // compact cell size
-  const cellW = density === "compact" ? 64 : 112;
+  const cellW = density === "compact" ? 90 : 140;
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden">
@@ -772,7 +772,7 @@ function ZoneAccordion({
                         title={title}
                         className={[
                           "group relative flex flex-col justify-between rounded-lg border text-left transition-all overflow-hidden",
-                          density === "compact" ? "min-h-[54px] p-1.5" : "min-h-[72px] p-2",
+                          density === "compact" ? "min-h-[62px] p-2" : "min-h-[80px] p-2",
                           matched
                             ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.12)] ring-1 ring-[var(--state-ok)]"
                             : FILL_CELL_CLS[String(lvl)],
@@ -808,11 +808,12 @@ function ZoneAccordion({
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-end justify-between mt-0.5 min-w-0">
-                              <span className="text-[9px] text-[var(--text-faint)] truncate max-w-[65%] leading-tight">
-                                {cell.stock[0].product_name.slice(0, 12)}
-                              </span>
-                              <span className="font-mono text-[11px] font-semibold text-[var(--accent)] shrink-0">{totalQty}</span>
+                            <div className="mt-1 min-w-0">
+                              <p className="truncate text-[10.5px] font-medium leading-tight text-[var(--text)]">
+                                {cell.stock[0].product_name}
+                                {multi && <span className="text-[var(--text-faint)]"> +{cell.stock.length - 1}</span>}
+                              </p>
+                              <p className="font-mono text-[10px] text-[var(--accent)] mt-0.5">{totalQty} шт</p>
                             </div>
                           )
                         ) : (
