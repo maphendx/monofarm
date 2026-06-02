@@ -288,7 +288,7 @@ function CellModal({
     try {
       const item = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/assign`, {
         method: "POST",
-        body: JSON.stringify({ product_id: assignPid, quantity: parseFloat(assignQty) || 1 }),
+        body: JSON.stringify({ product_id: assignPid, quantity: parseFloat(assignQty) || 0 }),
       });
       setStock((prev) => {
         const idx = prev.findIndex((s) => s.product_id === item.product_id);
@@ -505,14 +505,14 @@ function CellModal({
               {assignPid && (
                 <div className="flex gap-2">
                   <input
-                    type="number" min="0.01" step="0.01" value={assignQty}
+                    type="number" min="0" step="0.01" value={assignQty}
                     onChange={(e) => setAssignQty(e.target.value)}
                     className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
                     type="button"
                     onClick={submitAssign}
-                    disabled={assignBusy || parseFloat(assignQty) <= 0}
+                    disabled={assignBusy || !(parseFloat(assignQty) >= 0)}
                     className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {assignBusy ? "…" : "Призначити"}
