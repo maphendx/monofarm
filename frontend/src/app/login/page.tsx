@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 
 import { ApiError, api, getToken, setToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import AuthLayout from "@/components/ui/AuthLayout";
 
 interface TokenResponse {
   access_token: string;
@@ -15,11 +17,14 @@ interface TokenResponse {
 export default function LoginPage() {
   const router = useRouter();
   const t = useT();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw]     = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [info, setInfo]         = useState<string | null>(null);
+  const [busy, setBusy]         = useState(false);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (getToken()) router.replace("/dashboard");
@@ -29,6 +34,8 @@ export default function LoginPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setBusy(true);
     try {
@@ -42,88 +49,121 @@ export default function LoginPage() {
       if (err instanceof ApiError) setError(err.message);
       else setError(t("errors.networkError"));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8 shadow-sm  "
-      >
-        <div className="flex items-center gap-3">
-          <svg width="36" height="28" viewBox="0 0 112 88" aria-hidden="true">
-            <rect x="24" y="0"  width="24" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="64" y="0"  width="24" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="16" y="8"  width="80" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="0"  y="24" width="112" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="16" y="40" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="16" y="48" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="32" y="48" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
-            <rect x="64" y="48" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
-            <rect x="16" y="56" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="32" y="56" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
-            <rect x="64" y="56" width="16" height="8"  className="fill-white dark:fill-neutral-950"/>
-            <rect x="16" y="64" width="80" height="8"  className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="32" y="72" width="16" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
-            <rect x="64" y="72" width="16" height="16" className="fill-neutral-900 dark:fill-neutral-100"/>
-          </svg>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">monofarm</h1>
-            <p className="text-xs text-[var(--text-muted)]">{t("auth.loginSubtitle")}</p>
-          </div>
-        </div>
+    <AuthLayout activeTab="login">
+      <form onSubmit={onSubmit}>
+        <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.02em", margin: "0 0 5px" }}>
+          З поверненням
+        </h1>
+        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px" }}>
+          {t("auth.loginSubtitle")}
+        </p>
 
-        <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-sm">{t("auth.email")}</span>
+        {/* Email */}
+        <div style={{ marginBottom: "15px" }}>
+          <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "7px" }}>
+            {t("auth.email")}
+          </label>
+          <div className="auth-input-wrap">
+            <Mail size={15} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="input"
+              placeholder="you@monofarm.ua"
               autoComplete="email"
               autoFocus
+              style={inputStyle}
             />
+          </div>
+        </div>
+
+        {/* Password */}
+        <div style={{ marginBottom: "15px" }}>
+          <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "7px" }}>
+            {t("auth.password")}
+            <Link href="/forgot-password" style={{ fontSize: "11.5px", color: "var(--accent)", textDecoration: "none", whiteSpace: "nowrap" }}>
+              {t("auth.forgotPassword")}
+            </Link>
           </label>
-          <label className="block">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-sm">{t("auth.password")}</span>
-              <Link href="/forgot-password" className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-hi)]">
-                {t("auth.forgotPassword")}
-              </Link>
-            </div>
+          <div className="auth-input-wrap">
+            <Lock size={15} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
             <input
-              type="password"
+              type={showPw ? "text" : "password"}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="input"
+              placeholder="••••••••"
               autoComplete="current-password"
+              style={inputStyle}
             />
-          </label>
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              style={{ color: "var(--text-faint)", cursor: "pointer", display: "flex", background: "none", border: "none", padding: "2px" }}
+              aria-label={showPw ? "Приховати пароль" : "Показати пароль"}
+            >
+              {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+            </button>
+          </div>
         </div>
 
-        {info && <p className="text-sm text-[var(--state-ok)]">{info}</p>}
-        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+        {/* Remember me */}
+        <div
+          role="checkbox"
+          aria-checked={remember}
+          tabIndex={0}
+          onClick={() => setRemember((v) => !v)}
+          onKeyDown={(e) => e.key === " " && setRemember((v) => !v)}
+          style={{ display: "flex", alignItems: "center", gap: "9px", fontSize: "12.5px", color: "var(--text-muted)", margin: "4px 0 20px", cursor: "pointer", userSelect: "none" }}
+        >
+          <div style={{
+            width: "17px", height: "17px", borderRadius: "5px",
+            border: remember ? "1px solid var(--accent)" : "1px solid var(--border-strong)",
+            background: remember ? "var(--accent)" : "var(--surface-2)",
+            flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "background 80ms, border-color 80ms",
+          }}>
+            {remember && (
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4l3 3 5-6" stroke="#052e2b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+          Запам&apos;ятати на цьому пристрої
+        </div>
+
+        {info  && <p style={{ fontSize: "13px", color: "var(--state-ok)",    marginBottom: "12px" }}>{info}</p>}
+        {error && <p style={{ fontSize: "13px", color: "var(--state-error)", marginBottom: "12px" }}>{error}</p>}
 
         <button
           type="submit"
           disabled={busy}
-          className="btn btn-primary w-full disabled:opacity-50"
+          className="btn btn-primary btn-lg"
+          style={{ width: "100%", gap: "8px", opacity: busy ? 0.6 : 1 }}
         >
           {busy ? t("auth.loggingIn") : t("auth.loginBtn")}
+          {!busy && <ArrowRight size={15}/>}
         </button>
 
-        <p className="text-center text-sm text-[var(--text-muted)]">
-          {t("auth.noAccount")}{" "}
-          <Link href="/register" className="underline hover:text-[var(--text-hi)] ">
-            {t("auth.signUp")}
+        <p style={{ textAlign: "center", fontSize: "12.5px", color: "var(--text-muted)", marginTop: "22px" }}>
+          Немає акаунта?{" "}
+          <Link href="/register" style={{ color: "var(--accent)", fontWeight: 500, textDecoration: "none" }}>
+            Створити робочий простір
           </Link>
         </p>
       </form>
-    </div>
+    </AuthLayout>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  flex: 1, background: "transparent", border: "none", outline: "none",
+  color: "var(--text)", fontSize: "14px", fontFamily: "inherit",
+};

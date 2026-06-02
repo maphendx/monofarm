@@ -3,31 +3,40 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Lock, Eye, EyeOff, ArrowRight, Loader } from "lucide-react";
 
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import AuthLayout from "@/components/ui/AuthLayout";
 
 interface InviteInfo { email: string; org_name: string; valid: boolean }
+
+const inputStyle: React.CSSProperties = {
+  flex: 1, background: "transparent", border: "none", outline: "none",
+  color: "var(--text)", fontSize: "14px", fontFamily: "inherit",
+};
 
 export default function AcceptInvitePage() {
   const t = useT();
   const router = useRouter();
-  const [token, setToken] = useState("");
-  const [info, setInfo] = useState<InviteInfo | null>(null);
+  const [token, setToken]       = useState("");
+  const [info, setInfo]         = useState<InviteInfo | null>(null);
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm]   = useState("");
+  const [showPw, setShowPw]     = useState(false);
+  const [showCf, setShowCf]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [busy, setBusy]         = useState(false);
   const inFlight = useRef(false);
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    const t = sp.get("token") ?? "";
-    setToken(t);
-    if (!t) { setInfo({ email: "", org_name: "", valid: false }); return; }
-    api<InviteInfo>(`/api/auth/invite/${t}`).then(setInfo).catch(() =>
-      setInfo({ email: "", org_name: "", valid: false })
-    );
+    const tok = sp.get("token") ?? "";
+    setToken(tok);
+    if (!tok) { setInfo({ email: "", org_name: "", valid: false }); return; }
+    api<InviteInfo>(`/api/auth/invite/${tok}`)
+      .then(setInfo)
+      .catch(() => setInfo({ email: "", org_name: "", valid: false }));
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
@@ -53,59 +62,75 @@ export default function AcceptInvitePage() {
 
   if (!info) {
     return (
-      <div className="flex flex-1 items-center justify-center px-4 py-16">
-        <p className="text-sm text-[var(--text-muted)]">Завантаження…</p>
-      </div>
+      <AuthLayout>
+        <div style={{ textAlign: "center" }}>
+          <Loader size={36} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />
+        </div>
+      </AuthLayout>
     );
   }
 
   if (!info.valid) {
     return (
-      <div className="flex flex-1 items-center justify-center px-4 py-16">
-        <div className="w-full max-w-sm space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8">
-          <p className="text-sm text-[var(--state-error)]">{t("auth.inviteInvalid")}</p>
-          <Link href="/login" className="text-sm underline hover:text-[var(--text-hi)]">
+      <AuthLayout>
+        <div>
+          <p style={{ fontSize: "13px", color: "var(--state-error)", marginBottom: "16px" }}>{t("auth.inviteInvalid")}</p>
+          <Link href="/login" style={{ color: "var(--accent)", fontSize: "13px", textDecoration: "none" }}>
             {t("auth.signIn")}
           </Link>
         </div>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm space-y-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8 shadow-sm"
-      >
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t("auth.inviteTitle")}</h1>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {info.org_name} · {info.email}
-          </p>
+    <AuthLayout>
+      <form onSubmit={onSubmit}>
+        <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.02em", margin: "0 0 5px" }}>
+          {t("auth.inviteTitle")}
+        </h1>
+        <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px" }}>
+          {info.org_name} · {info.email}
+        </p>
+
+        <div style={{ marginBottom: "15px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "7px" }}>{t("auth.newPassword")}</div>
+          <div className="auth-input-wrap">
+            <Lock size={15} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
+            <input type={showPw ? "text" : "password"} required minLength={8}
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="Мінімум 8 символів" autoComplete="new-password" autoFocus style={inputStyle} />
+            <button type="button" onClick={() => setShowPw((v) => !v)}
+              style={{ color: "var(--text-faint)", cursor: "pointer", display: "flex", background: "none", border: "none", padding: "2px" }}
+              aria-label={showPw ? "Приховати пароль" : "Показати пароль"}>
+              {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-sm">{t("auth.newPassword")}</span>
-            <input type="password" required minLength={8} value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="input" autoComplete="new-password" autoFocus />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm">{t("auth.confirmPassword")}</span>
-            <input type="password" required minLength={8} value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              className="input" autoComplete="new-password" />
-          </label>
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 500, color: "var(--text-muted)", marginBottom: "7px" }}>{t("auth.confirmPassword")}</div>
+          <div className="auth-input-wrap">
+            <Lock size={15} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
+            <input type={showCf ? "text" : "password"} required minLength={8}
+              value={confirm} onChange={(e) => setConfirm(e.target.value)}
+              placeholder="Повторіть пароль" autoComplete="new-password" style={inputStyle} />
+            <button type="button" onClick={() => setShowCf((v) => !v)}
+              style={{ color: "var(--text-faint)", cursor: "pointer", display: "flex", background: "none", border: "none", padding: "2px" }}
+              aria-label={showCf ? "Приховати пароль" : "Показати пароль"}>
+              {showCf ? <EyeOff size={15}/> : <Eye size={15}/>}
+            </button>
+          </div>
         </div>
 
-        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+        {error && <p style={{ fontSize: "13px", color: "var(--state-error)", marginBottom: "12px" }}>{error}</p>}
 
-        <button type="submit" disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
+        <button type="submit" disabled={busy} className="btn btn-primary btn-lg"
+          style={{ width: "100%", gap: "8px", opacity: busy ? 0.6 : 1 }}>
           {busy ? t("auth.acceptingInvite") : t("auth.acceptInvite")}
+          {!busy && <ArrowRight size={15}/>}
         </button>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

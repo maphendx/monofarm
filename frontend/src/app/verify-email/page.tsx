@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { CheckCircle, XCircle, Loader } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import AuthLayout from "@/components/ui/AuthLayout";
 
 export default function VerifyEmailPage() {
   const t = useT();
@@ -20,22 +22,43 @@ export default function VerifyEmailPage() {
   }, []);
 
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <div className="w-full max-w-sm space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-8 shadow-sm">
-        {status === "loading" && <p className="text-sm text-[var(--text-muted)]">{t("common.loading")}</p>}
+    <AuthLayout>
+      <div style={{ textAlign: "center" }}>
+        {status === "loading" && (
+          <>
+            <Loader size={36} style={{ color: "var(--accent)", marginBottom: "16px", animation: "spin 1s linear infinite" }} />
+            <p style={{ fontSize: "14px", color: "var(--text-muted)" }}>{t("common.loading")}</p>
+          </>
+        )}
         {status === "ok" && (
           <>
-            <p className="text-sm text-[var(--state-ok)]">✓ Email підтверджено!</p>
-            <Link href="/dashboard" className="btn btn-primary block text-center">{t("nav.dashboard")}</Link>
+            <CheckCircle size={40} style={{ color: "var(--state-ok)", marginBottom: "16px" }} />
+            <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.02em", margin: "0 0 8px" }}>
+              Email підтверджено
+            </h1>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px" }}>
+              Ваш акаунт активовано. Можна увійти.
+            </p>
+            <Link href="/dashboard" className="btn btn-primary btn-lg" style={{ textDecoration: "none" }}>
+              {t("nav.dashboard")}
+            </Link>
           </>
         )}
         {status === "error" && (
           <>
-            <p className="text-sm text-[var(--state-error)]">{t("auth.resetInvalid")}</p>
-            <Link href="/dashboard" className="text-sm underline hover:text-[var(--text-hi)]">{t("nav.dashboard")}</Link>
+            <XCircle size={40} style={{ color: "var(--state-error)", marginBottom: "16px" }} />
+            <h1 style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.02em", margin: "0 0 8px" }}>
+              Невалідне посилання
+            </h1>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "0 0 24px" }}>
+              {t("auth.resetInvalid")}
+            </p>
+            <Link href="/dashboard" style={{ color: "var(--accent)", fontSize: "13px", fontWeight: 500, textDecoration: "none" }}>
+              {t("nav.dashboard")}
+            </Link>
           </>
         )}
       </div>
-    </div>
+    </AuthLayout>
   );
 }

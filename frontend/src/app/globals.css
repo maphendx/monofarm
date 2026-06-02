@@ -271,6 +271,7 @@ body {
 
 /* Skeleton */
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .skeleton {
   background: linear-gradient(90deg, var(--surface-hi) 0%, var(--surface-2) 50%, var(--surface-hi) 100%);
   background-size: 200% 100%;
@@ -315,6 +316,26 @@ body {
 .field-label { font-size: 12px; font-weight: 500; color: var(--text-muted); letter-spacing: -0.005em; }
 .field-hint { font-size: 11px; color: var(--text-faint); }
 .field-hint.error { color: var(--state-error); }
+/* Auth icon-input wrapper (used in login/register pages) */
+.auth-input-wrap {
+  display: flex; align-items: center; gap: 9px; height: 42px; padding: 0 13px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  transition: border-color var(--dur-instant), box-shadow var(--dur-instant);
+}
+.auth-input-wrap:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.auth-input-wrap input::placeholder { color: var(--text-dim); }
+
+/* Mobile: hide brand panel, show single-column */
+@media (max-width: 980px) {
+  .auth-layout { grid-template-columns: 1fr !important; }
+  .auth-layout > aside { display: none !important; }
+  .auth-layout > main { padding: 32px 24px !important; align-items: flex-start !important; padding-top: 60px !important; }
+}
+
 .input:disabled, .select-field:disabled { opacity: .5; cursor: not-allowed; }
 .input-error { border-color: rgba(239,68,68,.50) !important; }
 .input-error:focus { box-shadow: 0 0 0 3px rgba(239,68,68,.20) !important; }
