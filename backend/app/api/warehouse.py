@@ -2677,6 +2677,7 @@ def list_stock(
             product_sku=p.sku,
             product_barcode=p.barcode,
             product_categories=p.categories or [],
+            image_url=_product_image_url(p, org.id),
             product_unit=p.unit,
             warehouse_id=e.warehouse_id,
             warehouse_name=wh.name,

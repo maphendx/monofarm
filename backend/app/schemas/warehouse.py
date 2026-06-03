@@ -290,6 +290,7 @@ class StockEntryOut(BaseModel):
     product_sku:    str
     product_barcode: str | None
     product_categories: list[str] = []
+    image_url:      str | None = None
     product_unit:   str
     warehouse_id:   int
     warehouse_name: str

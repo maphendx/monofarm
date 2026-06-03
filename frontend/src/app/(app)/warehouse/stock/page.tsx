@@ -1,5 +1,6 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
@@ -26,6 +27,7 @@ type StockEntry = {
   product_sku:        string;
   product_barcode:    string | null;
   product_categories: string[];
+  image_url:          string | null;
   product_unit:       string;
   warehouse_id:       number;
   warehouse_name:     string;
@@ -679,9 +681,26 @@ export default function StockPage() {
                     </td>
                     {colVis.isVisible("name") && (
                       <td className="px-3 py-2.5">
-                        <p className="font-medium leading-tight">{e.product_name}</p>
-                        <p className="font-mono text-xs text-[var(--text-faint)]">{e.product_sku}</p>
-                        <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} />
+                        <div className="flex min-w-[240px] items-start gap-3">
+                          {e.image_url ? (
+                            <img
+                              src={e.image_url}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              className="h-12 w-12 shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface-hi)] object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--surface-hi)] font-mono text-[10px] font-semibold text-[var(--text-faint)]">
+                              SKU
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium leading-tight" title={e.product_name}>{e.product_name}</p>
+                            <p className="font-mono text-xs text-[var(--text-faint)]">{e.product_sku}</p>
+                            <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} />
+                          </div>
+                        </div>
                       </td>
                     )}
                     {colVis.isVisible("barcode") && (
