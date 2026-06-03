@@ -194,6 +194,12 @@ function bambuCover(model: string | null | undefined): string | null {
   return null;
 }
 
+function printerCover(printer: Printer): string | null {
+  if (printer.kind === "bambu") return bambuCover(printer.bambu_model);
+  if (printer.kind === "snapmaker_u1") return "/printers/snapmaker_u1.png";
+  return null;
+}
+
 
 function fmtFinish(eta_minutes: number): string {
   const finish = new Date(Date.now() + eta_minutes * 60_000);
@@ -223,7 +229,7 @@ function PrinterPhotoCard({
   onClick: () => void;
   onUpdated: (p: Printer) => void;
 }) {
-  const cover      = printer.kind === "bambu" ? bambuCover(printer.bambu_model) : null;
+  const cover      = printerCover(printer);
   const tone       = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
