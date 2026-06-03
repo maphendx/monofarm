@@ -45,7 +45,7 @@ const ZPL_DPI = 203; // default; overridden per-call via dpi param
 const dots = (mm: number, dpi: number) => Math.round(mm * dpi / 25.4);
 
 function safeZpl(s: string): string {
-  return s.replace(/[\\^~]/g, "").slice(0, 40);
+  return s.replace(/[\\^~]/g, "").slice(0, 100);
 }
 
 function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): string {
@@ -57,11 +57,12 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): str
       const text = safeZpl(substituteVars(el.text ?? "", vars));
       if (!text) return "";
       const fh = Math.max(8, d(el.fontSize ?? 4));
-      // Omitting width parameter makes it auto-proportional.
-      // Explicit 0 width breaks Cyrillic fallback glyphs (renders them invisible).
       const just = el.align === "center" ? "C" : el.align === "right" ? "R" : "L";
-      const fb = just !== "L" ? `^FB${w},1,0,${just}` : "";
-      
+      // Always use ^FB to constrain width and enable wrapping.
+      // maxLines based on element height / line height (1.25 factor for line spacing).
+      const maxLines = Math.max(1, Math.floor(h / (fh * 1.25)));
+      const fb = `^FB${w},${maxLines},0,${just}`;
+
       const cmd = `^A0N,${fh}${fb}^FD${text}^FS`;
       if (el.fontWeight === "bold") {
         const off = Math.max(1, Math.round(fh / 30)); // 1-3 dots offset depending on size
@@ -92,9 +93,12 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): str
     case "barcode": {
       const val = safeZpl(substituteVars(el.value ?? "", vars));
       if (!val) return "";
-      const narrow = Math.max(1, Math.min(3, Math.round(w / 60)));
-      const showTxt = el.showText !== false ? "Y" : "N";
-      return `^FO${x},${y}^BY${narrow},3,${Math.round(h * 0.7)}^BCN,${Math.round(h * 0.7)},${showTxt},N,N^FD${val}^FS`;
+      // Fit barcode within element width: CODE128 ≈ 11*(len+2)+13 modules.
+      const modules = 11 * (val.length + 2) + 13;
+      const narrow = Math.max(1, Math.min(3, Math.floor(w / modules)));
+      const showTxt = el.showText ? "Y" : "N";
+      const bh = showTxt === "Y" ? Math.round(h * 0.7) : Math.round(h * 0.9);
+      return `^FO${x},${y}^BY${narrow},3,${bh}^BCN,${bh},${showTxt},N,N^FD${val}^FS`;
     }
     case "rect": {
       const border = Math.max(1, d(el.borderWidth ?? 0.3));
