@@ -20,7 +20,7 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, role: str, org_id: int) -> str:
+def create_access_token(subject: str, role: str, org_id: int | None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": subject, "role": role, "org_id": org_id, "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
@@ -82,5 +82,4 @@ def create_reset_token(user: object) -> str:
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
-
 

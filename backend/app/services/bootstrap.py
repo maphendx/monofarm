@@ -13,7 +13,12 @@ log = logging.getLogger(__name__)
 
 def seed_admin(db: Session) -> None:
     """Create the default organization and initial admin user if none exist."""
-    if db.query(User).count() > 0 or db.query(Organization).filter_by(slug="default-farm").count() > 0:
+    _seed_platform_admin(db)
+
+    if (
+        db.query(User).filter(User.organization_id.isnot(None)).count() > 0
+        or db.query(Organization).filter_by(slug="default-farm").count() > 0
+    ):
         return
 
     from app.services.encryption import encrypt
@@ -39,3 +44,24 @@ def seed_admin(db: Session) -> None:
     db.add(admin)
     db.commit()
     log.info("Seeded default org (id=%s) and admin user %s", org.id, settings.ADMIN_EMAIL)
+
+
+def _seed_platform_admin(db: Session) -> None:
+    """Optionally create the global platform operator outside tenant context."""
+    email = settings.PLATFORM_ADMIN_EMAIL.strip().lower()
+    password = settings.PLATFORM_ADMIN_PASSWORD
+    if not email or not password:
+        return
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        return
+    admin = User(
+        organization_id=None,
+        email=email,
+        password_hash=hash_password(password),
+        name="Platform Admin",
+        role=UserRole.admin,
+    )
+    db.add(admin)
+    db.commit()
+    log.info("Seeded platform admin user %s", email)

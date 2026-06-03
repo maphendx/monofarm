@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 import { LocaleProvider } from "@/lib/i18n";
+import { ImpersonationProvider } from "@/lib/impersonation";
 
 const ibmPlexSans = IBM_Plex_Sans({
   variable: "--font-ibm-plex-sans",
@@ -49,7 +51,12 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text-hi)]  ">
-        <LocaleProvider>{children}</LocaleProvider>
+        <LocaleProvider>
+          <ImpersonationProvider>
+            <ImpersonationBanner />
+            {children}
+          </ImpersonationProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

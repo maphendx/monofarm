@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     ADMIN_EMAIL: str = "admin@example.com"
     ADMIN_PASSWORD: str = "change-me"
+    PLATFORM_ADMIN_EMAIL: str = ""
+    PLATFORM_ADMIN_PASSWORD: str = ""
 
     BAMBU_EMAIL: str = ""
     BAMBU_PASSWORD: str = ""

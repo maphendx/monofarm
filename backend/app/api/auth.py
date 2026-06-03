@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org, get_current_user
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import (
@@ -16,7 +16,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.organization import Organization
-from app.models.user import User
+from app.models.user import User, is_platform_admin
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -39,6 +39,9 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Невірний email або пароль")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Користувача деактивовано")
+    from datetime import datetime, timezone
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
     token = create_access_token(subject=str(user.id), role=user.role.value, org_id=user.organization_id)
     return TokenResponse(access_token=token)
 
@@ -80,14 +83,17 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
 @router.get("/me", response_model=UserOut)
 def me(
     user: User         = Depends(get_current_user),
-    org:  Organization = Depends(get_current_org),
+    db: Session        = Depends(get_db),
 ) -> dict:
+    org = db.get(Organization, user.organization_id) if user.organization_id is not None else None
     return {
         "id":                user.id,
         "email":             user.email,
         "name":              user.name,
         "role":              user.role,
-        "org_plan":          org.plan,
+        "organization_id":    user.organization_id,
+        "org_plan":          org.plan if org else None,
+        "is_platform_admin": is_platform_admin(user),
         "created_at":        user.created_at,
         "email_verified_at": user.email_verified_at,
         "telegram_chat_id":  user.telegram_chat_id,
@@ -141,7 +147,6 @@ def change_email(
         raise HTTPException(status_code=400, detail="Це вже ваш поточний email")
     if db.query(User).filter(User.email == new_email).first():
         raise HTTPException(status_code=409, detail="Email вже використовується")
-    from datetime import datetime, timezone
     current_user.email = new_email
     current_user.email_verified_at = None
     db.commit()

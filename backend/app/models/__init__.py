@@ -1,5 +1,5 @@
 from app.models.organization import Organization
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, is_platform_admin, is_tenant_admin
 from app.models.printer_group import PrinterGroup
 from app.models.printer import Printer, PrinterKind
 from app.models.task import PrintTask, PrintTaskStatus, FarmTask, FarmTaskStatus
@@ -15,6 +15,8 @@ __all__ = [
     "Organization",
     "User",
     "UserRole",
+    "is_platform_admin",
+    "is_tenant_admin",
     "PrinterGroup",
     "Printer",
     "PrinterKind",

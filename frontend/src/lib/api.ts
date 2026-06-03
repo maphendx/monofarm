@@ -1,3 +1,5 @@
+import { getActiveImpersonationOrgId } from "@/lib/impersonation-store";
+
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const TOKEN_KEY = "monofarm_token";
 
@@ -34,6 +36,10 @@ export async function api<T>(
   }
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+  const impersonatedOrgId = getActiveImpersonationOrgId();
+  if (impersonatedOrgId && !path.startsWith("/api/admin") && !path.startsWith("/api/auth")) {
+    headers.set("X-Impersonated-Org-Id", impersonatedOrgId);
   }
   const resp = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (!resp.ok) {

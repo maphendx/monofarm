@@ -30,7 +30,9 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
-    org_plan: OrgPlan
+    organization_id: int | None = None
+    org_plan: OrgPlan | None = None
+    is_platform_admin: bool = False
     created_at: datetime
     email_verified_at: datetime | None = None
     telegram_chat_id: int | None = None

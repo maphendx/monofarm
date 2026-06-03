@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.agent import router as agent_router
 from app.api.agent_tg import router as agent_tg_router
+from app.api.admin import router as admin_router
 from app.api.api_keys import router as api_keys_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
@@ -133,6 +134,7 @@ async def serve_agent_file(filename: str) -> FileResponse:
 
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 app.include_router(orgs_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")

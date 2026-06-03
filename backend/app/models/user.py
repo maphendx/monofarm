@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, JSON, String, func
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Enum, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -29,16 +29,20 @@ class CustomRole(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("role = 'admin' OR organization_id IS NOT NULL", name="ck_users_non_admin_requires_org"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    organization_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    organization_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(120), default="")
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.operator)
     is_active: Mapped[bool] = mapped_column(default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -56,3 +60,12 @@ class User(Base):
         Integer, ForeignKey("org_custom_roles.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
+
+def is_platform_admin(user: User) -> bool:
+    """Transitional admin bridge: global operators are admin users without an org."""
+    return user.role == UserRole.admin and user.organization_id is None
+
+
+def is_tenant_admin(user: User) -> bool:
+    """Transitional admin bridge: existing org admins stay tenant-scoped."""
+    return user.role == UserRole.admin and user.organization_id is not None

@@ -12,7 +12,9 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
-  org_plan: OrgPlan;
+  organization_id: number | null;
+  org_plan: OrgPlan | null;
+  is_platform_admin: boolean;
   created_at: string;
   email_verified_at: string | null;
   telegram_chat_id: number | null;
