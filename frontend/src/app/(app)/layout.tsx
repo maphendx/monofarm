@@ -11,6 +11,7 @@ import { ScannerModal } from "@/components/warehouse/ScannerModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
+import { getStoredImpersonation } from "@/lib/impersonation-store";
 import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
@@ -55,7 +56,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!getToken()) { router.replace("/login"); return; }
     api<User>("/api/auth/me")
-      .then((u) => { setUser(u); setReady(true); })
+      .then((u) => {
+        if (u.is_platform_admin && !getStoredImpersonation()) {
+          router.replace("/admin");
+          return;
+        }
+        setUser(u);
+        setReady(true);
+      })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
         else setReady(true);

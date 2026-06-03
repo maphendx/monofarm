@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 
 import { ApiError, api, getToken, setToken } from "@/lib/api";
+import { clearStoredImpersonation } from "@/lib/impersonation-store";
 import { useT } from "@/lib/i18n";
+import type { User } from "@/lib/types";
 import AuthLayout from "@/components/ui/AuthLayout";
 
 interface TokenResponse {
@@ -27,7 +29,11 @@ export default function LoginPage() {
   const inFlight = useRef(false);
 
   useEffect(() => {
-    if (getToken()) router.replace("/dashboard");
+    if (getToken()) {
+      api<User>("/api/auth/me")
+        .then((user) => router.replace(user.is_platform_admin ? "/admin" : "/dashboard"))
+        .catch(() => router.replace("/dashboard"));
+    }
     const sp = new URLSearchParams(window.location.search);
     if (sp.get("reset") === "1") setInfo(t("auth.resetSuccess"));
   }, [router, t]);
@@ -43,8 +49,10 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      clearStoredImpersonation();
       setToken(data.access_token);
-      router.replace("/dashboard");
+      const user = await api<User>("/api/auth/me");
+      router.replace(user.is_platform_admin ? "/admin" : "/dashboard");
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
       else setError(t("errors.networkError"));

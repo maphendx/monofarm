@@ -1,4 +1,4 @@
-import { getActiveImpersonationOrgId } from "@/lib/impersonation-store";
+import { clearStoredImpersonation, getActiveImpersonationOrgId } from "@/lib/impersonation-store";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const TOKEN_KEY = "monofarm_token";
@@ -22,6 +22,7 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  clearStoredImpersonation();
 }
 
 export async function api<T>(
