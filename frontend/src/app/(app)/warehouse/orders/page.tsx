@@ -991,7 +991,7 @@ export default function OrdersPage() {
             {colVis.isVisible("due_date") && <col className="w-[104px]" />}
             {colVis.isVisible("amount") && <col className="w-[120px]" />}
             {colVis.isVisible("debt") && <col className="w-[128px]" />}
-            <col className="w-[245px]" />
+            <col className="w-[320px]" />
           </colgroup>
           <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
@@ -1070,7 +1070,7 @@ export default function OrdersPage() {
                       </td>
                     )}
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex flex-wrap items-center justify-end gap-1">
                       <button
                         onClick={() => {
                           const w = window.open("", "_blank");
@@ -1087,6 +1087,12 @@ export default function OrdersPage() {
                         title="Друк QR для сканера"
                         className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
                         ⊞
+                      </button>
+                      <button
+                        onClick={() => window.open(`/print/order/${o.id}?auto=1`, "_blank", "noopener,noreferrer")}
+                        title="Друк накладної"
+                        className="rounded-md border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
+                        Накладна
                       </button>
                       {o.status === "new" && (
                         <button
