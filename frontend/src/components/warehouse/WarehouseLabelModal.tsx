@@ -1054,22 +1054,37 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     {/* Print portal — React-rendered labels, @media print shows only these */}
     {printing && activeTpl && createPortal(
       (() => {
-        // Auto-calculate minimum margin so labels fit maximum columns
-        // A4 = 210mm. Find largest margin where at least 1 label fits.
-        // Try 2 columns first; fall back to 1.
+        // A4 = 210mm. Fill the printable width with as many columns as fit.
+        // Keep page margins at 0 so Chrome's "Margins: None" does not left-align
+        // a narrow grid and leave a large blank strip on the right.
         const lw = activeTpl.width_mm;
-        const GAP = 2;
-        const marginForTwo = Math.max(1, Math.floor((210 - 2 * lw - GAP) / 2));
-        const margin = lw * 2 + GAP + marginForTwo * 2 <= 210 ? marginForTwo : Math.max(1, Math.floor((210 - lw) / 2));
-        const cols = lw * 2 + GAP + margin * 2 <= 210 ? 2 : 1;
+        const PAGE_W = 210;
+        const TARGET_COLS = 3;
+        const canUseThreeCols = lw * TARGET_COLS <= PAGE_W;
+        const GAP = canUseThreeCols
+          ? Math.max(0, Math.min(2, (PAGE_W - lw * TARGET_COLS) / (TARGET_COLS - 1)))
+          : 2;
+        const PAGE_PAD = canUseThreeCols ? 0 : 1;
+        const printableW = PAGE_W - PAGE_PAD * 2;
+        const cols = canUseThreeCols
+          ? TARGET_COLS
+          : Math.max(1, Math.floor((printableW + GAP) / (lw + GAP)));
 
         return (
           <>
-            {/* eslint-disable-next-line react/no-danger */}
             <style dangerouslySetInnerHTML={{ __html: `
               @media print {
                 body > *:not(#wl-a4-print) { display: none !important; }
-                @page { size: A4; margin: ${margin}mm; }
+                @page { size: A4; margin: 0; }
+                html, body {
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  width: ${PAGE_W}mm;
+                  background: #fff !important;
+                }
+                #wl-a4-print {
+                  display: grid !important;
+                }
               }
               @media screen { #wl-a4-print { display: none !important; } }
             ` }} />
@@ -1077,7 +1092,12 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
               display: "grid",
               gridTemplateColumns: `repeat(${cols}, ${lw}mm)`,
               gap: `${GAP}mm`,
+              justifyContent: "center",
               alignContent: "flex-start",
+              width: `${PAGE_W}mm`,
+              minHeight: "297mm",
+              padding: `${PAGE_PAD}mm`,
+              boxSizing: "border-box",
               background: "#fff",
               fontFamily: "Arial, Helvetica, sans-serif",
             }}>
