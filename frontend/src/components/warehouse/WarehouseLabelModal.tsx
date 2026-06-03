@@ -41,14 +41,15 @@ const EL_LABELS: Record<string, string> = { text: "Текст", qr: "QR", barcod
 
 // ─── ZPL generation from template elements ────────────────────────────────────
 
-const ZPL_DPI = 203;
-const d = (mm: number) => Math.round(mm * ZPL_DPI / 25.4);
+const ZPL_DPI = 203; // default; overridden per-call via dpi param
+const dots = (mm: number, dpi: number) => Math.round(mm * dpi / 25.4);
 
 function safeZpl(s: string): string {
   return s.replace(/[\\^~]/g, "").slice(0, 40);
 }
 
-function elementToZpl(el: LabelElement, vars: LabelDataVars): string {
+function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): string {
+  const d = (mm: number) => dots(mm, dpi);
   const x = d(el.x), y = d(el.y), w = d(el.w), h = d(el.h);
 
   switch (el.type) {
@@ -113,12 +114,14 @@ function buildZplFromTemplate(
   tpl: LabelTemplate,
   items: WarehouseLabelItem[],
   varsList: LabelDataVars[],
+  dpi = ZPL_DPI,
 ): string {
+  const d = (mm: number) => dots(mm, dpi);
   const W = d(tpl.width_mm), H = d(tpl.height_mm);
   return items.map((_, i) => {
     const vars = varsList[i];
     const elLines = tpl.elements
-      .map(el => elementToZpl(el, vars))
+      .map(el => elementToZpl(el, vars, dpi))
       .filter(Boolean);
     return [
       "^XA",
@@ -138,7 +141,8 @@ function buildZplFromTemplate(
 }
 
 // Fallback ZPL when no template is selected
-function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: number, hMm: number): string {
+function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: number, hMm: number, dpi = ZPL_DPI): string {
+  const d = (mm: number) => dots(mm, dpi);
   const W = d(wMm), H = d(hMm), pad = d(2);
   const mag = Math.min(10, Math.max(2, Math.floor((H - pad * 2) / 21)));
   const qrD = mag * 21, qrY = Math.floor((H - qrD) / 2);
@@ -332,6 +336,10 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [busy,        setBusy]        = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [printing,    setPrinting]    = useState(false);
+  const [zplDpi,      setZplDpi]      = useState<203 | 300 | 600>(() => {
+    const saved = parseInt(localStorage.getItem("zebra_dpi") ?? "203");
+    return (saved === 300 || saved === 600) ? saved : 203;
+  });
 
   // Per-item print quantity and enabled state
   const [labelQty,     setLabelQty]     = useState<Record<number, number>>(() => Object.fromEntries(items.map(it => [it.id, 1])));
@@ -560,11 +568,11 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
       const varsList = printItems.map(item =>
         itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
       );
-      zpl = buildZplFromTemplate(activeTpl, printItems, varsList);
+      zpl = buildZplFromTemplate(activeTpl, printItems, varsList, zplDpi);
     } else {
       // Fallback: simple QR + text
       const qrVals = printItems.map(item => defaultQr(item));
-      zpl = buildZplFallback(printItems, qrVals, 57, 32);
+      zpl = buildZplFallback(printItems, qrVals, 57, 32, zplDpi);
     }
 
     setStatus("Підключення до Zebra Browser Print…");
@@ -583,7 +591,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
     const varsList = printItems.map(item =>
       itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
     );
-    const zpl = buildZplFromTemplate(activeTpl, printItems, varsList);
+    const zpl = buildZplFromTemplate(activeTpl, printItems, varsList, zplDpi);
     const blob = new Blob([zpl], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -706,6 +714,15 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         <button onClick={downloadZpl} disabled={!activeTpl || totalLabels === 0} className="btn btn-ghost btn-sm disabled:opacity-40" title="Завантажити ZPL файл">
           ↓ ZPL
         </button>
+        <select
+          value={zplDpi}
+          onChange={e => { const v = parseInt(e.target.value) as 203|300|600; setZplDpi(v); localStorage.setItem("zebra_dpi", String(v)); }}
+          title="DPI принтера (GX420t=203, GX430t=300)"
+          className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs text-[var(--text-muted)] outline-none hover:border-[var(--accent)] cursor-pointer">
+          <option value={203}>203 DPI</option>
+          <option value={300}>300 DPI</option>
+          <option value={600}>600 DPI</option>
+        </select>
         <button onClick={printZebra} disabled={busy || !activeTpl || totalLabels === 0} className="btn btn-secondary btn-sm disabled:opacity-40">
           {busy ? "…" : `Zebra${totalLabels > 1 ? ` (${totalLabels})` : ""}`}
         </button>
