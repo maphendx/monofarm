@@ -421,16 +421,20 @@ def _putaway(
 
 def _pick_from_cell(
     cell: WarehouseCell, product_id: int, qty: Decimal, org_id: int, db: Session,
-    *, kind: CellMoveKind = CellMoveKind.pick, movement_id: int | None = None, created_by_id: int | None = None,
+    *, kind: CellMoveKind = CellMoveKind.pick, movement_id: int | None = None,
+    created_by_id: int | None = None, keep_row: bool = False,
 ) -> Decimal:
-    """Remove up to qty from a cell. Returns the amount actually removed."""
+    """Remove up to qty from a cell. Returns the amount actually removed.
+
+    keep_row=True preserves the CellStock row at 0 (write-off: goods destroyed in place).
+    """
     cs = db.query(CellStock).filter_by(cell_id=cell.id, product_id=product_id).first()
     take = min(cs.quantity, qty) if cs else Decimal("0")
     if take > 0:
         cs.quantity -= take
         _log_cell_move(db, org_id=org_id, product_id=product_id, quantity=take, kind=kind,
                        cell_from_id=cell.id, movement_id=movement_id, created_by_id=created_by_id)
-        if cs.quantity <= 0:
+        if cs.quantity <= 0 and not keep_row:
             db.delete(cs)
     return take
 
@@ -438,6 +442,7 @@ def _pick_from_cell(
 def _clamp_cells_to_stock(
     product_id: int, warehouse_id: int, org_id: int, db: Session,
     *, movement_id: int | None = None, created_by_id: int | None = None,
+    keep_rows: bool = False,
 ) -> None:
     """Reduce cell allocations FIFO until sum(cells) <= StockEntry.quantity."""
     entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
@@ -451,7 +456,8 @@ def _clamp_cells_to_stock(
             break
         cell = db.get(WarehouseCell, cs.cell_id)
         take = _pick_from_cell(cell, product_id, min(cs.quantity, excess), org_id, db,
-                               movement_id=movement_id, created_by_id=created_by_id)
+                               movement_id=movement_id, created_by_id=created_by_id,
+                               keep_row=keep_rows)
         excess -= take
 
 
@@ -508,11 +514,15 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
 
     # Keep cell allocations within the new totals for every touched warehouse.
     # Clamping a warehouse whose stock only increased is a harmless no-op.
+    # For WRITE_OFF, goods are destroyed in place — preserve CellStock rows at 0
+    # so the cell assignment remains visible (keep_rows=True skips db.delete).
     db.flush()
+    keep = mt == MovementType.WRITE_OFF
     for wh_id in {movement.warehouse_from_id, movement.warehouse_to_id}:
         if wh_id:
             _clamp_cells_to_stock(pid, wh_id, movement.organization_id, db,
-                                  movement_id=movement.id, created_by_id=movement.created_by_id)
+                                  movement_id=movement.id, created_by_id=movement.created_by_id,
+                                  keep_rows=keep)
 
 
 def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
