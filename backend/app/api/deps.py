@@ -28,6 +28,12 @@ def get_current_user(
     user = db.get(User, int(user_id))
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    # If a custom role is set, override allowed_modules from the role (in-memory only)
+    if user.custom_role_id and user.role != UserRole.admin:
+        from app.models.user import CustomRole
+        cr = db.get(CustomRole, user.custom_role_id)
+        if cr:
+            user.allowed_modules = cr.allowed_modules
     return user
 
 

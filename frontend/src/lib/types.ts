@@ -25,6 +25,15 @@ export interface AdminUser extends User {
   created_at: string;
   telegram_chat_id: number | null;
   allowed_modules: string[] | null;
+  custom_role_id: number | null;
+  custom_role_name: string | null;
+}
+
+export interface CustomRole {
+  id: number;
+  name: string;
+  allowed_modules: string[];
+  created_at: string;
 }
 
 export interface TelegramLink {

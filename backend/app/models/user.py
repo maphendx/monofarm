@@ -13,6 +13,20 @@ class UserRole(str, enum.Enum):
     manager = "manager"
 
 
+class CustomRole(Base):
+    """Named role template per org.
+    Assigning a CustomRole to a user overrides their individual allowed_modules.
+    Changing the role propagates to all users with that role on the next request.
+    """
+    __tablename__ = "org_custom_roles"
+
+    id:              Mapped[int]          = mapped_column(primary_key=True)
+    organization_id: Mapped[int]          = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name:            Mapped[str]          = mapped_column(String(80), nullable=False)
+    allowed_modules: Mapped[list[str]]    = mapped_column(JSON, nullable=False, default=list)
+    created_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -36,4 +50,9 @@ class User(Base):
     # null = unrestricted (all modules); list = explicit allowlist.
     # Admins always have full access regardless of this field.
     allowed_modules: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=None)
+
+    # If set, overrides allowed_modules — effective modules come from the CustomRole.
+    custom_role_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("org_custom_roles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 

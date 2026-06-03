@@ -7,8 +7,8 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import create_invite_token
 from app.models.organization import PLAN_LIMITS, Organization
-from app.models.user import User, UserRole
-from app.schemas.user import UserAdminOut, UserCreate, UserUpdate
+from app.models.user import CustomRole, User, UserRole
+from app.schemas.user import CustomRoleCreate, CustomRoleOut, CustomRoleUpdate, UserAdminOut, UserCreate, UserUpdate
 from app.services import email, telegram_bot
 
 
@@ -22,13 +22,31 @@ class TelegramLinkOut(BaseModel):
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _user_out(user: User, db: Session) -> UserAdminOut:
+    """Build UserAdminOut with resolved custom_role_name."""
+    cr_name: str | None = None
+    if user.custom_role_id:
+        cr = db.get(CustomRole, user.custom_role_id)
+        cr_name = cr.name if cr else None
+    return UserAdminOut(
+        id=user.id, email=user.email, name=user.name, role=user.role,
+        is_active=user.is_active, created_at=user.created_at,
+        email_verified_at=user.email_verified_at,
+        telegram_chat_id=user.telegram_chat_id,
+        allowed_modules=user.allowed_modules,
+        custom_role_id=user.custom_role_id,
+        custom_role_name=cr_name,
+    )
+
+
 @router.get("", response_model=list[UserAdminOut])
 def list_users(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
-) -> list[User]:
-    return db.query(User).filter(User.organization_id == org.id).order_by(User.created_at).all()
+) -> list[UserAdminOut]:
+    users = db.query(User).filter(User.organization_id == org.id).order_by(User.created_at).all()
+    return [_user_out(u, db) for u in users]
 
 
 @router.post("", response_model=UserAdminOut, status_code=status.HTTP_201_CREATED)
@@ -49,6 +67,9 @@ def create_user(
             status_code=402,
             detail=f"Ліміт плану «{org.plan.value}»: {limit} активних користувачів. Перейдіть на вищий план.",
         )
+    if payload.custom_role_id is not None:
+        if not db.query(CustomRole).filter_by(id=payload.custom_role_id, organization_id=org.id).first():
+            raise HTTPException(status_code=404, detail="Роль не знайдена")
     user = User(
         organization_id=org.id,
         email=payload.email,
@@ -57,6 +78,7 @@ def create_user(
         role=payload.role,
         email_verified_at=None,
         allowed_modules=payload.allowed_modules,
+        custom_role_id=payload.custom_role_id,
     )
     db.add(user)
     db.flush()
@@ -114,6 +136,11 @@ def update_user(
         user.password_hash = hash_password(payload.password)
     if "allowed_modules" in payload.model_fields_set:
         user.allowed_modules = payload.allowed_modules
+    if "custom_role_id" in payload.model_fields_set:
+        if payload.custom_role_id is not None:
+            if not db.query(CustomRole).filter_by(id=payload.custom_role_id, organization_id=org.id).first():
+                raise HTTPException(status_code=404, detail="Роль не знайдена")
+        user.custom_role_id = payload.custom_role_id
 
     db.commit()
     db.refresh(user)
@@ -172,4 +199,68 @@ def delete_user(
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="Не можна видалити власний акаунт")
     db.delete(user)
+    db.commit()
+
+
+# ── Custom Roles ──────────────────────────────────────────────────────────────
+
+roles_router = APIRouter(prefix="/roles", tags=["users"])
+
+
+@roles_router.get("", response_model=list[CustomRoleOut])
+def list_roles(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> list[CustomRole]:
+    return db.query(CustomRole).filter_by(organization_id=org.id).order_by(CustomRole.created_at).all()
+
+
+@roles_router.post("", response_model=CustomRoleOut, status_code=status.HTTP_201_CREATED)
+def create_role(
+    payload: CustomRoleCreate,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> CustomRole:
+    cr = CustomRole(organization_id=org.id, name=payload.name, allowed_modules=payload.allowed_modules)
+    db.add(cr)
+    db.commit()
+    db.refresh(cr)
+    return cr
+
+
+@roles_router.patch("/{role_id}", response_model=CustomRoleOut)
+def update_role(
+    role_id: int,
+    payload: CustomRoleUpdate,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> CustomRole:
+    cr = db.query(CustomRole).filter_by(id=role_id, organization_id=org.id).first()
+    if not cr:
+        raise HTTPException(status_code=404, detail="Роль не знайдена")
+    if payload.name is not None:
+        cr.name = payload.name
+    if payload.allowed_modules is not None:
+        cr.allowed_modules = payload.allowed_modules
+    db.commit()
+    db.refresh(cr)
+    return cr
+
+
+@roles_router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_role(
+    role_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _admin: User = Depends(require_roles(UserRole.admin)),
+) -> None:
+    cr = db.query(CustomRole).filter_by(id=role_id, organization_id=org.id).first()
+    if not cr:
+        raise HTTPException(status_code=404, detail="Роль не знайдена")
+    # unassign from all users
+    db.query(User).filter_by(custom_role_id=role_id).update({"custom_role_id": None})
+    db.delete(cr)
     db.commit()
