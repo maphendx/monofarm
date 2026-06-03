@@ -56,6 +56,7 @@ def create_user(
         name=payload.name,
         role=payload.role,
         email_verified_at=None,
+        allowed_modules=payload.allowed_modules,
     )
     db.add(user)
     db.flush()
@@ -111,6 +112,8 @@ def update_user(
         user.is_active = payload.is_active
     if payload.password:
         user.password_hash = hash_password(payload.password)
+    if "allowed_modules" in payload.model_fields_set:
+        user.allowed_modules = payload.allowed_modules
 
     db.commit()
     db.refresh(user)

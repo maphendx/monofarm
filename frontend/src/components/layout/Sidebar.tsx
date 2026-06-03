@@ -102,6 +102,26 @@ export function Sidebar({
 
   const isAdmin = user.role === "admin";
 
+  // Map href → module key. null = always visible (admin-only items use role check separately).
+  const MODULE_MAP: Record<string, string> = {
+    "/dashboard":  "dashboard",
+    "/queue":      "plan",
+    "/history":    "history",
+    "/materials":  "filament",
+    "/files":      "files",
+    "/printers":   "printers",
+    "/tasks":      "tasks",
+    "/warehouse":  "warehouse",
+    "/analytics":  "analytics",
+  };
+
+  function canSee(href: string): boolean {
+    if (isAdmin) return true;
+    if (!user.allowed_modules) return true; // null = unrestricted
+    const mod = MODULE_MAP[href];
+    return !mod || user.allowed_modules.includes(mod);
+  }
+
   const txt = pinned
     ? "opacity-100"
     : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100";
@@ -148,6 +168,7 @@ export function Sidebar({
             <div className="flex flex-col gap-0.5">
               {group.items
                 .filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin)
+                .filter((item) => canSee(item.href))
                 .map((item) => {
                   const label = t(item.tKey as Parameters<typeof t>[0]);
                   return (

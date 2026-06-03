@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str = ""
     role: UserRole = UserRole.operator
+    allowed_modules: list[str] | None = None
 
 
 class UserUpdate(BaseModel):
@@ -16,6 +17,8 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=6)
+    # Use model_fields_set to distinguish "not sent" from "sent as null"
+    allowed_modules: list[str] | None = Field(default=None)
 
 
 class UserAdminOut(BaseModel):
@@ -27,6 +30,7 @@ class UserAdminOut(BaseModel):
     created_at: datetime
     email_verified_at: datetime | None = None
     telegram_chat_id: int | None = None
+    allowed_modules: list[str] | None = None
 
     @computed_field
     @property

@@ -25,8 +25,59 @@ const ROLE_COLOR: Record<UserRole, string> = {
   manager: "badge badge-warn",
 };
 
-interface FormState { email: string; name: string; role: UserRole }
-const EMPTY_FORM: FormState = { email: "", name: "", role: "operator" };
+// ── Module access ─────────────────────────────────────────────────────────────
+
+const ALL_MODULES = [
+  { key: "dashboard",  label: "Дашборд (принтери)" },
+  { key: "plan",       label: "Черга / план" },
+  { key: "tasks",      label: "Завдання" },
+  { key: "history",    label: "Історія друку" },
+  { key: "filament",   label: "Філамент" },
+  { key: "files",      label: "Файли (gcode)" },
+  { key: "printers",   label: "Принтери" },
+  { key: "warehouse",  label: "Склад" },
+  { key: "analytics",  label: "Аналітика" },
+];
+
+function ModuleCheckboxes({ value, onChange }: {
+  value: string[] | null;
+  onChange: (v: string[] | null) => void;
+}) {
+  const unrestricted = value === null;
+  return (
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={unrestricted}
+          onChange={e => onChange(e.target.checked ? null : ALL_MODULES.map(m => m.key))}
+          className="rounded" />
+        <span className="text-xs font-medium">Повний доступ (без обмежень)</span>
+      </label>
+      {!unrestricted && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pl-1 pt-1 border-l-2 border-[var(--border)] ml-1">
+          {ALL_MODULES.map(m => (
+            <label key={m.key} className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox"
+                checked={value!.includes(m.key)}
+                onChange={e => {
+                  const next = e.target.checked
+                    ? [...value!, m.key]
+                    : value!.filter(k => k !== m.key);
+                  onChange(next);
+                }}
+                className="rounded" />
+              <span className="text-xs">{m.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Form ──────────────────────────────────────────────────────────────────────
+
+interface FormState { email: string; name: string; role: UserRole; allowedModules: string[] | null }
+const EMPTY_FORM: FormState = { email: "", name: "", role: "operator", allowedModules: null };
 
 function UserFormModal({ open, initial, onClose, onSaved }: {
   open: boolean; initial: AdminUserWithInvite | null;
@@ -38,7 +89,9 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
 
   useEffect(() => {
     if (open) {
-      setForm(initial ? { email: initial.email, name: initial.name, role: initial.role } : EMPTY_FORM);
+      setForm(initial
+        ? { email: initial.email, name: initial.name, role: initial.role, allowedModules: initial.allowed_modules ?? null }
+        : EMPTY_FORM);
       setError(null);
     }
   }, [open, initial]);
@@ -48,14 +101,22 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
     try {
       let saved: AdminUserWithInvite;
       if (initial) {
-        saved = await api<AdminUserWithInvite>(`/api/users/${initial.id}`, { method: "PATCH", body: JSON.stringify({ name: form.name, role: form.role }) });
+        saved = await api<AdminUserWithInvite>(`/api/users/${initial.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: form.name, role: form.role, allowed_modules: form.allowedModules }),
+        });
       } else {
-        saved = await api<AdminUserWithInvite>("/api/users", { method: "POST", body: JSON.stringify(form) });
+        saved = await api<AdminUserWithInvite>("/api/users", {
+          method: "POST",
+          body: JSON.stringify({ email: form.email, name: form.name, role: form.role, allowed_modules: form.allowedModules }),
+        });
       }
       onSaved(saved); onClose();
     } catch (err) { setError(err instanceof ApiError ? err.message : "Помилка"); }
     finally { setBusy(false); }
   }
+
+  const isAdmin = form.role === "admin";
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }}
@@ -75,9 +136,29 @@ function UserFormModal({ open, initial, onClose, onSaved }: {
           <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             placeholder="Іван" className="input" /></label>
         <label className="block"><span className="mb-1 block">Роль</span>
-          <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))} className="input">
+          <select value={form.role}
+            onChange={e => {
+              const role = e.target.value as UserRole;
+              setForm(f => ({ ...f, role, allowedModules: role === "admin" ? null : f.allowedModules }));
+            }}
+            className="input">
             {(Object.keys(ROLE_LABEL) as UserRole[]).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select></label>
+
+        {/* Module access — only for non-admin */}
+        {!isAdmin && (
+          <div className="rounded-lg border border-[var(--border)] p-3 space-y-2">
+            <p className="text-xs font-semibold text-[var(--text-muted)]">Доступ до модулів</p>
+            <ModuleCheckboxes
+              value={form.allowedModules}
+              onChange={v => setForm(f => ({ ...f, allowedModules: v }))}
+            />
+          </div>
+        )}
+        {isAdmin && (
+          <p className="text-xs text-[var(--text-faint)]">Адміни мають повний доступ до всіх модулів.</p>
+        )}
+
         {!initial && <p className="text-xs text-[var(--text-muted)]">Запрошення надійде на email. Користувач сам встановить пароль.</p>}
         {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>

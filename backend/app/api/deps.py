@@ -75,6 +75,24 @@ def require_roles(*roles: UserRole):
     return checker
 
 
+def require_module(module: str):
+    """Block access to a module if the user has an explicit allowlist that excludes it.
+    Admins always pass. null allowed_modules = unrestricted.
+    """
+    def checker(user: User = Depends(get_current_user)) -> User:
+        if user.role == UserRole.admin:
+            return user
+        if user.allowed_modules is None:
+            return user
+        if module not in user.allowed_modules:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Доступ до модуля «{module}» не дозволено",
+            )
+        return user
+    return checker
+
+
 def require_warehouse_full(org: Organization = Depends(get_current_org)) -> Organization:
     """Blocks free-plan orgs from full warehouse access (stock, orders, batches, etc.)."""
     if org.plan not in WAREHOUSE_FULL_PLANS:

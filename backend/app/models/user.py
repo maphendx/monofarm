@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -32,4 +32,8 @@ class User(Base):
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, unique=True, index=True)
     telegram_link_code: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     telegram_link_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # null = unrestricted (all modules); list = explicit allowlist.
+    # Admins always have full access regardless of this field.
+    allowed_modules: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=None)
 

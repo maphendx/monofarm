@@ -16,12 +16,15 @@ export interface User {
   created_at: string;
   email_verified_at: string | null;
   telegram_chat_id: number | null;
+  // null = unrestricted; string[] = explicit allowlist (admins always bypass)
+  allowed_modules: string[] | null;
 }
 
 export interface AdminUser extends User {
   is_active: boolean;
   created_at: string;
   telegram_chat_id: number | null;
+  allowed_modules: string[] | null;
 }
 
 export interface TelegramLink {
