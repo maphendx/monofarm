@@ -521,6 +521,8 @@ class OrderItemOut(BaseModel):
     id:           int
     product_id:   int
     product_name: str
+    product_sku:  str | None = None
+    image_url:    str | None = None
     warehouse_id: int | None
     quantity:     int
     unit_price:   Decimal
@@ -536,6 +538,12 @@ class OrderOut(BaseModel):
     counterparty_id:  int | None
     counterparty_name: str | None   # denormalised for UI convenience
     customer_name:    str | None
+    customer_phone:   str | None = None
+    customer_email:   str | None = None
+    delivery_city:    str | None = None
+    delivery_service: str | None = None
+    delivery_address: str | None = None
+    payment_method:   str | None = None
     source:           OrderSource
     status:           OrderStatus
     total_amount:     Decimal | None

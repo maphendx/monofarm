@@ -567,6 +567,8 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
             id=it.id,
             product_id=it.product_id,
             product_name=p.name if p else "",  # type: ignore[union-attr]
+            product_sku=p.sku if p else None,
+            image_url=_product_image_url(p, o.organization_id) if p else None,
             warehouse_id=it.warehouse_id,
             quantity=it.quantity,
             unit_price=it.unit_price,
@@ -574,10 +576,28 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
         ))
 
     counterparty_name: str | None = None
+    customer_phone: str | None = None
+    customer_email: str | None = None
+    delivery_address: str | None = None
     if o.counterparty_id:
         cp = db.get(Counterparty, o.counterparty_id)
         if cp:
             counterparty_name = cp.name
+            customer_phone = cp.phone
+            customer_email = cp.email
+            delivery_address = cp.address
+
+    payload = o.external_payload or {}
+    delivery_type = payload.get("delivery_type") if isinstance(payload, dict) else None
+    payment_type = payload.get("payment_type") if isinstance(payload, dict) else None
+    delivery_service = delivery_type.get("title") if isinstance(delivery_type, dict) else None
+    payment_method = payment_type.get("title") if isinstance(payment_type, dict) else None
+    delivery_city = None
+    if isinstance(payload, dict):
+        customer_phone = payload.get("delivery_phone") or customer_phone
+        customer_email = payload.get("delivery_email") or customer_email
+        delivery_city = payload.get("delivery_city_stable") or payload.get("delivery_city")
+        delivery_address = payload.get("delivery_address") or delivery_address
 
     total       = o.total_amount or Decimal("0")
     paid        = o.paid_amount  or Decimal("0")
@@ -596,6 +616,12 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
         counterparty_id=o.counterparty_id,
         counterparty_name=counterparty_name,
         customer_name=o.customer_name,
+        customer_phone=customer_phone,
+        customer_email=customer_email,
+        delivery_city=delivery_city,
+        delivery_service=delivery_service,
+        delivery_address=delivery_address,
+        payment_method=payment_method,
         source=o.source,
         status=o.status,
         total_amount=o.total_amount,

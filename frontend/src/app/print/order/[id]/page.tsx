@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+/* eslint-disable @next/next/no-img-element */
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 
@@ -10,6 +11,8 @@ type OrderItem = {
   id: number;
   product_id: number;
   product_name: string;
+  product_sku: string | null;
+  image_url: string | null;
   quantity: number;
   unit_price: string;
   total_price: string;
@@ -21,6 +24,12 @@ type Order = {
   order_number: string;
   counterparty_name: string | null;
   customer_name: string | null;
+  customer_phone: string | null;
+  customer_email: string | null;
+  delivery_city: string | null;
+  delivery_service: string | null;
+  delivery_address: string | null;
+  payment_method: string | null;
   source: string;
   status: OrderStatus;
   total_amount: string | null;
@@ -63,18 +72,18 @@ const SOURCE_LABELS: Record<string, string> = {
   api: "API",
 };
 
-function money(value: string | null | undefined) {
-  if (value === null || value === undefined || value === "") return "0 ₴";
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return `${value} ₴`;
-  return `${parsed.toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`;
-}
-
 function shortMoney(value: string | null | undefined) {
   if (value === null || value === undefined || value === "") return "0 ₴";
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return `${value} ₴`;
   return `${parsed.toLocaleString("uk-UA", { maximumFractionDigits: 2 })} ₴`;
+}
+
+function moneyPlain(value: string | null | undefined) {
+  if (value === null || value === undefined || value === "") return "0.00";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  return parsed.toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatDate(value: string | null | undefined, withTime = false) {
@@ -87,6 +96,54 @@ function formatDate(value: string | null | undefined, withTime = false) {
     year: "numeric",
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
+}
+
+function plural(value: number, one: string, few: string, many: string) {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+function threeDigitsToWords(value: number, feminine = false) {
+  const hundreds = ["", "сто", "двісті", "триста", "чотириста", "п'ятсот", "шістсот", "сімсот", "вісімсот", "дев'ятсот"];
+  const teens = ["десять", "одинадцять", "дванадцять", "тринадцять", "чотирнадцять", "п'ятнадцять", "шістнадцять", "сімнадцять", "вісімнадцять", "дев'ятнадцять"];
+  const tens = ["", "", "двадцять", "тридцять", "сорок", "п'ятдесят", "шістдесят", "сімдесят", "вісімдесят", "дев'яносто"];
+  const ones = feminine
+    ? ["", "одна", "дві", "три", "чотири", "п'ять", "шість", "сім", "вісім", "дев'ять"]
+    : ["", "один", "два", "три", "чотири", "п'ять", "шість", "сім", "вісім", "дев'ять"];
+
+  const parts: string[] = [];
+  const h = Math.floor(value / 100);
+  const t = Math.floor((value % 100) / 10);
+  const o = value % 10;
+  if (h) parts.push(hundreds[h]);
+  if (t === 1) parts.push(teens[o]);
+  else {
+    if (t) parts.push(tens[t]);
+    if (o) parts.push(ones[o]);
+  }
+  return parts.join(" ");
+}
+
+function amountInWords(value: string | null | undefined) {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount)) return "";
+  const hryvnia = Math.floor(amount);
+  const kopiykas = Math.round((amount - hryvnia) * 100);
+  const thousands = Math.floor(hryvnia / 1000);
+  const remainder = hryvnia % 1000;
+  const parts: string[] = [];
+  if (thousands) {
+    parts.push(threeDigitsToWords(thousands, true));
+    parts.push(plural(thousands, "тисяча", "тисячі", "тисяч"));
+  }
+  if (remainder) parts.push(threeDigitsToWords(remainder, false));
+  if (!parts.length) parts.push("нуль");
+  const text = parts.join(" ");
+  const currency = plural(hryvnia, "грн", "грн", "грн");
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)} ${currency} ${String(kopiykas).padStart(2, "0")} коп.`;
 }
 
 function makeBarcodeSeed(value: string) {
@@ -139,10 +196,21 @@ export default function OrderPrintPage() {
     };
   }, [params.id]);
 
-  const documentDate = useMemo(() => formatDate(order?.created_at, true), [order?.created_at]);
+  const orderNumber = order?.order_number ?? params.id;
+  const documentDate = formatDate(order?.created_at, true);
+  const invoiceDate = formatDate(order?.created_at);
+  const invoiceDigits = order?.order_number.replace(/\D/g, "");
+  const invoiceNumber = invoiceDigits || orderNumber;
   const customerName = order?.counterparty_name ?? order?.customer_name ?? "Покупець";
-  const totalQty = useMemo(() => order?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0, [order]);
-  const barcode = useMemo(() => makeBarcodeSeed(order?.order_number ?? params.id), [order?.order_number, params.id]);
+  const totalQty = order?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const barcode = makeBarcodeSeed(orderNumber);
+  const payableWords = amountInWords(order?.outstanding);
+  const deliveryLines = [
+    order?.delivery_city,
+    order?.delivery_service,
+    order?.delivery_address,
+  ].filter((line): line is string => Boolean(line));
+  const paymentText = order ? order.payment_method || PAYMENT_LABELS[order.payment_status] : "-";
 
   useEffect(() => {
     if (!order || printedRef.current) return;
@@ -233,37 +301,43 @@ export default function OrderPrintPage() {
           </div>
         </header>
 
-        <section className="mt-6 grid grid-cols-2 gap-5">
-          <div className="rounded-lg border border-[#d1d5db] p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-[#6b7280]">Продавець</div>
-            <div className="mt-2 text-base font-semibold">{org?.name ?? "monofarm"}</div>
-            <div className="mt-1 text-sm text-[#4b5563]">CRM складів monofarm</div>
-            {org?.slug && <div className="mt-1 text-xs text-[#6b7280]">Організація: {org.slug}</div>}
+        <section className="mt-6 grid grid-cols-[1fr_58mm] gap-8">
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-[32mm_1fr] gap-3">
+              <div className="font-bold text-[#4b5563]">Постачальник</div>
+              <div>
+                <div className="font-semibold">{org?.name ?? "monofarm"}</div>
+                <div className="text-[#6b7280]">CRM складів monofarm</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-[32mm_1fr] gap-3">
+              <div className="font-bold text-[#4b5563]">Одержувач</div>
+              <div>
+                <div className="font-semibold">{customerName}</div>
+                {order.customer_phone && <div>{order.customer_phone}</div>}
+                {order.customer_email && <div>{order.customer_email}</div>}
+              </div>
+            </div>
+            <div className="grid grid-cols-[32mm_1fr] gap-3">
+              <div className="font-bold text-[#4b5563]">Доставка</div>
+              <div className="space-y-0.5">
+                {deliveryLines.length > 0 ? deliveryLines.map((line) => <div key={line}>{line}</div>) : <div>-</div>}
+              </div>
+            </div>
+            <div className="grid grid-cols-[32mm_1fr] gap-3">
+              <div className="font-bold text-[#4b5563]">Оплата</div>
+              <div>{paymentText}</div>
+            </div>
           </div>
-          <div className="rounded-lg border border-[#d1d5db] p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-[#6b7280]">Покупець</div>
-            <div className="mt-2 text-base font-semibold">{customerName}</div>
-            <div className="mt-1 text-sm text-[#4b5563]">Джерело: {SOURCE_LABELS[order.source] ?? order.source}</div>
-            <div className="mt-1 text-xs text-[#6b7280]">Статус: {STATUS_LABELS[order.status]}</div>
-          </div>
-        </section>
-
-        <section className="mt-5 grid grid-cols-4 gap-3">
-          <div className="rounded-md bg-[#f3f4f6] px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#6b7280]">Оплата</div>
-            <div className="mt-1 text-sm font-semibold">{PAYMENT_LABELS[order.payment_status]}</div>
-          </div>
-          <div className="rounded-md bg-[#f3f4f6] px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#6b7280]">До дати</div>
-            <div className="mt-1 text-sm font-semibold">{formatDate(order.due_date)}</div>
-          </div>
-          <div className="rounded-md bg-[#f3f4f6] px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#6b7280]">Позицій</div>
-            <div className="mt-1 text-sm font-semibold">{order.items.length}</div>
-          </div>
-          <div className="rounded-md bg-[#f3f4f6] px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-[#6b7280]">Кількість</div>
-            <div className="mt-1 text-sm font-semibold">{totalQty} шт</div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">Рахунок №{invoiceNumber}</div>
+            <div className="mt-1 text-sm text-[#4b5563]">від {invoiceDate}</div>
+            <div className="mt-4 rounded-md bg-[#f3f4f6] px-3 py-2 text-left text-xs text-[#4b5563]">
+              <div>Джерело: {SOURCE_LABELS[order.source] ?? order.source}</div>
+              <div>Статус: {STATUS_LABELS[order.status]}</div>
+              <div>Позицій: {order.items.length}</div>
+              <div>Кількість: {totalQty} шт</div>
+            </div>
           </div>
         </section>
 
@@ -271,21 +345,44 @@ export default function OrderPrintPage() {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-[#111827] text-left text-[11px] uppercase tracking-wider text-white">
-                <th className="w-10 px-3 py-2 font-semibold">#</th>
+                <th className="w-10 px-3 py-2 font-semibold">№</th>
+                <th className="w-16 px-3 py-2 font-semibold">Фото</th>
                 <th className="px-3 py-2 font-semibold">Товар</th>
-                <th className="w-20 px-3 py-2 text-right font-semibold">К-сть</th>
-                <th className="w-28 px-3 py-2 text-right font-semibold">Ціна</th>
-                <th className="w-32 px-3 py-2 text-right font-semibold">Сума</th>
+                <th className="w-20 px-3 py-2 text-right font-semibold">Кіл-ть</th>
+                <th className="w-14 px-3 py-2 text-right font-semibold">Од.</th>
+                <th className="w-28 px-3 py-2 text-right font-semibold">Ціна, грн</th>
+                <th className="w-32 px-3 py-2 text-right font-semibold">Сума, грн</th>
               </tr>
             </thead>
             <tbody>
               {order.items.map((item, index) => (
                 <tr key={item.id} className="border-b border-[#e5e7eb] last:border-0">
                   <td className="px-3 py-2 align-top text-[#6b7280]">{index + 1}</td>
-                  <td className="px-3 py-2 align-top font-medium">{item.product_name}</td>
-                  <td className="px-3 py-2 align-top text-right tabular-nums">{item.quantity}</td>
-                  <td className="px-3 py-2 align-top text-right tabular-nums">{money(item.unit_price)}</td>
-                  <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">{money(item.total_price)}</td>
+                  <td className="px-3 py-2 align-top">
+                    {item.image_url ? (
+                      <img
+                        src={item.image_url}
+                        alt=""
+                        className="h-11 w-11 rounded-md border border-[#d1d5db] object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 items-center justify-center rounded-md border border-dashed border-[#cbd5e1] bg-[#f8fafc] text-[10px] font-semibold text-[#94a3b8]">
+                        SKU
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <div className="font-medium">{item.product_name}</div>
+                    <div className="mt-1 font-mono text-[11px] font-semibold uppercase tracking-normal text-[#6b7280]">
+                      Артикул: {item.product_sku || "-"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
+                    {item.quantity}
+                  </td>
+                  <td className="px-3 py-2 align-top text-right text-[#4b5563]">шт.</td>
+                  <td className="px-3 py-2 align-top text-right tabular-nums">{moneyPlain(item.unit_price)}</td>
+                  <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">{moneyPlain(item.total_price)}</td>
                 </tr>
               ))}
             </tbody>
@@ -301,18 +398,27 @@ export default function OrderPrintPage() {
           </div>
           <div className="rounded-lg border border-[#111827]">
             <div className="flex justify-between border-b border-[#d1d5db] px-4 py-2 text-sm">
-              <span className="text-[#4b5563]">Разом</span>
-              <span className="font-semibold tabular-nums">{money(order.total_amount)}</span>
+              <span className="text-[#4b5563]">Всього</span>
+              <span className="font-semibold tabular-nums">{moneyPlain(order.total_amount)}</span>
             </div>
             <div className="flex justify-between border-b border-[#d1d5db] px-4 py-2 text-sm">
-              <span className="text-[#4b5563]">Оплачено</span>
-              <span className="font-semibold tabular-nums">{money(order.paid_amount)}</span>
+              <span className="text-[#4b5563]">Доставка</span>
+              <span className="font-semibold">За тарифами перевізника</span>
+            </div>
+            <div className="flex justify-between border-b border-[#d1d5db] px-4 py-2 text-sm">
+              <span className="text-[#4b5563]">Загальна сума</span>
+              <span className="font-semibold tabular-nums">{moneyPlain(order.total_amount)}</span>
             </div>
             <div className="flex justify-between bg-[#f3f4f6] px-4 py-3 text-base">
-              <span className="font-bold">Борг</span>
+              <span className="font-bold">До сплати</span>
               <span className="font-bold tabular-nums">{shortMoney(order.outstanding)}</span>
             </div>
           </div>
+        </section>
+
+        <section className="mt-5 text-sm">
+          <div className="font-bold">Загальна сума до сплати:</div>
+          <div className="mt-1 text-[#374151]">{payableWords}</div>
         </section>
 
         <footer className="mt-10 grid grid-cols-2 gap-12 text-sm">
