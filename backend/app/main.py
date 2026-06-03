@@ -14,6 +14,7 @@ from app.api.api_keys import router as api_keys_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
 from app.api.history import router as history_router
+from app.api.horoshop import router as horoshop_router
 from app.api.auth import router as auth_router
 from app.api.deps import require_roles
 from app.api.farm_tasks import router as farm_tasks_router
@@ -155,4 +156,5 @@ app.include_router(history_router, prefix="/api")
 app.include_router(billing_router)
 app.include_router(warehouse_router, prefix="/api")
 app.include_router(keycrm_router, prefix="/api")
+app.include_router(horoshop_router, prefix="/api")
 app.include_router(search_router, prefix="/api")

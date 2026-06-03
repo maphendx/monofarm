@@ -74,6 +74,7 @@ class OrderSource(str, enum.Enum):
     etsy    = "etsy"
     shopify = "shopify"
     keycrm  = "keycrm"
+    horoshop = "horoshop"
     api     = "api"
 
 
@@ -324,6 +325,8 @@ class Order(Base):
     counterparty_id:  Mapped[int | None]  = mapped_column(Integer, ForeignKey("wh_counterparties.id", ondelete="SET NULL"), nullable=True, index=True)
     customer_name:    Mapped[str | None]  = mapped_column(String(255), nullable=True)  # fallback if no counterparty
     source:           Mapped[OrderSource] = mapped_column(Enum(OrderSource), default=OrderSource.manual, nullable=False)
+    external_id:      Mapped[str | None]  = mapped_column(String(120), nullable=True, index=True)
+    external_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status:           Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.new, nullable=False, index=True)
     total_amount:     Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     paid_amount:      Mapped[Decimal]        = mapped_column(Numeric(12, 2), default=0, nullable=False)
@@ -361,6 +364,20 @@ class OrderPayment(Base):
     note:            Mapped[str | None]    = mapped_column(String(500), nullable=True)
     cashflow_id:     Mapped[int | None]    = mapped_column(Integer, ForeignKey("wh_cash_transactions.id", ondelete="SET NULL"), nullable=True)
     created_at:      Mapped[datetime]      = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class HoroshopSyncEvent(Base):
+    __tablename__ = "horoshop_sync_events"
+
+    id:                Mapped[int]      = mapped_column(primary_key=True)
+    organization_id:   Mapped[int]      = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type:        Mapped[str]      = mapped_column(String(80), nullable=False)
+    external_order_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    status:            Mapped[str]      = mapped_column(String(24), default="pending", server_default="pending", nullable=False)
+    message:           Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload:           Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at:        Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    processed_at:      Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class WarehouseZone(Base):

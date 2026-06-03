@@ -29,7 +29,7 @@ const STATUS_META: Record<OrderStatus, { label: string; cls: string }> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-  manual: "Ручне", etsy: "Etsy", shopify: "Shopify", keycrm: "KeyCRM", api: "API",
+  manual: "Ручне", etsy: "Etsy", shopify: "Shopify", keycrm: "KeyCRM", horoshop: "Хорошоп", api: "API",
 };
 
 type OrderItem = {

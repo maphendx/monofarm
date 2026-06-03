@@ -38,6 +38,19 @@ interface BillingStatus {
   yearly_discount_pct?: number;
 }
 
+interface HoroshopSettings {
+  domain: string;
+  login: string;
+  configured: boolean;
+  webhook_url: string;
+  subscribed_events: Record<string, number>;
+  last_sync_at: string | null;
+  orders_total: number;
+  errors_total: number;
+  last_event_status: string | null;
+  last_event_message: string | null;
+}
+
 type SectionId =
   | "profile" | "general"
   | "organization" | "printers" | "users" | "filament"
@@ -975,6 +988,192 @@ function KeyCRMSection() {
   );
 }
 
+// ── Horoshop Section ───────────────────────────────────────────────────────
+
+function HoroshopSection() {
+  const [data, setData] = useState<HoroshopSettings | null>(null);
+  const [domain, setDomain] = useState("");
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function hydrate(d: HoroshopSettings | null) {
+    setData(d);
+    setDomain(d?.domain ?? "");
+    setLogin(d?.login ?? "");
+  }
+
+  useEffect(() => {
+    api<HoroshopSettings>("/api/horoshop/settings")
+      .then(hydrate)
+      .catch(() => {});
+  }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("save"); setError(null); setMessage(null); setSaved(false);
+    try {
+      const body: Record<string, unknown> = { domain: domain.trim(), login: login.trim() };
+      if (password.trim()) body.password = password.trim();
+      const updated = await api<HoroshopSettings>("/api/horoshop/settings", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      hydrate(updated);
+      setPassword("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка збереження");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function test() {
+    setBusy("test"); setError(null); setMessage(null);
+    try {
+      await api<{ ok: boolean }>("/api/horoshop/test", { method: "POST" });
+      setMessage("З'єднання з Хорошопом успішне");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Хорошоп недоступний");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function subscribe() {
+    setBusy("subscribe"); setError(null); setMessage(null);
+    try {
+      const updated = await api<HoroshopSettings>("/api/horoshop/subscribe", { method: "POST" });
+      hydrate(updated);
+      setMessage("Webhook-и Хорошопа підписано");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не вдалося підписати webhook-и");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function syncNow() {
+    setBusy("sync"); setError(null); setMessage(null);
+    try {
+      const result = await api<{ seen: number; created: number; updated: number; unmatched: number }>("/api/horoshop/sync", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const updated = await api<HoroshopSettings>("/api/horoshop/settings");
+      hydrate(updated);
+      setMessage(`Синхронізовано: ${result.seen}, нових: ${result.created}, оновлено: ${result.updated}, без SKU: ${result.unmatched}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Синхронізація не вдалася");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function copyWebhook() {
+    if (!data?.webhook_url) return;
+    navigator.clipboard.writeText(data.webhook_url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const subscribedCount = Object.keys(data?.subscribed_events ?? {}).length;
+
+  return (
+    <SectionCard>
+      <div className="mb-4 flex items-center gap-3">
+        <SectionTitle>Хорошоп</SectionTitle>
+        {data && <BadgeStatus ok={data.configured} />}
+        {subscribedCount > 0 && (
+          <span className="badge badge-ok text-xs">
+            webhook-и {subscribedCount}/3
+          </span>
+        )}
+      </div>
+
+      {data && (
+        <div className="mb-5 rounded-lg bg-[var(--bg)] p-3">
+          <p className="mb-1 text-xs font-medium text-[var(--text-muted)]">Webhook URL для Хорошопа</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs">
+              {data.webhook_url}
+            </code>
+            <button
+              type="button"
+              onClick={copyWebhook}
+              className="shrink-0 rounded-md border border-[var(--border)] px-2 py-1.5 text-xs hover:bg-[var(--surface-hi)]"
+            >
+              {copied ? "✓" : "Копіювати"}
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs text-[var(--text-faint)] sm:grid-cols-3">
+            <span>Замовлень: <strong className="text-[var(--text-muted)]">{data.orders_total}</strong></span>
+            <span>Помилок: <strong className="text-[var(--text-muted)]">{data.errors_total}</strong></span>
+            <span>Останній sync: <strong className="text-[var(--text-muted)]">{data.last_sync_at ? new Date(data.last_sync_at).toLocaleString() : "ще не було"}</strong></span>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={save} className="space-y-3">
+        <label className="block">
+          <span className="mb-1 block text-sm text-[var(--text-muted)]">Домен магазину</span>
+          <input value={domain} onChange={(e) => setDomain(e.target.value)}
+            placeholder="example.com.ua" className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm text-[var(--text-muted)]">API логін</span>
+          <input value={login} onChange={(e) => setLogin(e.target.value)}
+            placeholder="api" className={inputCls} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm text-[var(--text-muted)]">
+            API пароль {data?.configured && <span className="text-xs text-[var(--text-faint)]">(залиште порожнім щоб не змінювати)</span>}
+          </span>
+          <input value={password} onChange={(e) => setPassword(e.target.value)}
+            type="password" autoComplete="new-password"
+            placeholder={data?.configured ? "••••••••" : "Пароль API користувача"}
+            className={inputCls} />
+        </label>
+
+        {message && <p className="text-sm text-[var(--state-ok)]">{message}</p>}
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={!!busy}
+            className="btn btn-primary disabled:opacity-50">
+            {busy === "save" ? "Зберігаю…" : saved ? "✓ Збережено" : "Зберегти"}
+          </button>
+          <button type="button" onClick={test} disabled={!!busy || !data?.configured}
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50">
+            {busy === "test" ? "Перевіряю…" : "Тест"}
+          </button>
+          <button type="button" onClick={subscribe} disabled={!!busy || !data?.configured}
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50">
+            {busy === "subscribe" ? "Підписую…" : "Підписати webhook-и"}
+          </button>
+          <button type="button" onClick={syncNow} disabled={!!busy || !data?.configured}
+            className="rounded-md border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--surface-hi)] disabled:opacity-50">
+            {busy === "sync" ? "Синхронізую…" : "Sync now"}
+          </button>
+        </div>
+
+        {data?.last_event_message && (
+          <p className="text-xs text-[var(--text-faint)]">
+            Остання подія: {data.last_event_status} · {data.last_event_message}
+          </p>
+        )}
+      </form>
+    </SectionCard>
+  );
+}
+
 
 function OrgSection({
   settings,
@@ -1789,6 +1988,7 @@ export default function SettingsPage() {
         {active === "integrations" && (
           <div className="space-y-6">
             <AgentSection />
+            <HoroshopSection />
             <KeyCRMSection />
           </div>
         )}
