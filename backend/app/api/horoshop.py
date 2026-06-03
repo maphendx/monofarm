@@ -25,6 +25,7 @@ router = APIRouter(prefix="/horoshop", tags=["horoshop"])
 class HoroshopSettingsOut(BaseModel):
     domain: str
     login: str
+    verify_ssl: bool
     configured: bool
     webhook_url: str
     subscribed_events: dict[str, int]
@@ -39,6 +40,7 @@ class HoroshopSettingsUpdate(BaseModel):
     domain: str | None = None
     login: str | None = None
     password: str | None = None
+    verify_ssl: bool | None = None
     reset_webhook_secret: bool = False
 
 
@@ -58,6 +60,7 @@ def _settings_out(org: Organization, db: Session) -> HoroshopSettingsOut:
     return HoroshopSettingsOut(
         domain=org.horoshop_domain or "",
         login=org.horoshop_login or "",
+        verify_ssl=bool(org.horoshop_verify_ssl),
         configured=horoshop.configured(org),
         webhook_url=_webhook_url(org),
         subscribed_events=org.horoshop_hook_ids or {},
@@ -100,6 +103,8 @@ def update_settings(
         org.horoshop_login = payload.login.strip()
     if payload.password is not None:
         org.horoshop_password = encrypt(payload.password.strip()) if payload.password.strip() else ""
+    if payload.verify_ssl is not None:
+        org.horoshop_verify_ssl = payload.verify_ssl
     if payload.reset_webhook_secret or not org.horoshop_webhook_secret:
         org.horoshop_webhook_secret = ""
         horoshop.webhook_secret(org)

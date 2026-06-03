@@ -41,6 +41,7 @@ interface BillingStatus {
 interface HoroshopSettings {
   domain: string;
   login: string;
+  verify_ssl: boolean;
   configured: boolean;
   webhook_url: string;
   subscribed_events: Record<string, number>;
@@ -995,6 +996,7 @@ function HoroshopSection() {
   const [domain, setDomain] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [verifySsl, setVerifySsl] = useState(true);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -1005,6 +1007,7 @@ function HoroshopSection() {
     setData(d);
     setDomain(d?.domain ?? "");
     setLogin(d?.login ?? "");
+    setVerifySsl(d?.verify_ssl ?? true);
   }
 
   useEffect(() => {
@@ -1017,7 +1020,7 @@ function HoroshopSection() {
     e.preventDefault();
     setBusy("save"); setError(null); setMessage(null); setSaved(false);
     try {
-      const body: Record<string, unknown> = { domain: domain.trim(), login: login.trim() };
+      const body: Record<string, unknown> = { domain: domain.trim(), login: login.trim(), verify_ssl: verifySsl };
       if (password.trim()) body.password = password.trim();
       const updated = await api<HoroshopSettings>("/api/horoshop/settings", {
         method: "PUT",
@@ -1140,6 +1143,15 @@ function HoroshopSection() {
             type="password" autoComplete="new-password"
             placeholder={data?.configured ? "••••••••" : "Пароль API користувача"}
             className={inputCls} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+          <input
+            type="checkbox"
+            checked={verifySsl}
+            onChange={(e) => setVerifySsl(e.target.checked)}
+            className="h-4 w-4 rounded border-[var(--border)]"
+          />
+          Перевіряти SSL сертифікат
         </label>
 
         {message && <p className="text-sm text-[var(--state-ok)]">{message}</p>}

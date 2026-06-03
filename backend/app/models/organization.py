@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -107,6 +107,7 @@ class Organization(Base):
     horoshop_login:          Mapped[str] = mapped_column(String(255), default="", server_default="")
     horoshop_password:       Mapped[str] = mapped_column(String(512), default="", server_default="")  # Fernet-encrypted
     horoshop_webhook_secret: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    horoshop_verify_ssl:     Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     horoshop_hook_ids:       Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     horoshop_last_sync_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import requests
+import urllib3
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -40,8 +41,11 @@ class HoroshopError(RuntimeError):
 
 
 def normalize_domain(value: str) -> str:
-    domain = (value or "").strip()
-    domain = re.sub(r"^https?://", "", domain, flags=re.I)
+    domain = (value or "").strip().rstrip("/")
+    if re.match(r"^https?://", domain, flags=re.I):
+        scheme, rest = domain.split("://", 1)
+        host = rest.split("/", 1)[0].strip()
+        return f"{scheme.lower()}://{host}"
     domain = domain.split("/", 1)[0].strip()
     return domain
 
@@ -64,6 +68,8 @@ def _base_url(org: Organization) -> str:
     domain = normalize_domain(org.horoshop_domain)
     if not domain:
         raise HoroshopError("Домен Хорошопа не налаштовано")
+    if re.match(r"^https?://", domain, flags=re.I):
+        return f"{domain}/api"
     return f"https://{domain}/api"
 
 
@@ -83,8 +89,17 @@ def _int(value: Any, default: int = 0) -> int:
 
 def _api_post(org: Organization, function: str, payload: dict[str, Any], timeout: int = 20) -> dict[str, Any]:
     url = f"{_base_url(org)}/{function.strip('/')}/"
+    verify_ssl = bool(getattr(org, "horoshop_verify_ssl", True))
+    if not verify_ssl:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     try:
-        resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=timeout)
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=timeout,
+            verify=verify_ssl,
+        )
     except requests.RequestException as exc:
         raise HoroshopError(f"Хорошоп API недоступний: {exc}") from exc
 
