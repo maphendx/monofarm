@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -72,6 +72,92 @@ const METHOD_LABELS: Record<string, string> = { card: "Картка", cash: "Г�
 type Product     = { id: number; name: string; sku: string; sale_price: string | null };
 type Counterparty = { id: number; name: string; type: string };
 type Warehouse   = { id: number; name: string; type: string };
+
+function money(value: string | null | undefined) {
+  if (!value) return "—";
+  return `${parseFloat(value).toLocaleString("uk-UA")} ₴`;
+}
+
+function totalQty(items: OrderItem[]) {
+  return items.reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function OrderItemsCell({
+  order,
+  expanded,
+  onToggle,
+}: {
+  order: Order;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (order.items.length === 0) {
+    return <span className="text-[var(--text-faint)]">—</span>;
+  }
+
+  const preview = order.items.slice(0, 3);
+  const hidden = order.items.length - preview.length;
+
+  return (
+    <div className="min-w-0 space-y-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded-md bg-[var(--surface-hi)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+          {order.items.length} позицій
+        </span>
+        <span className="rounded-md bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-faint)]">
+          {totalQty(order.items)} шт
+        </span>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+        >
+          {expanded ? "Сховати" : "Деталі"}
+        </button>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-1.5">
+        {preview.map((it) => (
+          <span
+            key={it.id}
+            title={`${it.product_name} ×${it.quantity}`}
+            className="max-w-[240px] truncate rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-muted)]"
+          >
+            {it.product_name} ×{it.quantity}
+          </span>
+        ))}
+        {hidden > 0 && (
+          <span className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs text-[var(--text-faint)]">
+            +{hidden}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OrderItemsDetails({ items }: { items: OrderItem[] }) {
+  return (
+    <div className="max-h-72 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+      <div className="grid grid-cols-[minmax(0,1fr)_64px_96px_104px] gap-3 border-b border-[var(--border)] px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+        <span>Товар</span>
+        <span className="text-right">К-сть</span>
+        <span className="text-right">Ціна</span>
+        <span className="text-right">Разом</span>
+      </div>
+      {items.map((it) => (
+        <div
+          key={it.id}
+          className="grid grid-cols-[minmax(0,1fr)_64px_96px_104px] gap-3 border-b border-[var(--border)] px-4 py-2 text-xs last:border-0"
+        >
+          <span className="min-w-0 truncate text-[var(--text)]" title={it.product_name}>{it.product_name}</span>
+          <span className="text-right font-mono text-[var(--text-muted)]">{it.quantity}</span>
+          <span className="text-right tabular-nums text-[var(--text-muted)]">{money(it.unit_price)}</span>
+          <span className="text-right tabular-nums font-medium">{money(it.total_price)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Create order modal ────────────────────────────────────────────────────────
 
@@ -812,6 +898,7 @@ export default function OrdersPage() {
   const [paymentOrder,  setPaymentOrder]  = useState<Order | null>(null);
   const [actionBusy,    setActionBusy]    = useState<number | null>(null);
   const [batchOrder,    setBatchOrder]    = useState<Order | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(() => new Set());
 
   const colVis = useColumnVisibility("orders", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
@@ -839,6 +926,16 @@ export default function OrdersPage() {
   }
 
   const filtered = filter === "Всі" ? orders : orders.filter((o) => o.status === filter);
+  const visibleColCount = COLS.filter((c) => colVis.isVisible(c.key)).length + 1;
+
+  function toggleItems(orderId: number) {
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  }
 
   if (loading) return <PageSkeleton cols={7} />;
 
@@ -883,8 +980,19 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+        <table className="w-full min-w-[1180px] table-fixed text-sm">
+          <colgroup>
+            {colVis.isVisible("number") && <col className="w-[96px]" />}
+            {colVis.isVisible("client") && <col className="w-[160px]" />}
+            {colVis.isVisible("source") && <col className="w-[116px]" />}
+            {colVis.isVisible("items") && <col />}
+            {colVis.isVisible("status") && <col className="w-[132px]" />}
+            {colVis.isVisible("due_date") && <col className="w-[104px]" />}
+            {colVis.isVisible("amount") && <col className="w-[120px]" />}
+            {colVis.isVisible("debt") && <col className="w-[128px]" />}
+            <col className="w-[245px]" />
+          </colgroup>
           <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
               {colVis.isVisible("number")   && <th className="px-4 py-3 font-medium">Номер</th>}
@@ -900,62 +1008,69 @@ export default function OrdersPage() {
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {filtered.length === 0 ? (
-              <tr><td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає замовлень</td></tr>
+              <tr><td colSpan={visibleColCount} className="px-4 py-10 text-center text-[var(--text-faint)]">Немає замовлень</td></tr>
             ) : filtered.map((o) => {
               const meta = STATUS_META[o.status];
               const isBusy = actionBusy === o.id;
               const outstanding = parseFloat(o.outstanding);
+              const expanded = expandedItems.has(o.id);
               return (
-                <tr key={o.id} className="hover:bg-[var(--surface-hi)]">
-                  {colVis.isVisible("number") && (
-                    <td className="px-4 py-3 font-mono text-xs font-medium">{o.order_number}</td>
-                  )}
-                  {colVis.isVisible("client") && (
+                <Fragment key={o.id}>
+                  <tr className="align-top hover:bg-[var(--surface-hi)]">
+                    {colVis.isVisible("number") && (
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--text)]">{o.order_number}</td>
+                    )}
+                    {colVis.isVisible("client") && (
+                      <td className="px-4 py-3">
+                        <div className="min-w-0 truncate font-medium" title={o.counterparty_name ?? o.customer_name ?? ""}>
+                          {o.counterparty_name ?? o.customer_name ?? <span className="text-[var(--text-faint)]">—</span>}
+                        </div>
+                        <div className="mt-1 text-[11px] text-[var(--text-faint)]">
+                          {new Date(o.created_at).toLocaleDateString("uk-UA")}
+                        </div>
+                      </td>
+                    )}
+                    {colVis.isVisible("source") && (
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs">
+                          {SOURCE_LABELS[o.source] ?? o.source}
+                        </span>
+                      </td>
+                    )}
+                    {colVis.isVisible("items") && (
+                      <td className="px-4 py-3 text-[var(--text-muted)]">
+                        <OrderItemsCell order={o} expanded={expanded} onToggle={() => toggleItems(o.id)} />
+                      </td>
+                    )}
+                    {colVis.isVisible("status") && (
+                      <td className="px-4 py-3">
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
+                      </td>
+                    )}
+                    {colVis.isVisible("due_date") && (
+                      <td className="px-4 py-3 text-[var(--text-muted)]">
+                        {o.due_date ? new Date(o.due_date).toLocaleDateString("uk-UA") : "—"}
+                      </td>
+                    )}
+                    {colVis.isVisible("amount") && (
+                      <td className="px-4 py-3 text-right font-medium tabular-nums">
+                        {money(o.total_amount)}
+                      </td>
+                    )}
+                    {colVis.isVisible("debt") && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-0.5">
+                          {(() => { const b = PAYMENT_BADGE[o.payment_status]; return b ? (
+                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${b.cls}`}>{b.label}</span>
+                          ) : null; })()}
+                          {outstanding > 0 && (
+                            <span className="tabular-nums text-xs text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-3">
-                      {o.counterparty_name ?? o.customer_name ?? <span className="text-[var(--text-faint)]">—</span>}
-                    </td>
-                  )}
-                  {colVis.isVisible("source") && (
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs">
-                        {SOURCE_LABELS[o.source] ?? o.source}
-                      </span>
-                    </td>
-                  )}
-                  {colVis.isVisible("items") && (
-                    <td className="px-4 py-3 text-[var(--text-muted)]">
-                      {o.items.map((it) => `${it.product_name} ×${it.quantity}`).join(", ") || "—"}
-                    </td>
-                  )}
-                  {colVis.isVisible("status") && (
-                    <td className="px-4 py-3">
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${meta.cls}`}>{meta.label}</span>
-                    </td>
-                  )}
-                  {colVis.isVisible("due_date") && (
-                    <td className="px-4 py-3 text-[var(--text-muted)]">
-                      {o.due_date ? new Date(o.due_date).toLocaleDateString("uk-UA") : "—"}
-                    </td>
-                  )}
-                  {colVis.isVisible("amount") && (
-                    <td className="px-4 py-3 text-right font-medium tabular-nums">
-                      {o.total_amount ? `${parseFloat(o.total_amount).toLocaleString("uk-UA")} ₴` : "—"}
-                    </td>
-                  )}
-                  {colVis.isVisible("debt") && (
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex flex-col items-end gap-0.5">
-                        {(() => { const b = PAYMENT_BADGE[o.payment_status]; return b ? (
-                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ${b.cls}`}>{b.label}</span>
-                        ) : null; })()}
-                        {outstanding > 0 && (
-                          <span className="tabular-nums text-xs text-[var(--state-error)]">{outstanding.toLocaleString("uk-UA")} ₴</span>
-                        )}
-                      </div>
-                    </td>
-                  )}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => {
                           const w = window.open("", "_blank");
@@ -1033,9 +1148,17 @@ export default function OrdersPage() {
                           ✕
                         </button>
                       )}
-                    </div>
-                  </td>
-                </tr>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded && colVis.isVisible("items") && (
+                    <tr key={`${o.id}-items`} className="bg-[var(--bg)]">
+                      <td colSpan={visibleColCount} className="px-4 py-3">
+                        <OrderItemsDetails items={o.items} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
