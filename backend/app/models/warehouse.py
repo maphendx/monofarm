@@ -285,8 +285,32 @@ class ProductionBatch(Base):
     print_task_id:    Mapped[int | None]  = mapped_column(Integer, ForeignKey("print_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     notes:            Mapped[str | None]  = mapped_column(Text, nullable=True)
     created_by_id:    Mapped[int | None]  = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_to_id:   Mapped[int | None]  = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:       Mapped[datetime]    = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:       Mapped[datetime]    = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# ── AssemblySession ───────────────────────────────────────────────────────────
+
+class AssemblySession(Base):
+    """One work session of one worker on one production batch.
+
+    A session captures: who worked, when, how many units were completed.
+    Multiple sessions per batch are allowed (shift changes, breaks, etc.).
+    Closing a session is non-destructive — it just sets closed_at.
+    The batch's good_qty / defect_qty are updated when the session is closed.
+    """
+    __tablename__ = "wh_assembly_sessions"
+
+    id:              Mapped[int]          = mapped_column(primary_key=True)
+    organization_id: Mapped[int]          = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    batch_id:        Mapped[int]          = mapped_column(Integer, ForeignKey("wh_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    worker_id:       Mapped[int]          = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    started_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    closed_at:       Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    units_good:      Mapped[int]          = mapped_column(Integer, default=0, nullable=False)
+    units_defective: Mapped[int]          = mapped_column(Integer, default=0, nullable=False)
+    notes:           Mapped[str | None]   = mapped_column(Text, nullable=True)
 
 
 # ── Order ─────────────────────────────────────────────────────────────────────

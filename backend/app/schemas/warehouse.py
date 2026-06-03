@@ -412,11 +412,60 @@ class BatchOut(BaseModel):
     print_task_title:  str | None = None
     notes:             str | None
     components:        list[BatchComponentOut] = []
+    assigned_to_id:    int | None = None
+    assigned_to_name:  str | None = None
     created_at:        datetime
     updated_at:        datetime
 
     class Config:
         from_attributes = True
+
+
+# ── Assembly sessions ─────────────────────────────────────────────────────────
+
+class AssemblySessionUpdate(BaseModel):
+    units_good:      int | None = None
+    units_defective: int | None = None
+    notes:           str | None = None
+
+
+class AssemblySessionOut(BaseModel):
+    id:              int
+    batch_id:        int
+    product_name:    str
+    worker_id:       int
+    worker_name:     str
+    started_at:      datetime
+    closed_at:       datetime | None
+    units_good:      int
+    units_defective: int
+    notes:           str | None
+    duration_minutes: int | None = None   # computed
+
+    class Config:
+        from_attributes = True
+
+
+class WorkerProductStats(BaseModel):
+    product_id:   int
+    product_name: str
+    units_good:   int
+
+
+class WorkerStatsOut(BaseModel):
+    worker_id:       int
+    worker_name:     str
+    worker_email:    str
+    total_sessions:  int
+    total_minutes:   int
+    total_good:      int
+    total_defective: int
+    defect_rate_pct: float
+    products:        list[WorkerProductStats]
+
+
+class BatchAssignRequest(BaseModel):
+    assigned_to_id: int | None = None
 
 
 # ── Order ─────────────────────────────────────────────────────────────────────
