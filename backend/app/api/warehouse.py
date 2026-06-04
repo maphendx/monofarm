@@ -2817,7 +2817,6 @@ def replenish_preview(
         .join(Warehouse, Warehouse.id == StockEntry.warehouse_id)
         .filter(
             StockEntry.organization_id == org.id,
-            Product.is_active.is_(True),
             or_(
                 available_expr <= 0,
                 Product.min_stock.isnot(None) & (available_expr < Product.min_stock),

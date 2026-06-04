@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
 import Link from "next/link";
@@ -412,7 +412,44 @@ type ReplenishItem = {
   warehouse_name:   string | null;
 };
 
-function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function buildReplenishFallback(stock: StockEntry[]): ReplenishItem[] {
+  const byProduct = new Map<number, ReplenishItem>();
+
+  stock.forEach((e) => {
+    const status = getStatus(e);
+    if (status !== "out" && status !== "low") return;
+
+    const available = parseFloat(e.available);
+    const target = e.desired_stock ?? e.min_stock ?? 1;
+    const item: ReplenishItem = {
+      product_id: e.product_id,
+      product_name: e.product_name,
+      product_sku: e.product_sku,
+      unit: e.product_unit,
+      available,
+      min_stock: e.min_stock,
+      desired_stock: e.desired_stock,
+      qty_needed: Math.max(1, Math.ceil(target - available)),
+      kind: "batch",
+      specification_id: null,
+      warehouse_id: e.warehouse_id,
+      warehouse_name: e.warehouse_name,
+    };
+
+    const existing = byProduct.get(e.product_id);
+    if (!existing || item.available < existing.available) byProduct.set(e.product_id, item);
+  });
+
+  return Array.from(byProduct.values());
+}
+
+function ReplenishModal({
+  fallbackItems, onClose, onDone,
+}: {
+  fallbackItems: ReplenishItem[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
   useBodyScrollLock(true);
 
   const [items,    setItems]    = useState<ReplenishItem[]>([]);
@@ -423,17 +460,26 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [result,   setResult]   = useState<{ batches: number; movements: number } | null>(null);
 
   useEffect(() => {
+    let ignore = false;
+
+    function applyItems(data: ReplenishItem[]) {
+      if (ignore) return;
+      const source = data.length > 0 ? data : fallbackItems;
+      setItems(source);
+      const initQtys: Record<number, string> = {};
+      const initSel = new Set<number>();
+      source.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
+      setQtys(initQtys);
+      setSelected(initSel);
+    }
+
     api<ReplenishItem[]>("/api/warehouse/stock/replenish-preview")
-      .then((data) => {
-        setItems(data);
-        const initQtys: Record<number, string> = {};
-        const initSel = new Set<number>();
-        data.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
-        setQtys(initQtys);
-        setSelected(initSel);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      .then(applyItems)
+      .catch(() => applyItems(fallbackItems))
+      .finally(() => { if (!ignore) setLoading(false); });
+
+    return () => { ignore = true; };
+  }, [fallbackItems]);
 
   async function confirm() {
     setBusy(true);
@@ -653,6 +699,7 @@ export default function StockPage() {
   const outCount   = stock.filter((e) => getStatus(e) === "out").length;
   const lowCount   = stock.filter((e) => getStatus(e) === "low").length;
   const prodCount  = stock.filter((e) => getStatus(e) === "production").length;
+  const replenishCandidates = useMemo(() => buildReplenishFallback(stock), [stock]);
 
   const filtered = stock.filter((e) => {
     if (hideZero && parseFloat(e.quantity) === 0) return false;
@@ -728,9 +775,9 @@ export default function StockPage() {
               <path d="M12 2v20M2 12h20"/><path d="M17 7 12 2l-5 5"/>
             </svg>
             Відправити на виробництво
-            {(outCount + lowCount) > 0 && (
+            {replenishCandidates.length > 0 && (
               <span className="flex size-4 items-center justify-center rounded-full bg-[var(--state-warn)] text-[9px] font-bold text-white leading-none">
-                {outCount + lowCount}
+                {replenishCandidates.length}
               </span>
             )}
           </button>
@@ -1164,6 +1211,7 @@ export default function StockPage() {
 
       {replenishOpen && (
         <ReplenishModal
+          fallbackItems={replenishCandidates}
           onClose={() => setReplenishOpen(false)}
           onDone={() => { setReplenishOpen(false); load(); }}
         />
