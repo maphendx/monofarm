@@ -8,7 +8,7 @@ import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
-import { Modal } from "@/components/ui/Modal";
+import { Modal, useBodyScrollLock } from "@/components/ui/Modal";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
@@ -184,6 +184,52 @@ function fmt(n: string | number | null): string {
 
 // ── Product settings ─────────────────────────────────────────────────────────
 
+function CategoryTagsInput({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [input, setInput] = useState("");
+
+  function add(raw: string) {
+    const tag = raw.trim();
+    if (tag && !value.includes(tag)) onChange([...value, tag]);
+    setInput("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      add(input);
+    }
+    if (e.key === "Backspace" && !input && value.length > 0) {
+      onChange(value.slice(0, -1));
+    }
+  }
+
+  return (
+    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-focus)]">
+      {value.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+          {tag}
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((x) => x !== tag))}
+            className="text-[var(--text-faint)] hover:text-[var(--text)]"
+            title="Прибрати категорію"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={() => add(input)}
+        placeholder={value.length === 0 ? "Категорія, Enter щоб додати…" : ""}
+        className="min-w-32 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
+      />
+    </div>
+  );
+}
+
 function ProductSettingsModal({
   product, onClose, onSaved,
 }: {
@@ -194,7 +240,7 @@ function ProductSettingsModal({
   const [name,         setName]         = useState(product?.name ?? "");
   const [sku,          setSku]          = useState(product?.sku ?? "");
   const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
-  const [categories,   setCategories]   = useState((product?.categories ?? []).join(", "));
+  const [categories,   setCategories]   = useState<string[]>(product?.categories ?? []);
   const [unit,         setUnit]         = useState(product?.unit ?? "шт");
   const [minStock,     setMinStock]     = useState(product?.min_stock != null ? String(product.min_stock) : "");
   const [desiredStock, setDesiredStock] = useState(product?.desired_stock != null ? String(product.desired_stock) : "");
@@ -207,7 +253,7 @@ function ProductSettingsModal({
     setName(product.name);
     setSku(product.sku);
     setBarcode(product.barcode ?? "");
-    setCategories(product.categories.join(", "));
+    setCategories(product.categories);
     setUnit(product.unit);
     setMinStock(product.min_stock != null ? String(product.min_stock) : "");
     setDesiredStock(product.desired_stock != null ? String(product.desired_stock) : "");
@@ -237,10 +283,7 @@ function ProductSettingsModal({
         name: cleanName,
         sku: cleanSku,
         barcode: barcode.trim() || null,
-        categories: categories
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean),
+        categories,
         unit: unit.trim() || "шт",
         min_stock: parseOptionalInt(minStock),
         desired_stock: parseOptionalInt(desiredStock),
@@ -324,12 +367,7 @@ function ProductSettingsModal({
 
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Категорії</span>
-          <input
-            value={categories}
-            onChange={(e) => setCategories(e.target.value)}
-            className={inputCls}
-            placeholder="Категорія 1, Категорія 2"
-          />
+          <CategoryTagsInput value={categories} onChange={setCategories} />
         </label>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -375,9 +413,10 @@ type ReplenishItem = {
 };
 
 function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  useBodyScrollLock(true);
+
   const [items,    setItems]    = useState<ReplenishItem[]>([]);
   const [qtys,     setQtys]     = useState<Record<number, string>>({});
-  const [costs,    setCosts]    = useState<Record<number, string>>({});
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading,  setLoading]  = useState(true);
   const [busy,     setBusy]     = useState(false);
@@ -386,10 +425,11 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   useEffect(() => {
     api<ReplenishItem[]>("/api/warehouse/stock/replenish-preview")
       .then((data) => {
-        setItems(data);
+        const producible = data.filter((it) => it.kind === "batch" && it.specification_id != null);
+        setItems(producible);
         const initQtys: Record<number, string> = {};
         const initSel = new Set<number>();
-        data.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
+        producible.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
         setQtys(initQtys);
         setSelected(initSel);
       })
@@ -404,12 +444,10 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         .map((it) => ({
           product_id:       it.product_id,
           qty:              parseInt(qtys[it.product_id] ?? "0") || 0,
-          kind:             it.kind,
+          kind:             "batch",
           warehouse_id:     it.warehouse_id,
           specification_id: it.specification_id,
-          unit_cost:        it.kind === "purchase" && costs[it.product_id]
-                              ? parseFloat(costs[it.product_id])
-                              : null,
+          unit_cost:        null,
         }))
         .filter((it) => it.qty > 0);
       const res = await api<{ batches: number; movements: number }>("/api/warehouse/stock/replenish", { method: "POST", body: JSON.stringify({ items: payload }) });
@@ -422,7 +460,6 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
 
   const selectedItems = items.filter((it) => selected.has(it.product_id));
   const batchCount    = selectedItems.filter((it) => it.kind === "batch").length;
-  const purchaseCount = selectedItems.filter((it) => it.kind === "purchase").length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -432,8 +469,8 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
           <div>
-            <h2 className="font-semibold text-[var(--text-hi)]">Поповнення запасів</h2>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">Товари нижче мінімального залишку</p>
+            <h2 className="font-semibold text-[var(--text-hi)]">Відправити на виробництво</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">Товари нижче мінімального залишку зі специфікацією</p>
           </div>
           <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
         </div>
@@ -443,7 +480,9 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
           {loading ? (
             <div className="px-6 py-12 text-center text-sm text-[var(--text-faint)]">Завантаження…</div>
           ) : items.length === 0 ? (
-            <div className="px-6 py-12 text-center text-sm text-[var(--text-faint)]">Всі залишки в нормі 🎉</div>
+            <div className="px-6 py-12 text-center text-sm text-[var(--text-faint)]">
+              Немає дефіцитних товарів, які можна відправити у виробництво
+            </div>
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-[var(--bg)] text-xs uppercase tracking-wider text-[var(--text-faint)]">
@@ -457,9 +496,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
                   <th className="px-3 py-3 text-left font-medium">Товар</th>
                   <th className="px-3 py-3 text-right font-medium">Наявно</th>
                   <th className="px-3 py-3 text-right font-medium">Мін / Бажаний</th>
-                  <th className="px-3 py-3 text-right font-medium">Замовити</th>
-                  <th className="px-3 py-3 text-right font-medium">Ціна/од. ₴</th>
-                  <th className="px-3 py-3 text-center font-medium">Тип</th>
+                  <th className="px-3 py-3 text-right font-medium">К-сть у партію</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
@@ -490,26 +527,6 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
                         className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                       />
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      {it.kind === "purchase" ? (
-                        <input
-                          type="number" min="0" step="0.01"
-                          value={costs[it.product_id] ?? ""}
-                          onChange={(e) => setCosts((prev) => ({ ...prev, [it.product_id]: e.target.value }))}
-                          placeholder="0.00"
-                          className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
-                        />
-                      ) : (
-                        <span className="text-[var(--text-faint)] text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-center">
-                      <span className={["rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                        it.kind === "batch" ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "bg-[var(--state-ok)]/10 text-[var(--state-ok)]",
-                      ].join(" ")}>
-                        {it.kind === "batch" ? "Партія" : "Прихід"}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -523,12 +540,11 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
             <p className="text-xs text-[var(--text-muted)]">
               {selected.size} обрано
               {batchCount > 0 && <> · {batchCount} партій</>}
-              {purchaseCount > 0 && <> · {purchaseCount} приходів</>}
             </p>
             <div className="flex gap-2">
               <button onClick={onClose} className="btn btn-ghost btn-sm">Скасувати</button>
               <button onClick={confirm} disabled={busy || selected.size === 0} className="btn btn-primary btn-sm disabled:opacity-50">
-                {busy ? "Створюю…" : "Створити все"}
+                {busy ? "Створюю…" : "Створити партії"}
               </button>
             </div>
           </div>
@@ -537,7 +553,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         {result && (
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-[var(--border)] bg-[rgba(34,197,94,.06)] px-6 py-3">
             <span className="text-sm text-[var(--state-ok)]">
-              Створено: {result.batches} партій, {result.movements} приходів
+              Створено: {result.batches} партій
             </span>
             <button onClick={onClose} className="btn btn-ghost btn-sm">Закрити</button>
           </div>
@@ -712,7 +728,7 @@ export default function StockPage() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2v20M2 12h20"/><path d="M17 7 12 2l-5 5"/>
             </svg>
-            Поповнити запаси
+            Відправити на виробництво
             {(outCount + lowCount) > 0 && (
               <span className="flex size-4 items-center justify-center rounded-full bg-[var(--state-warn)] text-[9px] font-bold text-white leading-none">
                 {outCount + lowCount}

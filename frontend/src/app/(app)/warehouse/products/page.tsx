@@ -7,6 +7,7 @@ import { useConfirm } from "@/hooks/useConfirm";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { AuthImage } from "@/components/ui/AuthImage";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
+import { useBodyScrollLock } from "@/components/ui/Modal";
 import {
   useColumnVisibility,
   ColumnSettingsModal,
@@ -192,6 +193,8 @@ function ProductModal({
   onClose: () => void;
   onSaved: (p: Product) => void;
 }) {
+  useBodyScrollLock(true);
+
   const { confirm, dialog } = useConfirm();
   const isEdit = product !== null;
   const src = product ?? prefill;  // for field defaults
@@ -533,6 +536,8 @@ function ProductModal({
 const OP_TYPE_LABELS: Record<string, string> = { print: "Друк", manual: "Ручна", postprocess: "Постобробка" };
 
 function SpecModal({ product, onClose }: { product: Product; onClose: () => void }) {
+  useBodyScrollLock(true);
+
   const [spec,     setSpec]     = useState<Spec | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [cost,     setCost]     = useState<CostBreakdown | null>(null);
@@ -969,6 +974,8 @@ function ImportPreviewModal({
   onClose: () => void;
   busy: boolean;
 }) {
+  useBodyScrollLock(true);
+
   const { summary } = preview;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

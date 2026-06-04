@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useBodyScrollLock } from "@/components/ui/Modal";
 
 // Mascot with variant expression
 function ConfirmMascot({ variant }: { variant: "danger" | "warn" | "default" }) {
@@ -62,6 +63,7 @@ export function ConfirmDialog({
 }) {
   const variant = opts.variant ?? "default";
   const showMascot = variant !== "default";
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

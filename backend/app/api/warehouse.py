@@ -2884,7 +2884,7 @@ def replenish_stock(
                 product_id=item.product_id,
                 specification_id=item.specification_id,
                 target_qty=item.qty,
-                status=BatchStatus.open,
+                status=BatchStatus.draft,
                 created_by_id=user.id,
             )
             db.add(b)

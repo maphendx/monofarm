@@ -14,6 +14,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { API_URL, api, getToken } from "@/lib/api";
+import { useBodyScrollLock } from "@/components/ui/Modal";
 import { generateCode128Url } from "@/components/warehouse/labelUtils";
 import {
   LabelCanvas,
@@ -323,6 +324,8 @@ const ALL_VARS = ["{{name}}","{{sku}}","{{barcode}}","{{categories}}","{{PROD_QR
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelItem[]; onClose: () => void }) {
+  useBodyScrollLock(true);
+
   const itemType = items[0]?.type ?? "product";
 
   // ── State ─────────────────────────────────────────────────────────────────
