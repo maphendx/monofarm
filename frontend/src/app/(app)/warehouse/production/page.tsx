@@ -1,11 +1,24 @@
 "use client";
 
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { Archive, GripVertical, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
-import { CreateBatchModal, Batch, BatchComponent } from "@/components/warehouse/CreateBatchModal";
+import { CreateBatchModal, Batch, BatchComponent, BatchPriority } from "@/components/warehouse/CreateBatchModal";
 import { CloseBatchModal } from "@/components/warehouse/CloseBatchModal";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
@@ -18,6 +31,43 @@ const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
   { status: "active", label: "Друкується",  accent: "border-[var(--accent)]" },
   { status: "done",   label: "Готово",      accent: "border-[var(--state-ok)]" },
 ];
+
+const PRIORITY_META: Record<BatchPriority, { label: string; className: string }> = {
+  low: {
+    label: "Низький",
+    className: "border-[var(--border)] bg-[var(--surface-hi)] text-[var(--text-muted)]",
+  },
+  normal: {
+    label: "Звичайний",
+    className: "border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)]",
+  },
+  high: {
+    label: "Високий",
+    className: "border-[rgba(245,158,11,.35)] bg-[rgba(245,158,11,.10)] text-[var(--state-warn)]",
+  },
+  urgent: {
+    label: "Терміновий",
+    className: "border-[rgba(239,68,68,.35)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)]",
+  },
+};
+
+const PRIORITY_WEIGHT: Record<BatchPriority, number> = {
+  urgent: 0,
+  high: 1,
+  normal: 2,
+  low: 3,
+};
+
+function sortBatches(items: Batch[]) {
+  return [...items].sort((a, b) => {
+    const byPriority = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
+    if (byPriority !== 0) return byPriority;
+    const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+    const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+    if (aDue !== bDue) return aDue - bDue;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
 
 // ── Batch card ────────────────────────────────────────────────────────────────
 
@@ -63,12 +113,12 @@ function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Bat
   const inFlight = useRef(false);
 
   async function bump(delta: number) {
+    if (inFlight.current) return;
     const next = Math.min(Math.max(printed + delta, 0), batch.target_qty);
     if (next === printed) return;
     const prev = printed;
     setPrinted(next);
     setInputVal(String(next));
-    if (inFlight.current) return;
     inFlight.current = true;
     try {
       const updated = await api<Batch>(`/api/warehouse/batches/${batch.id}/progress?printed_qty=${next}`, { method: "PATCH" });
@@ -80,12 +130,12 @@ function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Bat
   }
 
   async function commitInput() {
+    if (inFlight.current) return;
     const val = Math.min(Math.max(parseInt(inputVal) || 0, 0), batch.target_qty);
     setInputVal(String(val));
     if (val === printed) return;
     const prev = printed;
     setPrinted(val);
-    if (inFlight.current) return;
     inFlight.current = true;
     try {
       const updated = await api<Batch>(`/api/warehouse/batches/${batch.id}/progress?printed_qty=${val}`, { method: "PATCH" });
@@ -98,7 +148,7 @@ function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Bat
 
   return (
     <div className="mt-2 flex items-center gap-1.5">
-      <button onClick={() => bump(-1)}
+      <button type="button" onClick={() => bump(-1)}
         className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">−1</button>
       <input
         type="number" min={0} max={batch.target_qty}
@@ -108,27 +158,47 @@ function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Bat
         onKeyDown={e => e.key === "Enter" && commitInput()}
         className="w-14 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-center text-xs outline-none focus:border-[var(--accent)]"
       />
-      <button onClick={() => bump(1)}
+      <button type="button" onClick={() => bump(1)}
         className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">+1</button>
-      <button onClick={() => bump(5)}
+      <button type="button" onClick={() => bump(5)}
         className="rounded border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">+5</button>
     </div>
   );
 }
 
-function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModal, onDelete, onProgressUpdate }: {
+function BatchCard({
+  batch,
+  archiveMode = false,
+  dragging = false,
+  onStatusChange,
+  onOpenCloseModal,
+  onDelete,
+  onProgressUpdate,
+  onPatch,
+  onEditMeta,
+}: {
   batch: Batch;
   archiveMode?: boolean;
+  dragging?: boolean;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
   onOpenCloseModal: (b: Batch) => void;
   onDelete: (id: number) => Promise<void>;
   onProgressUpdate: (b: Batch) => void;
+  onPatch: (id: number, payload: Partial<Pick<Batch, "priority" | "notes" | "due_date" | "target_qty" | "status">>) => Promise<Batch>;
+  onEditMeta: (b: Batch) => void;
 }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `batch-${batch.id}`,
+    data: { batch },
+    disabled: archiveMode,
+  });
+  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const { confirm, dialog } = useConfirm();
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
-  const defects = batch.printed_qty - batch.good_qty;
+  const defects = batch.defect_qty;
   const [busy, setBusy]       = useState(false);
   const [bomOpen, setBomOpen] = useState(false);
+  const priority = PRIORITY_META[batch.priority];
 
   async function move(newStatus: BatchStatus) {
     setBusy(true);
@@ -169,8 +239,28 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
     }
   }
 
+  async function handlePriorityChange(value: BatchPriority) {
+    setBusy(true);
+    try {
+      await onPatch(batch.id, { priority: value });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Помилка зміни пріоритету");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={[
+        "rounded-xl border bg-[var(--bg-elevated)] p-4 shadow-sm transition",
+        dragging || isDragging
+          ? "border-[var(--border-strong)] opacity-50 ring-2 ring-[var(--border-strong)]"
+          : "border-[var(--border)] hover:border-[var(--border-strong)]",
+      ].join(" ")}
+    >
       <div className="mb-1 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="font-medium leading-tight">{batch.product_name}</span>
@@ -182,6 +272,17 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {!archiveMode && (
+            <button
+              type="button"
+              title="Перетягнути"
+              className="cursor-grab rounded p-0.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] active:cursor-grabbing"
+              {...listeners}
+              {...attributes}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </button>
+          )}
           {batch.status === "active" && (
             <span className="rounded-full bg-[rgba(56,189,248,.08)] px-2 py-0.5 text-xs font-medium text-[var(--accent)]">● live</span>
           )}
@@ -191,16 +292,43 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
           {batch.status === "cancelled" && (
             <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">Архів</span>
           )}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onEditMeta(batch)}
+            title="Коментар і пріоритет"
+            className="rounded p-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-50"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
           {batch.status === "done" && !archiveMode ? (
-            <button disabled={busy} onClick={handleArchive} title="Архівувати партію" className="text-[var(--text-faint)] hover:text-[var(--text-muted)] disabled:opacity-50 transition-colors">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7H4m2 0v12a2 2 0 002 2h8a2 2 0 002-2V7M9 11h6M8 3h8l2 4H6l2-4z" /></svg>
+            <button type="button" disabled={busy} onClick={handleArchive} title="Архівувати партію" className="rounded p-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-50">
+              <Archive className="h-3.5 w-3.5" />
             </button>
           ) : (
-            <button disabled={busy} onClick={handleDelete} title="Видалити партію" className="text-[var(--text-faint)] hover:text-[var(--state-error)] disabled:opacity-50 transition-colors">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <button type="button" disabled={busy} onClick={handleDelete} title="Видалити партію" className="rounded p-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)] disabled:opacity-50">
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <select
+          value={batch.priority}
+          disabled={busy}
+          onChange={(e) => handlePriorityChange(e.target.value as BatchPriority)}
+          className={`max-w-full rounded-full border px-2 py-0.5 text-xs outline-none transition focus:border-[var(--border-focus)] disabled:opacity-50 ${priority.className}`}
+        >
+          {Object.entries(PRIORITY_META).map(([value, meta]) => (
+            <option key={value} value={value}>{meta.label}</option>
+          ))}
+        </select>
+        {batch.due_date && (
+          <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-[var(--text-muted)]">
+            {new Date(batch.due_date).toLocaleDateString("uk-UA")}
+          </span>
+        )}
       </div>
 
       {batch.status !== "draft" ? (
@@ -218,15 +346,12 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
         <p className="text-xs text-[var(--text-faint)]">Ціль: {batch.target_qty} шт</p>
       )}
 
-      {batch.notes && <p className="mt-1.5 text-xs text-[var(--text-faint)] italic truncate">{batch.notes}</p>}
-
-      <div className="mt-2 flex gap-3 text-xs text-[var(--text-faint)]">
-        {batch.due_date && <span>📅 {new Date(batch.due_date).toLocaleDateString("uk-UA")}</span>}
-      </div>
+      {batch.notes && <p className="mt-1.5 line-clamp-2 text-xs text-[var(--text-faint)] italic">{batch.notes}</p>}
 
       {batch.components.length > 0 && (
         <div className="mt-3">
           <button
+            type="button"
             onClick={() => setBomOpen(v => !v)}
             className="flex w-full items-center justify-between text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)]"
           >
@@ -253,19 +378,19 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
       )}
 
       {batch.status === "draft" && (
-        <button disabled={busy} onClick={() => move("active")}
+        <button type="button" disabled={busy} onClick={() => move("active")}
           className="mt-3 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50   ">
           → Запустити
         </button>
       )}
       {batch.status === "active" && (
-        <button disabled={busy} onClick={() => onOpenCloseModal(batch)}
+        <button type="button" disabled={busy} onClick={() => onOpenCloseModal(batch)}
           className="mt-3 w-full rounded-md border border-[rgba(34,197,94,.3)] py-1.5 text-xs text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.08)] disabled:opacity-50 ">
           ✓ Завершити
         </button>
       )}
       {batch.status === "cancelled" && (
-        <button disabled={busy} onClick={handleRestore}
+        <button type="button" disabled={busy} onClick={handleRestore}
           className="mt-3 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50">
           Повернути в готові
         </button>
@@ -275,13 +400,173 @@ function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModa
   );
 }
 
+function BatchMetaModal({
+  batch,
+  onClose,
+  onSaved,
+}: {
+  batch: Batch | null;
+  onClose: () => void;
+  onSaved: (id: number, payload: Partial<Pick<Batch, "priority" | "notes">>) => Promise<Batch>;
+}) {
+  const [priority, setPriority] = useState<BatchPriority>("normal");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!batch) return;
+    setPriority(batch.priority);
+    setNotes(batch.notes ?? "");
+    setError(null);
+  }, [batch]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!batch || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSaved(batch.id, {
+        priority,
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Помилка збереження");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!batch) return null;
+
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Пріоритет і коментар"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50"
+          >
+            Скасувати
+          </button>
+          <button
+            type="submit"
+            form="batch-meta-form"
+            disabled={busy}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50"
+          >
+            {busy ? "Зберігаю…" : "Зберегти"}
+          </button>
+        </>
+      }
+    >
+      <form id="batch-meta-form" onSubmit={submit} className="space-y-3 text-sm">
+        <p className="font-medium">{batch.product_name}</p>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Пріоритет</span>
+          <select value={priority} onChange={(e) => setPriority(e.target.value as BatchPriority)} className={inputCls}>
+            {Object.entries(PRIORITY_META).map(([value, meta]) => (
+              <option key={value} value={value}>{meta.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Коментар</span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={4}
+            className={`${inputCls} resize-none`}
+            placeholder="Деталі для оператора, пакування, нюанси друку..."
+          />
+        </label>
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+      </form>
+    </Modal>
+  );
+}
+
+function BatchColumn({
+  col,
+  items,
+  draggingId,
+  onStatusChange,
+  onOpenCloseModal,
+  onDelete,
+  onProgressUpdate,
+  onPatch,
+  onEditMeta,
+}: {
+  col: typeof COLUMNS[number];
+  items: Batch[];
+  draggingId: number | null;
+  onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
+  onOpenCloseModal: (b: Batch) => void;
+  onDelete: (id: number) => Promise<void>;
+  onProgressUpdate: (b: Batch) => void;
+  onPatch: (id: number, payload: Partial<Pick<Batch, "priority" | "notes" | "due_date" | "target_qty" | "status">>) => Promise<Batch>;
+  onEditMeta: (b: Batch) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.status });
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className={`mb-3 flex items-center gap-2 border-l-2 pl-2 ${col.accent}`}>
+        <span className="text-sm font-medium">{col.label}</span>
+        <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+          {items.length}
+        </span>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={[
+          "min-h-32 space-y-3 rounded-xl p-2 transition-colors",
+          isOver ? "bg-[var(--surface-hi)]" : "bg-[var(--bg)]",
+        ].join(" ")}
+      >
+        {items.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center text-xs text-[var(--text-faint)]">
+            Порожньо
+          </div>
+        ) : (
+          items.map((b) => (
+            <BatchCard
+              key={b.id}
+              batch={b}
+              dragging={draggingId === b.id}
+              onStatusChange={onStatusChange}
+              onOpenCloseModal={onOpenCloseModal}
+              onDelete={onDelete}
+              onProgressUpdate={onProgressUpdate}
+              onPatch={onPatch}
+              onEditMeta={onEditMeta}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProductionPage() {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [batches,   setBatches]   = useState<Batch[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [batchToClose, setBatchToClose] = useState<Batch | null>(null);
+  const [batchToEdit, setBatchToEdit] = useState<Batch | null>(null);
+  const [draggingBatch, setDraggingBatch] = useState<Batch | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -291,9 +576,20 @@ export default function ProductionPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  async function patchBatch(
+    id: number,
+    payload: Partial<Pick<Batch, "priority" | "notes" | "due_date" | "target_qty" | "status">>,
+  ) {
+    const updated = await api<Batch>(`/api/warehouse/batches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    setBatches((prev) => prev.map((b) => b.id === id ? updated : b));
+    return updated;
+  }
+
   async function changeStatus(id: number, newStatus: BatchStatus) {
-    await api(`/api/warehouse/batches/${id}`, { method: "PATCH", body: JSON.stringify({ status: newStatus }) });
-    setBatches((prev) => prev.map((b) => b.id === id ? { ...b, status: newStatus } : b));
+    await patchBatch(id, { status: newStatus });
   }
 
   async function deleteBatch(id: number) {
@@ -301,9 +597,38 @@ export default function ProductionPage() {
     setBatches((prev) => prev.filter((b) => b.id !== id));
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    setDraggingBatch((event.active.data.current?.batch as Batch | undefined) ?? null);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setDraggingBatch(null);
+    const { active, over } = event;
+    if (!over) return;
+    const batch = active.data.current?.batch as Batch | undefined;
+    const newStatus = over.id as BatchStatus;
+    if (!batch || batch.status === newStatus) return;
+
+    if (batch.status === "done" && newStatus !== "done") {
+      toast.error("Готову партію не відкриваємо перетягуванням, бо вона вже могла створити складські рухи");
+      return;
+    }
+
+    if (newStatus === "done") {
+      setBatchToClose(batch);
+      return;
+    }
+
+    try {
+      await changeStatus(batch.id, newStatus);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Помилка переміщення партії");
+    }
+  }
+
   if (loading) return <PageSkeleton cols={6} />;
 
-  const byStatus = (s: BatchStatus) => batches.filter((b) => b.status === s);
+  const byStatus = (s: BatchStatus) => sortBatches(batches.filter((b) => b.status === s));
   const archived = byStatus("cancelled");
 
   return (
@@ -334,7 +659,7 @@ export default function ProductionPage() {
               Архів порожній
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
               {archived.map((b) => (
                 <BatchCard
                   key={b.id}
@@ -344,36 +669,42 @@ export default function ProductionPage() {
                   onOpenCloseModal={setBatchToClose}
                   onDelete={deleteBatch}
                   onProgressUpdate={(updated) => setBatches(prev => prev.map(x => x.id === updated.id ? updated : x))}
+                  onPatch={patchBatch}
+                  onEditMeta={setBatchToEdit}
                 />
               ))}
             </div>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-        {COLUMNS.map((col) => {
-          const items = byStatus(col.status);
-          return (
-            <div key={col.status}>
-              <div className={`mb-3 flex items-center gap-2 border-l-2 pl-2 ${col.accent}`}>
-                <span className="text-sm font-medium">{col.label}</span>
-                <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
-                  {items.length}
-                </span>
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            {COLUMNS.map((col) => (
+              <BatchColumn
+                key={col.status}
+                col={col}
+                items={byStatus(col.status)}
+                draggingId={draggingBatch?.id ?? null}
+                onStatusChange={changeStatus}
+                onOpenCloseModal={setBatchToClose}
+                onDelete={deleteBatch}
+                onProgressUpdate={(updated) => setBatches(prev => prev.map(x => x.id === updated.id ? updated : x))}
+                onPatch={patchBatch}
+                onEditMeta={setBatchToEdit}
+              />
+            ))}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {draggingBatch && (
+              <div className="w-72 cursor-grabbing rounded-xl border-2 border-[var(--border-strong)] bg-[var(--bg-elevated)] p-4 shadow-xl">
+                <p className="text-sm font-medium">{draggingBatch.product_name}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  {draggingBatch.printed_qty}/{draggingBatch.target_qty} надруковано
+                </p>
               </div>
-              <div className="space-y-3">
-                {items.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center text-xs text-[var(--text-faint)] ">
-                    Порожньо
-                  </div>
-                ) : (
-                  items.map((b) => <BatchCard key={b.id} batch={b} onStatusChange={changeStatus} onOpenCloseModal={setBatchToClose} onDelete={deleteBatch} onProgressUpdate={(updated) => setBatches(prev => prev.map(x => x.id === updated.id ? updated : x))} />)
-                )}
-              </div>
-            </div>
-          );
-        })}
-        </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
 
       {createOpen && (
@@ -392,6 +723,14 @@ export default function ProductionPage() {
           open
           onClose={() => setBatchToClose(null)}
           onClosed={(b) => setBatches((prev) => prev.map((x) => x.id === b.id ? b : x))}
+        />
+      )}
+
+      {batchToEdit && (
+        <BatchMetaModal
+          batch={batchToEdit}
+          onClose={() => setBatchToEdit(null)}
+          onSaved={patchBatch}
         />
       )}
     </div>

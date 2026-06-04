@@ -5,7 +5,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from app.models.warehouse import (
-    BatchStatus, CashTxCategory, CashTxType, CounterpartyType,
+    BatchPriority, BatchStatus, CashTxCategory, CashTxType, CounterpartyType,
     MovementType, OrderSource, OrderStatus, SpecOpType, WarehouseType,
 )
 
@@ -392,6 +392,7 @@ class BatchCreate(BaseModel):
     product_id:       int
     specification_id: int | None = None
     target_qty:       int
+    priority:         BatchPriority = BatchPriority.normal
     due_date:         date | None = None
     notes:            str | None = None
     order_id:         int | None = None
@@ -401,6 +402,7 @@ class BatchCreate(BaseModel):
 class BatchUpdate(BaseModel):
     target_qty:  int | None = None
     status:      BatchStatus | None = None
+    priority:    BatchPriority | None = None
     due_date:    date | None = None
     notes:       str | None = None
 
@@ -422,6 +424,7 @@ class BatchOut(BaseModel):
     good_qty:         int
     defect_qty:       int
     status:            BatchStatus
+    priority:          BatchPriority
     due_date:          date | None
     order_id:          int | None
     print_task_id:     int | None = None

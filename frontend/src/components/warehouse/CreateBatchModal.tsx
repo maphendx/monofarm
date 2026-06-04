@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 
 type BatchStatus = "draft" | "active" | "paused" | "done" | "cancelled";
+export type BatchPriority = "low" | "normal" | "high" | "urgent";
 
 export type BatchComponent = {
   id: number; name: string;
@@ -18,8 +19,9 @@ export type BatchComponent = {
 export type Batch = {
   id: number; product_name: string; specification_id: number | null;
   target_qty: number; printed_qty: number; good_qty: number; defect_qty: number;
-  status: BatchStatus; due_date: string | null; notes: string | null;
+  status: BatchStatus; priority: BatchPriority; due_date: string | null; notes: string | null;
   print_task_id: number | null; print_task_title: string | null;
+  created_at: string; updated_at: string;
   components: BatchComponent[];
 };
 
@@ -44,6 +46,7 @@ export function CreateBatchModal({
   const [productId,   setProductId]   = useState(initialProductId || "");
   const [specId,      setSpecId]      = useState("");
   const [targetQty,   setTargetQty]   = useState("10");
+  const [priority,    setPriority]    = useState<BatchPriority>("normal");
   const [dueDate,     setDueDate]     = useState("");
   const [notes,       setNotes]       = useState("");
   const [printTaskId, setPrintTaskId] = useState("");
@@ -66,16 +69,7 @@ export function CreateBatchModal({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    selectedProductId.current = productId;
-    if (!productId) {
-      setReplenishHint(null);
-      return;
-    }
-    void suggestTargetQty(productId);
-  }, [productId, products]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function suggestTargetQty(id: string) {
+  const suggestTargetQty = useCallback(async (id: string) => {
     const product = products.find((p) => p.id === parseInt(id));
     try {
       const rows = await api<StockRow[]>(`/api/warehouse/stock?product_id=${id}`);
@@ -101,7 +95,16 @@ export function CreateBatchModal({
     } catch {
       setReplenishHint(null);
     }
-  }
+  }, [products]);
+
+  useEffect(() => {
+    selectedProductId.current = productId;
+    if (!productId) {
+      setReplenishHint(null);
+      return;
+    }
+    void suggestTargetQty(productId);
+  }, [productId, suggestTargetQty]);
 
   function handleProductChange(id: string) {
     setProductId(id);
@@ -126,6 +129,7 @@ export function CreateBatchModal({
       const body: Record<string, unknown> = {
         product_id: parseInt(productId),
         target_qty: parsedTargetQty,
+        priority,
       };
       if (specId)        body.specification_id = parseInt(specId);
       if (dueDate)       body.due_date = dueDate;
@@ -180,7 +184,7 @@ export function CreateBatchModal({
           </label>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="block">
             <span className="mb-1 block text-[var(--text-muted)] ">Кількість (шт)</span>
             <input
@@ -198,13 +202,22 @@ export function CreateBatchModal({
             )}
           </label>
           <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)] ">Пріоритет</span>
+            <select value={priority} onChange={(e) => setPriority(e.target.value as BatchPriority)} className={inputCls}>
+              <option value="low">Низький</option>
+              <option value="normal">Звичайний</option>
+              <option value="high">Високий</option>
+              <option value="urgent">Терміновий</option>
+            </select>
+          </label>
+          <label className="block">
             <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
           </label>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-[var(--text-muted)] ">Нотатка</span>
+          <span className="mb-1 block text-[var(--text-muted)] ">Коментар</span>
           <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputCls} />
         </label>
 

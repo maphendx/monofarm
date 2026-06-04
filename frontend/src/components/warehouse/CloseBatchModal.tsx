@@ -16,8 +16,8 @@ export function CloseBatchModal({
   onClosed: (b: Batch) => void;
 }) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [goodQty, setGoodQty] = useState(() => batch ? batch.target_qty.toString() : "");
-  const [defectQty, setDefectQty] = useState("0");
+  const [goodQty, setGoodQty] = useState(() => batch ? String(batch.printed_qty || batch.good_qty || batch.target_qty) : "");
+  const [defectQty, setDefectQty] = useState(() => batch ? String(batch.defect_qty) : "0");
   const [whGoodId, setWhGoodId] = useState("");
   const [whDefectId, setWhDefectId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,6 +33,12 @@ export function CloseBatchModal({
       }
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!batch) return;
+    setGoodQty(String(batch.printed_qty || batch.good_qty || batch.target_qty));
+    setDefectQty(String(batch.defect_qty));
+  }, [batch]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

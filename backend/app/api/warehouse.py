@@ -3370,7 +3370,7 @@ def _batch_to_out(b: ProductionBatch, db: Session, pf: "_BatchPrefetch | None" =
         specification_id=b.specification_id,
         target_qty=b.target_qty, printed_qty=b.printed_qty,
         good_qty=b.good_qty, defect_qty=b.defect_qty,
-        status=b.status, due_date=b.due_date,
+        status=b.status, priority=b.priority, due_date=b.due_date,
         order_id=b.order_id,
         print_task_id=b.print_task_id,
         print_task_title=print_task_title,

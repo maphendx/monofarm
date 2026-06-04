@@ -60,6 +60,13 @@ class BatchStatus(str, enum.Enum):
     cancelled = "cancelled"
 
 
+class BatchPriority(str, enum.Enum):
+    low    = "low"
+    normal = "normal"
+    high   = "high"
+    urgent = "urgent"
+
+
 class OrderStatus(str, enum.Enum):
     new           = "new"
     confirmed     = "confirmed"     # reserved — stock locked
@@ -281,6 +288,7 @@ class ProductionBatch(Base):
     good_qty:         Mapped[int]         = mapped_column(Integer, default=0)
     defect_qty:       Mapped[int]         = mapped_column(Integer, default=0)
     status:           Mapped[BatchStatus] = mapped_column(Enum(BatchStatus), default=BatchStatus.draft, nullable=False, index=True)
+    priority:         Mapped[BatchPriority] = mapped_column(Enum(BatchPriority), default=BatchPriority.normal, nullable=False, index=True)
     due_date:         Mapped[date | None] = mapped_column(Date, nullable=True)
     order_id:         Mapped[int | None]  = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="SET NULL"), nullable=True)
     print_task_id:    Mapped[int | None]  = mapped_column(Integer, ForeignKey("print_tasks.id", ondelete="SET NULL"), nullable=True, index=True)
