@@ -3317,10 +3317,10 @@ def delete_batch(
     b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
     if not b:
         raise HTTPException(status_code=404, detail="Batch not found")
-    if b.status != BatchStatus.draft:
+    if b.status == BatchStatus.done:
         raise HTTPException(
             status_code=400,
-            detail=f"Видалити можна лише чернеткову партію (зараз: {b.status}). Активні та закриті партії не видаляються.",
+            detail="Завершену партію не можна видалити, бо вона вже могла створити складські рухи.",
         )
     db.delete(b)
     db.commit()

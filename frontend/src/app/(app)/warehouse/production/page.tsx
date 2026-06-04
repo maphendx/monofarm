@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
@@ -115,8 +116,9 @@ function ProgressControls({ batch, onUpdate }: { batch: Batch; onUpdate: (b: Bat
   );
 }
 
-function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgressUpdate }: {
+function BatchCard({ batch, archiveMode = false, onStatusChange, onOpenCloseModal, onDelete, onProgressUpdate }: {
   batch: Batch;
+  archiveMode?: boolean;
   onStatusChange: (id: number, s: BatchStatus) => Promise<void>;
   onOpenCloseModal: (b: Batch) => void;
   onDelete: (id: number) => Promise<void>;
@@ -138,7 +140,33 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
     if (!await confirm({ message: "Видалити цю партію?", variant: "danger" })) return;
     setBusy(true);
     try { await onDelete(batch.id); }
-    catch { setBusy(false); }
+    catch (err) {
+      toast.error(err instanceof Error ? err.message : "Помилка видалення");
+      setBusy(false);
+    }
+  }
+
+  async function handleArchive() {
+    if (!await confirm({ message: "Перемістити готову партію в архів?", variant: "danger" })) return;
+    setBusy(true);
+    try {
+      await onStatusChange(batch.id, "cancelled");
+      toast.success("Партію переміщено в архів");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Помилка архівації");
+      setBusy(false);
+    }
+  }
+
+  async function handleRestore() {
+    setBusy(true);
+    try {
+      await onStatusChange(batch.id, "done");
+      toast.success("Партію повернуто в готові");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Помилка відновлення");
+      setBusy(false);
+    }
   }
 
   return (
@@ -160,9 +188,18 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
           {batch.status === "done" && (
             <span className="rounded-full bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-xs font-medium text-[var(--state-ok)]">✓</span>
           )}
-          <button disabled={busy} onClick={handleDelete} title="Видалити партію" className="text-[var(--text-faint)] hover:text-red-500 disabled:opacity-50 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-          </button>
+          {batch.status === "cancelled" && (
+            <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">Архів</span>
+          )}
+          {batch.status === "done" && !archiveMode ? (
+            <button disabled={busy} onClick={handleArchive} title="Архівувати партію" className="text-[var(--text-faint)] hover:text-[var(--text-muted)] disabled:opacity-50 transition-colors">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7H4m2 0v12a2 2 0 002 2h8a2 2 0 002-2V7M9 11h6M8 3h8l2 4H6l2-4z" /></svg>
+            </button>
+          ) : (
+            <button disabled={busy} onClick={handleDelete} title="Видалити партію" className="text-[var(--text-faint)] hover:text-[var(--state-error)] disabled:opacity-50 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,6 +264,12 @@ function BatchCard({ batch, onStatusChange, onOpenCloseModal, onDelete, onProgre
           ✓ Завершити
         </button>
       )}
+      {batch.status === "cancelled" && (
+        <button disabled={busy} onClick={handleRestore}
+          className="mt-3 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50">
+          Повернути в готові
+        </button>
+      )}
       {dialog}
     </div>
   );
@@ -239,6 +282,7 @@ export default function ProductionPage() {
   const [loading,   setLoading]   = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [batchToClose, setBatchToClose] = useState<Batch | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const load = useCallback(async () => {
     try { setBatches(await api<Batch[]>("/api/warehouse/batches")); }
@@ -260,17 +304,53 @@ export default function ProductionPage() {
   if (loading) return <PageSkeleton cols={6} />;
 
   const byStatus = (s: BatchStatus) => batches.filter((b) => b.status === s);
+  const archived = byStatus("cancelled");
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={() => setArchiveOpen((v) => !v)}
+          className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+        >
+          {archiveOpen ? "Поточні партії" : `Архів (${archived.length})`}
+        </button>
         <button onClick={() => setCreateOpen(true)}
           className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-xs text-white hover:bg-[var(--accent-hi)]  ">
           + Партія
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      {archiveOpen ? (
+        <div>
+          <div className="mb-3 flex items-center gap-2 border-l-2 border-[var(--border-strong)] pl-2">
+            <span className="text-sm font-medium">Архів</span>
+            <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+              {archived.length}
+            </span>
+          </div>
+          {archived.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] px-4 py-6 text-center text-xs text-[var(--text-faint)]">
+              Архів порожній
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {archived.map((b) => (
+                <BatchCard
+                  key={b.id}
+                  batch={b}
+                  archiveMode
+                  onStatusChange={changeStatus}
+                  onOpenCloseModal={setBatchToClose}
+                  onDelete={deleteBatch}
+                  onProgressUpdate={(updated) => setBatches(prev => prev.map(x => x.id === updated.id ? updated : x))}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
         {COLUMNS.map((col) => {
           const items = byStatus(col.status);
           return (
@@ -293,7 +373,8 @@ export default function ProductionPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {createOpen && (
         <CreateBatchModal
