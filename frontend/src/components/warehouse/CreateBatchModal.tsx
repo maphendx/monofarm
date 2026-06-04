@@ -23,9 +23,10 @@ export type Batch = {
   components: BatchComponent[];
 };
 
-type Product  = { id: number; name: string; sku: string };
+type Product  = { id: number; name: string; sku: string; desired_stock: number | null };
 type Spec     = { id: number; name: string; version: number; is_default: boolean };
 type FarmTask = { id: number; title: string; quantity: number; status: string; product_id: number | null };
+type StockRow = { available: string; desired_stock: number | null };
 
 export function CreateBatchModal({
   open, onClose, onCreated, initialProductId, initialOrderId, orderNumber,
@@ -46,10 +47,14 @@ export function CreateBatchModal({
   const [dueDate,     setDueDate]     = useState("");
   const [notes,       setNotes]       = useState("");
   const [printTaskId, setPrintTaskId] = useState("");
+  const [replenishHint, setReplenishHint] = useState<{ desired: number; available: number; qty: number } | null>(null);
   const orderId = initialOrderId;
   const [busy,  setBusy]  = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const targetTouched = useRef(false);
+  const autoTargetForProduct = useRef<string | null>(null);
+  const selectedProductId = useRef(productId);
 
   useEffect(() => {
     api<Product[]>("/api/warehouse/products").then(setProducts).catch(() => {});
@@ -61,10 +66,49 @@ export function CreateBatchModal({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    selectedProductId.current = productId;
+    if (!productId) {
+      setReplenishHint(null);
+      return;
+    }
+    void suggestTargetQty(productId);
+  }, [productId, products]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function suggestTargetQty(id: string) {
+    const product = products.find((p) => p.id === parseInt(id));
+    try {
+      const rows = await api<StockRow[]>(`/api/warehouse/stock?product_id=${id}`);
+      if (selectedProductId.current !== id) return;
+      const desired = rows.find((r) => r.desired_stock != null)?.desired_stock ?? product?.desired_stock ?? null;
+      if (desired == null) {
+        setReplenishHint(null);
+        return;
+      }
+
+      const available = rows.reduce((sum, row) => {
+        const value = parseFloat(row.available);
+        return sum + (Number.isFinite(value) ? value : 0);
+      }, 0);
+      const qty = Math.max(0, Math.ceil(desired - available));
+      setReplenishHint({ desired, available, qty });
+
+      if (!targetTouched.current || autoTargetForProduct.current === id) {
+        setTargetQty(String(qty));
+        autoTargetForProduct.current = id;
+        targetTouched.current = false;
+      }
+    } catch {
+      setReplenishHint(null);
+    }
+  }
+
   function handleProductChange(id: string) {
     setProductId(id);
     setSpecs([]);
     setSpecId("");
+    targetTouched.current = false;
+    autoTargetForProduct.current = null;
     if (!id) return;
     api<Spec[]>(`/api/warehouse/products/${id}/specs`)
       .then((ss) => { setSpecs(ss); setSpecId(ss.find((s) => s.is_default)?.id.toString() ?? ss[0]?.id.toString() ?? ""); })
@@ -73,13 +117,15 @@ export function CreateBatchModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const parsedTargetQty = parseInt(targetQty, 10);
+    if (!Number.isFinite(parsedTargetQty) || parsedTargetQty < 1) return;
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true); setError(null);
     try {
       const body: Record<string, unknown> = {
         product_id: parseInt(productId),
-        target_qty: parseInt(targetQty),
+        target_qty: parsedTargetQty,
       };
       if (specId)        body.specification_id = parseInt(specId);
       if (dueDate)       body.due_date = dueDate;
@@ -94,6 +140,8 @@ export function CreateBatchModal({
   }
 
   const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)] ";
+  const parsedTargetQty = parseInt(targetQty, 10);
+  const canSubmit = Boolean(productId) && Number.isFinite(parsedTargetQty) && parsedTargetQty >= 1;
 
   return (
     <Modal open={open} onClose={onClose} title="Нова виробнича партія"
@@ -102,7 +150,7 @@ export function CreateBatchModal({
           className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  ">
           Скасувати
         </button>
-        <button type="submit" form="batch-form" disabled={busy || !productId || parseInt(targetQty) < 1}
+        <button type="submit" form="batch-form" disabled={busy || !canSubmit}
           className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50  ">
           {busy ? "Зберігаю…" : "Створити"}
         </button>
@@ -135,7 +183,19 @@ export function CreateBatchModal({
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="mb-1 block text-[var(--text-muted)] ">Кількість (шт)</span>
-            <input type="number" required min={1} value={targetQty} onChange={(e) => setTargetQty(e.target.value)} className={inputCls} />
+            <input
+              type="number"
+              required
+              min={0}
+              value={targetQty}
+              onChange={(e) => { targetTouched.current = true; setTargetQty(e.target.value); }}
+              className={inputCls}
+            />
+            {replenishHint && (
+              <span className="mt-1 block text-xs text-[var(--text-faint)]">
+                Бажаний {replenishHint.desired} · доступний {replenishHint.available.toLocaleString("uk-UA", { maximumFractionDigits: 2 })} · потрібно {replenishHint.qty}
+              </span>
+            )}
           </label>
           <label className="block">
             <span className="mb-1 block text-[var(--text-muted)] ">Дедлайн</span>
