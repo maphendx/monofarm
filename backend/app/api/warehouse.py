@@ -11,7 +11,7 @@ import uuid
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles, require_warehouse_full
@@ -2783,7 +2783,7 @@ class _ReplenishPreviewItem(BaseModel):
     product_sku:      str
     unit:             str
     available:        float
-    min_stock:        int
+    min_stock:        int | None
     desired_stock:    int | None
     qty_needed:       int
     kind:             str         # "batch" | "purchase"
@@ -2810,6 +2810,7 @@ def replenish_preview(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[_ReplenishPreviewItem]:
+    available_expr = StockEntry.quantity - StockEntry.reserved_qty
     rows = (
         db.query(StockEntry, Product, Warehouse)
         .join(Product,   Product.id   == StockEntry.product_id)
@@ -2817,8 +2818,10 @@ def replenish_preview(
         .filter(
             StockEntry.organization_id == org.id,
             Product.is_active.is_(True),
-            Product.min_stock.isnot(None),
-            StockEntry.quantity - StockEntry.reserved_qty < Product.min_stock,
+            or_(
+                available_expr <= 0,
+                Product.min_stock.isnot(None) & (available_expr < Product.min_stock),
+            ),
         )
         .order_by(Product.name)
         .all()
@@ -2845,7 +2848,7 @@ def replenish_preview(
             continue
         seen.add(p.id)
         avail = float(e.quantity - e.reserved_qty)
-        target = p.desired_stock if p.desired_stock else p.min_stock
+        target = p.desired_stock if p.desired_stock else (p.min_stock or 1)
         qty_needed = max(1, int(target - avail))
         spec = default_specs.get(p.id)
         result.append(_ReplenishPreviewItem(
@@ -2857,7 +2860,7 @@ def replenish_preview(
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,
             qty_needed=qty_needed,
-            kind="batch" if spec else "purchase",
+            kind="batch",
             specification_id=spec.id if spec else None,
             warehouse_id=wh.id,
             warehouse_name=wh.name,

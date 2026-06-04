@@ -403,7 +403,7 @@ type ReplenishItem = {
   product_sku:      string;
   unit:             string;
   available:        number;
-  min_stock:        number;
+  min_stock:        number | null;
   desired_stock:    number | null;
   qty_needed:       number;
   kind:             "batch" | "purchase";
@@ -425,11 +425,10 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   useEffect(() => {
     api<ReplenishItem[]>("/api/warehouse/stock/replenish-preview")
       .then((data) => {
-        const producible = data.filter((it) => it.kind === "batch" && it.specification_id != null);
-        setItems(producible);
+        setItems(data);
         const initQtys: Record<number, string> = {};
         const initSel = new Set<number>();
-        producible.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
+        data.forEach((it) => { initQtys[it.product_id] = String(it.qty_needed); initSel.add(it.product_id); });
         setQtys(initQtys);
         setSelected(initSel);
       })
@@ -470,7 +469,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-6 py-4">
           <div>
             <h2 className="font-semibold text-[var(--text-hi)]">Відправити на виробництво</h2>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">Товари нижче мінімального залишку зі специфікацією</p>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">Товари без залишку або нижче мінімального залишку</p>
           </div>
           <button onClick={onClose} className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)]">×</button>
         </div>
@@ -517,7 +516,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-xs text-[var(--text-muted)]">
-                      {it.min_stock}{it.desired_stock ? ` / ${it.desired_stock}` : ""}
+                      {it.min_stock ?? "—"}{it.desired_stock ? ` / ${it.desired_stock}` : ""}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <input
