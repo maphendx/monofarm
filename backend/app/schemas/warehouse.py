@@ -305,6 +305,7 @@ class StockEntryOut(BaseModel):
     min_stock:      int | None
     desired_stock:  int | None
     cell_limit:     int | None
+    in_production_qty: int = 0    # сума (target_qty - good_qty) по відкритих партіях товару
     updated_at:     datetime
 
     class Config:

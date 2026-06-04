@@ -1226,7 +1226,7 @@ export default function ProductsPage() {
   const [search,        setSearch]        = useState("");
   const [selectedCats,  setSelectedCats]  = useState<string[]>([]);
   const [barcodeFilter, setBarcodeFilter] = useState<BarcodeFilter>("all");
-  const [sortKey,       setSortKey]       = useState<SortKey>("name");
+  const [sortKey,       setSortKey]       = useState<SortKey>("sku");
   const [sortDir,  setSortDir]  = useState<SortDir>("asc");
   const [pageSize, setPageSize] = useState<number>(25);
   const [page,     setPage]     = useState(1);

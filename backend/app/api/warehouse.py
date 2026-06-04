@@ -2725,6 +2725,21 @@ def list_stock(
             cell_name = f"{zone_name} {cell_code}"
             cell_stock_map[(pid, wid)].append({"name": cell_name, "quantity": qty})
 
+    # Скільки кожного товару зараз у відкритих виробничих партіях (заплановано/друкується/пауза).
+    # Прив'язка партій — на рівні товару, тож значення проставляється всім складським рядкам товару.
+    in_production_map: dict[int, int] = {}
+    if product_ids:
+        open_states = (BatchStatus.draft, BatchStatus.active, BatchStatus.paused)
+        prod_rows = db.query(
+            ProductionBatch.product_id,
+            func.sum(ProductionBatch.target_qty - ProductionBatch.good_qty),
+        ).filter(
+            ProductionBatch.organization_id == org.id,
+            ProductionBatch.product_id.in_(product_ids),
+            ProductionBatch.status.in_(open_states),
+        ).group_by(ProductionBatch.product_id).all()
+        in_production_map = {pid: max(0, int(s or 0)) for pid, s in prod_rows}
+
     result = []
     for e, p, wh in rows:
         avail = e.quantity - e.reserved_qty
@@ -2754,6 +2769,7 @@ def list_stock(
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,
             cell_limit=p.box_limit,
+            in_production_qty=in_production_map.get(e.product_id, 0),
             updated_at=e.updated_at,
         ))
     return result

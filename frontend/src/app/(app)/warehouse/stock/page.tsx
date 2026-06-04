@@ -42,24 +42,28 @@ type StockEntry = {
   min_stock:          number | null;
   desired_stock:      number | null;
   cell_limit:         number | null;
+  in_production_qty:  number;
   updated_at:         string;
 };
 
-type StockStatus = "out" | "low" | "ok" | "desired";
+type StockStatus = "out" | "low" | "ok" | "desired" | "production";
 
 function getStatus(e: StockEntry): StockStatus {
-  const avail = parseFloat(e.available);
-  if (avail <= 0) return "out";
-  if (e.min_stock != null && avail < e.min_stock) return "low";
+  const avail  = parseFloat(e.available);
+  const inProd = e.in_production_qty > 0;
+  // Товар нижче мінімуму, але по ньому вже відкрита партія — не алярмимо, показуємо «у виробництві».
+  if (avail <= 0) return inProd ? "production" : "out";
+  if (e.min_stock != null && avail < e.min_stock) return inProd ? "production" : "low";
   if (e.desired_stock != null && avail >= e.desired_stock) return "desired";
   return "ok";
 }
 
 const STATUS_META: Record<StockStatus, { label: string; dot: string; row: string }> = {
-  out:     { label: "Немає",    dot: "bg-[var(--state-error)]", row: "bg-[rgba(239,68,68,.04)]" },
-  low:     { label: "Мало",     dot: "bg-[var(--state-warn)]",  row: "bg-[rgba(245,158,11,.04)]" },
-  ok:      { label: "Норма",    dot: "bg-[var(--state-ok)]",    row: "" },
-  desired: { label: "Цільовий", dot: "bg-[var(--accent)]",      row: "" },
+  out:        { label: "Немає",         dot: "bg-[var(--state-error)]",      row: "bg-[rgba(239,68,68,.04)]" },
+  low:        { label: "Мало",          dot: "bg-[var(--state-warn)]",       row: "bg-[rgba(245,158,11,.04)]" },
+  ok:         { label: "Норма",         dot: "bg-[var(--state-ok)]",         row: "" },
+  desired:    { label: "Цільовий",      dot: "bg-[var(--accent)]",           row: "" },
+  production: { label: "У виробництві", dot: "bg-[var(--state-production)]", row: "bg-[rgba(139,92,246,.06)]" },
 };
 
 // ── Column defs ───────────────────────────────────────────────────────────────
@@ -142,10 +146,12 @@ function ThresholdCell({
 
 // ── StockBar ──────────────────────────────────────────────────────────────────
 
-function StockBar({ avail, min, desired }: { avail: number; min: number | null; desired: number | null }) {
+function StockBar({ avail, min, desired, inProduction = false }: { avail: number; min: number | null; desired: number | null; inProduction?: boolean }) {
   if (!desired) return null;
   const pct   = Math.min(100, (avail / desired) * 100);
-  const color = avail <= 0          ? "var(--state-error)"
+  const lowOrOut = avail <= 0 || (min != null && avail < min);
+  const color = inProduction && lowOrOut ? "var(--state-production)"
+    : avail <= 0                    ? "var(--state-error)"
     : min != null && avail < min    ? "var(--state-warn)"
     : avail >= desired              ? "var(--accent)"
     : "var(--state-ok)";
@@ -354,7 +360,7 @@ function ReplenishModal({ onClose, onDone }: { onClose: () => void; onDone: () =
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type FilterMode = "all" | "out" | "low" | "order";
+type FilterMode = "all" | "out" | "low" | "order" | "production";
 
 export default function StockPage() {
   const [stock,    setStock]    = useState<StockEntry[]>([]);
@@ -410,13 +416,15 @@ export default function StockPage() {
   const warehouses = ["Всі", ...Array.from(new Set(stock.map((s) => s.warehouse_name)))];
   const outCount   = stock.filter((e) => getStatus(e) === "out").length;
   const lowCount   = stock.filter((e) => getStatus(e) === "low").length;
+  const prodCount  = stock.filter((e) => getStatus(e) === "production").length;
 
   const filtered = stock.filter((e) => {
     if (hideZero && parseFloat(e.quantity) === 0) return false;
     if (whFilter !== "Всі" && e.warehouse_name !== whFilter) return false;
     const st = getStatus(e);
-    if (mode === "out"   && st !== "out") return false;
-    if (mode === "low"   && (st !== "low" && st !== "out")) return false;
+    if (mode === "out"        && st !== "out") return false;
+    if (mode === "low"        && (st !== "low" && st !== "out")) return false;
+    if (mode === "production" && st !== "production") return false;
     if (search) {
       const q = search.toLowerCase();
       if (!e.product_name.toLowerCase().includes(q) &&
@@ -498,7 +506,7 @@ export default function StockPage() {
       </div>
 
       {/* Summary alert strip */}
-      {(outCount > 0 || lowCount > 0) && (
+      {(outCount > 0 || lowCount > 0 || prodCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {outCount > 0 && (
             <button onClick={() => setMode(mode === "out" ? "all" : "out")}
@@ -520,6 +528,17 @@ export default function StockPage() {
               ].join(" ")}>
               <span className="size-2 rounded-full bg-[var(--state-warn)]" />
               {lowCount} нижче мінімуму
+            </button>
+          )}
+          {prodCount > 0 && (
+            <button onClick={() => setMode(mode === "production" ? "all" : "production")}
+              className={["flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors",
+                mode === "production"
+                  ? "border-[var(--state-production)] bg-[rgba(139,92,246,.10)] text-[var(--state-production)]"
+                  : "border-[rgba(139,92,246,.3)] text-[var(--state-production)] hover:bg-[rgba(139,92,246,.06)]",
+              ].join(" ")}>
+              <span className="size-2 rounded-full bg-[var(--state-production)]" />
+              {prodCount} у виробництві
             </button>
           )}
         </div>
@@ -558,10 +577,11 @@ export default function StockPage() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[var(--text-faint)]">Статус</p>
             <div className="space-y-0.5">
               {([
-                ["all",   "Всі"],
-                ["out",   "Немає на складі"],
-                ["low",   "Нижче мінімуму"],
-                ["order", "Потребують замовлення"],
+                ["all",        "Всі"],
+                ["out",        "Немає на складі"],
+                ["low",        "Нижче мінімуму"],
+                ["production", "У виробництві"],
+                ["order",      "Потребують замовлення"],
               ] as const).map(([val, label]) => (
                 <label key={val} className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-[var(--surface-hi)]">
                   <input
@@ -698,7 +718,14 @@ export default function StockPage() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium leading-tight" title={e.product_name}>{e.product_name}</p>
                             <p className="font-mono text-xs text-[var(--text-faint)]">{e.product_sku}</p>
-                            <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} />
+                            {e.in_production_qty > 0 && (
+                              <span className="mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                                style={{ background: "rgba(139,92,246,.10)", color: "var(--state-production)" }}
+                                title="Заплановано/друкується у виробничих партіях">
+                                🛠 у вир-ві {fmt(e.in_production_qty)} {e.product_unit}
+                              </span>
+                            )}
+                            <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} inProduction={status === "production"} />
                           </div>
                         </div>
                       </td>
@@ -775,7 +802,7 @@ export default function StockPage() {
                     {colVis.isVisible("quantity") && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap">
                         <span className={["font-mono text-sm font-semibold tabular-nums",
-                          status === "out" ? "text-[var(--state-error)]" : status === "low" ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+                          status === "out" ? "text-[var(--state-error)]" : status === "low" ? "text-[var(--state-warn)]" : status === "production" ? "text-[var(--state-production)]" : "text-[var(--text)]",
                         ].join(" ")}>
                           {fmt(e.quantity)}
                         </span>
