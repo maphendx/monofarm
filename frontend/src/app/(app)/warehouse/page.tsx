@@ -73,13 +73,23 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+const LOW_STOCK_PREVIEW = 8;
+
+function pluralPositions(n: number): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "позиція";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "позиції";
+  return "позицій";
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WarehouseDashboard() {
-  const [summary,   setSummary]   = useState<DashboardSummary | null>(null);
-  const [batches,   setBatches]   = useState<Batch[]>([]);
-  const [movements, setMovements] = useState<Movement[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [summary,    setSummary]    = useState<DashboardSummary | null>(null);
+  const [batches,    setBatches]    = useState<Batch[]>([]);
+  const [movements,  setMovements]  = useState<Movement[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [showAllLow, setShowAllLow] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -120,18 +130,38 @@ export default function WarehouseDashboard() {
       {/* Low stock alert */}
       {lowStock.length > 0 && (
         <div className="rounded-xl border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-4 py-3">
-          <p className="mb-2 text-sm font-medium text-[var(--state-warn)]">
-            ⚠ {lowStock.length} позиції нижче мінімального залишку
-          </p>
-          <ul className="space-y-1">
-            {lowStock.map((s) => (
-              <li key={s.product_id} className="flex items-center gap-2 text-sm text-[var(--state-warn)]">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-[var(--state-warn)]">
+              ⚠ {lowStock.length} {pluralPositions(lowStock.length)} нижче мінімального залишку
+            </p>
+            {lowStock.length > LOW_STOCK_PREVIEW && (
+              <button
+                onClick={() => setShowAllLow((v) => !v)}
+                className="shrink-0 text-xs font-medium text-[var(--state-warn)] underline-offset-2 hover:underline"
+              >
+                {showAllLow ? "Згорнути" : `Показати всі (${lowStock.length})`}
+              </button>
+            )}
+          </div>
+          <div className={`flex flex-wrap gap-1.5 ${showAllLow ? "max-h-40 overflow-y-auto pr-1" : ""}`}>
+            {(showAllLow ? lowStock : lowStock.slice(0, LOW_STOCK_PREVIEW)).map((s) => (
+              <span
+                key={s.product_id}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.1)] px-2.5 py-0.5 text-xs text-[var(--state-warn)]"
+              >
                 <span className="font-medium">{s.product_name}</span>
-                <span>—</span>
-                <span>{parseFloat(s.available).toFixed(0)} шт</span>
-              </li>
+                <span className="tabular-nums opacity-75">{parseFloat(s.available).toFixed(0)} шт</span>
+              </span>
             ))}
-          </ul>
+            {!showAllLow && lowStock.length > LOW_STOCK_PREVIEW && (
+              <button
+                onClick={() => setShowAllLow(true)}
+                className="inline-flex items-center rounded-full border border-[rgba(245,158,11,.25)] px-2.5 py-0.5 text-xs font-medium text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.1)]"
+              >
+                +{lowStock.length - LOW_STOCK_PREVIEW} ще
+              </button>
+            )}
+          </div>
         </div>
       )}
 
