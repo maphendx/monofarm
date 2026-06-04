@@ -62,10 +62,16 @@ const PRIORITY_WEIGHT: Record<BatchPriority, number> = {
   low: 3,
 };
 
+function remainingQty(batch: Batch) {
+  return Math.max(0, batch.target_qty - batch.good_qty);
+}
+
 function sortBatches(items: Batch[]) {
   return [...items].sort((a, b) => {
     const byPriority = PRIORITY_WEIGHT[a.priority] - PRIORITY_WEIGHT[b.priority];
     if (byPriority !== 0) return byPriority;
+    const byNeededQty = remainingQty(b) - remainingQty(a);
+    if (byNeededQty !== 0) return byNeededQty;
     const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
     const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
     if (aDue !== bDue) return aDue - bDue;
