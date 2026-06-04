@@ -9,6 +9,7 @@ import { PrinterCard } from "@/components/printers/PrinterCard";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useT } from "@/lib/i18n";
@@ -609,9 +610,16 @@ export default function DashboardPage() {
         <FlowView printers={printers} />
       ) : loading && printers.length === 0 ? (
         <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>
+      ) : printers.length === 0 ? (
+        <EmptyState
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>}
+          title={t("dashboard.noPrinters")}
+          description={t("dashboard.addFirstPrinter")}
+          action={{ label: t("printers.add"), href: "/settings" }}
+        />
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-muted)] ">
-          {t("dashboard.noPrinters")}
+          {t("dashboard.noMatch")}
         </div>
       ) : view === "photos" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">

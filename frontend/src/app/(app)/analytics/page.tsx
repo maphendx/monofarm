@@ -16,6 +16,7 @@ import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface Summary {
   tasks: { queued: number; in_progress: number; done: number; cancelled: number };
@@ -106,6 +107,25 @@ export default function AnalyticsPage() {
   }, [days]);
 
   if (loading) return <PageSkeleton cols={5} withStats statsCount={5} />;
+
+  const isEmpty = summary != null
+    && summary.plan_entries_done === 0
+    && summary.total_print_minutes === 0
+    && summary.active_printers === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="space-y-8">
+        <h1 className="text-lg font-semibold">{t("analytics.title")}</h1>
+        <EmptyState
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>}
+          title={t("analytics.noData")}
+          description={t("analytics.noDataHint")}
+          action={{ label: t("printers.add"), href: "/settings" }}
+        />
+      </div>
+    );
+  }
 
   const maxDone = Math.max(...daily.map((d) => d.done), 1);
 

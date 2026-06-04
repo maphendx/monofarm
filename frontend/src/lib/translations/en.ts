@@ -131,6 +131,7 @@ const en = {
     manageGroups: "Manage printer groups",
     noPrinters: "No printers yet",
     addFirstPrinter: "Add a printer manually — takes a minute.",
+    noMatch: "Nothing matches the filter",
   },
   printers: {
     title: "Printers",
@@ -334,7 +335,8 @@ const en = {
   },
   history: {
     title: "Print history",
-    noRecords: "No records yet. The tracker will log the first print within 30 seconds of starting.",
+    noRecords: "No records yet",
+    noRecordsHint: "Completed prints will show up here — the first entry lands within 30 seconds of starting.",
     allTime: "all time",
     completed: "completed",
     doing: "printing",
@@ -350,6 +352,7 @@ const en = {
     start: "Start",
     now: "Now",
     noData: "No data",
+    noDataHint: "Analytics appear once you run your first prints.",
     notFound: "Not found",
   },
   users: {

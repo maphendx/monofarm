@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface HistoryEntry {
   id: number;
@@ -73,7 +74,11 @@ export default function HistoryPage() {
       {loading ? (
         <PageSkeleton cols={6} />
       ) : entries.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">{t("history.noRecords")}</p>
+        <EmptyState
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"/></svg>}
+          title={t("history.noRecords")}
+          description={t("history.noRecordsHint")}
+        />
       ) : (
         <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
           <table className="w-full text-sm">
