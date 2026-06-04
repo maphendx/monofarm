@@ -311,6 +311,20 @@ class StockEntryOut(BaseModel):
         from_attributes = True
 
 
+# ── Dashboard summary ─────────────────────────────────────────────────────────
+
+class DashboardLowStockOut(BaseModel):
+    product_id:   int
+    product_name: str
+    available:    Decimal
+
+
+class DashboardSummaryOut(BaseModel):
+    sku_count:   int
+    total_units: Decimal
+    low_stock:   list[DashboardLowStockOut]
+
+
 # ── Movement ──────────────────────────────────────────────────────────────────
 
 class MovementCreate(BaseModel):

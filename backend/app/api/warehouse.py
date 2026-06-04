@@ -1,5 +1,6 @@
 """Warehouse module — counterparties, products, specifications, stock, movements, batches, orders."""
 import base64
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -23,7 +24,7 @@ from app.models.warehouse import (
     CellMoveKind, CellMovement, CellStock, Counterparty, LabelTemplate, MovementType, Order, OrderItem, OrderPayment,
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
-    WarehouseZone, Product,
+    WarehouseType, WarehouseZone, Product,
 )
 from app.services.label_templates import BUILTIN_TEMPLATES
 from app.schemas.warehouse import (
@@ -35,6 +36,7 @@ from app.schemas.warehouse import (
     ScanAction, ScanActionRequest, ScanActionResult, ScanResult,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
     CounterpartyOut, CounterpartyUpdate,
+    DashboardLowStockOut, DashboardSummaryOut,
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
     OrderCreate, OrderItemOut, OrderOut, OrderPaymentCreate, OrderPaymentOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
@@ -56,6 +58,7 @@ _full = APIRouter(dependencies=[Depends(require_warehouse_full)])
 _ELECTRICITY_RATE  = Decimal("4.5")   # ₴/кВт·год
 _LABOR_RATE        = Decimal("150")   # ₴/год
 _PRINTER_WATTS     = 200              # Вт
+_LOW_STOCK_THRESHOLD = Decimal("10")  # finished-goods units below this surface on the dashboard
 _IMAGE_PREFIX      = "product-images"
 _IMAGE_MIME_EXT    = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 _IMAGE_MAX_BYTES   = 8 * 1024 * 1024  # 8 MB
@@ -568,11 +571,19 @@ def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
     db.add(batch)
 
 
-def _order_to_out(o: Order, db: Session) -> OrderOut:
-    items = db.query(OrderItem).filter_by(order_id=o.id).all()
+def _order_to_out(
+    o: Order,
+    db: Session,
+    *,
+    items: list[OrderItem] | None = None,
+    product_map: dict[int, Product] | None = None,
+    cp_map: dict[int, Counterparty] | None = None,
+) -> OrderOut:
+    if items is None:
+        items = db.query(OrderItem).filter_by(order_id=o.id).all()
     item_outs = []
     for it in items:
-        p = db.get(Product, it.product_id)
+        p = product_map.get(it.product_id) if product_map is not None else db.get(Product, it.product_id)
         item_outs.append(OrderItemOut(
             id=it.id,
             product_id=it.product_id,
@@ -590,7 +601,7 @@ def _order_to_out(o: Order, db: Session) -> OrderOut:
     customer_email: str | None = None
     delivery_address: str | None = None
     if o.counterparty_id:
-        cp = db.get(Counterparty, o.counterparty_id)
+        cp = cp_map.get(o.counterparty_id) if cp_map is not None else db.get(Counterparty, o.counterparty_id)
         if cp:
             counterparty_name = cp.name
             customer_phone = cp.phone
@@ -1619,7 +1630,10 @@ def create_product(
     user: User         = Depends(require_roles(UserRole.admin)),
 ) -> ProductOut:
     _check_product_limit(org, db)
-    p = Product(**payload.model_dump(), organization_id=org.id, created_by_id=user.id)
+    data = payload.model_dump()
+    if "cell_limit" in data:
+        data["box_limit"] = data.pop("cell_limit")
+    p = Product(**data, organization_id=org.id, created_by_id=user.id)
     db.add(p)
     db.commit()
     db.refresh(p)
@@ -2613,6 +2627,44 @@ def compute_cost(
 
 # ── Stock ─────────────────────────────────────────────────────────────────────
 
+@_full.get("/dashboard", response_model=DashboardSummaryOut)
+def dashboard_summary(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> DashboardSummaryOut:
+    """Lightweight KPI block for the warehouse overview — aggregates only,
+    no per-cell joins or presigned image URLs (unlike /stock)."""
+    sku_count = db.query(func.count(func.distinct(StockEntry.product_id))).filter(
+        StockEntry.organization_id == org.id
+    ).scalar() or 0
+
+    total_units = db.query(func.sum(StockEntry.quantity)).filter(
+        StockEntry.organization_id == org.id
+    ).scalar() or Decimal("0")
+
+    low_rows = (
+        db.query(StockEntry, Product)
+        .join(Product, Product.id == StockEntry.product_id)
+        .join(Warehouse, Warehouse.id == StockEntry.warehouse_id)
+        .filter(
+            StockEntry.organization_id == org.id,
+            Warehouse.type == WarehouseType.finished,
+            (StockEntry.quantity - StockEntry.reserved_qty) < _LOW_STOCK_THRESHOLD,
+        )
+        .order_by(Product.name)
+        .all()
+    )
+    low_stock = [
+        DashboardLowStockOut(
+            product_id=e.product_id,
+            product_name=p.name,
+            available=e.quantity - e.reserved_qty,
+        )
+        for e, p in low_rows
+    ]
+    return DashboardSummaryOut(sku_count=sku_count, total_units=total_units, low_stock=low_stock)
+
+
 @_full.get("/stock", response_model=list[StockEntryOut])
 def list_stock(
     warehouse_id: int | None = Query(None),
@@ -3177,29 +3229,96 @@ def create_movement(
 
 # ── ProductionBatch ───────────────────────────────────────────────────────────
 
-def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
-    p = db.get(Product, b.product_id)
+@dataclass
+class _BatchPrefetch:
+    """Bulk-loaded lookups for serializing many batches without N+1 queries."""
+    products:         dict[int, Product]
+    comps_by_spec:    dict[int, list[SpecComponent]]
+    avail_by_product: dict[int, Decimal]
+    task_titles:      dict[int, str]
+    user_names:       dict[int, str]
 
-    components: list[BatchComponentOut] = []
-    if b.specification_id:
-        spec_comps = (
+
+def _build_batch_prefetch(batches: list[ProductionBatch], db: Session) -> _BatchPrefetch:
+    spec_ids = {b.specification_id for b in batches if b.specification_id}
+    comps_by_spec: dict[int, list[SpecComponent]] = {}
+    if spec_ids:
+        comp_rows = (
             db.query(SpecComponent)
-            .filter_by(specification_id=b.specification_id)
+            .filter(SpecComponent.specification_id.in_(spec_ids))
             .order_by(SpecComponent.sort_order)
             .all()
         )
+        for c in comp_rows:
+            comps_by_spec.setdefault(c.specification_id, []).append(c)
+
+    comp_product_ids = {c.product_id for comps in comps_by_spec.values() for c in comps if c.product_id}
+    product_ids = {b.product_id for b in batches} | comp_product_ids
+    products = {
+        p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+
+    # Sum per-entry available (clamped at 0) to match the single-batch path exactly.
+    avail_by_product: dict[int, Decimal] = {}
+    if comp_product_ids:
+        for e in db.query(StockEntry).filter(StockEntry.product_id.in_(comp_product_ids)).all():
+            avail_by_product[e.product_id] = (
+                avail_by_product.get(e.product_id, Decimal("0"))
+                + max(Decimal("0"), e.quantity - e.reserved_qty)
+            )
+
+    task_titles: dict[int, str] = {}
+    task_ids = {b.print_task_id for b in batches if b.print_task_id}
+    if task_ids:
+        from app.models.task import PrintTask
+        for t in db.query(PrintTask).filter(PrintTask.id.in_(task_ids)).all():
+            task_titles[t.id] = t.title
+
+    user_names: dict[int, str] = {}
+    user_ids = {b.assigned_to_id for b in batches if b.assigned_to_id}
+    if user_ids:
+        for u in db.query(User).filter(User.id.in_(user_ids)).all():
+            user_names[u.id] = u.name or u.email
+
+    return _BatchPrefetch(
+        products=products,
+        comps_by_spec=comps_by_spec,
+        avail_by_product=avail_by_product,
+        task_titles=task_titles,
+        user_names=user_names,
+    )
+
+
+def _batch_to_out(b: ProductionBatch, db: Session, pf: "_BatchPrefetch | None" = None) -> BatchOut:
+    p = pf.products.get(b.product_id) if pf else db.get(Product, b.product_id)
+
+    components: list[BatchComponentOut] = []
+    if b.specification_id:
+        if pf is not None:
+            spec_comps = pf.comps_by_spec.get(b.specification_id, [])
+        else:
+            spec_comps = (
+                db.query(SpecComponent)
+                .filter_by(specification_id=b.specification_id)
+                .order_by(SpecComponent.sort_order)
+                .all()
+            )
         for c in spec_comps:
             total_qty = c.quantity * b.target_qty
             available_stock: Decimal | None = None
             product_name: str | None = None
             if c.product_id:
-                cp = db.get(Product, c.product_id)
+                if pf is not None:
+                    cp = pf.products.get(c.product_id)
+                    available_stock = pf.avail_by_product.get(c.product_id, Decimal("0"))
+                else:
+                    cp = db.get(Product, c.product_id)
+                    entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
+                    available_stock = sum(
+                        (max(Decimal("0"), e.quantity - e.reserved_qty) for e in entries),
+                        Decimal("0"),
+                    )
                 product_name = cp.name if cp else None
-                entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
-                available_stock = sum(
-                    (max(Decimal("0"), e.quantity - e.reserved_qty) for e in entries),
-                    Decimal("0"),
-                )
             components.append(BatchComponentOut(
                 id=c.id,
                 name=c.name,
@@ -3214,14 +3333,20 @@ def _batch_to_out(b: ProductionBatch, db: Session) -> BatchOut:
 
     print_task_title: str | None = None
     if b.print_task_id:
-        from app.models.task import PrintTask
-        pt = db.get(PrintTask, b.print_task_id)
-        print_task_title = pt.title if pt else None
+        if pf is not None:
+            print_task_title = pf.task_titles.get(b.print_task_id)
+        else:
+            from app.models.task import PrintTask
+            pt = db.get(PrintTask, b.print_task_id)
+            print_task_title = pt.title if pt else None
 
     assigned_to_name: str | None = None
     if b.assigned_to_id:
-        u = db.get(User, b.assigned_to_id)
-        assigned_to_name = (u.name or u.email) if u else None
+        if pf is not None:
+            assigned_to_name = pf.user_names.get(b.assigned_to_id)
+        else:
+            u = db.get(User, b.assigned_to_id)
+            assigned_to_name = (u.name or u.email) if u else None
 
     return BatchOut(
         id=b.id, product_id=b.product_id,
@@ -3254,7 +3379,8 @@ def list_batches(
     if product_id:
         q = q.filter(ProductionBatch.product_id == product_id)
     rows = q.order_by(ProductionBatch.created_at.desc()).all()
-    return [_batch_to_out(b, db) for b in rows]
+    pf = _build_batch_prefetch(rows, db)
+    return [_batch_to_out(b, db, pf) for b in rows]
 
 
 @_full.post("/batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
@@ -3689,7 +3815,29 @@ def list_orders(
     if counterparty_id:
         q = q.filter(Order.counterparty_id == counterparty_id)
     rows = q.order_by(Order.created_at.desc()).all()
-    return [_order_to_out(o, db) for o in rows]
+
+    # Bulk-load items, products and counterparties to avoid N+1 per order.
+    order_ids = [o.id for o in rows]
+    items_by_order: dict[int, list[OrderItem]] = {}
+    if order_ids:
+        for it in db.query(OrderItem).filter(OrderItem.order_id.in_(order_ids)).order_by(OrderItem.id).all():
+            items_by_order.setdefault(it.order_id, []).append(it)
+
+    product_ids = {it.product_id for order_items in items_by_order.values() for it in order_items}
+    product_map = {
+        p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+
+    cp_ids = {o.counterparty_id for o in rows if o.counterparty_id}
+    cp_map = {
+        c.id: c for c in db.query(Counterparty).filter(Counterparty.id.in_(cp_ids)).all()
+    } if cp_ids else {}
+
+    return [
+        _order_to_out(o, db, items=items_by_order.get(o.id, []),
+                      product_map=product_map, cp_map=cp_map)
+        for o in rows
+    ]
 
 
 @_full.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)

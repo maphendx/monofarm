@@ -9,6 +9,17 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models.organization import OrgPlan
+
+
+@pytest.fixture(autouse=True)
+def _warehouse_full_plan(test_org, db_session):
+    """All bin/cell endpoints sit behind require_warehouse_full — grant the
+    test org a paid plan so these tests exercise the full warehouse module."""
+    test_org.plan = OrgPlan.farm
+    test_org.plan_expires_at = None
+    db_session.commit()
+
 
 @pytest.fixture
 def setup(client: TestClient, auth_headers: dict[str, str]) -> dict:

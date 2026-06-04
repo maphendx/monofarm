@@ -6,13 +6,16 @@ import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type StockEntry = {
-  product_id:    number;
-  product_name:  string;
-  warehouse_name: string;
-  quantity:      string;
-  reserved_qty:  string;
-  available:     string;
+type LowStockItem = {
+  product_id:   number;
+  product_name: string;
+  available:    string;
+};
+
+type DashboardSummary = {
+  sku_count:   number;
+  total_units: string;
+  low_stock:   LowStockItem[];
 };
 
 type Batch = {
@@ -73,19 +76,19 @@ function fmtDate(s: string) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WarehouseDashboard() {
-  const [stock,     setStock]     = useState<StockEntry[]>([]);
+  const [summary,   setSummary]   = useState<DashboardSummary | null>(null);
   const [batches,   setBatches]   = useState<Batch[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading,   setLoading]   = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [s, b, m] = await Promise.all([
-        api<StockEntry[]>("/api/warehouse/stock"),
+      const [d, b, m] = await Promise.all([
+        api<DashboardSummary>("/api/warehouse/dashboard"),
         api<Batch[]>("/api/warehouse/batches"),
         api<MovementListOut>("/api/warehouse/movements?limit=5"),
       ]);
-      setStock(s);
+      setSummary(d);
       setBatches(b);
       setMovements(m.items);
     } finally {
@@ -96,13 +99,10 @@ export default function WarehouseDashboard() {
   useEffect(() => { load(); }, [load]);
 
   const activeBatches = batches.filter((b) => b.status === "active");
-  const totalUnits    = stock.reduce((sum, s) => sum + parseFloat(s.quantity), 0);
+  const totalUnits    = parseFloat(summary?.total_units ?? "0");
   const pendingOrders = 0; // orders endpoint — placeholder
 
-  const lowStock = stock.filter((s) => {
-    const avail = parseFloat(s.available);
-    return avail < 10 && s.warehouse_name === "Готова продукція";
-  });
+  const lowStock = summary?.low_stock ?? [];
 
   if (loading) return <PageSkeleton cols={5} withStats statsCount={4} />;
 
@@ -111,7 +111,7 @@ export default function WarehouseDashboard() {
 
       {/* KPI */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Товари (SKU)"       value={String(new Set(stock.map((s) => s.product_id)).size)} sub="активних позицій" />
+        <KpiCard label="Товари (SKU)"       value={String(summary?.sku_count ?? 0)} sub="активних позицій" />
         <KpiCard label="Готова продукція"   value={String(Math.round(totalUnits))} sub="одиниць на складах" />
         <KpiCard label="Активні партії"     value={String(activeBatches.length)} sub="у виробництві" />
         <KpiCard label="Нові замовлення"    value={String(pendingOrders)} sub="очікують обробки" />

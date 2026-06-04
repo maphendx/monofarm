@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Generator
 
@@ -37,7 +38,10 @@ def _s3_key(stored_name: str, org_id: int, prefix: str) -> str:
     return f"orgs/{org_id}/{prefix}/{stored_name}"
 
 
+@lru_cache(maxsize=1)
 def _client():
+    # boto3 clients are thread-safe and reusable; building one per call is the
+    # dominant cost when generating presigned URLs for product lists. Cache it.
     from app.core.config import settings
     import boto3
     from botocore.config import Config
