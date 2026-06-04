@@ -8,6 +8,7 @@ import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
+import { Modal } from "@/components/ui/Modal";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import {
   useColumnVisibility,
@@ -47,6 +48,19 @@ type StockEntry = {
 };
 
 type StockStatus = "out" | "low" | "ok" | "desired" | "production";
+
+type ProductSettings = {
+  id:            number;
+  name:          string;
+  sku:           string;
+  barcode:       string | null;
+  categories:    string[];
+  unit:          string;
+  min_stock:     number | null;
+  desired_stock: number | null;
+  cell_limit:    number | null;
+  image_url:     string | null;
+};
 
 function getStatus(e: StockEntry): StockStatus {
   const avail  = parseFloat(e.available);
@@ -166,6 +180,181 @@ function fmt(n: string | number | null): string {
   if (n == null) return "—";
   const v = typeof n === "string" ? parseFloat(n) : n;
   return isNaN(v) ? "—" : v.toLocaleString("uk-UA", { maximumFractionDigits: 2 });
+}
+
+// ── Product settings ─────────────────────────────────────────────────────────
+
+function ProductSettingsModal({
+  product, onClose, onSaved,
+}: {
+  product: ProductSettings | null;
+  onClose: () => void;
+  onSaved: (p: ProductSettings) => void;
+}) {
+  const [name,         setName]         = useState(product?.name ?? "");
+  const [sku,          setSku]          = useState(product?.sku ?? "");
+  const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
+  const [categories,   setCategories]   = useState((product?.categories ?? []).join(", "));
+  const [unit,         setUnit]         = useState(product?.unit ?? "шт");
+  const [minStock,     setMinStock]     = useState(product?.min_stock != null ? String(product.min_stock) : "");
+  const [desiredStock, setDesiredStock] = useState(product?.desired_stock != null ? String(product.desired_stock) : "");
+  const [cellLimit,    setCellLimit]    = useState(product?.cell_limit != null ? String(product.cell_limit) : "");
+  const [busy,         setBusy]         = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product) return;
+    setName(product.name);
+    setSku(product.sku);
+    setBarcode(product.barcode ?? "");
+    setCategories(product.categories.join(", "));
+    setUnit(product.unit);
+    setMinStock(product.min_stock != null ? String(product.min_stock) : "");
+    setDesiredStock(product.desired_stock != null ? String(product.desired_stock) : "");
+    setCellLimit(product.cell_limit != null ? String(product.cell_limit) : "");
+    setError(null);
+  }, [product]);
+
+  function parseOptionalInt(value: string) {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : Math.max(0, parseInt(trimmed, 10) || 0);
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!product || busy) return;
+    const cleanName = name.trim();
+    const cleanSku = sku.trim();
+    if (!cleanName || !cleanSku) {
+      setError("Назва і SKU обовʼязкові");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        name: cleanName,
+        sku: cleanSku,
+        barcode: barcode.trim() || null,
+        categories: categories
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean),
+        unit: unit.trim() || "шт",
+        min_stock: parseOptionalInt(minStock),
+        desired_stock: parseOptionalInt(desiredStock),
+        cell_limit: parseOptionalInt(cellLimit),
+      };
+      const updated = await api<ProductSettings>(`/api/warehouse/products/${product.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      onSaved(updated);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Помилка збереження");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!product) return null;
+
+  const inputCls = "w-full rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--border-focus)]";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Редагувати номенклатуру"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50"
+          >
+            Скасувати
+          </button>
+          <button
+            type="submit"
+            form="stock-product-settings-form"
+            disabled={busy}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50"
+          >
+            {busy ? "Зберігаю…" : "Зберегти"}
+          </button>
+        </>
+      }
+    >
+      <form id="stock-product-settings-form" onSubmit={submit} className="space-y-3 text-sm">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[72px_1fr]">
+          <div>
+            {product.image_url ? (
+              <img
+                src={product.image_url}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-16 w-16 rounded-md border border-[var(--border)] bg-[var(--surface-hi)] object-cover"
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-[var(--border)] bg-[var(--surface-hi)] font-mono text-xs font-semibold text-[var(--text-faint)]">
+                SKU
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-[var(--text-muted)]">Назва</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">SKU</span>
+              <input value={sku} onChange={(e) => setSku(e.target.value)} className={inputCls} required />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[var(--text-muted)]">Штрих-код</span>
+              <input value={barcode} onChange={(e) => setBarcode(e.target.value)} className={inputCls} />
+            </label>
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-[var(--text-muted)]">Категорії</span>
+          <input
+            value={categories}
+            onChange={(e) => setCategories(e.target.value)}
+            className={inputCls}
+            placeholder="Категорія 1, Категорія 2"
+          />
+        </label>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Од.</span>
+            <input value={unit} onChange={(e) => setUnit(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Мін</span>
+            <input type="number" min={0} value={minStock} onChange={(e) => setMinStock(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Бажаний</span>
+            <input type="number" min={0} value={desiredStock} onChange={(e) => setDesiredStock(e.target.value)} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[var(--text-muted)]">Ліміт комірки</span>
+            <input type="number" min={0} value={cellLimit} onChange={(e) => setCellLimit(e.target.value)} className={inputCls} />
+          </label>
+        </div>
+
+        {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
+      </form>
+    </Modal>
+  );
 }
 
 // ── Replenishment ─────────────────────────────────────────────────────────────
@@ -379,6 +568,7 @@ export default function StockPage() {
   const [colSettingsOpen,   setColSettingsOpen]   = useState(false);
   const [hideZero,          setHideZero]          = useState(false);
   const [replenishOpen,     setReplenishOpen]     = useState(false);
+  const [productSettings,   setProductSettings]   = useState<ProductSettings | null>(null);
 
   const colVis = useColumnVisibility("stock", COLS);
 
@@ -391,6 +581,37 @@ export default function StockPage() {
 
   function updateThreshold(pid: number, field: string, val: number | null) {
     setStock((prev) => prev.map((e) => e.product_id === pid ? { ...e, [field]: val } : e));
+  }
+
+  function openProductSettings(e: StockEntry) {
+    setProductSettings({
+      id: e.product_id,
+      name: e.product_name,
+      sku: e.product_sku,
+      barcode: e.product_barcode,
+      categories: e.product_categories ?? [],
+      unit: e.product_unit,
+      min_stock: e.min_stock,
+      desired_stock: e.desired_stock,
+      cell_limit: e.cell_limit,
+      image_url: e.image_url,
+    });
+  }
+
+  function handleProductSettingsSaved(product: ProductSettings) {
+    setStock((prev) => prev.map((e) => e.product_id === product.id ? {
+      ...e,
+      product_name: product.name,
+      product_sku: product.sku,
+      product_barcode: product.barcode,
+      product_categories: product.categories,
+      product_unit: product.unit,
+      min_stock: product.min_stock,
+      desired_stock: product.desired_stock,
+      cell_limit: product.cell_limit,
+      image_url: product.image_url,
+    } : e));
+    toast.success("Номенклатуру оновлено");
   }
 
   function openMovement(type: MovementType) {
@@ -701,7 +922,12 @@ export default function StockPage() {
                     </td>
                     {colVis.isVisible("name") && (
                       <td className="px-3 py-2.5">
-                        <div className="flex min-w-[240px] items-start gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openProductSettings(e)}
+                          className="group flex min-w-[240px] max-w-full items-start gap-3 rounded-lg p-1 text-left transition-colors hover:bg-[var(--surface-hi)] focus:outline-none focus:ring-2 focus:ring-[var(--border-focus)]"
+                          title="Редагувати номенклатуру"
+                        >
                           {e.image_url ? (
                             <img
                               src={e.image_url}
@@ -716,7 +942,7 @@ export default function StockPage() {
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium leading-tight" title={e.product_name}>{e.product_name}</p>
+                            <p className="truncate font-medium leading-tight text-[var(--text-hi)] underline-offset-2 group-hover:underline" title={e.product_name}>{e.product_name}</p>
                             <p className="font-mono text-xs text-[var(--text-faint)]">{e.product_sku}</p>
                             {e.in_production_qty > 0 && (
                               <span className="mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
@@ -727,7 +953,7 @@ export default function StockPage() {
                             )}
                             <StockBar avail={avail} min={e.min_stock} desired={e.desired_stock} inProduction={status === "production"} />
                           </div>
-                        </div>
+                        </button>
                       </td>
                     )}
                     {colVis.isVisible("barcode") && (
@@ -899,7 +1125,15 @@ export default function StockPage() {
           open
           onClose={() => setBatchProductId(null)}
           initialProductId={batchProductId}
-          onCreated={() => {}}
+          onCreated={() => load()}
+        />
+      )}
+
+      {productSettings && (
+        <ProductSettingsModal
+          product={productSettings}
+          onClose={() => setProductSettings(null)}
+          onSaved={handleProductSettingsSaved}
         />
       )}
 

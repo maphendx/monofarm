@@ -11,7 +11,6 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { Archive, GripVertical, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -31,6 +30,11 @@ const COLUMNS: { status: BatchStatus; label: string; accent: string }[] = [
   { status: "active", label: "Друкується",  accent: "border-[var(--accent)]" },
   { status: "done",   label: "Готово",      accent: "border-[var(--state-ok)]" },
 ];
+
+const DROP_ANIMATION = {
+  duration: 180,
+  easing: "cubic-bezier(0.2, 0, 0, 1)",
+};
 
 const PRIORITY_META: Record<BatchPriority, { label: string; className: string }> = {
   low: {
@@ -187,12 +191,11 @@ function BatchCard({
   onPatch: (id: number, payload: Partial<Pick<Batch, "priority" | "notes" | "due_date" | "target_qty" | "status">>) => Promise<Batch>;
   onEditMeta: (b: Batch) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: `batch-${batch.id}`,
     data: { batch },
     disabled: archiveMode,
   });
-  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const { confirm, dialog } = useConfirm();
   const pct     = batch.target_qty > 0 ? (batch.printed_qty / batch.target_qty) * 100 : 0;
   const defects = batch.defect_qty;
@@ -253,11 +256,10 @@ function BatchCard({
   return (
     <div
       ref={setNodeRef}
-      style={style}
       className={[
-        "rounded-xl border bg-[var(--bg-elevated)] p-4 shadow-sm transition",
+        "rounded-xl border bg-[var(--bg-elevated)] p-4 shadow-sm transition-[border-color,box-shadow,opacity] duration-150",
         dragging || isDragging
-          ? "border-[var(--border-strong)] opacity-50 ring-2 ring-[var(--border-strong)]"
+          ? "border-[var(--border-strong)] opacity-45"
           : "border-[var(--border)] hover:border-[var(--border-strong)]",
       ].join(" ")}
     >
@@ -274,9 +276,10 @@ function BatchCard({
         <div className="flex shrink-0 items-center gap-1.5">
           {!archiveMode && (
             <button
+              ref={setActivatorNodeRef}
               type="button"
               title="Перетягнути"
-              className="cursor-grab rounded p-0.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] active:cursor-grabbing"
+              className="touch-none select-none cursor-grab rounded p-0.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] active:cursor-grabbing"
               {...listeners}
               {...attributes}
             >
@@ -529,8 +532,8 @@ function BatchColumn({
       <div
         ref={setNodeRef}
         className={[
-          "min-h-32 space-y-3 rounded-xl p-2 transition-colors",
-          isOver ? "bg-[var(--surface-hi)]" : "bg-[var(--bg)]",
+          "min-h-32 space-y-3 rounded-xl p-2 transition-[background-color,box-shadow] duration-150",
+          isOver ? "bg-[var(--surface-hi)] shadow-inner ring-1 ring-[var(--border-strong)]" : "bg-[var(--bg)]",
         ].join(" ")}
       >
         {items.length === 0 ? (
@@ -560,7 +563,7 @@ function BatchColumn({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProductionPage() {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [batches,   setBatches]   = useState<Batch[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -694,7 +697,7 @@ export default function ProductionPage() {
               />
             ))}
           </div>
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay dropAnimation={DROP_ANIMATION}>
             {draggingBatch && (
               <div className="w-72 cursor-grabbing rounded-xl border-2 border-[var(--border-strong)] bg-[var(--bg-elevated)] p-4 shadow-xl">
                 <p className="text-sm font-medium">{draggingBatch.product_name}</p>
