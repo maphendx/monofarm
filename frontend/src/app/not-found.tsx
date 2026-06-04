@@ -177,7 +177,9 @@ export default function NotFound() {
       target = clampPos((clientX - r.left) / r.width);
     }
 
-    const onPointerDown = (e: PointerEvent) => { dragging = true; play.setPointerCapture(e.pointerId); setTargetFromClientX(e.clientX); if (!running && !over) start(); };
+    // Restart on any pointerdown when not running — the start/again button's
+    // click is otherwise swallowed by play's setPointerCapture.
+    const onPointerDown = (e: PointerEvent) => { dragging = true; play.setPointerCapture(e.pointerId); setTargetFromClientX(e.clientX); if (!running) start(); };
     const onPointerMove = (e: PointerEvent) => { if (dragging) setTargetFromClientX(e.clientX); };
     const onPointerUp = () => { dragging = false; };
     play.addEventListener("pointerdown", onPointerDown);
