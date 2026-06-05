@@ -341,6 +341,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [printBcUrls, setPrintBcUrls] = useState<Record<string,string>>({});
   const [status,      setStatus]      = useState<string | null>(null);
   const [busy,        setBusy]        = useState(false);
+  const [confirmDelTpl, setConfirmDelTpl] = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [printing,    setPrinting]    = useState(false);
   const [zplDpi,      setZplDpi]      = useState<203 | 300 | 600>(() => {
@@ -646,17 +647,28 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
 
         {/* Delete custom template */}
         {activeTpl && !activeTpl.is_builtin && !editMode && (
-          <button
-            onClick={async () => {
-              if (!confirm(`Видалити шаблон «${activeTpl.name}»?`)) return;
-              await api(`/api/warehouse/label-templates/${activeTpl.id}`, { method: "DELETE" });
-              setTemplates(p => p.filter(t => t.id !== activeTpl.id));
-              setTplId(null);
-            }}
-            title="Видалити шаблон"
-            className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]">
-            🗑
-          </button>
+          confirmDelTpl ? (
+            <>
+              <button
+                onClick={async () => {
+                  await api(`/api/warehouse/label-templates/${activeTpl.id}`, { method: "DELETE" });
+                  setTemplates(p => p.filter(t => t.id !== activeTpl.id));
+                  setTplId(null);
+                  setConfirmDelTpl(false);
+                }}
+                className="btn btn-danger btn-sm">
+                Видалити
+              </button>
+              <button onClick={() => setConfirmDelTpl(false)} className="btn btn-sm">Ні</button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDelTpl(true)}
+              title="Видалити шаблон"
+              className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]">
+              🗑
+            </button>
+          )
         )}
 
         {/* New blank template with custom size */}

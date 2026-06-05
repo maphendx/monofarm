@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -366,7 +367,7 @@ export default function AssemblyPage() {
     try {
       const s = await api<Session>(`/api/warehouse/batches/${b.id}/sessions`, { method: "POST" });
       setActiveSession(s);
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : "Помилка"); }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Помилка"); }
     finally { inFlight.current = false; }
   }
 

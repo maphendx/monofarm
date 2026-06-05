@@ -45,12 +45,10 @@
 
 ---
 
-### 🟡 Дрібниці (разом ~2 год)
+### 🟡 Дрібниці (разом ~1 год)
 
 | # | Файл | Проблема |
 |---|---|---|
-| D1 | `warehouse/assembly/page.tsx:369` | Сирий `alert()` — єдиний що лишився |
-| D2 | `warehouse/WarehouseLabelModal.tsx:651` | Сирий `confirm()` — єдиний що лишився |
 | D3 | `/design-system` | Без guard — доступна всім. Прибрати або `if (user.role !== "admin") redirect` |
 | D4 | Продуктовий onboarding | Є тільки агент-онбординг. Новий юзер без принтера не розуміє з чого почати |
 | D5 | Sentry | На сплеску трафіку з реклами — сліпота до крашів |
@@ -121,7 +119,7 @@ B2B-клієнти часто просять накладну/рахунок у 
 | ✅ `not-found.tsx` — 404 з міні-грою | f921450 |
 | ✅ Empty-states — dashboard, history, analytics, cashflow, production | 310c9b8 |
 | ✅ Іконки — новий дизайн-сет, stroke 1.7 скрізь | 04386a5 |
-| ✅ ConfirmDialog (`useConfirm` hook) — майже всі `confirm()` вже кастомні | — |
+| ✅ ConfirmDialog (`useConfirm` hook) — всі `alert()`/`confirm()` замінено кастомними | — |
 | ✅ Rate limiting — `slowapi` підключено | — |
 | ✅ Email (Resend) — `forgot-password`, `reset-password`, `verify-email` готові | — |
 | ✅ Email-верифікація — банер у layout + «Надіслати знову» | — |
@@ -138,7 +136,7 @@ B2B-клієнти часто просять накладну/рахунок у 
 1. Лендінг + /terms + /privacy          ← ⛔ потрібен контент від тебе
 2. GA4 + OG meta                        ← 2-3 год коду
 3. Мобільна верстка                     ← 4-6 год (найбільше)
-4. D1-D3 (2 alert + design-system)      ← 30 хв
+4. D3 (design-system guard)              ← 10 хв
 5. Sentry                               ← 1 год
 --- після запуску ---
 6. Purchase Orders (склад)
