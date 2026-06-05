@@ -1529,7 +1529,7 @@ export default function ProductsPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const result = await api<SpecImportResult>("/api/warehouse/specs/import-ordage", { method: "POST", body });
+      const result = await api<SpecImportResult>("/api/warehouse/specs/import", { method: "POST", body });
       setSpecImportResult(result);
       await load(showArchive);
     } catch {

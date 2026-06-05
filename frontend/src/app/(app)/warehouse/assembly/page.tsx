@@ -22,7 +22,7 @@ interface Batch {
   good_qty: number;
   defect_qty: number;
   printed_qty: number;
-  status: "draft" | "open" | "done";
+  status: "draft" | "active" | "paused" | "done" | "cancelled";
   assigned_to_id: number | null;
   assigned_to_name: string | null;
   due_date: string | null;
@@ -58,6 +58,8 @@ interface WorkerStats {
 interface OrgUser { id: number; name: string; email: string; role: string }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+const WORK_BATCH_STATUSES = new Set<Batch["status"]>(["draft", "active", "paused"]);
 
 function fmtMin(m: number | null): string {
   if (!m) return "—";
@@ -184,8 +186,8 @@ function BatchCard({ batch, activeSession, onStart, onSessionClose }: {
           </p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-          batch.status === "done" ? "badge badge-ok" : batch.status === "open" ? "badge badge-print" : "badge badge-offline"
-        }`}>{batch.status === "done" ? "Закрита" : batch.status === "open" ? "В роботі" : "Чернетка"}</span>
+          batch.status === "done" ? "badge badge-ok" : batch.status === "active" ? "badge badge-print" : "badge badge-offline"
+        }`}>{batch.status === "done" ? "Закрита" : batch.status === "active" ? "В роботі" : "Чернетка"}</span>
       </div>
 
       <div>
@@ -333,16 +335,16 @@ export default function AssemblyPage() {
   const load = useCallback(async () => {
     if (isManager) {
       const [b, u] = await Promise.all([
-        api<Batch[]>("/api/warehouse/batches?batch_status=open"),
+        api<Batch[]>("/api/warehouse/batches"),
         api<OrgUser[]>("/api/users"),
       ]);
-      setMgrBatches(b); setAllUsers(u);
+      setMgrBatches(b.filter((x) => WORK_BATCH_STATUSES.has(x.status))); setAllUsers(u);
     } else {
       const [b, s] = await Promise.all([
-        api<Batch[]>("/api/warehouse/batches?batch_status=open"),
+        api<Batch[]>("/api/warehouse/batches"),
         api<Session[]>("/api/warehouse/assembly/sessions?open_only=true"),
       ]);
-      setBatches(b.filter(x => x.assigned_to_id === me.id));
+      setBatches(b.filter(x => x.assigned_to_id === me.id && WORK_BATCH_STATUSES.has(x.status)));
       setActiveSession(s.find(x => x.worker_id === me.id) ?? null);
     }
     setLoading(false);

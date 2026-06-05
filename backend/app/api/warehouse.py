@@ -240,6 +240,20 @@ def _get_spec(spec_id: int, org: Organization, db: Session) -> Specification:
     return spec
 
 
+def _get_spec_for_product(
+    spec_id: int | None,
+    product_id: int,
+    org: Organization,
+    db: Session,
+) -> Specification | None:
+    if spec_id is None:
+        return None
+    spec = _get_spec(spec_id, org, db)
+    if spec.product_id != product_id:
+        raise HTTPException(status_code=400, detail="Specification does not belong to product")
+    return spec
+
+
 def _spec_to_out(spec: Specification, db: Session) -> SpecOut:
     components = db.query(SpecComponent).filter(SpecComponent.specification_id == spec.id).order_by(SpecComponent.sort_order).all()
     operations = db.query(SpecOperation).filter(SpecOperation.specification_id == spec.id).order_by(SpecOperation.sort_order).all()
@@ -348,7 +362,8 @@ def _update_avco(product_id: int, incoming_qty: Decimal, incoming_cost: Decimal,
         return
 
     current_qty = db.query(func.sum(StockEntry.quantity)).filter(
-        StockEntry.product_id == product_id
+        StockEntry.organization_id == product.organization_id,
+        StockEntry.product_id == product_id,
     ).scalar() or Decimal("0")
 
     current_cost = product.cost_price or Decimal("0")
@@ -414,17 +429,21 @@ def _cell_assigned(product_id: int, warehouse_id: int, db: Session) -> Decimal:
     return sum((cs.quantity for cs in _cells_in_warehouse(product_id, warehouse_id, db)), Decimal("0"))
 
 
-def _unassigned_qty(product_id: int, warehouse_id: int, db: Session) -> Decimal:
-    entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+def _unassigned_qty(product_id: int, warehouse_id: int, org_id: int, db: Session) -> Decimal:
+    entry = db.query(StockEntry).filter_by(
+        organization_id=org_id,
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+    ).first()
     total = entry.quantity if entry else Decimal("0")
     return max(Decimal("0"), total - _cell_assigned(product_id, warehouse_id, db))
 
 
-def _lock_stock_row(product_id: int, warehouse_id: int, db: Session) -> None:
+def _lock_stock_row(product_id: int, warehouse_id: int, org_id: int, db: Session) -> None:
     """Row-lock the (product, warehouse) stock entry so concurrent bin edits on
     the same product+warehouse serialize (prevents over-assigning the pool)."""
     db.query(StockEntry).filter_by(
-        product_id=product_id, warehouse_id=warehouse_id
+        organization_id=org_id, product_id=product_id, warehouse_id=warehouse_id
     ).with_for_update().first()
 
 
@@ -484,7 +503,11 @@ def _clamp_cells_to_stock(
     keep_rows: bool = False,
 ) -> None:
     """Reduce cell allocations FIFO until sum(cells) <= StockEntry.quantity."""
-    entry = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+    entry = db.query(StockEntry).filter_by(
+        organization_id=org_id,
+        product_id=product_id,
+        warehouse_id=warehouse_id,
+    ).first()
     total = entry.quantity if entry else Decimal("0")
     cells = _cells_in_warehouse(product_id, warehouse_id, db)
     excess = sum((c.quantity for c in cells), Decimal("0")) - total
@@ -513,11 +536,14 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
 
     def _entry(product_id: int, warehouse_id: int) -> StockEntry:
         from decimal import Decimal
-        row = db.query(StockEntry).filter_by(product_id=product_id, warehouse_id=warehouse_id).first()
+        row = db.query(StockEntry).filter_by(
+            organization_id=movement.organization_id,
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+        ).first()
         if not row:
-            product = db.get(Product, product_id)
             row = StockEntry(
-                organization_id=product.organization_id,  # type: ignore[union-attr]
+                organization_id=movement.organization_id,
                 product_id=product_id,
                 warehouse_id=warehouse_id,
                 quantity=Decimal("0"),
@@ -526,29 +552,42 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
             db.add(row)
         return row
 
+    def _decrease(product_id: int, warehouse_id: int, amount: Decimal) -> StockEntry:
+        row = _entry(product_id, warehouse_id)
+        if row.quantity < amount:
+            raise HTTPException(status_code=422, detail="Недостатньо товару на складі")
+        row.quantity -= amount
+        return row
+
     if mt == MovementType.PURCHASE_IN and movement.warehouse_to_id:
         if movement.unit_cost:
             _update_avco(pid, q, movement.unit_cost, db)
         _entry(pid, movement.warehouse_to_id).quantity += q
 
     elif mt in (MovementType.PRODUCTION_IN, MovementType.RETURN_IN) and movement.warehouse_to_id:
+        if mt == MovementType.PRODUCTION_IN and movement.unit_cost:
+            _update_avco(pid, q, movement.unit_cost, db)
         _entry(pid, movement.warehouse_to_id).quantity += q
 
-    elif mt == MovementType.DEFECT and movement.warehouse_from_id:
-        _entry(pid, movement.warehouse_from_id).quantity -= q
+    elif mt == MovementType.DEFECT:
+        if movement.warehouse_from_id:
+            _decrease(pid, movement.warehouse_from_id, q)
         if movement.warehouse_to_id:
             _entry(pid, movement.warehouse_to_id).quantity += q
 
     elif mt in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.WRITE_OFF) and movement.warehouse_from_id:
-        _entry(pid, movement.warehouse_from_id).quantity -= q
+        row = _decrease(pid, movement.warehouse_from_id, q)
+        if mt == MovementType.SALE_OUT and movement.order_id:
+            row.reserved_qty -= min(row.reserved_qty, q)
 
     elif mt == MovementType.ADJUSTMENT:
-        wh_id = movement.warehouse_to_id or movement.warehouse_from_id
-        if wh_id:
-            _entry(pid, wh_id).quantity += q
+        if movement.warehouse_to_id:
+            _entry(pid, movement.warehouse_to_id).quantity += q
+        elif movement.warehouse_from_id:
+            _decrease(pid, movement.warehouse_from_id, q)
 
     elif mt == MovementType.TRANSFER and movement.warehouse_from_id and movement.warehouse_to_id:
-        _entry(pid, movement.warehouse_from_id).quantity -= q
+        _decrease(pid, movement.warehouse_from_id, q)
         _entry(pid, movement.warehouse_to_id).quantity   += q
 
     # Keep cell allocations within the new totals for every touched warehouse.
@@ -567,20 +606,20 @@ def _apply_movement(movement: WarehouseMovement, db: Session) -> None:
 def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
     from sqlalchemy import func
     from app.models.warehouse import Product, StockEntry, ProductionBatch, Specification, BatchStatus
-    import math
 
-    p = db.get(Product, pid)
+    p = db.query(Product).filter(Product.id == pid, Product.organization_id == org_id).first()
     if not p or p.min_stock is None:
         return
 
-    total_qty = db.query(func.sum(StockEntry.quantity)).filter_by(product_id=pid).scalar() or 0
-    total_res = db.query(func.sum(StockEntry.reserved_qty)).filter_by(product_id=pid).scalar() or 0
+    total_qty = db.query(func.sum(StockEntry.quantity)).filter_by(organization_id=org_id, product_id=pid).scalar() or 0
+    total_res = db.query(func.sum(StockEntry.reserved_qty)).filter_by(organization_id=org_id, product_id=pid).scalar() or 0
     available = float(total_qty - total_res)
 
     if available >= p.min_stock:
         return
 
     active_batch = db.query(ProductionBatch).filter(
+        ProductionBatch.organization_id == org_id,
         ProductionBatch.product_id == pid,
         ProductionBatch.status.in_([BatchStatus.draft, BatchStatus.active])
     ).first()
@@ -594,7 +633,16 @@ def _check_and_auto_replenish(pid: int, org_id: int, db: Session) -> None:
 
     target_qty = int(target_qty)
 
-    spec = db.query(Specification).filter_by(product_id=pid, is_default=True).first()
+    spec = (
+        db.query(Specification)
+        .join(Product, Product.id == Specification.product_id)
+        .filter(
+            Product.organization_id == org_id,
+            Specification.product_id == pid,
+            Specification.is_default.is_(True),
+        )
+        .first()
+    )
 
     batch = ProductionBatch(
         organization_id=org_id,
@@ -1036,13 +1084,13 @@ def set_cell_stock(
         raise HTTPException(status_code=404, detail="Product not found")
 
     wh_id   = _cell_warehouse_id(cell, db)
-    _lock_stock_row(payload.product_id, wh_id, db)
+    _lock_stock_row(payload.product_id, wh_id, org.id, db)
     cs      = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     current = cs.quantity if cs else Decimal("0")
     delta   = payload.quantity - current
 
     if delta > 0:
-        avail = _unassigned_qty(payload.product_id, wh_id, db)
+        avail = _unassigned_qty(payload.product_id, wh_id, org.id, db)
         if delta > avail:
             raise HTTPException(
                 status_code=400,
@@ -1105,7 +1153,7 @@ def assign_cell_product(
 
     wh_id = _cell_warehouse_id(cell, db)
     if payload.quantity > 0:
-        _lock_stock_row(payload.product_id, wh_id, db)
+        _lock_stock_row(payload.product_id, wh_id, org.id, db)
     mtype = MovementType.PURCHASE_IN if payload.quantity > 0 else MovementType.ADJUSTMENT
     reason = (
         f"Отримання в комірку {cell.code}"
@@ -1218,8 +1266,8 @@ def putaway_to_cell(
         raise HTTPException(status_code=400, detail="Кількість має бути більшою за 0")
 
     wh_id = _cell_warehouse_id(cell, db)
-    _lock_stock_row(payload.product_id, wh_id, db)
-    avail = _unassigned_qty(payload.product_id, wh_id, db)
+    _lock_stock_row(payload.product_id, wh_id, org.id, db)
+    avail = _unassigned_qty(payload.product_id, wh_id, org.id, db)
     if payload.quantity > avail:
         raise HTTPException(
             status_code=400,
@@ -1253,7 +1301,7 @@ def relocate_between_cells(
     if _cell_warehouse_id(src, db) != _cell_warehouse_id(dst, db):
         raise HTTPException(status_code=400, detail="Переміщення можливе лише в межах одного складу")
 
-    _lock_stock_row(payload.product_id, _cell_warehouse_id(src, db), db)
+    _lock_stock_row(payload.product_id, _cell_warehouse_id(src, db), org.id, db)
     src_cs = db.query(CellStock).filter_by(cell_id=src.id, product_id=payload.product_id).first()
     if not src_cs or src_cs.quantity < payload.quantity:
         have = src_cs.quantity if src_cs else Decimal("0")
@@ -1297,7 +1345,7 @@ def scan_action(
 
     cell  = _get_cell(payload.cell_id, org, db)
     wh_id = _cell_warehouse_id(cell, db)
-    _lock_stock_row(payload.product_id, wh_id, db)
+    _lock_stock_row(payload.product_id, wh_id, org.id, db)
 
     def _outbound(mtype: MovementType, reason: str, *,
                   unit_price: Decimal | None = None, replenish: bool = False) -> None:
@@ -1335,7 +1383,7 @@ def scan_action(
         db.add(m)
         db.flush()
         _apply_movement(m, db)   # AVCO before stock add when unit_cost is set
-        avail = _unassigned_qty(payload.product_id, wh_id, db)
+        avail = _unassigned_qty(payload.product_id, wh_id, org.id, db)
         _putaway(cell, payload.product_id, min(payload.quantity, avail), org.id, db,
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
@@ -1370,7 +1418,7 @@ def scan_action(
             return ScanActionResult(message=f"Переміщено {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
 
         # Cross-warehouse → real TRANSFER ledger movement (decrements src wh, adds dst wh).
-        _lock_stock_row(payload.product_id, dst_wh, db)
+        _lock_stock_row(payload.product_id, dst_wh, org.id, db)
         m = WarehouseMovement(
             organization_id=org.id, type=MovementType.TRANSFER,
             product_id=payload.product_id, warehouse_from_id=wh_id, warehouse_to_id=dst_wh,
@@ -1382,7 +1430,7 @@ def scan_action(
         _pick_from_cell(cell, payload.product_id, payload.quantity, org.id, db,
                         movement_id=m.id, created_by_id=user.id)
         _apply_movement(m, db)   # src wh -= qty, dst wh += qty, clamps cells in both
-        avail = _unassigned_qty(payload.product_id, dst_wh, db)
+        avail = _unassigned_qty(payload.product_id, dst_wh, org.id, db)
         _putaway(dst, payload.product_id, min(payload.quantity, avail), org.id, db,
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
@@ -1602,7 +1650,7 @@ def delete_counterparty(
 ) -> None:
     cp = _get_counterparty(cp_id, org, db)
     # Nullify references before deletion so existing orders are not orphaned
-    db.query(Order).filter_by(counterparty_id=cp.id).update({"counterparty_id": None})
+    db.query(Order).filter_by(organization_id=org.id, counterparty_id=cp.id).update({"counterparty_id": None})
     db.delete(cp)
     db.commit()
 
@@ -2045,7 +2093,7 @@ def copy_product(
     p = _get_product(product_id, org, db)
     # Find a unique SKU: base-copy, base-copy-2, base-copy-3 …
     base = p.sku + "-copy"
-    
+
     taken = {
         row.sku for row in
         db.query(Product.sku).filter(Product.organization_id == org.id, Product.sku.like(base + "%")).all()
@@ -2605,6 +2653,8 @@ def add_component(
     _:   User         = Depends(require_roles(UserRole.admin)),
 ) -> SpecOut:
     spec = _get_spec(spec_id, org, db)
+    if payload.product_id is not None:
+        _get_product(payload.product_id, org, db)
     comp = SpecComponent(specification_id=spec.id, **payload.model_dump())
     db.add(comp)
     db.commit()
@@ -2740,7 +2790,6 @@ def list_stock(
         q = q.filter(StockEntry.product_id == product_id)
     rows = q.order_by(Product.name).all()
 
-    import math
     import collections
     from sqlalchemy import func
     from app.models.warehouse import CellStock, WarehouseCell, WarehouseZone
@@ -2888,8 +2937,9 @@ def replenish_preview(
     default_specs = {
         s.product_id: s
         for s in db.query(Specification)
+        .join(Product, Product.id == Specification.product_id)
         .filter(
-            Specification.organization_id == org.id,
+            Product.organization_id == org.id,
             Specification.product_id.in_(product_ids),
             Specification.is_default.is_(True),
         )
@@ -2935,8 +2985,9 @@ def replenish_stock(
     for item in payload.items:
         if item.qty <= 0:
             continue
-        _get_product(item.product_id, org, db)
+        product = _get_product(item.product_id, org, db)
         if item.kind == "batch":
+            _get_spec_for_product(item.specification_id, item.product_id, org, db)
             b = ProductionBatch(
                 organization_id=org.id,
                 product_id=item.product_id,
@@ -2947,8 +2998,10 @@ def replenish_stock(
             )
             db.add(b)
             batches_created += 1
-        elif item.kind == "purchase" and item.warehouse_id:
-            p = db.get(Product, item.product_id)
+        elif item.kind == "purchase":
+            if item.warehouse_id is None:
+                raise HTTPException(status_code=400, detail="Purchase replenishment requires warehouse_id")
+            _get_warehouse(item.warehouse_id, org, db)
             qty = Decimal(str(item.qty))
             uc  = item.unit_cost
             m = WarehouseMovement(
@@ -2957,17 +3010,17 @@ def replenish_stock(
                 type=MovementType.PURCHASE_IN,
                 warehouse_to_id=item.warehouse_id,
                 quantity=qty,
-                unit=p.unit,  # type: ignore[union-attr]
+                unit=product.unit,
                 unit_cost=uc,
                 total_cost=(uc * qty) if uc else None,
                 created_by_id=user.id,
             )
             db.add(m)
             db.flush()
-            if uc:
-                _update_avco(item.product_id, qty, uc, db)
             _apply_movement(m, db)
             movements_created += 1
+        else:
+            raise HTTPException(status_code=400, detail="Unknown replenishment kind")
     db.commit()
     return {"batches": batches_created, "movements": movements_created}
 
@@ -3099,7 +3152,11 @@ def import_stock(
             skipped += 1
             continue
 
-        entry = db.query(StockEntry).filter_by(product_id=product.id, warehouse_id=warehouse.id).first()
+        entry = db.query(StockEntry).filter_by(
+            organization_id=org.id,
+            product_id=product.id,
+            warehouse_id=warehouse.id,
+        ).first()
         current = entry.quantity if entry else Decimal("0")
         delta = target - current
         if delta == 0:
@@ -3203,7 +3260,10 @@ def list_movements(
 
     # build product name map in one query
     pids = {r.product_id for r in rows}
-    products = {p.id: p.name for p in db.query(Product).filter(Product.id.in_(pids)).all()} if pids else {}
+    products = {
+        p.id: p.name
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(pids)).all()
+    } if pids else {}
 
     items = [
         MovementOut(
@@ -3230,7 +3290,39 @@ def create_movement(
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> MovementOut:
-    _get_product(payload.product_id, org, db)
+    product = _get_product(payload.product_id, org, db)
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than zero")
+    if payload.warehouse_from_id is not None:
+        _get_warehouse(payload.warehouse_from_id, org, db)
+    if payload.warehouse_to_id is not None:
+        _get_warehouse(payload.warehouse_to_id, org, db)
+    if payload.batch_id is not None:
+        batch = db.query(ProductionBatch).filter_by(id=payload.batch_id, organization_id=org.id).first()
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        if batch.product_id != payload.product_id and payload.type in (MovementType.PRODUCTION_IN, MovementType.DEFECT):
+            raise HTTPException(status_code=400, detail="Movement product does not match batch product")
+    if payload.order_id is not None:
+        order = db.query(Order).filter_by(id=payload.order_id, organization_id=org.id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+    if payload.type in (MovementType.PURCHASE_IN, MovementType.RETURN_IN, MovementType.PRODUCTION_IN) and payload.warehouse_to_id is None:
+        raise HTTPException(status_code=400, detail=f"{payload.type.value} requires warehouse_to_id")
+    if payload.type in (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT, MovementType.WRITE_OFF) and payload.warehouse_from_id is None:
+        raise HTTPException(status_code=400, detail=f"{payload.type.value} requires warehouse_from_id")
+    if payload.type == MovementType.TRANSFER:
+        if payload.warehouse_from_id is None or payload.warehouse_to_id is None:
+            raise HTTPException(status_code=400, detail="TRANSFER requires both warehouses")
+        if payload.warehouse_from_id == payload.warehouse_to_id:
+            raise HTTPException(status_code=400, detail="Transfer warehouses must differ")
+    if payload.type == MovementType.DEFECT and payload.warehouse_from_id is None and payload.warehouse_to_id is None:
+        raise HTTPException(status_code=400, detail="DEFECT requires at least one warehouse")
+    if payload.type == MovementType.ADJUSTMENT:
+        if bool(payload.warehouse_from_id) == bool(payload.warehouse_to_id):
+            raise HTTPException(status_code=400, detail="ADJUSTMENT requires exactly one warehouse")
+
     if payload.type == MovementType.PURCHASE_IN and not payload.unit_cost:
         raise HTTPException(status_code=400, detail="Закупка потребує ціну за одиницю (unit_cost)")
     if payload.type == MovementType.RETURN_IN and payload.order_id:
@@ -3241,10 +3333,11 @@ def create_movement(
             raise HTTPException(status_code=400, detail="Товар не входив у це замовлення")
         already_returned: Decimal = db.query(
             func.coalesce(func.sum(WarehouseMovement.quantity), 0)
-        ).filter_by(
-            order_id=payload.order_id,
-            product_id=payload.product_id,
-            type=MovementType.RETURN_IN,
+        ).filter(
+            WarehouseMovement.organization_id == org.id,
+            WarehouseMovement.order_id == payload.order_id,
+            WarehouseMovement.product_id == payload.product_id,
+            WarehouseMovement.type == MovementType.RETURN_IN,
         ).scalar() or Decimal("0")
         if already_returned + payload.quantity > item.quantity:
             raise HTTPException(
@@ -3279,7 +3372,7 @@ def create_movement(
     # Honor an explicit target bin AFTER stock increased (cap to what's unassigned).
     if cell_to_id and m.warehouse_to_id:
         dst = _get_cell(cell_to_id, org, db, warehouse_id=m.warehouse_to_id)
-        avail = _unassigned_qty(m.product_id, m.warehouse_to_id, db)
+        avail = _unassigned_qty(m.product_id, m.warehouse_to_id, org.id, db)
         _putaway(dst, m.product_id, min(m.quantity, avail), org.id, db,
                  movement_id=m.id, created_by_id=user.id)
 
@@ -3288,11 +3381,10 @@ def create_movement(
 
     db.commit()
     db.refresh(m)
-    p = db.get(Product, m.product_id)
     return MovementOut(
         id=m.id, type=m.type,
         direction=_MOVEMENT_DIRECTION.get(m.type, "in"),
-        product_id=m.product_id, product_name=p.name if p else "",  # type: ignore[union-attr]
+        product_id=m.product_id, product_name=product.name,
         warehouse_from_id=m.warehouse_from_id, warehouse_to_id=m.warehouse_to_id,
         quantity=m.quantity, unit=m.unit,
         unit_cost=m.unit_cost, total_cost=m.total_cost,
@@ -3314,6 +3406,7 @@ class _BatchPrefetch:
 
 
 def _build_batch_prefetch(batches: list[ProductionBatch], db: Session) -> _BatchPrefetch:
+    org_id = batches[0].organization_id if batches else None
     spec_ids = {b.specification_id for b in batches if b.specification_id}
     comps_by_spec: dict[int, list[SpecComponent]] = {}
     if spec_ids:
@@ -3329,13 +3422,20 @@ def _build_batch_prefetch(batches: list[ProductionBatch], db: Session) -> _Batch
     comp_product_ids = {c.product_id for comps in comps_by_spec.values() for c in comps if c.product_id}
     product_ids = {b.product_id for b in batches} | comp_product_ids
     products = {
-        p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+        p.id: p
+        for p in db.query(Product).filter(
+            Product.organization_id == org_id,
+            Product.id.in_(product_ids),
+        ).all()
     } if product_ids else {}
 
     # Sum per-entry available (clamped at 0) to match the single-batch path exactly.
     avail_by_product: dict[int, Decimal] = {}
     if comp_product_ids:
-        for e in db.query(StockEntry).filter(StockEntry.product_id.in_(comp_product_ids)).all():
+        for e in db.query(StockEntry).filter(
+            StockEntry.organization_id == org_id,
+            StockEntry.product_id.in_(comp_product_ids),
+        ).all():
             avail_by_product[e.product_id] = (
                 avail_by_product.get(e.product_id, Decimal("0"))
                 + max(Decimal("0"), e.quantity - e.reserved_qty)
@@ -3345,13 +3445,13 @@ def _build_batch_prefetch(batches: list[ProductionBatch], db: Session) -> _Batch
     task_ids = {b.print_task_id for b in batches if b.print_task_id}
     if task_ids:
         from app.models.task import PrintTask
-        for t in db.query(PrintTask).filter(PrintTask.id.in_(task_ids)).all():
+        for t in db.query(PrintTask).filter(PrintTask.organization_id == org_id, PrintTask.id.in_(task_ids)).all():
             task_titles[t.id] = t.title
 
     user_names: dict[int, str] = {}
     user_ids = {b.assigned_to_id for b in batches if b.assigned_to_id}
     if user_ids:
-        for u in db.query(User).filter(User.id.in_(user_ids)).all():
+        for u in db.query(User).filter(User.organization_id == org_id, User.id.in_(user_ids)).all():
             user_names[u.id] = u.name or u.email
 
     return _BatchPrefetch(
@@ -3386,8 +3486,11 @@ def _batch_to_out(b: ProductionBatch, db: Session, pf: "_BatchPrefetch | None" =
                     cp = pf.products.get(c.product_id)
                     available_stock = pf.avail_by_product.get(c.product_id, Decimal("0"))
                 else:
-                    cp = db.get(Product, c.product_id)
-                    entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
+                    cp = db.query(Product).filter_by(id=c.product_id, organization_id=b.organization_id).first()
+                    entries = db.query(StockEntry).filter_by(
+                        organization_id=b.organization_id,
+                        product_id=c.product_id,
+                    ).all()
                     available_stock = sum(
                         (max(Decimal("0"), e.quantity - e.reserved_qty) for e in entries),
                         Decimal("0"),
@@ -3465,11 +3568,20 @@ def create_batch(
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> BatchOut:
     _get_product(payload.product_id, org, db)
+    _get_spec_for_product(payload.specification_id, payload.product_id, org, db)
+    if payload.order_id:
+        order = db.query(Order).filter_by(id=payload.order_id, organization_id=org.id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+    if payload.print_task_id:
+        from app.models.task import PrintTask
+        task = db.query(PrintTask).filter_by(id=payload.print_task_id, organization_id=org.id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Print task not found")
     b = ProductionBatch(organization_id=org.id, created_by_id=user.id, **payload.model_dump())
     db.add(b)
     # auto-advance linked order to in_production
     if payload.order_id:
-        order = db.query(Order).filter_by(id=payload.order_id, organization_id=org.id).first()
         if order and order.status == OrderStatus.confirmed:
             order.status = OrderStatus.in_production
     db.commit()
@@ -3560,6 +3672,59 @@ def close_batch(
         raise HTTPException(status_code=404, detail="Batch not found")
     if b.status == BatchStatus.done:
         raise HTTPException(status_code=400, detail="Batch already closed")
+    if payload.good_qty < 0 or payload.defect_qty < 0:
+        raise HTTPException(status_code=400, detail="Quantities must be non-negative")
+    if payload.good_qty > 0 and payload.finished_warehouse_id is None:
+        raise HTTPException(status_code=400, detail="finished_warehouse_id is required when good_qty > 0")
+    if payload.defect_qty > 0 and payload.defect_warehouse_id is None:
+        raise HTTPException(status_code=400, detail="defect_warehouse_id is required when defect_qty > 0")
+
+    if payload.finished_warehouse_id is not None:
+        _get_warehouse(payload.finished_warehouse_id, org, db)
+    if payload.defect_warehouse_id is not None:
+        _get_warehouse(payload.defect_warehouse_id, org, db)
+
+    batch_product = _get_product(b.product_id, org, db)
+    output_unit_cost = batch_product.full_cost or batch_product.direct_cost or batch_product.cost_price
+
+    component_picks: list[tuple[SpecComponent, list[tuple[int, Decimal]]]] = []
+    if b.specification_id and payload.good_qty > 0:
+        spec_comps = db.query(SpecComponent).filter_by(specification_id=b.specification_id).all()
+        shortages: list[str] = []
+        for c in spec_comps:
+            if not c.product_id:
+                continue
+            component_product = _get_product(c.product_id, org, db)
+            qty_needed = c.quantity * Decimal(payload.good_qty)
+            remaining = qty_needed
+            picks: list[tuple[int, Decimal]] = []
+            entries = (
+                db.query(StockEntry)
+                .filter_by(organization_id=org.id, product_id=c.product_id)
+                .with_for_update()
+                .all()
+            )
+            entries.sort(key=lambda e: float(e.quantity - e.reserved_qty), reverse=True)
+            for entry in entries:
+                available = max(Decimal("0"), entry.quantity - entry.reserved_qty)
+                if available <= 0:
+                    continue
+                take = min(available, remaining)
+                picks.append((entry.warehouse_id, take))
+                remaining -= take
+                if remaining <= 0:
+                    break
+            if remaining > 0:
+                available = qty_needed - remaining
+                shortages.append(f"{component_product.name}: потрібно {qty_needed}, доступно {available}")
+            else:
+                component_picks.append((c, picks))
+
+        if shortages:
+            raise HTTPException(
+                status_code=422,
+                detail="Недостатньо компонентів для закриття партії:\n" + "\n".join(shortages),
+            )
 
     b.good_qty   = payload.good_qty
     b.defect_qty = payload.defect_qty
@@ -3571,7 +3736,9 @@ def close_batch(
             type=MovementType.PRODUCTION_IN,
             product_id=b.product_id,
             warehouse_to_id=payload.finished_warehouse_id,
-            quantity=Decimal(payload.good_qty), unit="шт",
+            quantity=Decimal(payload.good_qty), unit=batch_product.unit,
+            unit_cost=output_unit_cost,
+            total_cost=(output_unit_cost * Decimal(payload.good_qty)) if output_unit_cost else None,
             batch_id=b.id,
         )
         db.add(m_in)
@@ -3584,7 +3751,9 @@ def close_batch(
             type=MovementType.DEFECT,
             product_id=b.product_id,
             warehouse_to_id=payload.defect_warehouse_id,
-            quantity=Decimal(payload.defect_qty), unit="шт",
+            quantity=Decimal(payload.defect_qty), unit=batch_product.unit,
+            unit_cost=output_unit_cost,
+            total_cost=(output_unit_cost * Decimal(payload.defect_qty)) if output_unit_cost else None,
             batch_id=b.id,
         )
         db.add(m_def)
@@ -3592,30 +3761,25 @@ def close_batch(
         _apply_movement(m_def, db)
 
     # Deduct spec components from stock for every good unit assembled
-    if b.specification_id and payload.good_qty > 0:
-        spec_comps = db.query(SpecComponent).filter_by(specification_id=b.specification_id).all()
-        for c in spec_comps:
-            if not c.product_id:
-                continue
-            qty_needed = c.quantity * Decimal(payload.good_qty)
-            # Pick the warehouse with the most available stock
-            entries = db.query(StockEntry).filter_by(product_id=c.product_id).all()
-            entries.sort(key=lambda e: float(e.quantity - e.reserved_qty), reverse=True)
-            best = entries[0] if entries and (entries[0].quantity - entries[0].reserved_qty) > 0 else None
-            if not best:
-                continue
+    for c, picks in component_picks:
+        component_product = _get_product(c.product_id, org, db) if c.product_id else None
+        unit_cost = component_product.cost_price if component_product else None
+        for warehouse_id, quantity in picks:
             m_out = WarehouseMovement(
                 organization_id=org.id, created_by_id=user.id,
                 type=MovementType.PRODUCTION_OUT,
                 product_id=c.product_id,
-                warehouse_from_id=best.warehouse_id,
-                quantity=qty_needed,
+                warehouse_from_id=warehouse_id,
+                quantity=quantity,
                 unit=c.unit,
+                unit_cost=unit_cost,
+                total_cost=(unit_cost * quantity) if unit_cost else None,
                 batch_id=b.id,
             )
             db.add(m_out)
             db.flush()
             _apply_movement(m_out, db)
+            _check_and_auto_replenish(c.product_id, org.id, db)
 
     db.commit()
     db.refresh(b)
@@ -3685,7 +3849,7 @@ def start_session(
         raise HTTPException(status_code=400, detail="Партія вже закрита")
     # open the batch if it's still draft
     if b.status == BatchStatus.draft:
-        b.status = BatchStatus.open
+        b.status = BatchStatus.active
     # ensure there's no already-open session for this worker on this batch
     existing = db.query(AssemblySession).filter_by(
         batch_id=batch_id, worker_id=user.id, organization_id=org.id
@@ -3899,12 +4063,12 @@ def list_orders(
 
     product_ids = {it.product_id for order_items in items_by_order.values() for it in order_items}
     product_map = {
-        p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+        p.id: p for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(product_ids)).all()
     } if product_ids else {}
 
     cp_ids = {o.counterparty_id for o in rows if o.counterparty_id}
     cp_map = {
-        c.id: c for c in db.query(Counterparty).filter(Counterparty.id.in_(cp_ids)).all()
+        c.id: c for c in db.query(Counterparty).filter(Counterparty.organization_id == org.id, Counterparty.id.in_(cp_ids)).all()
     } if cp_ids else {}
 
     return [
@@ -3944,6 +4108,8 @@ def create_order(
 
     for it in payload.items:
         _get_product(it.product_id, org, db)
+        if it.warehouse_id is not None:
+            _get_warehouse(it.warehouse_id, org, db)
         db.add(OrderItem(
             order_id=o.id,
             product_id=it.product_id,
@@ -4027,7 +4193,7 @@ def reserve_order(
         wh_id = item.warehouse_id or payload.warehouse_id
         entry = (
             db.query(StockEntry)
-            .filter_by(product_id=item.product_id, warehouse_id=wh_id)
+            .filter_by(organization_id=org.id, product_id=item.product_id, warehouse_id=wh_id)
             .with_for_update()
             .first()
         )
@@ -4047,7 +4213,11 @@ def reserve_order(
     for item in items:
         wh_id = item.warehouse_id or payload.warehouse_id
 
-        entry = db.query(StockEntry).filter_by(product_id=item.product_id, warehouse_id=wh_id).first()
+        entry = db.query(StockEntry).filter_by(
+            organization_id=org.id,
+            product_id=item.product_id,
+            warehouse_id=wh_id,
+        ).first()
         if entry:
             entry.reserved_qty += item.quantity
 
@@ -4103,13 +4273,18 @@ def ship_order(
         # Lock and deduct
         entry = (
             db.query(StockEntry)
-            .filter_by(product_id=item.product_id, warehouse_id=item.warehouse_id)
+            .filter_by(organization_id=org.id, product_id=item.product_id, warehouse_id=item.warehouse_id)
             .with_for_update()
             .first()
         )
-        if entry:
-            entry.quantity     -= item.quantity
-            entry.reserved_qty -= min(entry.reserved_qty, Decimal(item.quantity))
+        if not entry or entry.quantity < Decimal(item.quantity):
+            product = db.get(Product, item.product_id)
+            name = product.name if product else f"#{item.product_id}"
+            available = entry.quantity if entry else Decimal("0")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Недостатньо товару для відвантаження {name}: потрібно {item.quantity}, доступно {available}",
+            )
 
         # Create audit movement — store both cost (COGS) and price (revenue) separately
         prod       = db.get(Product, item.product_id)
@@ -4124,7 +4299,7 @@ def ship_order(
             product_id=item.product_id,
             warehouse_from_id=item.warehouse_id,
             quantity=qty,
-            unit="шт",
+            unit=prod.unit if prod else "шт",
             unit_cost=unit_cost,
             total_cost=(unit_cost * qty) if unit_cost else None,
             unit_price=unit_price,
@@ -4139,14 +4314,17 @@ def ship_order(
             cell = _get_cell(pk.cell_id, org, db, warehouse_id=item.warehouse_id)
             _pick_from_cell(cell, item.product_id, pk.quantity, org.id, db,
                             movement_id=m.id, created_by_id=user.id)
-        _clamp_cells_to_stock(item.product_id, item.warehouse_id, org.id, db,
-                              movement_id=m.id, created_by_id=user.id)
+        _apply_movement(m, db)
+        _check_and_auto_replenish(item.product_id, org.id, db)
 
     # Update counterparty balance (outstanding debt)
     if o.counterparty_id:
         outstanding = (o.total_amount or Decimal("0")) - (o.paid_amount or Decimal("0"))
         if outstanding > 0:
-            cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+            cp = db.query(Counterparty).with_for_update().filter_by(
+                id=o.counterparty_id,
+                organization_id=org.id,
+            ).first()
             if cp:
                 cp.balance += outstanding
 
@@ -4183,7 +4361,7 @@ def cancel_order(
             if item.warehouse_id:
                 entry = (
                     db.query(StockEntry)
-                    .filter_by(product_id=item.product_id, warehouse_id=item.warehouse_id)
+                    .filter_by(organization_id=org.id, product_id=item.product_id, warehouse_id=item.warehouse_id)
                     .with_for_update()
                     .first()
                 )
@@ -4255,7 +4433,10 @@ def record_payment(
 
     # Reduce counterparty debt (guard: only if counterparty exists)
     if o.counterparty_id:
-        cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+        cp = db.query(Counterparty).with_for_update().filter_by(
+            id=o.counterparty_id,
+            organization_id=org.id,
+        ).first()
         if cp:
             cp.balance -= payload.amount
 
@@ -4301,7 +4482,7 @@ def delete_payment(
 
     # Delete linked cashflow (guard: tx may have been deleted manually)
     if p.cashflow_id:
-        tx = db.get(CashTransaction, p.cashflow_id)
+        tx = db.query(CashTransaction).filter_by(id=p.cashflow_id, organization_id=org.id).first()
         if tx:
             db.delete(tx)
 
@@ -4312,13 +4493,16 @@ def delete_payment(
     from sqlalchemy import select, func as safunc
     new_paid = db.execute(
         select(safunc.coalesce(safunc.sum(OrderPayment.amount), Decimal("0")))
-        .where(OrderPayment.order_id == order_id)
+        .where(OrderPayment.organization_id == org.id, OrderPayment.order_id == order_id)
     ).scalar_one()
     o.paid_amount = new_paid
 
     # Restore counterparty debt
     if o.counterparty_id:
-        cp = db.query(Counterparty).with_for_update().filter_by(id=o.counterparty_id).first()
+        cp = db.query(Counterparty).with_for_update().filter_by(
+            id=o.counterparty_id,
+            organization_id=org.id,
+        ).first()
         if cp:
             cp.balance += amount
 
@@ -4727,12 +4911,18 @@ def update_label_template(
     ).first()
     if not tpl:
         raise HTTPException(404, "Template not found")
-    if body.name is not None:       tpl.name = body.name
-    if body.item_type is not None:  tpl.item_type = body.item_type
-    if body.width_mm is not None:   tpl.width_mm = body.width_mm
-    if body.height_mm is not None:  tpl.height_mm = body.height_mm
-    if body.elements is not None:   tpl.elements = body.elements
-    if body.is_default is not None: tpl.is_default = body.is_default
+    if body.name is not None:
+        tpl.name = body.name
+    if body.item_type is not None:
+        tpl.item_type = body.item_type
+    if body.width_mm is not None:
+        tpl.width_mm = body.width_mm
+    if body.height_mm is not None:
+        tpl.height_mm = body.height_mm
+    if body.elements is not None:
+        tpl.elements = body.elements
+    if body.is_default is not None:
+        tpl.is_default = body.is_default
     db.commit()
     db.refresh(tpl)
     return LabelTemplateOut(
