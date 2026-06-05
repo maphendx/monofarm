@@ -208,7 +208,7 @@ export default function OnboardingPage() {
             <div className="space-y-5">
               <div className="flex flex-col items-center gap-3 py-4 text-center">
                 <div className="flex size-14 items-center justify-center rounded-full bg-[rgba(34,197,94,.15)] text-[var(--state-ok)]">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
                 </div>

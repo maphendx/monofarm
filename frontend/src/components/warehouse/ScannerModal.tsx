@@ -250,12 +250,12 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         {/* Input row */}
         <div className="flex items-center gap-4 border-b border-[var(--border)] px-7 py-5">
           {loading ? (
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
               className="shrink-0 animate-spin text-[var(--accent)]">
               <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
           ) : (
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
               strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3"/><path d="M17 21v-4h4"/><path d="M21 14h-4"/>

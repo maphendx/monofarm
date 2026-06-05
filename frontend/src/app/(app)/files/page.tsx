@@ -733,7 +733,7 @@ export default function FilesPage() {
             <>
               <button onClick={() => setCurrentFolderId(null)}
                 className="flex items-center gap-1.5 text-sm text-[var(--text-faint)] hover:text-[var(--text)] transition">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 12H5M12 5l-7 7 7 7"/>
                 </svg>
                 Файли

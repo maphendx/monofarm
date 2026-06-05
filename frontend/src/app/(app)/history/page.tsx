@@ -75,7 +75,7 @@ export default function HistoryPage() {
         <PageSkeleton cols={6} />
       ) : entries.length === 0 ? (
         <EmptyState
-          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"/></svg>}
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"/></svg>}
           title={t("history.noRecords")}
           description={t("history.noRecordsHint")}
         />

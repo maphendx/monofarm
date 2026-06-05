@@ -24,7 +24,7 @@ function FarmGridLogo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
       {([[14,32],[50,32],[14,14],[32,14],[50,14],[14,50],[32,50],[50,50]]).map(([cx,cy], i) => (
-        <circle key={i} cx={cx} cy={cy} r="4" stroke="var(--accent)" strokeWidth="2.5" opacity=".6"/>
+        <circle key={i} cx={cx} cy={cy} r="4" stroke="var(--accent)" strokeWidth="1.6" opacity=".6"/>
       ))}
       <circle cx="32" cy="32" r="7" fill="var(--accent)"/>
     </svg>

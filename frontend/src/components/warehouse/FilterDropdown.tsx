@@ -32,7 +32,7 @@ export function FilterDropdown({
           active > 0 ? "!border-[var(--accent)] !text-[var(--accent)]" : "",
         ].join(" ")}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
         </svg>
         Фільтри

@@ -69,7 +69,7 @@ export default function ZonesOverviewPage() {
                   onClick={() => router.push(`/warehouse/warehouses/${z.warehouse_id}`)}
                   className="group flex w-full items-center gap-3 border-b border-[var(--border)] px-4 py-2.5 text-left last:border-0 hover:bg-[var(--surface-hi)]">
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)]">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                       <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                       <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                     </svg>

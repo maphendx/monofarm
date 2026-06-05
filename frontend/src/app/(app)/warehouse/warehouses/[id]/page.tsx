@@ -402,7 +402,7 @@ function CellModal({
                   <button
                     onClick={() => setRelocate(s)} title="Перемістити в іншу комірку"
                     className="flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                       <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
                     </svg>
                   </button>
@@ -664,7 +664,7 @@ function ZoneAccordion({
         {/* actions */}
         <button onClick={() => onEdit(zone)} title="Редагувати"
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
           </svg>
@@ -672,14 +672,14 @@ function ZoneAccordion({
         <button title="Мітки QR для всіх комірок"
           onClick={() => setLabelItems(cells.map(c => ({ type: "cell" as const, id: c.id, code: c.code, zone_name: zone.name, notes: c.notes })))}
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
             <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
             <rect x="6" y="14" width="12" height="8"/>
           </svg>
         </button>
         <button onClick={() => onDelete(zone.id)} title="Видалити"
           className="flex size-7 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
             <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
           </svg>
@@ -693,7 +693,7 @@ function ZoneAccordion({
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]"
-                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
               <input type="search" placeholder="Знайти товар…" value={search}
@@ -710,11 +710,11 @@ function ZoneAccordion({
             <div className="flex rounded-md border border-[var(--border)] overflow-hidden shrink-0">
               <button onClick={() => setDensity("compact")} title="Компактно"
                 className={`px-2 py-1.5 text-xs transition ${density === "compact" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"}`}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
               </button>
               <button onClick={() => setDensity("comfy")} title="Детально"
                 className={`px-2 py-1.5 text-xs transition border-l border-[var(--border)] ${density === "comfy" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"}`}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/></svg>
               </button>
             </div>
             {/* fill legend */}

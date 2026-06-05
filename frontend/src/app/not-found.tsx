@@ -378,7 +378,7 @@ export default function NotFound() {
             <div className="ov-sub" id="ovSub">Рухайте Mono і ловіть свіжонадруковані деталі, доки вони не впали. Три промахи — і партія браку.</div>
             <span className="kbd"><b>←</b><b>→</b> або тягніть мишею / пальцем</span>
             <button className="nfbtn nfbtn-primary nfbtn-sm" id="startBtn" style={{ marginTop: 4 }} type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none" /></svg>
               Грати
             </button>
           </div>
@@ -386,11 +386,11 @@ export default function NotFound() {
 
         <div className="actions">
           <Link className="nfbtn nfbtn-primary" href="/">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /></svg>
             На головну ферму
           </Link>
           <button className="nfbtn nfbtn-ghost" type="button" onClick={() => { if (history.length > 1) history.back(); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             Повернутись назад
           </button>
         </div>

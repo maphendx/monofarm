@@ -155,7 +155,7 @@ export default function RegisterPage() {
           }}>
             {terms && (
               <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                <path d="M1 4l3 3 5-6" stroke="#052e2b" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M1 4l3 3 5-6" stroke="#052e2b" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             )}
           </div>

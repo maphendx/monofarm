@@ -276,7 +276,7 @@ export function FlowView({ printers }: Props) {
       const more = g.items.length > 4 ? `<div style="font-size:10px;color:var(--text-faint);padding-top:3px">+ ще ${g.items.length - 4}</div>` : "";
       return `<div style="padding:10px 12px;min-width:200px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="18" width="12" height="4" rx="1"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="18" width="12" height="4" rx="1"/></svg>
           <span style="font-size:12px;font-weight:600;color:var(--text-hi)">${g.label}</span>
           <span style="font-size:10.5px;color:var(--text-faint);margin-left:auto">${printing}/${g.items.length}</span>
         </div>
@@ -287,7 +287,7 @@ export function FlowView({ printers }: Props) {
     function qcHtml(): string {
       return `<div style="padding:10px 12px;min-width:180px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
           <span style="font-size:12px;font-weight:600;color:var(--text-hi)">Контроль · QC</span>
           <span id="fl-qcThr" style="font-size:10.5px;color:var(--text-faint);margin-left:auto">0/год</span>
         </div>
@@ -306,7 +306,7 @@ export function FlowView({ printers }: Props) {
     function whHtml(): string {
       return `<div style="padding:10px 12px;min-width:210px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M12 6v12"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M12 6v12"/></svg>
           <span style="font-size:12px;font-weight:600;color:var(--text-hi)">Склад</span>
           <span style="font-size:10px;color:var(--accent);margin-left:auto">→ перейти</span>
         </div>
@@ -317,7 +317,7 @@ export function FlowView({ printers }: Props) {
     function shipHtml(pending: number): string {
       return `<div style="padding:10px 12px;min-width:172px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v5"/><circle cx="17" cy="17" r="3"/><circle cx="8" cy="17" r="3"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v5"/><circle cx="17" cy="17" r="3"/><circle cx="8" cy="17" r="3"/></svg>
           <span style="font-size:12px;font-weight:600;color:var(--text-hi)">Відправка</span>
           <span style="font-size:10px;color:var(--accent);margin-left:auto">→ замовлення</span>
         </div>

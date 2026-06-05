@@ -345,7 +345,7 @@ export default function CashFlowPage() {
               <tr><td colSpan={1 + COLS.filter((c) => colVis.isVisible(c.key)).length} className="p-3">
                 <EmptyState
                   className="border-0"
-                  icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
+                  icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>}
                   title="Транзакцій немає"
                   description="Доходи й витрати з'являться тут. Додайте першу транзакцію."
                   action={{ label: "Додати транзакцію", onClick: () => setCreateOpen(true) }}
