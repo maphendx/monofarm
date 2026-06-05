@@ -161,16 +161,16 @@ export default function RegisterPage() {
           </div>
           <span>
             Приймаю{" "}
-            <a href="#" style={{ color: "var(--accent)", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>умови</a>
+            <Link href="/terms" style={{ color: "var(--accent)", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>умови</Link>
             {" "}та{" "}
-            <a href="#" style={{ color: "var(--accent)", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>політику даних</a>
+            <Link href="/privacy" style={{ color: "var(--accent)", textDecoration: "none" }} onClick={(e) => e.stopPropagation()}>політику даних</Link>
           </span>
         </div>
 
         {error && <p style={{ fontSize: "13px", color: "var(--state-error)", marginBottom: "12px" }}>{error}</p>}
 
-        <button type="submit" disabled={busy} className="btn btn-primary btn-lg"
-          style={{ width: "100%", gap: "8px", opacity: busy ? 0.6 : 1 }}>
+        <button type="submit" disabled={busy || !terms} className="btn btn-primary btn-lg"
+          style={{ width: "100%", gap: "8px", opacity: busy || !terms ? 0.6 : 1 }}>
           {busy ? t("auth.registering") : "Створити робочий простір"}
           {!busy && <ArrowRight size={15}/>}
         </button>

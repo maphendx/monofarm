@@ -186,8 +186,8 @@ export default function AuthLayout({ children, activeTab }: AuthLayoutProps) {
         <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "var(--text-faint)" }}>
           <span>© 2026 Monofarm</span>
           <div style={{ display: "flex", gap: "12px" }}>
-            <a href="#" style={{ color: "var(--text-muted)", textDecoration: "none" }}>Документація</a>
-            <a href="#" style={{ color: "var(--text-muted)", textDecoration: "none" }}>Підтримка</a>
+            <Link href="/terms" style={{ color: "var(--text-muted)", textDecoration: "none" }}>Умови</Link>
+            <Link href="/privacy" style={{ color: "var(--text-muted)", textDecoration: "none" }}>Приватність</Link>
           </div>
         </div>
       </aside>
