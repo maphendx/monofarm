@@ -3,7 +3,7 @@
 import {
   BarChart2,
   BookOpen,
-  CheckSquare,
+  ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
   FileText,
@@ -12,7 +12,6 @@ import {
   List,
   MessageCircle,
   Package,
-  Printer,
   Search,
   Settings,
   Users,
@@ -27,7 +26,7 @@ import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// ── custom icon: filament spool (no lucide equivalent) ────────────────────────
+// ── custom icons (no lucide equivalents or design-system-specific shapes) ─────
 
 function FilamentIcon({ size = 18, className = "" }: { size?: number; className?: string }) {
   return (
@@ -37,6 +36,19 @@ function FilamentIcon({ size = 18, className = "" }: { size?: number; className?
       <path d="M12 2a10 10 0 1 0 10 10"/>
       <path d="M12 8a4 4 0 1 0 4 4"/>
       <path d="M12 12h.01"/>
+    </svg>
+  );
+}
+
+// Design-system printer: slim output tray (rect y=18 h=3), differs from lucide Printer
+function PrinterNavIcon({ size = 18, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      className={`shrink-0 ${className}`}>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+      <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
+      <rect x="6" y="18" width="12" height="3"/>
     </svg>
   );
 }
@@ -55,15 +67,15 @@ const NAV_GROUPS: { label: string | null; items: { href: string; Ic: NavIcon; tK
   {
     label: "Друк",
     items: [
-      { href: "/materials", Ic: FilamentIcon, tKey: "nav.filament" },
-      { href: "/files",     Ic: FileText,    tKey: "nav.files" },
-      { href: "/printers",  Ic: Printer,     tKey: "nav.printers" },
+      { href: "/materials", Ic: FilamentIcon,   tKey: "nav.filament" },
+      { href: "/files",     Ic: FileText,      tKey: "nav.files" },
+      { href: "/printers",  Ic: PrinterNavIcon, tKey: "nav.printers" },
     ],
   },
   {
     label: "Управління",
     items: [
-      { href: "/tasks",     Ic: CheckSquare, tKey: "nav.tasks" },
+      { href: "/tasks",     Ic: ClipboardCheck, tKey: "nav.tasks" },
       { href: "/warehouse", Ic: Package,     tKey: "nav.warehouse" },
       { href: "/analytics", Ic: BarChart2,   tKey: "nav.analytics" },
     ],

@@ -1,9 +1,14 @@
 "use client";
 
+import React from "react";
+
 import {
-  AlertTriangle, ArrowRight, Check, ChevronDown, Download,
-  ExternalLink, Info, Loader2, Plus, RefreshCw, Search,
-  Settings, Trash2, Upload, X, Zap,
+  AlertTriangle, ArrowRight, BarChart2, BookOpen, Check,
+  ChevronDown, ClipboardCheck, Download, ExternalLink,
+  FileText, Globe, Grid, History, Home, Info, List,
+  Loader2, MessageCircle, MoreHorizontal, Package,
+  Pause, Phone, Play, Plus, RefreshCw, Search,
+  Settings, Square, Upload, Users, X, Zap,
 } from "lucide-react";
 import { Icon } from "@/components/ui/Icon";
 import { StateIcon } from "@/components/printers/StateIcon";
@@ -568,15 +573,50 @@ export default function DesignSystem() {
 
       {/* 12 · Icons */}
       <Section id="icons" num="6.0" title="Iconography · lucide-react (strokeWidth 1.6)">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(10, 1fr)", gap: 4 }}>
-          {[
-            Plus, X, Check, Search, Settings, Upload, Download, RefreshCw,
-            AlertTriangle, Info, Trash2, ExternalLink, Loader2, Zap, ArrowRight, ChevronDown,
-          ].map((Ic, i) => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4 }}>
+          {([
+            [Home,           "dashboard"],
+            [List,           "plan"],
+            [ClipboardCheck, "tasks"],
+            [FileText,       "files"],
+            [BarChart2,      "analytics"],
+            [History,        "history"],
+            ["filament",     "filament"],
+            [Package,        "warehouse"],
+            [Users,          "users"],
+            [Settings,       "settings"],
+            ["printer",      "printer"],
+            [Play,           "play"],
+            [Pause,          "pause"],
+            [Square,         "stop"],
+            [RefreshCw,      "refresh"],
+            [Search,         "search"],
+            [Plus,           "plus"],
+            [X,              "close"],
+            [Check,          "check"],
+            [ChevronDown,    "chevron"],
+            [Download,       "download"],
+            [Upload,         "upload"],
+            [Zap,            "layers"],
+            [AlertTriangle,  "alert"],
+            [Info,           "info"],
+            [MessageCircle,  "message"],
+            [Phone,          "phone"],
+            [Globe,          "globe"],
+            [Grid,           "grid"],
+            [MoreHorizontal, "more"],
+          ] as [(string | ((p: object) => React.ReactNode)), string][]).map(([Ic, label], i) => (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 0", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "var(--surface)", color: "var(--text-muted)", cursor: "pointer" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--accent)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}>
-              <Icon icon={Ic} size={18} />
+              {Ic === "filament" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8a4 4 0 1 0 4 4"/><path d="M12 12h.01"/></svg>
+              ) : Ic === "printer" ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="18" width="12" height="3"/></svg>
+              ) : (
+                <Icon icon={Ic as Parameters<typeof Icon>[0]["icon"]} size={18} />
+              )}
+              <span style={{ fontFamily: "var(--font-mono, ui-monospace)", fontSize: 9.5, color: "var(--text-dim)", letterSpacing: ".03em" }}>{label}</span>
             </div>
           ))}
         </div>
