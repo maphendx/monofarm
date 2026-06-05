@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Cookie, Database, KeyRound, LockKeyhole, Server, ShieldCheck } from "lucide-react";
 
 import { LegalPage, type LegalDocument, type LegalSection } from "@/components/legal/LegalPage";
+import type { Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Політика приватності | monofarm",
@@ -258,11 +258,8 @@ const enSections: LegalSection[] = [
   },
 ];
 
-const documents: LegalDocument[] = [
-  {
-    id: "uk",
-    languageLabel: "Українська версія",
-    localeLabel: "Українська",
+const documents: Record<Locale, LegalDocument> = {
+  uk: {
     title: "Політика приватності",
     subtitle: "Прозорий опис того, які дані потрібні Monofarm для керування 3D print farm, складом, файлами, інтеграціями та білінгом.",
     updatedAt,
@@ -271,39 +268,36 @@ const documents: LegalDocument[] = [
       {
         title: "Мінімум для роботи",
         text: "Ми збираємо дані, потрібні для акаунта, принтерів, файлів, складу, безпеки та підписки.",
-        icon: Database,
+        icon: "database",
       },
       {
         title: "Ізоляція організацій",
         text: "Дані клієнтів розділені за Organization і доступні лише користувачам із відповідними ролями.",
-        icon: ShieldCheck,
+        icon: "shield",
       },
       {
         title: "Секрети шифруються",
         text: "Bambu і Telegram credentials зберігаються зашифрованими у production-конфігурації.",
-        icon: LockKeyhole,
+        icon: "lock",
       },
       {
         title: "Опційні інтеграції",
         text: "Bambu, Moonraker, Telegram, KeyCRM і Lemon Squeezy обробляють дані лише для відповідних функцій.",
-        icon: Server,
+        icon: "server",
       },
       {
         title: "Локальне сховище",
         text: "Браузер зберігає технічні налаштування на кшталт теми, мови та токена входу.",
-        icon: Cookie,
+        icon: "storage",
       },
       {
         title: "Ваш контроль",
         text: "Ви можете звернутися щодо доступу, виправлення, експорту або видалення даних.",
-        icon: KeyRound,
+        icon: "key",
       },
     ],
   },
-  {
-    id: "en",
-    languageLabel: "English version",
-    localeLabel: "English",
+  en: {
     title: "Privacy Policy",
     subtitle: "A transparent explanation of the data Monofarm needs to manage 3D print farms, inventory, files, integrations, and billing.",
     updatedAt: "June 5, 2026",
@@ -312,37 +306,37 @@ const documents: LegalDocument[] = [
       {
         title: "Only what is needed",
         text: "We collect data needed for accounts, printers, files, inventory, security, and subscriptions.",
-        icon: Database,
+        icon: "database",
       },
       {
         title: "Organization isolation",
         text: "Customer data is separated by Organization and available only to users with the right roles.",
-        icon: ShieldCheck,
+        icon: "shield",
       },
       {
         title: "Secrets are encrypted",
         text: "Bambu and Telegram credentials are encrypted in production configuration.",
-        icon: LockKeyhole,
+        icon: "lock",
       },
       {
         title: "Optional integrations",
         text: "Bambu, Moonraker, Telegram, KeyCRM, and Lemon Squeezy process data only for the relevant features.",
-        icon: Server,
+        icon: "server",
       },
       {
         title: "Browser storage",
         text: "The browser stores technical settings such as theme, language, and login token.",
-        icon: Cookie,
+        icon: "storage",
       },
       {
         title: "Your control",
         text: "You can contact us about access, correction, export, or deletion of data.",
-        icon: KeyRound,
+        icon: "key",
       },
     ],
   },
-];
+};
 
 export default function PrivacyPage() {
-  return <LegalPage documents={documents} />;
+  return <LegalPage documents={documents} type="privacy" />;
 }

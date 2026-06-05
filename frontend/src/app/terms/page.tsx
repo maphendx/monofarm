@@ -1,14 +1,7 @@
 import type { Metadata } from "next";
-import {
-  AlertTriangle,
-  CreditCard,
-  FileCheck2,
-  Plug,
-  ShieldCheck,
-  Wrench,
-} from "lucide-react";
 
 import { LegalPage, type LegalDocument, type LegalSection } from "@/components/legal/LegalPage";
+import type { Locale } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Умови використання | monofarm",
@@ -307,11 +300,8 @@ const enSections: LegalSection[] = [
   },
 ];
 
-const documents: LegalDocument[] = [
-  {
-    id: "uk",
-    languageLabel: "Українська версія",
-    localeLabel: "Українська",
+const documents: Record<Locale, LegalDocument> = {
+  uk: {
     title: "Умови використання",
     subtitle: "Правила користування Monofarm для команд, які керують 3D-принтерами, виробництвом, складом, файлами та інтеграціями.",
     updatedAt,
@@ -320,39 +310,36 @@ const documents: LegalDocument[] = [
       {
         title: "Для 3D print farm",
         text: "Сервіс призначений для керування друком, операціями, файлами, матеріалами і складом.",
-        icon: FileCheck2,
+        icon: "file",
       },
       {
         title: "Фізична безпека",
         text: "Monofarm допомагає керувати обладнанням, але не замінює нагляд і правила безпечної експлуатації.",
-        icon: AlertTriangle,
+        icon: "alert",
       },
       {
         title: "Ваші дані",
         text: "Ви зберігаєте права на файли, моделі, SKU, BOM, складські й виробничі записи.",
-        icon: ShieldCheck,
+        icon: "shield",
       },
       {
         title: "Інтеграції",
         text: "Bambu, Moonraker, Telegram, KeyCRM і локальний агент працюють у межах ваших налаштувань.",
-        icon: Plug,
+        icon: "integration",
       },
       {
         title: "Білінг",
         text: "Платні плани й підписки обробляються через Lemon Squeezy або вказаний платіжний провайдер.",
-        icon: CreditCard,
+        icon: "billing",
       },
       {
         title: "Підтримка",
         text: "Для питань щодо доступу, оплати або безпеки використовуйте support@monofarm.app.",
-        icon: Wrench,
+        icon: "support",
       },
     ],
   },
-  {
-    id: "en",
-    languageLabel: "English version",
-    localeLabel: "English",
+  en: {
     title: "Terms of Service",
     subtitle: "Rules for using Monofarm by teams that manage 3D printers, production, warehouse workflows, files, and integrations.",
     updatedAt: "June 5, 2026",
@@ -361,37 +348,37 @@ const documents: LegalDocument[] = [
       {
         title: "For 3D print farms",
         text: "The service is designed for managing prints, operations, files, materials, and warehouse workflows.",
-        icon: FileCheck2,
+        icon: "file",
       },
       {
         title: "Physical safety",
         text: "Monofarm helps manage equipment, but does not replace supervision or safe operating rules.",
-        icon: AlertTriangle,
+        icon: "alert",
       },
       {
         title: "Your data",
         text: "You keep your rights to files, models, SKU, BOM, warehouse, and production records.",
-        icon: ShieldCheck,
+        icon: "shield",
       },
       {
         title: "Integrations",
         text: "Bambu, Moonraker, Telegram, KeyCRM, and the local agent operate within your settings.",
-        icon: Plug,
+        icon: "integration",
       },
       {
         title: "Billing",
         text: "Paid plans and subscriptions are processed through Lemon Squeezy or the listed payment provider.",
-        icon: CreditCard,
+        icon: "billing",
       },
       {
         title: "Support",
         text: "Use support@monofarm.app for access, payment, or security questions.",
-        icon: Wrench,
+        icon: "support",
       },
     ],
   },
-];
+};
 
 export default function TermsPage() {
-  return <LegalPage documents={documents} />;
+  return <LegalPage documents={documents} type="terms" />;
 }

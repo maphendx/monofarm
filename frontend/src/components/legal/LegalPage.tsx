@@ -1,13 +1,27 @@
+"use client";
+
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
+  AlertTriangle,
   CalendarDays,
   CheckCircle2,
-  FileText,
+  Cookie,
+  CreditCard,
+  Database,
+  FileCheck2,
+  KeyRound,
+  LockKeyhole,
   Mail,
+  Plug,
+  Server,
   ShieldCheck,
+  Wrench,
 } from "lucide-react";
+import type { ComponentType } from "react";
+
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useLocale, type Locale } from "@/lib/i18n";
 
 export interface LegalSection {
   id: string;
@@ -15,10 +29,20 @@ export interface LegalSection {
   body: Array<string | string[]>;
 }
 
+type SummaryIcon =
+  | "alert"
+  | "billing"
+  | "database"
+  | "file"
+  | "integration"
+  | "key"
+  | "lock"
+  | "server"
+  | "shield"
+  | "storage"
+  | "support";
+
 export interface LegalDocument {
-  id: string;
-  languageLabel: string;
-  localeLabel: string;
   title: string;
   subtitle: string;
   updatedAt: string;
@@ -26,16 +50,75 @@ export interface LegalDocument {
   summary: Array<{
     title: string;
     text: string;
-    icon: LucideIcon;
+    icon: SummaryIcon;
   }>;
 }
 
 interface LegalPageProps {
-  documents: LegalDocument[];
+  documents: Record<Locale, LegalDocument>;
+  type: "privacy" | "terms";
 }
 
-export function LegalPage({ documents }: LegalPageProps) {
-  const primary = documents[0];
+const ICONS = {
+  alert: AlertTriangle,
+  billing: CreditCard,
+  database: Database,
+  file: FileCheck2,
+  integration: Plug,
+  key: KeyRound,
+  lock: LockKeyhole,
+  server: Server,
+  shield: ShieldCheck,
+  storage: Cookie,
+  support: Wrench,
+} satisfies Record<SummaryIcon, ComponentType<{ size?: number; "aria-hidden"?: boolean }>>;
+
+const UI = {
+  uk: {
+    back: "До входу",
+    terms: "Умови",
+    privacy: "Приватність",
+    contact: "Контакт",
+    legalDocs: "Юридичні документи Monofarm",
+    updated: "Оновлено",
+    summary: "Коротко",
+    sections: "Розділи",
+    printFarmSaas: "SaaS для 3D print farm",
+    language: "Мова",
+    uk: "Українська",
+    en: "English",
+  },
+  en: {
+    back: "Back to sign in",
+    terms: "Terms",
+    privacy: "Privacy",
+    contact: "Contact",
+    legalDocs: "Monofarm legal documents",
+    updated: "Updated",
+    summary: "At a glance",
+    sections: "Sections",
+    printFarmSaas: "SaaS for 3D print farms",
+    language: "Language",
+    uk: "Українська",
+    en: "English",
+  },
+} as const;
+
+function FarmGridLogo({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      {([[14,32],[50,32],[14,14],[32,14],[50,14],[14,50],[32,50],[50,50]]).map(([cx, cy], i) => (
+        <circle key={i} cx={cx} cy={cy} r="4" stroke="var(--accent)" strokeWidth="1.7" opacity=".6" />
+      ))}
+      <circle cx="32" cy="32" r="7" fill="var(--accent)" />
+    </svg>
+  );
+}
+
+export function LegalPage({ documents, type }: LegalPageProps) {
+  const { locale, setLocale } = useLocale();
+  const document = documents[locale];
+  const ui = UI[locale];
 
   return (
     <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
@@ -46,70 +129,89 @@ export function LegalPage({ documents }: LegalPageProps) {
             className="inline-flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
           >
             <ArrowLeft size={16} aria-hidden="true" />
-            До входу
+            {ui.back}
           </Link>
-          <nav className="flex items-center gap-2 text-sm">
+          <nav className="flex flex-wrap items-center gap-2 text-sm">
             <Link
               href="/terms"
-              className="rounded-sm px-2 py-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]"
+              className={[
+                "rounded-sm px-2 py-1 transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
+                type === "terms" ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
+              ].join(" ")}
             >
-              Умови
+              {ui.terms}
             </Link>
             <Link
               href="/privacy"
-              className="rounded-sm px-2 py-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]"
+              className={[
+                "rounded-sm px-2 py-1 transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
+                type === "privacy" ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
+              ].join(" ")}
             >
-              Приватність
+              {ui.privacy}
             </Link>
             <a
               href="mailto:support@monofarm.app"
               className="rounded-sm px-2 py-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]"
             >
-              Контакт
+              {ui.contact}
             </a>
+            <ThemeToggle />
           </nav>
         </header>
 
-        <section className="grid gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:py-14">
+        <section className="grid gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:py-14">
           <div>
-            <div className="mb-5 inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-              <FileText size={17} aria-hidden="true" />
-              Юридичні документи Monofarm
+            <div className="mb-6 flex items-center gap-3">
+              <FarmGridLogo size={31} />
+              <div>
+                <div className="text-base font-semibold tracking-normal text-[var(--text-hi)]">monofarm</div>
+                <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-faint)]">
+                  {ui.legalDocs}
+                </div>
+              </div>
             </div>
             <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-normal text-[var(--text-hi)] sm:text-5xl">
-              {primary.title}
+              {document.title}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-muted)] sm:text-lg">
-              {primary.subtitle}
+              {document.subtitle}
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                 <CalendarDays size={15} aria-hidden="true" />
-                Оновлено / Updated: {primary.updatedAt}
+                {ui.updated}: {document.updatedAt}
               </span>
               <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                 <ShieldCheck size={15} aria-hidden="true" />
-                SaaS для 3D print farm
+                {ui.printFarmSaas}
               </span>
             </div>
-            <div className="mt-5 flex flex-wrap gap-2 text-sm">
-              {documents.map((document) => (
-                <a
-                  key={document.id}
-                  href={`#${document.id}`}
-                  className="inline-flex items-center rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--accent-ring)] hover:text-[var(--accent)]"
+            <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-[var(--text-faint)]">{ui.language}</span>
+              {(["uk", "en"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setLocale(item)}
+                  className={[
+                    "rounded-sm border px-3 py-2 font-medium transition-colors",
+                    locale === item
+                      ? "border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--accent-ring)] hover:text-[var(--accent)]",
+                  ].join(" ")}
                 >
-                  {document.localeLabel}
-                </a>
+                  {ui[item]}
+                </button>
               ))}
             </div>
           </div>
 
           <aside className="surface h-fit p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-hi)]">Коротко</h2>
+            <h2 className="text-sm font-semibold text-[var(--text-hi)]">{ui.summary}</h2>
             <div className="mt-4 space-y-4">
-              {primary.summary.map((item) => {
-                const Icon = item.icon;
+              {document.summary.map((item) => {
+                const Icon = ICONS[item.icon];
                 return (
                   <div key={item.title} className="flex gap-3">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]">
@@ -130,108 +232,58 @@ export function LegalPage({ documents }: LegalPageProps) {
           <aside className="hidden lg:block">
             <div className="sticky top-6 border-l border-[var(--border)] pl-4">
               <div className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">
-                Розділи / Sections
+                {ui.sections}
               </div>
-              <nav className="space-y-4">
-                {documents.map((document) => (
-                  <div key={document.id}>
-                    <a
-                      href={`#${document.id}`}
-                      className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-hi)] transition-colors hover:text-[var(--accent)]"
-                    >
-                      {document.languageLabel}
-                    </a>
-                    <div className="space-y-2">
-                      {document.sections.map((section, index) => (
-                        <a
-                          key={`${document.id}-${section.id}`}
-                          href={`#${document.id}-${section.id}`}
-                          className="block text-sm leading-5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
-                        >
-                          {index + 1}. {section.title}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
+              <nav className="space-y-2">
+                {document.sections.map((section, index) => (
+                  <a
+                    key={section.id}
+                    href={`#${section.id}`}
+                    className="block text-sm leading-5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                  >
+                    {index + 1}. {section.title}
+                  </a>
                 ))}
               </nav>
             </div>
           </aside>
 
           <article className="surface overflow-hidden">
-            {documents.map((document, documentIndex) => (
-              <div id={document.id} key={document.id} className="scroll-mt-8">
-                <header className="border-b border-[var(--border)] bg-[var(--surface-2)] p-5 sm:p-7">
-                  <div className="font-mono text-xs uppercase tracking-wider text-[var(--text-faint)]">
-                    {document.languageLabel}
-                  </div>
-                  <h2 className="mt-2 text-2xl font-semibold leading-tight tracking-normal text-[var(--text-hi)]">
-                    {document.title}
+            {document.sections.map((section, index) => (
+              <section
+                id={section.id}
+                key={section.id}
+                className="scroll-mt-8 border-b border-[var(--border)] p-5 last:border-b-0 sm:p-7"
+              >
+                <div className="mb-4 flex items-start gap-3">
+                  <span className="font-mono mt-1 text-xs text-[var(--text-faint)]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h2 className="text-xl font-semibold leading-snug tracking-normal text-[var(--text-hi)]">
+                    {section.title}
                   </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-muted)]">
-                    {document.subtitle}
-                  </p>
-                </header>
-
-                {documentIndex > 0 && (
-                  <section className="border-b border-[var(--border)] p-5 sm:p-7">
-                    <h3 className="text-sm font-semibold text-[var(--text-hi)]">At a glance</h3>
-                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                      {document.summary.map((item) => {
-                        const Icon = item.icon;
-                        return (
-                          <div key={item.title} className="flex gap-3">
-                            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]">
-                              <Icon size={16} aria-hidden="true" />
-                            </div>
-                            <div>
-                              <h4 className="text-sm font-medium text-[var(--text-hi)]">{item.title}</h4>
-                              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{item.text}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
-
-                {document.sections.map((section, index) => (
-                  <section
-                    id={`${document.id}-${section.id}`}
-                    key={`${document.id}-${section.id}`}
-                    className="scroll-mt-8 border-b border-[var(--border)] p-5 last:border-b-0 sm:p-7"
-                  >
-                    <div className="mb-4 flex items-start gap-3">
-                      <span className="font-mono mt-1 text-xs text-[var(--text-faint)]">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <h3 className="text-xl font-semibold leading-snug tracking-normal text-[var(--text-hi)]">
-                        {section.title}
-                      </h3>
-                    </div>
-                    <div className="space-y-4 text-sm leading-7 text-[var(--text)] sm:text-[15px]">
-                      {section.body.map((block, blockIndex) =>
-                        Array.isArray(block) ? (
-                          <ul key={blockIndex} className="space-y-2 pl-1">
-                            {block.map((item) => (
-                              <li key={item} className="flex gap-3">
-                                <CheckCircle2
-                                  size={16}
-                                  className="mt-1 shrink-0 text-[var(--accent)]"
-                                  aria-hidden="true"
-                                />
-                                <span>{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p key={blockIndex}>{block}</p>
-                        ),
-                      )}
-                    </div>
-                  </section>
-                ))}
-              </div>
+                </div>
+                <div className="space-y-4 text-sm leading-7 text-[var(--text)] sm:text-[15px]">
+                  {section.body.map((block, blockIndex) =>
+                    Array.isArray(block) ? (
+                      <ul key={blockIndex} className="space-y-2 pl-1">
+                        {block.map((item) => (
+                          <li key={item} className="flex gap-3">
+                            <CheckCircle2
+                              size={16}
+                              className="mt-1 shrink-0 text-[var(--accent)]"
+                              aria-hidden="true"
+                            />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p key={blockIndex}>{block}</p>
+                    ),
+                  )}
+                </div>
+              </section>
             ))}
           </article>
         </div>
