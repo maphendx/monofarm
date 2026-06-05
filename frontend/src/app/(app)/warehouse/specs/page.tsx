@@ -27,7 +27,7 @@ type SpecImportResult = {
   errors: { sku: string; reason: string }[];
 };
 
-type SortKey = "name" | "sku" | "full_cost" | "sale_price" | "margin";
+type SortKey = "name" | "sku" | "direct_cost" | "full_cost" | "sale_price" | "margin";
 
 function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
   col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
@@ -54,7 +54,8 @@ const COLS: ColDef[] = [
   { key: "name",       label: "Назва",        required: true },
   { key: "sku",        label: "SKU" },
   { key: "categories", label: "Категорії" },
-  { key: "full_cost",  label: "Собівартість" },
+  { key: "direct_cost", label: "Пряма собівартість" },
+  { key: "full_cost",  label: "Повна собівартість" },
   { key: "sale_price", label: "Ціна" },
   { key: "margin",     label: "Маржа" },
 ];
@@ -154,6 +155,7 @@ export default function SpecsPage() {
       let av: number | string = 0, bv: number | string = 0;
       if (sortKey === "name")            { av = a.name; bv = b.name; }
       else if (sortKey === "sku")        { av = a.sku;  bv = b.sku;  }
+      else if (sortKey === "direct_cost") { av = parseFloat(a.direct_cost ?? "0"); bv = parseFloat(b.direct_cost ?? "0"); }
       else if (sortKey === "full_cost")  { av = parseFloat(a.full_cost  ?? "0"); bv = parseFloat(b.full_cost  ?? "0"); }
       else if (sortKey === "sale_price") { av = parseFloat(a.sale_price ?? "0"); bv = parseFloat(b.sale_price ?? "0"); }
       else if (sortKey === "margin") {
@@ -285,7 +287,8 @@ export default function SpecsPage() {
                 <Th col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">Назва</Th>
                 {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">SKU</Th>}
                 {colVis.isVisible("categories") && <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>}
-                {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собівартість</Th>}
+                {colVis.isVisible("direct_cost") && <Th col="direct_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Пряма собівартість</Th>}
+                {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Повна собівартість</Th>}
                 {colVis.isVisible("sale_price") && <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>}
                 {colVis.isVisible("margin")     && <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>}
                 <th className="w-24 px-4 py-3" />
@@ -338,6 +341,15 @@ export default function SpecsPage() {
                               <span className="text-[10px] text-[var(--text-faint)]">+{p.categories.length - 3}</span>
                             )}
                           </div>
+                        </td>
+                      )}
+                      {colVis.isVisible("direct_cost") && (
+                        <td className="px-4 py-3 text-right font-mono tabular-nums">
+                          {p.direct_cost ? (
+                            <span className="text-[var(--text-muted)]">{fmt2(p.direct_cost)}</span>
+                          ) : (
+                            <span className="text-[var(--text-faint)]">—</span>
+                          )}
                         </td>
                       )}
                       {colVis.isVisible("full_cost") && (
