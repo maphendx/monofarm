@@ -85,6 +85,16 @@ const UI = {
     sections: "Розділи",
     printFarmSaas: "SaaS для 3D print farm",
     language: "Мова",
+    brandTagline: "Контроль ферми 3D-друку",
+    brandTitle: "Уся ферма, склад і правові межі — в одній системі.",
+    brandText: "Документи Monofarm написані для команд, які керують принтерами, файлами, локальним агентом, складом і білінгом у production-процесі.",
+    previewTitle: "monofarm · legal workspace",
+    printers: "принтери",
+    warehouse: "склад",
+    zones: "зони A·B·C",
+    printing: "друкують",
+    ready: "готові забрати",
+    attention: "потребують уваги",
     uk: "Українська",
     en: "English",
   },
@@ -99,8 +109,49 @@ const UI = {
     sections: "Sections",
     printFarmSaas: "SaaS for 3D print farms",
     language: "Language",
+    brandTagline: "3D print farm control",
+    brandTitle: "The farm, warehouse, and legal boundaries in one system.",
+    brandText: "Monofarm documents are written for teams that manage printers, files, local agents, inventory, and billing in a production workflow.",
+    previewTitle: "monofarm · legal workspace",
+    printers: "printers",
+    warehouse: "warehouse",
+    zones: "zones A·B·C",
+    printing: "printing",
+    ready: "ready to pick up",
+    attention: "need attention",
     uk: "Українська",
     en: "English",
+  },
+} as const;
+
+const MINI_PRINTERS: Array<"print" | "ok" | "err" | "idle"> = [
+  "print", "print", "print", "print", "print", "print",
+  "print", "print", "ok", "ok", "ok", "err",
+];
+
+const STATE_TOP: Record<(typeof MINI_PRINTERS)[number], string> = {
+  print: "var(--state-print)",
+  ok: "var(--state-ok)",
+  err: "var(--state-error)",
+  idle: "var(--state-idle)",
+};
+
+const ZONES = [
+  { key: "filaments", pct: 73, color: "var(--accent)" },
+  { key: "ready", pct: 48, color: "var(--state-ok)" },
+  { key: "parts", pct: 61, color: "var(--state-print)" },
+] as const;
+
+const ZONE_LABELS = {
+  uk: {
+    filaments: "Філаменти",
+    ready: "Готові",
+    parts: "Деталі",
+  },
+  en: {
+    filaments: "Filaments",
+    ready: "Ready",
+    parts: "Parts",
   },
 } as const;
 
@@ -121,85 +172,210 @@ export function LegalPage({ documents, type }: LegalPageProps) {
   const ui = UI[locale];
 
   return (
-    <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-5 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
-          >
-            <ArrowLeft size={16} aria-hidden="true" />
-            {ui.back}
-          </Link>
-          <nav className="flex flex-wrap items-center gap-2 text-sm">
-            <Link
-              href="/terms"
-              className={[
-                "rounded-sm px-2 py-1 transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
-                type === "terms" ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
-              ].join(" ")}
-            >
-              {ui.terms}
-            </Link>
-            <Link
-              href="/privacy"
-              className={[
-                "rounded-sm px-2 py-1 transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]",
-                type === "privacy" ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
-              ].join(" ")}
-            >
-              {ui.privacy}
-            </Link>
-            <a
-              href="mailto:support@monofarm.app"
-              className="rounded-sm px-2 py-1 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hi)] hover:text-[var(--text-hi)]"
-            >
-              {ui.contact}
-            </a>
-            <ThemeToggle />
-          </nav>
-        </header>
+    <main
+      className="auth-layout min-h-screen bg-[var(--bg)] text-[var(--text)]"
+      style={{ display: "grid", gridTemplateColumns: "minmax(360px,.95fr) minmax(0,1.25fr)" }}
+    >
+      <aside
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          background: `
+            radial-gradient(900px 500px at 18% 12%, rgba(34,211,238,.10), transparent 55%),
+            radial-gradient(700px 600px at 95% 100%, rgba(34,211,238,.06), transparent 60%),
+            var(--bg-elevated)
+          `,
+          borderRight: "1px solid var(--border)",
+          display: "flex",
+          minHeight: "100vh",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "40px",
+          gap: "40px",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage: "radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
+            maskImage: "radial-gradient(ellipse 80% 70% at 30% 30%, #000 40%, transparent 100%)",
+            pointerEvents: "none",
+          }}
+        />
 
-        <section className="grid gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:py-14">
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "11px" }}>
+          <FarmGridLogo size={30} />
           <div>
-            <div className="mb-6 flex items-center gap-3">
-              <FarmGridLogo size={31} />
-              <div>
-                <div className="text-base font-semibold tracking-normal text-[var(--text-hi)]">monofarm</div>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-faint)]">
-                  {ui.legalDocs}
-                </div>
+            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.01em" }}>
+              monofarm
+            </div>
+            <div className="font-mono" style={{ fontSize: "9.5px", letterSpacing: ".14em", textTransform: "uppercase", color: "var(--text-faint)", fontWeight: 400, marginTop: "1px", whiteSpace: "nowrap" }}>
+              {ui.brandTagline}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", maxWidth: "440px" }}>
+          <h2 style={{ fontSize: "clamp(20px, 2.2vw, 30px)", lineHeight: 1.18, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.025em", margin: 0 }}>
+            {ui.brandTitle}
+          </h2>
+          <p style={{ fontSize: "14px", color: "var(--text-muted)", lineHeight: 1.6, margin: "16px 0 0", maxWidth: "410px" }}>
+            {ui.brandText}
+          </p>
+
+          <div
+            style={{
+              marginTop: "34px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-lg)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-md)",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px 13px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", gap: "5px" }}>
+                {["var(--state-error)", "var(--state-warn)", "var(--state-ok)"].map((color) => (
+                  <div key={color} style={{ width: "9px", height: "9px", borderRadius: "50%", background: color }} />
+                ))}
+              </div>
+              <span className="font-mono" style={{ fontSize: "10px", color: "var(--text-faint)", marginLeft: "6px" }}>
+                {ui.previewTitle}
+              </span>
+            </div>
+
+            <div style={{ padding: "13px 14px 15px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
+                <span className="font-mono" style={{ fontSize: "9.5px", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-faint)" }}>{ui.printers}</span>
+                <span style={{ display: "flex", gap: "9px" }}>
+                  {([["var(--state-print)", "8"], ["var(--state-ok)", "3"], ["var(--state-error)", "1"]] as const).map(([color, count]) => (
+                    <span key={color} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--text-muted)", fontSize: "11px" }}>
+                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: color, display: "inline-block" }} />
+                      {count}
+                    </span>
+                  ))}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px" }}>
+                {MINI_PRINTERS.map((state, index) => (
+                  <div
+                    key={`${state}-${index}`}
+                    style={{
+                      aspectRatio: "1",
+                      borderRadius: "var(--r-xs)",
+                      border: "1px solid var(--border)",
+                      borderTopWidth: "2px",
+                      borderTopColor: STATE_TOP[state],
+                      background: "var(--surface-2)",
+                      opacity: state === "idle" ? 0.6 : 1,
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div style={{ height: "1px", background: "var(--border)", margin: "14px 0" }} />
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "9px" }}>
+                <span className="font-mono" style={{ fontSize: "9.5px", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-faint)" }}>{ui.warehouse}</span>
+                <span style={{ fontSize: "10px", color: "var(--text-faint)" }}>{ui.zones}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {ZONES.map((zone) => (
+                  <div key={zone.key} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{ fontSize: "11.5px", color: "var(--text-muted)", minWidth: "84px" }}>{ZONE_LABELS[locale][zone.key]}</span>
+                    <div style={{ flex: 1, height: "6px", background: "var(--surface-hi)", borderRadius: "99px", overflow: "hidden" }}>
+                      <div style={{ width: `${zone.pct}%`, height: "100%", background: zone.color, borderRadius: "99px" }} />
+                    </div>
+                    <span className="font-mono" style={{ fontSize: "10.5px", color: "var(--text-hi)", minWidth: "34px", textAlign: "right" }}>{zone.pct}%</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-normal text-[var(--text-hi)] sm:text-5xl">
+          </div>
+
+          <div style={{ display: "flex", marginTop: "24px", borderTop: "1px solid var(--border)", paddingTop: "20px" }}>
+            {[
+              { value: "8", label: ui.printing },
+              { value: "3", label: ui.ready },
+              { value: "1", label: ui.attention },
+            ].map((stat, index, arr) => (
+              <div
+                key={stat.label}
+                style={{
+                  paddingRight: index < arr.length - 1 ? "28px" : 0,
+                  marginRight: index < arr.length - 1 ? "28px" : 0,
+                  borderRight: index < arr.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                <div style={{ fontSize: "22px", fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.02em" }}>{stat.value}</div>
+                <div className="font-mono" style={{ fontSize: "10px", letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text-faint)", marginTop: "3px" }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", fontSize: "12px", color: "var(--text-faint)" }}>
+          <span>© 2026 Monofarm</span>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <Link href="/terms" style={{ color: type === "terms" ? "var(--accent)" : "var(--text-muted)", textDecoration: "none" }}>{ui.terms}</Link>
+            <Link href="/privacy" style={{ color: type === "privacy" ? "var(--accent)" : "var(--text-muted)", textDecoration: "none" }}>{ui.privacy}</Link>
+          </div>
+        </div>
+      </aside>
+
+      <section style={{ minWidth: 0, padding: "32px", overflow: "auto" }}>
+        <div style={{ margin: "0 auto", maxWidth: "880px" }}>
+          <header className="surface" style={{ padding: "16px", marginBottom: "18px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", flexWrap: "wrap" }}>
+              <Link href="/login" className="btn btn-ghost btn-sm">
+                <ArrowLeft size={13} aria-hidden="true" />
+                {ui.back}
+              </Link>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <Link href="/terms" className={["btn btn-sm", type === "terms" ? "btn-primary" : "btn-secondary"].join(" ")}>
+                  {ui.terms}
+                </Link>
+                <Link href="/privacy" className={["btn btn-sm", type === "privacy" ? "btn-primary" : "btn-secondary"].join(" ")}>
+                  {ui.privacy}
+                </Link>
+                <a href="mailto:support@monofarm.app" className="btn btn-ghost btn-sm">
+                  <Mail size={13} aria-hidden="true" />
+                  {ui.contact}
+                </a>
+                <ThemeToggle />
+              </div>
+            </div>
+          </header>
+
+          <div className="surface" style={{ padding: "26px", marginBottom: "18px" }}>
+            <div className="badge badge-accent" style={{ marginBottom: "18px" }}>{ui.legalDocs}</div>
+            <h1 style={{ margin: 0, maxWidth: "720px", fontSize: "clamp(26px,4vw,38px)", lineHeight: 1.12, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.025em" }}>
               {document.title}
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-muted)] sm:text-lg">
+            <p style={{ margin: "14px 0 0", maxWidth: "680px", fontSize: "14px", lineHeight: 1.65, color: "var(--text-muted)" }}>
               {document.subtitle}
             </p>
-            <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
-              <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                <CalendarDays size={15} aria-hidden="true" />
+            <div style={{ marginTop: "20px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
+              <span className="badge badge-neutral">
+                <CalendarDays size={12} aria-hidden="true" />
                 {ui.updated}: {document.updatedAt}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                <ShieldCheck size={15} aria-hidden="true" />
+              <span className="badge badge-accent">
+                <ShieldCheck size={12} aria-hidden="true" />
                 {ui.printFarmSaas}
               </span>
-            </div>
-            <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-[var(--text-faint)]">{ui.language}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-faint)", fontSize: "12px" }}>
+                {ui.language}
+              </span>
               {(["uk", "en"] as const).map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setLocale(item)}
-                  className={[
-                    "rounded-sm border px-3 py-2 font-medium transition-colors",
-                    locale === item
-                      ? "border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                      : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--accent-ring)] hover:text-[var(--accent)]",
-                  ].join(" ")}
+                  className={["btn btn-sm", locale === item ? "btn-primary" : "btn-secondary"].join(" ")}
                 >
                   {ui[item]}
                 </button>
@@ -207,98 +383,79 @@ export function LegalPage({ documents, type }: LegalPageProps) {
             </div>
           </div>
 
-          <aside className="surface h-fit p-4">
-            <h2 className="text-sm font-semibold text-[var(--text-hi)]">{ui.summary}</h2>
-            <div className="mt-4 space-y-4">
-              {document.summary.map((item) => {
-                const Icon = ICONS[item.icon];
-                return (
-                  <div key={item.title} className="flex gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]">
-                      <Icon size={16} aria-hidden="true" />
+          <div className="grid gap-[18px] lg:grid-cols-[minmax(180px,220px)_minmax(0,1fr)]">
+            <aside className="surface" style={{ height: "fit-content", padding: "14px", position: "sticky", top: "24px" }}>
+              <h2 style={{ margin: "0 0 12px", fontSize: "13px", fontWeight: 600, color: "var(--text-hi)" }}>{ui.summary}</h2>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", paddingBottom: "14px", borderBottom: "1px solid var(--border)" }}>
+                {document.summary.map((item) => {
+                  const Icon = ICONS[item.icon];
+                  return (
+                    <div key={item.title} style={{ display: "flex", gap: "10px" }}>
+                      <div style={{ marginTop: "2px", display: "flex", width: "26px", height: "26px", flexShrink: 0, alignItems: "center", justifyContent: "center", borderRadius: "var(--r-sm)", border: "1px solid var(--accent-ring)", background: "var(--accent-soft)", color: "var(--accent)" }}>
+                        <Icon size={14} aria-hidden="true" />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: "12.5px", fontWeight: 500, color: "var(--text-hi)" }}>{item.title}</h3>
+                        <p style={{ margin: "2px 0 0", fontSize: "12px", lineHeight: 1.5, color: "var(--text-muted)" }}>{item.text}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-hi)]">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{item.text}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-        </section>
-
-        <div className="grid gap-8 pb-16 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="hidden lg:block">
-            <div className="sticky top-6 border-l border-[var(--border)] pl-4">
-              <div className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">
+                  );
+                })}
+              </div>
+              <div className="font-mono" style={{ marginTop: "14px", marginBottom: "9px", fontSize: "10px", letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-faint)" }}>
                 {ui.sections}
               </div>
-              <nav className="space-y-2">
+              <nav style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
                 {document.sections.map((section, index) => (
                   <a
                     key={section.id}
                     href={`#${section.id}`}
-                    className="block text-sm leading-5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                    style={{ display: "block", fontSize: "12px", lineHeight: 1.35, color: "var(--text-muted)", textDecoration: "none" }}
                   >
-                    {index + 1}. {section.title}
+                    <span className="font-mono" style={{ marginRight: "6px", color: "var(--text-faint)" }}>{String(index + 1).padStart(2, "0")}</span>
+                    {section.title}
                   </a>
                 ))}
               </nav>
-            </div>
-          </aside>
+            </aside>
 
-          <article className="surface overflow-hidden">
-            {document.sections.map((section, index) => (
-              <section
-                id={section.id}
-                key={section.id}
-                className="scroll-mt-8 border-b border-[var(--border)] p-5 last:border-b-0 sm:p-7"
-              >
-                <div className="mb-4 flex items-start gap-3">
-                  <span className="font-mono mt-1 text-xs text-[var(--text-faint)]">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <h2 className="text-xl font-semibold leading-snug tracking-normal text-[var(--text-hi)]">
-                    {section.title}
-                  </h2>
-                </div>
-                <div className="space-y-4 text-sm leading-7 text-[var(--text)] sm:text-[15px]">
-                  {section.body.map((block, blockIndex) =>
-                    Array.isArray(block) ? (
-                      <ul key={blockIndex} className="space-y-2 pl-1">
-                        {block.map((item) => (
-                          <li key={item} className="flex gap-3">
-                            <CheckCircle2
-                              size={16}
-                              className="mt-1 shrink-0 text-[var(--accent)]"
-                              aria-hidden="true"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p key={blockIndex}>{block}</p>
-                    ),
-                  )}
-                </div>
-              </section>
-            ))}
-          </article>
+            <article className="surface" style={{ overflow: "hidden" }}>
+              {document.sections.map((section, index) => (
+                <section
+                  id={section.id}
+                  key={section.id}
+                  style={{ scrollMarginTop: "24px", borderBottom: index === document.sections.length - 1 ? "none" : "1px solid var(--border)", padding: "22px 24px" }}
+                >
+                  <div style={{ marginBottom: "12px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                    <span className="font-mono" style={{ marginTop: "4px", fontSize: "11px", color: "var(--text-faint)" }}>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <h2 style={{ margin: 0, fontSize: "20px", lineHeight: 1.25, fontWeight: 600, color: "var(--text-hi)", letterSpacing: "-.01em" }}>
+                      {section.title}
+                    </h2>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px", fontSize: "14px", lineHeight: 1.7, color: "var(--text)" }}>
+                    {section.body.map((block, blockIndex) =>
+                      Array.isArray(block) ? (
+                        <ul key={blockIndex} style={{ display: "flex", flexDirection: "column", gap: "8px", margin: 0, padding: 0, listStyle: "none" }}>
+                          {block.map((item) => (
+                            <li key={item} style={{ display: "flex", gap: "10px" }}>
+                              <CheckCircle2 size={15} style={{ marginTop: "4px", flexShrink: 0, color: "var(--accent)" }} aria-hidden="true" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p key={blockIndex} style={{ margin: 0 }}>{block}</p>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ))}
+            </article>
+          </div>
         </div>
-
-        <footer className="flex flex-col gap-3 border-t border-[var(--border)] py-6 text-sm text-[var(--text-muted)] sm:flex-row sm:items-center sm:justify-between">
-          <span>© 2026 Monofarm</span>
-          <a
-            href="mailto:support@monofarm.app"
-            className="inline-flex items-center gap-2 transition-colors hover:text-[var(--accent)]"
-          >
-            <Mail size={15} aria-hidden="true" />
-            support@monofarm.app
-          </a>
-        </footer>
-      </div>
+      </section>
     </main>
   );
 }
