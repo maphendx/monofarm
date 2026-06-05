@@ -246,6 +246,42 @@ def _spec_to_out(spec: Specification, db: Session) -> SpecOut:
     return SpecOut.model_validate({**spec.__dict__, "components": components, "operations": operations})
 
 
+def _specs_to_out(specs: list[Specification], db: Session) -> list[SpecOut]:
+    spec_ids = [s.id for s in specs]
+    if not spec_ids:
+        return []
+
+    components_by_spec: dict[int, list[SpecComponent]] = {sid: [] for sid in spec_ids}
+    operations_by_spec: dict[int, list[SpecOperation]] = {sid: [] for sid in spec_ids}
+
+    components = (
+        db.query(SpecComponent)
+        .filter(SpecComponent.specification_id.in_(spec_ids))
+        .order_by(SpecComponent.specification_id, SpecComponent.sort_order)
+        .all()
+    )
+    for component in components:
+        components_by_spec.setdefault(component.specification_id, []).append(component)
+
+    operations = (
+        db.query(SpecOperation)
+        .filter(SpecOperation.specification_id.in_(spec_ids))
+        .order_by(SpecOperation.specification_id, SpecOperation.sort_order)
+        .all()
+    )
+    for operation in operations:
+        operations_by_spec.setdefault(operation.specification_id, []).append(operation)
+
+    return [
+        SpecOut.model_validate({
+            **spec.__dict__,
+            "components": components_by_spec.get(spec.id, []),
+            "operations": operations_by_spec.get(spec.id, []),
+        })
+        for spec in specs
+    ]
+
+
 def _calc_cost(
     spec: Specification,
     db: Session,
@@ -2391,6 +2427,26 @@ def export_ordage_specs(
         media_type="text/tab-separated-values; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="specs.tsv"'},
     )
+
+
+@_full.get("/specs/defaults", response_model=list[SpecOut])
+def list_default_specs(
+    db:    Session      = Depends(get_db),
+    org:   Organization = Depends(get_current_org),
+    _user: User         = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> list[SpecOut]:
+    specs = (
+        db.query(Specification)
+        .join(Product, Product.id == Specification.product_id)
+        .filter(
+            Product.organization_id == org.id,
+            Product.is_active.is_(True),
+            Specification.is_default.is_(True),
+        )
+        .order_by(Product.name)
+        .all()
+    )
+    return _specs_to_out(specs, db)
 
 
 def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:

@@ -127,23 +127,18 @@ export default function SpecsPage() {
   const colVis = useColumnVisibility("specs", COLS);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const prods = await api<Product[]>("/api/warehouse/products");
       setProducts(prods);
-      const specs = await Promise.allSettled(
-        prods.map(async (p) => {
-          const list = await api<Spec[]>(`/api/warehouse/products/${p.id}/specs`);
-          const spec = list.find((s) => s.is_default) ?? list[0] ?? null;
-          return [p.id, spec] as const;
-        })
-      );
-      const next: Record<number, Spec> = {};
-      specs.forEach((result) => {
-        if (result.status !== "fulfilled") return;
-        const [productId, spec] = result.value;
-        if (spec) next[productId] = spec;
-      });
-      setSpecByProduct(next);
+      setSpecByProduct({});
+      setLoading(false);
+      try {
+        const specs = await api<Spec[]>("/api/warehouse/specs/defaults");
+        setSpecByProduct(Object.fromEntries(specs.map((spec) => [spec.product_id, spec])));
+      } catch {
+        setSpecByProduct({});
+      }
     } finally {
       setLoading(false);
     }
