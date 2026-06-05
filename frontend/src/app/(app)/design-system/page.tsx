@@ -13,7 +13,7 @@ import { StateIcon } from "@/components/printers/StateIcon";
 function FarmGrid({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <g stroke="var(--accent)" strokeWidth="1.6" fill="none" opacity=".50" strokeLinecap="round">
+      <g stroke="var(--accent)" strokeWidth="1.7" fill="none" opacity=".50" strokeLinecap="round">
         <circle cx="5"  cy="5"  r="1.6"/>
         <circle cx="12" cy="5"  r="1.6"/>
         <circle cx="19" cy="5"  r="1.6"/>
@@ -567,47 +567,50 @@ export default function DesignSystem() {
         </div>
       </Section>
 
-      {/* 12 · Icons — exact paths from design system HTML section 6.0 */}
-      <Section id="icons" num="6.0" title="Iconography · 24×24, stroke 1.6, round caps">
+      {/* 12 · Icons — exact paths from Monofarm Design System (stroke 1.7) */}
+      <Section id="icons" num="6.0" title="Iconography · 24×24, stroke 1.7, round caps">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4 }}>
           {([
-            ["dashboard",   <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></>],
-            ["plan",        <><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></>],
-            ["tasks",       <><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>],
-            ["files",       <><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M13 2v7h7"/></>],
-            ["analytics",   <path d="M18 20V10M12 20V4M6 20v-6"/>],
-            ["history",     <><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4M3 16v-5h5"/></>],
-            ["filament",    <><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 8a4 4 0 1 0 4 4"/><path d="M12 12h.01"/></>],
-            ["warehouse",   <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></>],
-            ["users",       <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></>],
-            ["settings",    <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.18V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15 1.65 1.65 0 0 0 3 13.4H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>],
-            ["printer",     <><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="18" width="12" height="3"/></>],
-            ["play",        <polygon points="5 3 19 12 5 21 5 3"/>],
-            ["pause",       <><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></>],
-            ["stop",        <rect x="5" y="5" width="14" height="14" rx="1"/>],
-            ["refresh",     <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>],
-            ["search",      <><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></>],
-            ["plus",        <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>],
-            ["close",       <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>],
-            ["check",       <polyline points="20 6 9 17 4 12"/>],
-            ["chevron",     <polyline points="6 9 12 15 18 9"/>],
-            ["download",    <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>],
-            ["upload",      <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>],
-            ["layers",      <><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></>],
-            ["temperature", <><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></>],
-            ["alert",       <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>],
-            ["info",        <><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>],
-            ["message",     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>],
-            ["phone",       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>],
-            ["globe",       <><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>],
-            ["grid",        <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>],
-            ["list",        <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>],
-            ["more",        <><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></>],
-          ] as [string, React.ReactNode][]).map(([label, content], i) => (
+            ["dashboard",   false, <><rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="3" y="15" width="7" height="6" rx="1.6"/><rect x="14" y="3" width="7" height="6" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/></>],
+            ["plan",        false, <><rect x="3" y="4" width="7" height="16" rx="1.6"/><rect x="14" y="4" width="7" height="10" rx="1.6"/></>],
+            ["tasks",       false, <><path d="M3.5 7l1.5 1.5L8 5.2"/><path d="M3.5 16.6l1.5 1.5L8 14.8"/><path d="M11.5 6.7h9"/><path d="M11.5 16.3h9"/></>],
+            ["files",       false, <><path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/></>],
+            ["analytics",   false, <><path d="M4 4v15a1 1 0 0 0 1 1h15"/><path d="M7.5 14.5l3.5-4 3 2.2 4.5-6"/></>],
+            ["history",     false, <><path d="M3.6 9a9 9 0 1 0 2.3-3.8"/><path d="M3.5 4.5V9H8"/><path d="M12 8v4.2l3 1.8"/></>],
+            ["filament",    false, <><circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="2.6"/><path d="M18.4 7.4 22 5.8"/></>],
+            ["warehouse",   false, <><rect x="3" y="4" width="18" height="16" rx="1.6"/><path d="M3 12h18"/><rect x="6" y="6.6" width="4.4" height="3.4" rx="0.6"/><rect x="13.2" y="14" width="4.6" height="3.6" rx="0.6"/></>],
+            ["users",       false, <><circle cx="9.5" cy="8" r="3.3"/><path d="M3.8 19.5a5.7 5.7 0 0 1 11.4 0"/><path d="M16.5 5.2a3.3 3.3 0 0 1 0 6.1"/><path d="M17 14.3a5.7 5.7 0 0 1 3.7 5.2"/></>],
+            ["settings",    false, <><path d="M4 7h8.4"/><path d="M16.6 7H20"/><circle cx="14.5" cy="7" r="2.1"/><path d="M4 17h3.4"/><path d="M11.6 17H20"/><circle cx="9.5" cy="17" r="2.1"/></>],
+            ["3d printer",  false, <><rect x="4" y="3" width="16" height="18" rx="2.2"/><rect x="7" y="5.6" width="10" height="8.4" rx="1.2"/><path d="M8.8 11.6h6.4"/><path d="M10.8 11.6v-1.8h2.4v1.8"/><path d="M4 17h16"/></>],
+            ["play",        false, <path d="M7 5.4v13.2a1 1 0 0 0 1.52.86l10.5-6.6a1 1 0 0 0 0-1.72L8.52 4.54A1 1 0 0 0 7 5.4z"/>],
+            ["pause",       false, <><rect x="7" y="5" width="3.4" height="14" rx="1.5"/><rect x="13.6" y="5" width="3.4" height="14" rx="1.5"/></>],
+            ["stop",        false, <rect x="6" y="6" width="12" height="12" rx="2.6"/>],
+            ["refresh",     false, <><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.5V9.5H15.5"/></>],
+            ["search",      false, <><circle cx="11" cy="11" r="7.2"/><path d="M16.5 16.5 21 21"/></>],
+            ["plus",        false, <><path d="M12 5v14"/><path d="M5 12h14"/></>],
+            ["close",       false, <><path d="M17.5 6.5l-11 11"/><path d="M6.5 6.5l11 11"/></>],
+            ["check",       false, <path d="M5 12.5l4.5 4.5L19 6.5"/>],
+            ["chevron",     false, <path d="M6 9.5l6 6 6-6"/>],
+            ["download",    false, <><path d="M5 20h14"/><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/></>],
+            ["upload",      false, <><path d="M5 20h14"/><path d="M12 16V5"/><path d="M7.5 9.5 12 5l4.5 4.5"/></>],
+            ["layers",      false, <><path d="M12 3l8.5 4.6-8.5 4.6L3.5 7.6 12 3z"/><path d="M4 12.2l8 4.3 8-4.3"/><path d="M4 16.4l8 4.3 8-4.3"/></>],
+            ["temperature", false, <><path d="M14 14.8V5.5a2.5 2.5 0 0 0-5 0v9.3a4.2 4.2 0 1 0 5 0z"/><path d="M11.5 14V9"/></>],
+            ["alert",       false, <><path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></>],
+            ["info",        false, <><circle cx="12" cy="12" r="8.8"/><path d="M12 11v5.2"/><path d="M12 7.8h.01"/></>],
+            ["message",     false, <path d="M20 4H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3v4l4.5-4H20a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>],
+            ["phone",       false, <path d="M6.8 3.5H4.4A1.6 1.6 0 0 0 2.8 5.1 16.6 16.6 0 0 0 18.9 21.2a1.6 1.6 0 0 0 1.6-1.6v-2.3a1.6 1.6 0 0 0-1.4-1.6l-2.5-.34a1.6 1.6 0 0 0-1.45.66l-.7.95a12.6 12.6 0 0 1-5.7-5.7l.95-.7a1.6 1.6 0 0 0 .66-1.45L9.7 5.1A1.6 1.6 0 0 0 8.1 3.5z"/>],
+            ["globe",       false, <><circle cx="12" cy="12" r="8.8"/><path d="M3.2 12h17.6"/><path d="M12 3.2a13.5 13.5 0 0 1 0 17.6 13.5 13.5 0 0 1 0-17.6z"/></>],
+            ["grid",        false, <><rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.4"/></>],
+            ["list",        false, <><path d="M8 6.5h12.5"/><path d="M8 12h12.5"/><path d="M8 17.5h12.5"/><path d="M3.6 6.5h.01"/><path d="M3.6 12h.01"/><path d="M3.6 17.5h.01"/></>],
+            ["more",        true,  <><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></>],
+          ] as [string, boolean, React.ReactNode][]).map(([label, filled, content], i) => (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "12px 0", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", background: "var(--surface)", color: "var(--text-muted)", cursor: "pointer" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--accent)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24"
+                fill={filled ? "currentColor" : "none"}
+                stroke={filled ? "none" : "currentColor"}
+                strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 {content}
               </svg>
               <span style={{ fontFamily: "var(--font-mono, ui-monospace)", fontSize: 9.5, color: "var(--text-dim)", letterSpacing: ".03em" }}>{label}</span>

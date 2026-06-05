@@ -118,7 +118,7 @@ export default function AnalyticsPage() {
       <div className="space-y-8">
         <h1 className="text-lg font-semibold">{t("analytics.title")}</h1>
         <EmptyState
-          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>}
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>}
           title={t("analytics.noData")}
           description={t("analytics.noDataHint")}
           action={{ label: t("printers.add"), href: "/settings" }}

@@ -1,21 +1,10 @@
 "use client";
 
 import {
-  BarChart2,
   BookOpen,
-  ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
-  FileText,
-  History,
-  Home,
-  List,
-  MessageCircle,
-  Package,
   Search,
-  Settings,
-  Users,
-  type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -26,58 +15,120 @@ import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// ── custom icons (no lucide equivalents or design-system-specific shapes) ─────
+// ── nav icons — exact paths from Monofarm Design System (stroke 1.7) ──────────
 
-function FilamentIcon({ size = 18, className = "" }: { size?: number; className?: string }) {
+type NavIconProps = { size?: number; className?: string };
+const sw = "1.7" as const;
+const sc = { strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+
+function DashboardIcon({ size = 18, className = "" }: NavIconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-      className={`shrink-0 ${className}`}>
-      <path d="M12 2a10 10 0 1 0 10 10"/>
-      <path d="M12 8a4 4 0 1 0 4 4"/>
-      <path d="M12 12h.01"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="3" y="15" width="7" height="6" rx="1.6"/>
+      <rect x="14" y="3" width="7" height="6" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/>
+    </svg>
+  );
+}
+function PlanIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <rect x="3" y="4" width="7" height="16" rx="1.6"/><rect x="14" y="4" width="7" height="10" rx="1.6"/>
+    </svg>
+  );
+}
+function HistoryIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M3.6 9a9 9 0 1 0 2.3-3.8"/><path d="M3.5 4.5V9H8"/><path d="M12 8v4.2l3 1.8"/>
+    </svg>
+  );
+}
+function FilamentIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="2.6"/><path d="M18.4 7.4 22 5.8"/>
+    </svg>
+  );
+}
+function FilesIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/>
+    </svg>
+  );
+}
+function PrinterNavIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <rect x="4" y="3" width="16" height="18" rx="2.2"/><rect x="7" y="5.6" width="10" height="8.4" rx="1.2"/>
+      <path d="M8.8 11.6h6.4"/><path d="M10.8 11.6v-1.8h2.4v1.8"/><path d="M4 17h16"/>
+    </svg>
+  );
+}
+function TasksIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M3.5 7l1.5 1.5L8 5.2"/><path d="M3.5 16.6l1.5 1.5L8 14.8"/>
+      <path d="M11.5 6.7h9"/><path d="M11.5 16.3h9"/>
+    </svg>
+  );
+}
+function WarehouseIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <rect x="3" y="4" width="18" height="16" rx="1.6"/><path d="M3 12h18"/>
+      <rect x="6" y="6.6" width="4.4" height="3.4" rx="0.6"/><rect x="13.2" y="14" width="4.6" height="3.6" rx="0.6"/>
+    </svg>
+  );
+}
+function AnalyticsIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M4 4v15a1 1 0 0 0 1 1h15"/><path d="M7.5 14.5l3.5-4 3 2.2 4.5-6"/>
+    </svg>
+  );
+}
+function SettingsNavIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M4 7h8.4"/><path d="M16.6 7H20"/><circle cx="14.5" cy="7" r="2.1"/>
+      <path d="M4 17h3.4"/><path d="M11.6 17H20"/><circle cx="9.5" cy="17" r="2.1"/>
+    </svg>
+  );
+}
+function SupportIcon({ size = 18, className = "" }: NavIconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
+      <path d="M20 4H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3v4l4.5-4H20a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
     </svg>
   );
 }
 
-// Design-system printer: slim output tray (rect y=18 h=3), differs from lucide Printer
-function PrinterNavIcon({ size = 18, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-      className={`shrink-0 ${className}`}>
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-      <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
-      <rect x="6" y="18" width="12" height="3"/>
-    </svg>
-  );
-}
-
-type NavIcon = LucideIcon | typeof FilamentIcon;
+type NavIcon = typeof DashboardIcon;
 
 const NAV_GROUPS: { label: string | null; items: { href: string; Ic: NavIcon; tKey: string }[] }[] = [
   {
     label: null,
     items: [
-      { href: "/dashboard", Ic: Home,        tKey: "nav.dashboard" },
-      { href: "/queue",     Ic: List,        tKey: "nav.plan" },
-      { href: "/history",   Ic: History,     tKey: "nav.history" },
+      { href: "/dashboard", Ic: DashboardIcon, tKey: "nav.dashboard" },
+      { href: "/queue",     Ic: PlanIcon,      tKey: "nav.plan" },
+      { href: "/history",   Ic: HistoryIcon,   tKey: "nav.history" },
     ],
   },
   {
     label: "Друк",
     items: [
       { href: "/materials", Ic: FilamentIcon,   tKey: "nav.filament" },
-      { href: "/files",     Ic: FileText,      tKey: "nav.files" },
+      { href: "/files",     Ic: FilesIcon,      tKey: "nav.files" },
       { href: "/printers",  Ic: PrinterNavIcon, tKey: "nav.printers" },
     ],
   },
   {
     label: "Управління",
     items: [
-      { href: "/tasks",     Ic: ClipboardCheck, tKey: "nav.tasks" },
-      { href: "/warehouse", Ic: Package,     tKey: "nav.warehouse" },
-      { href: "/analytics", Ic: BarChart2,   tKey: "nav.analytics" },
+      { href: "/tasks",     Ic: TasksIcon,     tKey: "nav.tasks" },
+      { href: "/warehouse", Ic: WarehouseIcon, tKey: "nav.warehouse" },
+      { href: "/analytics", Ic: AnalyticsIcon, tKey: "nav.analytics" },
     ],
   },
 ];
@@ -190,7 +241,7 @@ export function Sidebar({
                   const label = t(item.tKey as Parameters<typeof t>[0]);
                   return (
                     <Link key={item.href} href={item.href} title={label} className={linkCls(item.href)}>
-                      <item.Ic size={18} strokeWidth={1.6} className="shrink-0" />
+                      <item.Ic size={18} />
                       <span className={`whitespace-nowrap ${txt}`}>{label}</span>
                     </Link>
                   );
@@ -204,16 +255,16 @@ export function Sidebar({
       <div className="px-2 py-2">
         {isAdmin && (
           <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
-            <Settings size={18} strokeWidth={1.6} className="shrink-0" />
+            <SettingsNavIcon size={18} />
             <span className={`whitespace-nowrap ${txt}`}>{t("nav.settings")}</span>
           </Link>
         )}
         <Link href="/support" title={t("nav.support")} className={linkCls("/support")}>
-          <MessageCircle size={18} strokeWidth={1.6} className="shrink-0" />
+          <SupportIcon size={18} />
           <span className={`whitespace-nowrap ${txt}`}>{t("nav.support")}</span>
         </Link>
         <Link href="/learn" title={t("nav.learn")} className={linkCls("/learn")}>
-          <BookOpen size={18} strokeWidth={1.6} className="shrink-0" />
+          <BookOpen size={18} strokeWidth={1.7} className="shrink-0" />
           <span className={`whitespace-nowrap ${txt}`}>{t("nav.learn")}</span>
         </Link>
       </div>
@@ -235,8 +286,8 @@ export function Sidebar({
             className="flex w-14 shrink-0 items-center justify-center py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
           >
             {pinned
-              ? <ChevronsLeft size={15} strokeWidth={1.6} />
-              : <ChevronsRight size={15} strokeWidth={1.6} />
+              ? <ChevronsLeft size={15} strokeWidth={1.7} />
+              : <ChevronsRight size={15} strokeWidth={1.7} />
             }
           </button>
 
@@ -257,7 +308,7 @@ export function Sidebar({
               title="Пошук (⌘K)"
               className="flex flex-1 items-center justify-center py-1.5 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
             >
-              <Search size={15} strokeWidth={1.6} />
+              <Search size={15} strokeWidth={1.7} />
             </button>
 
             <div

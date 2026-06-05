@@ -115,7 +115,7 @@ export function StartPrintModal({
                     </div>
                   </div>
 
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
                     strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-muted)]">
                     <path d="M9 18l6-6-6-6"/>
                   </svg>

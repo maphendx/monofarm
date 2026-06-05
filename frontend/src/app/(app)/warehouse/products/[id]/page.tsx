@@ -528,7 +528,7 @@ export default function ProductDetailPage() {
                                   <button onClick={() => deleteComponent(c.id)}
                                     className="flex size-5 items-center justify-center rounded text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]"
                                     title="Видалити">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                   </button>
                                 </td>
                                 <td className="px-4 py-3"><span className="mr-1.5 text-[var(--text-faint)]">🧵</span>{c.name}</td>
@@ -581,7 +581,7 @@ export default function ProductDetailPage() {
                                 <button onClick={() => deleteOperation(op.id)}
                                   className="flex size-5 items-center justify-center rounded text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]"
                                   title="Видалити операцію">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                 </button>
                               </div>
                             </div>

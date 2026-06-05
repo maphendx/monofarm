@@ -149,7 +149,7 @@ function ThresholdCell({
       <span className="font-mono text-xs tabular-nums">
         {value != null ? value : <span className="text-[var(--text-faint)]">—</span>}
       </span>
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
         className="opacity-0 group-hover:opacity-40 transition-opacity">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -757,13 +757,13 @@ export default function StockPage() {
             a.download = `залишки_${new Date().toISOString().slice(0,10)}.xlsx`;
             a.click(); URL.revokeObjectURL(url);
           }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
             Експорт
           </button>
           <label className="btn btn-ghost btn-sm flex cursor-pointer items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
             Імпорт
@@ -771,7 +771,7 @@ export default function StockPage() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) { importStock(f); e.target.value = ""; } }} />
           </label>
           <button onClick={() => setReplenishOpen(true)} className="btn btn-ghost btn-sm flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
               <path d="M12 2v20M2 12h20"/><path d="M17 7 12 2l-5 5"/>
             </svg>
             Відправити на виробництво
@@ -831,7 +831,7 @@ export default function StockPage() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative">
           <svg className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)]"
-            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
           <input type="search" placeholder="Назва або код…" value={search}
@@ -1022,7 +1022,7 @@ export default function StockPage() {
                       <td className="px-3 py-2.5">
                         {e.product_barcode ? (
                           <div className="flex items-center gap-1.5 whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                               <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                             </svg>
                             #{e.product_barcode}
@@ -1037,7 +1037,7 @@ export default function StockPage() {
                         <Link href={`/warehouse/movements?search=${encodeURIComponent(e.product_sku)}`}
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] transition-colors"
                           title="Історія рухів">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
                             <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                             <path d="M3 3v5h5" /><path d="M12 7v5l4 2" />
                           </svg>

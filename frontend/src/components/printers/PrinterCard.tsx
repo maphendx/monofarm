@@ -1,6 +1,5 @@
 "use client";
 
-import { Settings } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -110,7 +109,10 @@ export function PrinterCard({
               className="rounded p-0.5 text-[var(--text-muted)] opacity-0 transition hover:text-[var(--text)] group-hover:opacity-100"
               tabIndex={-1}
             >
-              <Settings size={12} strokeWidth={1.6} />
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 7h8.4"/><path d="M16.6 7H20"/><circle cx="14.5" cy="7" r="2.1"/>
+                <path d="M4 17h3.4"/><path d="M11.6 17H20"/><circle cx="9.5" cy="17" r="2.1"/>
+              </svg>
             </button>
           )}
           <StateIcon state={printer.state} size={14} />

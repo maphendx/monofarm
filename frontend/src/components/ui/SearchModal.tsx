@@ -152,9 +152,9 @@ export function SearchModal({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border)]">
           {loading ? (
-            <Loader2 size={15} strokeWidth={1.6} className="shrink-0 text-[var(--accent)] animate-spin" />
+            <Loader2 size={15} strokeWidth={1.7} className="shrink-0 text-[var(--accent)] animate-spin" />
           ) : (
-            <Search size={15} strokeWidth={1.6} className="shrink-0 text-[var(--text-faint)]" />
+            <Search size={15} strokeWidth={1.7} className="shrink-0 text-[var(--text-faint)]" />
           )}
           <input
             ref={inputRef}

@@ -42,7 +42,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         aria-label={theme === "dark" ? "Світла тема" : "Темна тема"}
         title={theme === "dark" ? "Світла тема" : "Темна тема"}
       >
-        {theme === "dark" ? <Sun size={15} strokeWidth={1.6} /> : <Moon size={15} strokeWidth={1.6} />}
+        {theme === "dark" ? <Sun size={15} strokeWidth={1.7} /> : <Moon size={15} strokeWidth={1.7} />}
       </button>
     );
   }
@@ -54,7 +54,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       aria-label={theme === "dark" ? "Світла тема" : "Темна тема"}
       title={theme === "dark" ? "Світла тема" : "Темна тема"}
     >
-      {theme === "dark" ? <Sun size={15} strokeWidth={1.6} /> : <Moon size={15} strokeWidth={1.6} />}
+      {theme === "dark" ? <Sun size={15} strokeWidth={1.7} /> : <Moon size={15} strokeWidth={1.7} />}
     </button>
   );
 }

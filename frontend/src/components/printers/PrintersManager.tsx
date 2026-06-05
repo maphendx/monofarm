@@ -74,7 +74,7 @@ function WizardTypeCard({ icon, title, desc, badge, onClick }: { icon: React.Rea
         </div>
         <p className="mt-0.5 text-xs text-[var(--text-muted)]">{desc}</p>
       </div>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]"><path d="M9 18l6-6-6-6"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[var(--text-faint)]"><path d="M9 18l6-6-6-6"/></svg>
     </button>
   );
 }
@@ -121,9 +121,9 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
         {step === "choose" && (
           <div className="space-y-2">
             <p className="mb-3 text-xs text-[var(--text-muted)]">Оберіть тип підключення</p>
-            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>} title="Bambu Lab" desc="P1S, A1, X1C — синхронізація через Bambu Cloud акаунт" badge="Авто-імпорт" onClick={() => setStep("bambu")} />
-            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h10M7 11h6"/></svg>} title="Klipper / Moonraker" desc="Snapmaker, Voron, Rat Rig та будь-який Klipper принтер" onClick={() => setStep("moonraker")} />
-            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>} title="Ручне відстеження" desc="Будь-який принтер — оператор оновлює стан вручну" onClick={() => setStep("manual")} />
+            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>} title="Bambu Lab" desc="P1S, A1, X1C — синхронізація через Bambu Cloud акаунт" badge="Авто-імпорт" onClick={() => setStep("bambu")} />
+            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h10M7 11h6"/></svg>} title="Klipper / Moonraker" desc="Snapmaker, Voron, Rat Rig та будь-який Klipper принтер" onClick={() => setStep("moonraker")} />
+            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>} title="Ручне відстеження" desc="Будь-який принтер — оператор оновлює стан вручну" onClick={() => setStep("manual")} />
           </div>
         )}
         {step === "bambu" && (
@@ -156,7 +156,7 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
         )}
         {step === "done" && (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-[rgba(34,197,94,.12)] text-[var(--state-ok)]"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+            <div className="flex size-12 items-center justify-center rounded-full bg-[rgba(34,197,94,.12)] text-[var(--state-ok)]"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
             <p className="font-medium">Принтер додано!</p>
             <div className="flex gap-2"><button onClick={() => { onDone(); onClose(); }} className={primaryBtn}>Готово</button><button onClick={() => { onDone(); setStep("choose"); setName(""); setUrl(""); setError(null); }} className={ghostBtn}>Ще один</button></div>
           </div>

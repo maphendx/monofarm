@@ -137,11 +137,11 @@ function TemperaturesCard({ printer }: { printer: Printer }) {
               <div className="mb-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {r.icon === "nozzle" ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)]">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)]">
                       <path d="M12 22V12M8 22h8M9 12h6M12 2v4M9 6h6"/><path d="M7 6a5 5 0 0 0 10 0"/>
                     </svg>
                   ) : (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)]">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)]">
                       <rect x="2" y="14" width="20" height="6" rx="1"/><path d="M6 14v-4a6 6 0 0 1 12 0v4"/>
                     </svg>
                   )}
@@ -274,7 +274,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
       {busy === key ? (
         <span className="text-[10px]">…</span>
       ) : (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d={svgPath} />
         </svg>
       )}
@@ -292,7 +292,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
       {busy === key ? (
         <span className="text-[10px]">…</span>
       ) : (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
         </svg>
       )}
@@ -306,7 +306,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
       disabled={busy !== null}
       className={`flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40    ${colorCls}`}
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         <path d={icon} />
       </svg>
       {busy === key ? "…" : label}
@@ -388,7 +388,7 @@ function ControlPanel({ printer }: { printer: Printer }) {
                 disabled={busy !== null}
                 className="flex flex-col items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[10px] font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   "
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
                 </svg>
                 {busy === "home-all" ? "…" : "Всі"}
@@ -548,7 +548,7 @@ function PrintStatusCard({
         {/* Error strip */}
         {printer.error_msg && (
           <div className="mb-4 flex items-start gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2.5">
-            <svg className="mt-0.5 shrink-0 text-[var(--state-error)]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="mt-0.5 shrink-0 text-[var(--state-error)]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <p className="text-xs text-[var(--state-error)]">{printer.error_msg}</p>
@@ -637,7 +637,7 @@ function PrintStatusCard({
               ) : (
                 <button onClick={() => setConfirmClearBed(true)} disabled={busy !== null}
                   className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                   Стіл очищено
                 </button>
               )
@@ -689,7 +689,7 @@ function SpoolIcon({ color, size = 72 }: { color: string; size?: number }) {
         const y1 = cx + hubR * 1.05 * Math.sin(angle);
         const x2 = cx + rimR * 0.96 * Math.cos(angle);
         const y2 = cx + rimR * 0.96 * Math.sin(angle);
-        return <line key={k} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(0,0,0,0.22)" strokeWidth="1.6" strokeLinecap="round" />;
+        return <line key={k} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(0,0,0,0.22)" strokeWidth="1.7" strokeLinecap="round" />;
       })}
       <circle cx={cx} cy={cx} r={hubR} fill={hex} stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" />
       <circle cx={cx} cy={cx} r={r * 0.09} fill="rgba(0,0,0,0.45)" />
@@ -1541,7 +1541,7 @@ export default function PrinterPage() {
         <div className="flex items-center gap-3 min-w-0">
           <Link href="/dashboard"
             className="flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-[var(--text)]  shrink-0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           </Link>
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold">{printer.name}</h1>
@@ -1558,12 +1558,12 @@ export default function PrinterPage() {
           <button onClick={() => void load()}
             className="ml-2 rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
             title="Оновити">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           </button>
           <button onClick={() => setSettingsOpen(true)}
             className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
             title="Налаштування принтера">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
@@ -1635,7 +1635,7 @@ export default function PrinterPage() {
                 onClick={() => setSettingsOpen(false)}
                 className="rounded-lg p-1.5 text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]  "
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
               </button>

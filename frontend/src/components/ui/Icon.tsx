@@ -5,6 +5,6 @@ interface IconProps extends Omit<LucideProps, "ref"> {
   icon: ComponentType<LucideProps>;
 }
 
-export function Icon({ icon: Component, strokeWidth = 1.6, absoluteStrokeWidth = true, ...props }: IconProps) {
+export function Icon({ icon: Component, strokeWidth = 1.7, absoluteStrokeWidth = true, ...props }: IconProps) {
   return <Component strokeWidth={strokeWidth} absoluteStrokeWidth={absoluteStrokeWidth} {...props} />;
 }
