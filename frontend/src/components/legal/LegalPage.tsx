@@ -15,7 +15,10 @@ export interface LegalSection {
   body: Array<string | string[]>;
 }
 
-interface LegalPageProps {
+export interface LegalDocument {
+  id: string;
+  languageLabel: string;
+  localeLabel: string;
   title: string;
   subtitle: string;
   updatedAt: string;
@@ -27,7 +30,13 @@ interface LegalPageProps {
   }>;
 }
 
-export function LegalPage({ title, subtitle, updatedAt, sections, summary }: LegalPageProps) {
+interface LegalPageProps {
+  documents: LegalDocument[];
+}
+
+export function LegalPage({ documents }: LegalPageProps) {
+  const primary = documents[0];
+
   return (
     <main className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
@@ -68,27 +77,38 @@ export function LegalPage({ title, subtitle, updatedAt, sections, summary }: Leg
               Юридичні документи Monofarm
             </div>
             <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-normal text-[var(--text-hi)] sm:text-5xl">
-              {title}
+              {primary.title}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--text-muted)] sm:text-lg">
-              {subtitle}
+              {primary.subtitle}
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-[var(--text-muted)]">
               <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                 <CalendarDays size={15} aria-hidden="true" />
-                Оновлено: {updatedAt}
+                Оновлено / Updated: {primary.updatedAt}
               </span>
               <span className="inline-flex items-center gap-2 rounded-sm border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                 <ShieldCheck size={15} aria-hidden="true" />
                 SaaS для 3D print farm
               </span>
             </div>
+            <div className="mt-5 flex flex-wrap gap-2 text-sm">
+              {documents.map((document) => (
+                <a
+                  key={document.id}
+                  href={`#${document.id}`}
+                  className="inline-flex items-center rounded-sm border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--accent-ring)] hover:text-[var(--accent)]"
+                >
+                  {document.localeLabel}
+                </a>
+              ))}
+            </div>
           </div>
 
           <aside className="surface h-fit p-4">
             <h2 className="text-sm font-semibold text-[var(--text-hi)]">Коротко</h2>
             <div className="mt-4 space-y-4">
-              {summary.map((item) => {
+              {primary.summary.map((item) => {
                 const Icon = item.icon;
                 return (
                   <div key={item.title} className="flex gap-3">
@@ -110,58 +130,108 @@ export function LegalPage({ title, subtitle, updatedAt, sections, summary }: Leg
           <aside className="hidden lg:block">
             <div className="sticky top-6 border-l border-[var(--border)] pl-4">
               <div className="mb-3 text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">
-                Розділи
+                Розділи / Sections
               </div>
-              <nav className="space-y-2">
-                {sections.map((section, index) => (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    className="block text-sm leading-5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
-                  >
-                    {index + 1}. {section.title}
-                  </a>
+              <nav className="space-y-4">
+                {documents.map((document) => (
+                  <div key={document.id}>
+                    <a
+                      href={`#${document.id}`}
+                      className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-hi)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      {document.languageLabel}
+                    </a>
+                    <div className="space-y-2">
+                      {document.sections.map((section, index) => (
+                        <a
+                          key={`${document.id}-${section.id}`}
+                          href={`#${document.id}-${section.id}`}
+                          className="block text-sm leading-5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                        >
+                          {index + 1}. {section.title}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </nav>
             </div>
           </aside>
 
           <article className="surface overflow-hidden">
-            {sections.map((section, index) => (
-              <section
-                id={section.id}
-                key={section.id}
-                className="scroll-mt-8 border-b border-[var(--border)] p-5 last:border-b-0 sm:p-7"
-              >
-                <div className="mb-4 flex items-start gap-3">
-                  <span className="font-mono mt-1 text-xs text-[var(--text-faint)]">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <h2 className="text-xl font-semibold leading-snug tracking-normal text-[var(--text-hi)]">
-                    {section.title}
+            {documents.map((document, documentIndex) => (
+              <div id={document.id} key={document.id} className="scroll-mt-8">
+                <header className="border-b border-[var(--border)] bg-[var(--surface-2)] p-5 sm:p-7">
+                  <div className="font-mono text-xs uppercase tracking-wider text-[var(--text-faint)]">
+                    {document.languageLabel}
+                  </div>
+                  <h2 className="mt-2 text-2xl font-semibold leading-tight tracking-normal text-[var(--text-hi)]">
+                    {document.title}
                   </h2>
-                </div>
-                <div className="space-y-4 text-sm leading-7 text-[var(--text)] sm:text-[15px]">
-                  {section.body.map((block, blockIndex) =>
-                    Array.isArray(block) ? (
-                      <ul key={blockIndex} className="space-y-2 pl-1">
-                        {block.map((item) => (
-                          <li key={item} className="flex gap-3">
-                            <CheckCircle2
-                              size={16}
-                              className="mt-1 shrink-0 text-[var(--accent)]"
-                              aria-hidden="true"
-                            />
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p key={blockIndex}>{block}</p>
-                    ),
-                  )}
-                </div>
-              </section>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--text-muted)]">
+                    {document.subtitle}
+                  </p>
+                </header>
+
+                {documentIndex > 0 && (
+                  <section className="border-b border-[var(--border)] p-5 sm:p-7">
+                    <h3 className="text-sm font-semibold text-[var(--text-hi)]">At a glance</h3>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      {document.summary.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <div key={item.title} className="flex gap-3">
+                            <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border border-[var(--accent-ring)] bg-[var(--accent-soft)] text-[var(--accent)]">
+                              <Icon size={16} aria-hidden="true" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-medium text-[var(--text-hi)]">{item.title}</h4>
+                              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{item.text}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {document.sections.map((section, index) => (
+                  <section
+                    id={`${document.id}-${section.id}`}
+                    key={`${document.id}-${section.id}`}
+                    className="scroll-mt-8 border-b border-[var(--border)] p-5 last:border-b-0 sm:p-7"
+                  >
+                    <div className="mb-4 flex items-start gap-3">
+                      <span className="font-mono mt-1 text-xs text-[var(--text-faint)]">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <h3 className="text-xl font-semibold leading-snug tracking-normal text-[var(--text-hi)]">
+                        {section.title}
+                      </h3>
+                    </div>
+                    <div className="space-y-4 text-sm leading-7 text-[var(--text)] sm:text-[15px]">
+                      {section.body.map((block, blockIndex) =>
+                        Array.isArray(block) ? (
+                          <ul key={blockIndex} className="space-y-2 pl-1">
+                            {block.map((item) => (
+                              <li key={item} className="flex gap-3">
+                                <CheckCircle2
+                                  size={16}
+                                  className="mt-1 shrink-0 text-[var(--accent)]"
+                                  aria-hidden="true"
+                                />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p key={blockIndex}>{block}</p>
+                        ),
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </div>
             ))}
           </article>
         </div>

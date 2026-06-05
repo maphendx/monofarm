@@ -8,7 +8,7 @@ import {
   Wrench,
 } from "lucide-react";
 
-import { LegalPage, type LegalSection } from "@/components/legal/LegalPage";
+import { LegalPage, type LegalDocument, type LegalSection } from "@/components/legal/LegalPage";
 
 export const metadata: Metadata = {
   title: "Умови використання | monofarm",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 const updatedAt = "5 червня 2026";
 
-const sections: LegalSection[] = [
+const ukSections: LegalSection[] = [
   {
     id: "general",
     title: "Загальні положення",
@@ -162,45 +162,236 @@ const sections: LegalSection[] = [
   },
 ];
 
+const enSections: LegalSection[] = [
+  {
+    id: "general",
+    title: "General terms",
+    body: [
+      "These Terms govern access to Monofarm, a SaaS platform for managing 3D print farms, printers, files, production tasks, materials, inventory, users, and integrations.",
+      "By using the service, creating an account, or accepting an invitation to an organization, you agree to these Terms on your own behalf or on behalf of the organization you represent.",
+      "If Monofarm and your organization have signed a separate written agreement, that agreement controls the matters it expressly covers.",
+    ],
+  },
+  {
+    id: "eligibility",
+    title: "Accounts, organizations, and roles",
+    body: [
+      [
+        "You need an account and an Organization workspace to use the service.",
+        "You must provide accurate registration information and keep it up to date.",
+        "The organization administrator is responsible for user invitations, roles, printer access, API keys, integrations, and removing users who should no longer have access.",
+        "Logins, passwords, agent tokens, and API keys are confidential. Revoke them immediately if compromise is suspected.",
+      ],
+    ],
+  },
+  {
+    id: "service-scope",
+    title: "Scope of the service",
+    body: [
+      "Monofarm provides software tools for monitoring and controlling 3D printers, print planning, file management, warehouse accounting, production batches, history, analytics, notifications, and subscriptions.",
+      "Available features depend on your plan, deployment settings, connected printers, local agent, third-party APIs, and hardware compatibility.",
+      "Monofarm does not sell physical goods, printers, filament, or spare parts under these Terms unless separately agreed in writing.",
+    ],
+  },
+  {
+    id: "responsible-use",
+    title: "Responsible use",
+    body: [
+      "You are responsible for all actions in your account and organization, including starting prints, stopping printers, uploading files, changing settings, and actions through the API or local agent.",
+      [
+        "Do not use the service for illegal, harmful, or unsafe manufacturing.",
+        "Do not try to access other organizations, data, printers, or APIs.",
+        "Do not upload malware, harmful G-code, content that violates others' rights, or files you are not allowed to use.",
+        "Do not bypass plan limits, billing mechanisms, rate limits, access controls, or technical restrictions.",
+        "Do not use the service in a way that degrades the platform for other users.",
+      ],
+    ],
+  },
+  {
+    id: "physical-safety",
+    title: "Equipment safety and physical risks",
+    body: [
+      "3D printers are physical devices with moving parts, heating elements, electronics, materials, and potential fire or property damage risks. Monofarm does not replace technical supervision, operator training, maintenance, fire safety, or workplace rules.",
+      "You are solely responsible for printer condition, ventilation, materials, print profiles, G-code, firmware, local network, safe equipment placement, and decisions to start or stop prints. Do not run unsafe processes unattended if your safety rules do not allow it.",
+    ],
+  },
+  {
+    id: "files-data",
+    title: "Files, content, and production data",
+    body: [
+      "You keep your rights to files, models, G-code, product names, SKU, specifications, BOM, warehouse records, orders, and other data you upload or create in Monofarm.",
+      "You grant Monofarm a limited right to store, process, copy, transmit to the agent, analyze, and display that data only as needed to provide the service, backups, security, support, and the actions you request.",
+      "You are responsible for having the right to upload and use the relevant files, models, marks, customer data, and production specifications.",
+    ],
+  },
+  {
+    id: "integrations",
+    title: "Local agent and third-party integrations",
+    body: [
+      "Monofarm may integrate with Moonraker/Klipper, Bambu Lab Cloud/LAN, Telegram, KeyCRM, Lemon Squeezy, S3-compatible storage, and other services. Some features operate through a local agent inside your network.",
+      "You are responsible for configuration, permissions, network security, hardware compatibility, and compliance with third-party provider terms. We do not control the availability, API changes, failures, or restrictions of third-party services.",
+    ],
+  },
+  {
+    id: "billing",
+    title: "Subscriptions, payment, and taxes",
+    body: [
+      "Paid plans, limits, trial periods, prices, and available features are shown in the interface or commercial offer. Unless stated otherwise, subscriptions are paid in advance and may renew automatically.",
+      "Payments are processed by Lemon Squeezy or another listed payment provider. Monofarm does not store full payment card details. Taxes, VAT, bank fees, currency conversion, and local payment rules may depend on country, buyer type, and payment provider.",
+      "If payment fails, a subscription is cancelled, a chargeback occurs, or payment terms are violated, we may limit, suspend, or terminate access to paid features.",
+    ],
+  },
+  {
+    id: "availability",
+    title: "Availability, support, and service changes",
+    body: [
+      "We aim to keep Monofarm stable, but we do not guarantee uninterrupted availability unless a separate SLA or enterprise agreement says otherwise. The service may be unavailable due to maintenance, updates, bugs, network issues, third-party providers, or force majeure.",
+      "We may change, add, or remove features when needed for security, product development, compatibility, performance, billing, or legal requirements. Material changes affecting paid customers will be communicated in a reasonable way.",
+      "Support is available at support@monofarm.app. Support scope and priority may depend on your plan or separate agreement.",
+    ],
+  },
+  {
+    id: "security",
+    title: "Security and support access",
+    body: [
+      "We use technical and organizational measures to protect the service, but users are also responsible for strong passwords, MFA where available, secure API keys, local agent protection, printer access controls, and timely removal of unnecessary users.",
+      "The Monofarm team may have limited support access to metadata or organization data for support, diagnostics, security, billing, or legal compliance. We should not view your files or production data unless needed to provide the service or respond to your request.",
+    ],
+  },
+  {
+    id: "ip",
+    title: "Intellectual property",
+    body: [
+      "Monofarm, its code, interface, design, logos, text, documentation, API, workflows, and related materials belong to Monofarm or its licensors. You receive a limited, non-exclusive, non-transferable right to use the service under these Terms.",
+      "You may not copy, modify, reverse engineer, sell, rent, provide as a separate service, or bypass technical restrictions of Monofarm unless expressly allowed by a written agreement.",
+    ],
+  },
+  {
+    id: "privacy",
+    title: "Privacy",
+    body: [
+      "Personal data processing is described in the Monofarm Privacy Policy. By using the service, you agree that data will be processed to provide the service, security, billing, support, and lawful purposes described in that policy.",
+    ],
+  },
+  {
+    id: "termination",
+    title: "Suspension and termination",
+    body: [
+      "You may stop using the service or cancel a subscription according to the billing settings. We may suspend or terminate access if you violate these Terms, fail to pay, create a security risk, use the service unlawfully, or harm other users.",
+      "After access ends, you should export any needed data before the access period expires. We may delete or anonymize data according to the Privacy Policy, technical timelines, backups, and legal obligations.",
+    ],
+  },
+  {
+    id: "liability",
+    title: "Disclaimer and limitation of liability",
+    body: [
+      "The service is provided “as is” and “as available” unless a separate agreement expressly states otherwise. We do not guarantee that Monofarm will be error-free, uninterrupted, or compatible with every printer, firmware, network, file, integration, or production process.",
+      "To the extent permitted by law, Monofarm is not liable for indirect damages, lost profits, production downtime, equipment, material or model damage, G-code errors, operator decisions, third-party service actions, or physical consequences of printing.",
+      "Nothing in these Terms limits liability that cannot be limited by law.",
+    ],
+  },
+  {
+    id: "changes",
+    title: "Changes to these Terms",
+    body: [
+      "We may update these Terms when the product, billing, integrations, security, or law changes. The new updated date will be shown on the page. If a change materially affects paid customers, we will notify organization administrators in a reasonable way.",
+      "If you continue using the service after updated Terms take effect, that means you accept the updated version.",
+    ],
+  },
+  {
+    id: "contact",
+    title: "Contact",
+    body: [
+      "Questions about these Terms, billing, security, or organization requests should be sent to support@monofarm.app.",
+    ],
+  },
+];
+
+const documents: LegalDocument[] = [
+  {
+    id: "uk",
+    languageLabel: "Українська версія",
+    localeLabel: "Українська",
+    title: "Умови використання",
+    subtitle: "Правила користування Monofarm для команд, які керують 3D-принтерами, виробництвом, складом, файлами та інтеграціями.",
+    updatedAt,
+    sections: ukSections,
+    summary: [
+      {
+        title: "Для 3D print farm",
+        text: "Сервіс призначений для керування друком, операціями, файлами, матеріалами і складом.",
+        icon: FileCheck2,
+      },
+      {
+        title: "Фізична безпека",
+        text: "Monofarm допомагає керувати обладнанням, але не замінює нагляд і правила безпечної експлуатації.",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Ваші дані",
+        text: "Ви зберігаєте права на файли, моделі, SKU, BOM, складські й виробничі записи.",
+        icon: ShieldCheck,
+      },
+      {
+        title: "Інтеграції",
+        text: "Bambu, Moonraker, Telegram, KeyCRM і локальний агент працюють у межах ваших налаштувань.",
+        icon: Plug,
+      },
+      {
+        title: "Білінг",
+        text: "Платні плани й підписки обробляються через Lemon Squeezy або вказаний платіжний провайдер.",
+        icon: CreditCard,
+      },
+      {
+        title: "Підтримка",
+        text: "Для питань щодо доступу, оплати або безпеки використовуйте support@monofarm.app.",
+        icon: Wrench,
+      },
+    ],
+  },
+  {
+    id: "en",
+    languageLabel: "English version",
+    localeLabel: "English",
+    title: "Terms of Service",
+    subtitle: "Rules for using Monofarm by teams that manage 3D printers, production, warehouse workflows, files, and integrations.",
+    updatedAt: "June 5, 2026",
+    sections: enSections,
+    summary: [
+      {
+        title: "For 3D print farms",
+        text: "The service is designed for managing prints, operations, files, materials, and warehouse workflows.",
+        icon: FileCheck2,
+      },
+      {
+        title: "Physical safety",
+        text: "Monofarm helps manage equipment, but does not replace supervision or safe operating rules.",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Your data",
+        text: "You keep your rights to files, models, SKU, BOM, warehouse, and production records.",
+        icon: ShieldCheck,
+      },
+      {
+        title: "Integrations",
+        text: "Bambu, Moonraker, Telegram, KeyCRM, and the local agent operate within your settings.",
+        icon: Plug,
+      },
+      {
+        title: "Billing",
+        text: "Paid plans and subscriptions are processed through Lemon Squeezy or the listed payment provider.",
+        icon: CreditCard,
+      },
+      {
+        title: "Support",
+        text: "Use support@monofarm.app for access, payment, or security questions.",
+        icon: Wrench,
+      },
+    ],
+  },
+];
+
 export default function TermsPage() {
-  return (
-    <LegalPage
-      title="Умови використання"
-      subtitle="Правила користування Monofarm для команд, які керують 3D-принтерами, виробництвом, складом, файлами та інтеграціями."
-      updatedAt={updatedAt}
-      summary={[
-        {
-          title: "Для 3D print farm",
-          text: "Сервіс призначений для керування друком, операціями, файлами, матеріалами і складом.",
-          icon: FileCheck2,
-        },
-        {
-          title: "Фізична безпека",
-          text: "Monofarm допомагає керувати обладнанням, але не замінює нагляд і правила безпечної експлуатації.",
-          icon: AlertTriangle,
-        },
-        {
-          title: "Ваші дані",
-          text: "Ви зберігаєте права на файли, моделі, SKU, BOM, складські й виробничі записи.",
-          icon: ShieldCheck,
-        },
-        {
-          title: "Інтеграції",
-          text: "Bambu, Moonraker, Telegram, KeyCRM і локальний агент працюють у межах ваших налаштувань.",
-          icon: Plug,
-        },
-        {
-          title: "Білінг",
-          text: "Платні плани й підписки обробляються через Lemon Squeezy або вказаний платіжний провайдер.",
-          icon: CreditCard,
-        },
-        {
-          title: "Підтримка",
-          text: "Для питань щодо доступу, оплати або безпеки використовуйте support@monofarm.app.",
-          icon: Wrench,
-        },
-      ]}
-      sections={sections}
-    />
-  );
+  return <LegalPage documents={documents} />;
 }
