@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
+import { AuthImage } from "@/components/ui/AuthImage";
 import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
@@ -16,9 +17,27 @@ import {
 
 type Product = {
   id: number; name: string; sku: string; categories: string[];
-  unit: string; sale_price: string | null;
+  unit: string; description: string | null; image_url: string | null;
+  sale_price: string | null;
   cost_price: string | null; direct_cost: string | null; full_cost: string | null;
   min_stock: number | null; desired_stock: number | null; cell_limit: number | null;
+};
+
+type SpecComponent = {
+  id: number; name: string; quantity: string; unit: string;
+  unit_price: string | null; waste_pct: string; sort_order: number;
+};
+
+type SpecOperation = {
+  id: number; type: string; name: string; sort_order: number;
+  print_time_min: string | null; power_watts: number | null;
+  labor_minutes: string | null; labor_rate_per_hour: string | null;
+  explicit_cost: string | null; notes: string | null;
+};
+
+type Spec = {
+  id: number; product_id: number; version: number; name: string; is_default: boolean;
+  notes: string | null; components: SpecComponent[]; operations: SpecOperation[];
 };
 
 type SpecImportResult = {
@@ -52,10 +71,16 @@ type SortDir = "asc" | "desc";
 
 const COLS: ColDef[] = [
   { key: "name",       label: "Назва",        required: true },
-  { key: "sku",        label: "SKU" },
   { key: "categories", label: "Категорії" },
+  { key: "sku",        label: "SKU" },
+  { key: "materials",  label: "Матеріали" },
   { key: "direct_cost", label: "Пряма собівартість" },
   { key: "full_cost",  label: "Повна собівартість" },
+  { key: "works",      label: "Роботи" },
+  { key: "extras",     label: "Дод. витрати" },
+  { key: "unit",       label: "Од. виміру" },
+  { key: "description", label: "Опис" },
+  { key: "image",      label: "Фото" },
   { key: "sale_price", label: "Ціна" },
   { key: "margin",     label: "Маржа" },
 ];
@@ -72,10 +97,22 @@ function calcMargin(sale: string | null, cost: string | null): number | null {
   return ((parseFloat(sale) - parseFloat(cost)) / parseFloat(sale)) * 100;
 }
 
+function firstItems(items: string[], limit = 2) {
+  if (items.length === 0) return null;
+  const visible = items.slice(0, limit).join(", ");
+  return items.length > limit ? `${visible} +${items.length - limit}` : visible;
+}
+
+function fmtQty(v: string) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n.toLocaleString("uk-UA", { maximumFractionDigits: 3 }) : v;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SpecsPage() {
   const [products,     setProducts]     = useState<Product[]>([]);
+  const [specByProduct, setSpecByProduct] = useState<Record<number, Spec>>({});
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState("");
   const [sortKey,      setSortKey]      = useState<SortKey>("name");
@@ -93,6 +130,20 @@ export default function SpecsPage() {
     try {
       const prods = await api<Product[]>("/api/warehouse/products");
       setProducts(prods);
+      const specs = await Promise.allSettled(
+        prods.map(async (p) => {
+          const list = await api<Spec[]>(`/api/warehouse/products/${p.id}/specs`);
+          const spec = list.find((s) => s.is_default) ?? list[0] ?? null;
+          return [p.id, spec] as const;
+        })
+      );
+      const next: Record<number, Spec> = {};
+      specs.forEach((result) => {
+        if (result.status !== "fulfilled") return;
+        const [productId, spec] = result.value;
+        if (spec) next[productId] = spec;
+      });
+      setSpecByProduct(next);
     } finally {
       setLoading(false);
     }
@@ -143,12 +194,13 @@ export default function SpecsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return products.filter((p) => {
-      if (filter === "has"  && !p.full_cost) return false;
-      if (filter === "none" &&  p.full_cost) return false;
-      if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
+      const hasSpec = !!specByProduct[p.id];
+      if (filter === "has"  && !hasSpec) return false;
+      if (filter === "none" &&  hasSpec) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q) && !(p.description || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [products, search, filter]);
+  }, [products, search, filter, specByProduct]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -167,7 +219,7 @@ export default function SpecsPage() {
     });
   }, [filtered, sortKey, sortDir]);
 
-  const withSpec    = products.filter((p) => p.full_cost).length;
+  const withSpec    = products.filter((p) => specByProduct[p.id]).length;
   const withoutSpec = products.length - withSpec;
 
   const colSpan = 1 + COLS.filter((c) => colVis.isVisible(c.key)).length;
@@ -284,13 +336,25 @@ export default function SpecsPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-[var(--border)] bg-[var(--bg)] text-xs">
               <tr>
-                <Th col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">Назва</Th>
-                {colVis.isVisible("sku")        && <Th col="sku"        sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">SKU</Th>}
-                {colVis.isVisible("categories") && <th className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>}
-                {colVis.isVisible("direct_cost") && <Th col="direct_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Пряма собівартість</Th>}
-                {colVis.isVisible("full_cost")  && <Th col="full_cost"  sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Повна собівартість</Th>}
-                {colVis.isVisible("sale_price") && <Th col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>}
-                {colVis.isVisible("margin")     && <Th col="margin"     sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>}
+                {colVis.orderedCols.map((col) => {
+                  if (!colVis.isVisible(col.key)) return null;
+                  switch (col.key) {
+                    case "image": return <th key="image" className="w-12 px-3 py-3" />;
+                    case "name": return <Th key="name" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">Назва</Th>;
+                    case "categories": return <th key="categories" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Категорії</th>;
+                    case "sku": return <Th key="sku" col="sku" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-left">SKU</Th>;
+                    case "materials": return <th key="materials" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Матеріали</th>;
+                    case "direct_cost": return <Th key="direct_cost" col="direct_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Пряма собівартість</Th>;
+                    case "full_cost": return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Повна собівартість</Th>;
+                    case "works": return <th key="works" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Роботи</th>;
+                    case "extras": return <th key="extras" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Дод. витрати</th>;
+                    case "unit": return <th key="unit" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Од. виміру</th>;
+                    case "description": return <th key="description" className="px-4 py-3 text-left font-medium text-[var(--text-muted)]">Опис</th>;
+                    case "sale_price": return <Th key="sale_price" col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>;
+                    case "margin": return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа</Th>;
+                    default: return null;
+                  }
+                })}
                 <th className="w-24 px-4 py-3" />
               </tr>
             </thead>
@@ -310,78 +374,106 @@ export default function SpecsPage() {
               ) : (
                 sorted.map((p) => {
                   const margin  = calcMargin(p.sale_price, p.full_cost);
-                  const hasSpec = !!p.full_cost;
+                  const spec = specByProduct[p.id] ?? null;
+                  const hasSpec = !!spec;
+                  const materials = firstItems(
+                    spec?.components.map((c) => `${c.name} ${fmtQty(c.quantity)} ${c.unit}`) ?? []
+                  );
+                  const works = firstItems(spec?.operations.map((op) => op.name) ?? []);
+                  const extras = firstItems(
+                    spec?.operations
+                      .filter((op) => op.explicit_cost && parseFloat(op.explicit_cost) > 0)
+                      .map((op) => `${op.name}: ${fmt2(op.explicit_cost)}`) ?? []
+                  );
                   return (
                     <tr key={p.id} className="group hover:bg-[var(--surface-hi)]">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={[
-                              "inline-block size-1.5 shrink-0 rounded-full",
-                              hasSpec ? "bg-[var(--state-ok)]" : "bg-[var(--border-strong)]",
-                            ].join(" ")}
-                            title={hasSpec ? "Специфікація є" : "Без специфікації"}
-                          />
-                          <span className="font-medium">{p.name}</span>
-                        </div>
-                      </td>
-                      {colVis.isVisible("sku") && (
-                        <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>
-                      )}
-                      {colVis.isVisible("categories") && (
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {p.categories.slice(0, 3).map((c) => (
-                              <span key={c}
-                                className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-                                {c}
-                              </span>
-                            ))}
-                            {p.categories.length > 3 && (
-                              <span className="text-[10px] text-[var(--text-faint)]">+{p.categories.length - 3}</span>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                      {colVis.isVisible("direct_cost") && (
-                        <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {p.direct_cost ? (
-                            <span className="text-[var(--text-muted)]">{fmt2(p.direct_cost)}</span>
-                          ) : (
-                            <span className="text-[var(--text-faint)]">—</span>
-                          )}
-                        </td>
-                      )}
-                      {colVis.isVisible("full_cost") && (
-                        <td className="px-4 py-3 text-right font-mono tabular-nums">
-                          {hasSpec ? (
-                            <span className="text-[var(--text-hi)]">{fmt2(p.full_cost)}</span>
-                          ) : (
-                            <span className="text-[var(--text-faint)]">—</span>
-                          )}
-                        </td>
-                      )}
-                      {colVis.isVisible("sale_price") && (
-                        <td className="px-4 py-3 text-right font-mono tabular-nums text-[var(--text-muted)]">
-                          {fmt2(p.sale_price)}
-                        </td>
-                      )}
-                      {colVis.isVisible("margin") && (
-                        <td className="px-4 py-3 text-right">
-                          {margin !== null ? (
-                            <span className={[
-                              "font-mono tabular-nums text-xs font-medium",
-                              margin >= 50 ? "text-[var(--state-ok)]"
-                                : margin >= 20 ? "text-[var(--state-warn)]"
-                                : "text-[var(--state-error)]",
-                            ].join(" ")}>
-                              {margin.toFixed(0)}%
-                            </span>
-                          ) : (
-                            <span className="text-[var(--text-faint)]">—</span>
-                          )}
-                        </td>
-                      )}
+                      {colVis.orderedCols.map((col) => {
+                        if (!colVis.isVisible(col.key)) return null;
+                        switch (col.key) {
+                          case "image": return (
+                            <td key="image" className="px-3 py-3">
+                              {p.image_url ? (
+                                <button
+                                  onClick={() => setSpecProduct({ id: p.id, name: p.name, sku: p.sku, sale_price: p.sale_price })}
+                                  className="block size-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-hi)]"
+                                >
+                                  <AuthImage src={p.image_url} alt={p.name} className="size-full object-cover" />
+                                </button>
+                              ) : (
+                                <span className="text-[var(--text-faint)]">—</span>
+                              )}
+                            </td>
+                          );
+                          case "name": return (
+                            <td key="name" className="px-4 py-3">
+                              <button
+                                onClick={() => setSpecProduct({ id: p.id, name: p.name, sku: p.sku, sale_price: p.sale_price })}
+                                className="flex items-center gap-2 text-left font-medium hover:text-[var(--accent)]"
+                              >
+                                <span
+                                  className={[
+                                    "inline-block size-1.5 shrink-0 rounded-full",
+                                    hasSpec ? "bg-[var(--state-ok)]" : "bg-[var(--border-strong)]",
+                                  ].join(" ")}
+                                  title={hasSpec ? "Специфікація є" : "Без специфікації"}
+                                />
+                                <span>{p.name}</span>
+                              </button>
+                            </td>
+                          );
+                          case "categories": return (
+                            <td key="categories" className="px-4 py-3">
+                              <div className="flex flex-wrap gap-1">
+                                {p.categories.slice(0, 3).map((c) => (
+                                  <span key={c} className="rounded-full bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                                    {c}
+                                  </span>
+                                ))}
+                                {p.categories.length > 3 && <span className="text-[10px] text-[var(--text-faint)]">+{p.categories.length - 3}</span>}
+                                {p.categories.length === 0 && <span className="text-[var(--text-faint)]">—</span>}
+                              </div>
+                            </td>
+                          );
+                          case "sku": return <td key="sku" className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{p.sku}</td>;
+                          case "materials": return <td key="materials" className="max-w-[260px] px-4 py-3 text-sm text-[var(--text-muted)]">{materials ?? <span className="text-[var(--text-faint)]">—</span>}</td>;
+                          case "direct_cost": return (
+                            <td key="direct_cost" className="px-4 py-3 text-right font-mono tabular-nums">
+                              {p.direct_cost ? <span className="text-[var(--text-muted)]">{fmt2(p.direct_cost)}</span> : <span className="text-[var(--text-faint)]">—</span>}
+                            </td>
+                          );
+                          case "full_cost": return (
+                            <td key="full_cost" className="px-4 py-3 text-right font-mono tabular-nums">
+                              {p.full_cost ? <span className="text-[var(--text-hi)]">{fmt2(p.full_cost)}</span> : <span className="text-[var(--text-faint)]">—</span>}
+                            </td>
+                          );
+                          case "works": return <td key="works" className="max-w-[220px] px-4 py-3 text-sm text-[var(--text-muted)]">{works ?? <span className="text-[var(--text-faint)]">—</span>}</td>;
+                          case "extras": return <td key="extras" className="max-w-[220px] px-4 py-3 text-sm text-[var(--text-muted)]">{extras ?? <span className="text-[var(--text-faint)]">—</span>}</td>;
+                          case "unit": return <td key="unit" className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>;
+                          case "description": return (
+                            <td key="description" className="max-w-[260px] px-4 py-3 text-sm text-[var(--text-muted)]">
+                              {p.description ? <span className="line-clamp-2">{p.description}</span> : <span className="text-[var(--text-faint)]">—</span>}
+                            </td>
+                          );
+                          case "sale_price": return <td key="sale_price" className="px-4 py-3 text-right font-mono tabular-nums text-[var(--text-muted)]">{fmt2(p.sale_price)}</td>;
+                          case "margin": return (
+                            <td key="margin" className="px-4 py-3 text-right">
+                              {margin !== null ? (
+                                <span className={[
+                                  "font-mono tabular-nums text-xs font-medium",
+                                  margin >= 50 ? "text-[var(--state-ok)]"
+                                    : margin >= 20 ? "text-[var(--state-warn)]"
+                                    : "text-[var(--state-error)]",
+                                ].join(" ")}>
+                                  {margin.toFixed(0)}%
+                                </span>
+                              ) : (
+                                <span className="text-[var(--text-faint)]">—</span>
+                              )}
+                            </td>
+                          );
+                          default: return null;
+                        }
+                      })}
                       <td className="px-4 py-3 text-right">
                         <div className="invisible flex items-center justify-end gap-1 group-hover:visible">
                           <button

@@ -301,8 +301,6 @@ class StockEntryOut(BaseModel):
     reserved_qty:   Decimal
     available:      Decimal
     total_stock:    Decimal
-    cost_price:     Decimal | None
-    direct_cost:    Decimal | None
     full_cost:      Decimal | None
     min_stock:      int | None
     desired_stock:  int | None

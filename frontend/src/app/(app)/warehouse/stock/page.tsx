@@ -39,8 +39,6 @@ type StockEntry = {
   reserved_qty:       string;
   available:          string;
   total_stock:        string;
-  cost_price:         string | null;
-  direct_cost:        string | null;
   full_cost:          string | null;
   min_stock:          number | null;
   desired_stock:      number | null;
@@ -92,12 +90,11 @@ const COLS: ColDef[] = [
   { key: "warehouse",     label: "Склад" },
   { key: "location",      label: "Локація" },
   { key: "quantity",      label: "В наявності" },
-  { key: "direct_cost",   label: "Пряма собівартість за од." },
-  { key: "unit_cost",     label: "Повна собівартість за од." },
   { key: "total_cost",    label: "Вартість" },
   { key: "reserved",      label: "Резерв" },
   { key: "available",     label: "Доступний залишок" },
   { key: "total_stock",   label: "Загальний залишок" },
+  { key: "unit_cost",     label: "Собівартість за од." },
   { key: "min_stock",     label: "Мін ✎" },
   { key: "desired_stock", label: "Бажаний ✎" },
   { key: "cell_limit",    label: "Ліміт комірки ✎" },
@@ -950,12 +947,11 @@ export default function StockPage() {
                 {colVis.isVisible("warehouse")      && <th className="px-3 py-3 font-medium">Склад</th>}
                 {colVis.isVisible("location")       && <th className="px-3 py-3 font-medium">Локація</th>}
                 {colVis.isVisible("quantity")       && <th className="px-3 py-3 text-right font-medium">В наявності</th>}
-                {colVis.isVisible("direct_cost")    && <th className="px-3 py-3 text-right font-medium">Пряма собівартість за одиницю</th>}
-                {colVis.isVisible("unit_cost")      && <th className="px-3 py-3 text-right font-medium">Повна собівартість за одиницю</th>}
                 {colVis.isVisible("total_cost")     && <th className="px-3 py-3 text-right font-medium">Вартість</th>}
                 {colVis.isVisible("reserved")       && <th className="px-3 py-3 text-right font-medium">Резерв</th>}
                 {colVis.isVisible("available")      && <th className="px-3 py-3 text-right font-medium">Доступний залишок</th>}
                 {colVis.isVisible("total_stock")    && <th className="px-3 py-3 text-right font-medium">Загальний залишок</th>}
+                {colVis.isVisible("unit_cost")      && <th className="px-3 py-3 text-right font-medium">Собівартість за одиницю</th>}
                 {colVis.isVisible("min_stock")      && <th className="px-3 py-3 text-right font-medium text-[var(--state-warn)]">Мін ✎</th>}
                 {colVis.isVisible("desired_stock")  && <th className="px-3 py-3 text-right font-medium text-[var(--state-ok)]">Бажаний ✎</th>}
                 {colVis.isVisible("cell_limit")     && <th className="px-3 py-3 text-right font-medium text-[var(--accent)]">Ліміт комірки ✎</th>}
@@ -971,8 +967,7 @@ export default function StockPage() {
                 const avail     = parseFloat(e.available);
                 const status    = getStatus(e);
                 const meta      = STATUS_META[status];
-                const unitCost = e.full_cost ?? e.cost_price;
-                const totalCost = unitCost ? parseFloat(e.quantity) * parseFloat(unitCost) : null;
+                const totalCost = e.full_cost ? parseFloat(e.quantity) * parseFloat(e.full_cost) : null;
 
                 return (
                   <tr key={e.id} className={["transition-colors hover:bg-[var(--surface-hi)]", meta.row].join(" ")}>
@@ -1102,22 +1097,6 @@ export default function StockPage() {
                         <span className="ml-1 text-[10px] text-[var(--text-faint)]">{e.product_unit}</span>
                       </td>
                     )}
-                    {colVis.isVisible("direct_cost") && (
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
-                        {e.direct_cost != null ? fmt(e.direct_cost) : <span className="text-[var(--text-faint)]">—</span>}
-                      </td>
-                    )}
-                    {colVis.isVisible("unit_cost") && (
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
-                        {e.full_cost != null ? (
-                          fmt(e.full_cost)
-                        ) : e.cost_price != null ? (
-                          <span className="text-[var(--text-faint)]" title="Середньозважена ціна">{fmt(e.cost_price)}</span>
-                        ) : (
-                          <span className="text-[var(--text-faint)]">—</span>
-                        )}
-                      </td>
-                    )}
                     {colVis.isVisible("total_cost") && (
                       <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
                         {totalCost != null ? fmt(totalCost) : "—"}
@@ -1142,6 +1121,11 @@ export default function StockPage() {
                           {fmt(e.total_stock)}
                         </span>
                         <span className="ml-1 text-[10px] text-[var(--text-faint)]">{e.product_unit}</span>
+                      </td>
+                    )}
+                    {colVis.isVisible("unit_cost") && (
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap font-mono tabular-nums text-sm">
+                        {e.full_cost != null ? fmt(e.full_cost) : "—"}
                       </td>
                     )}
                     {colVis.isVisible("min_stock") && (

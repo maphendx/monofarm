@@ -2765,8 +2765,6 @@ def list_stock(
             reserved_qty=e.reserved_qty,
             available=avail,
             total_stock=total_stock,
-            cost_price=p.cost_price,
-            direct_cost=p.direct_cost,
             full_cost=p.full_cost,
             min_stock=p.min_stock,
             desired_stock=p.desired_stock,

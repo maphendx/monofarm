@@ -53,7 +53,7 @@ type CostBreakdown = {
   total: string; print_time_min: string; margin_pct: string | null;
 };
 
-type SortKey = "name" | "sku" | "stock" | "direct_cost" | "full_cost" | "sale_price" | "margin" | "margin_currency";
+type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin" | "margin_currency";
 type SortDir = "asc" | "desc";
 
 type ImportPreview = {
@@ -70,16 +70,14 @@ type SpecImportResult = { updated: number; skipped: number; errors: { sku: strin
 const PAGE_SIZES = [25, 50, 100] as const;
 
 const COLS: ColDef[] = [
-  { key: "name",       label: "Назва",        required: true },
-  { key: "categories", label: "Категорії" },
-  { key: "sku",        label: "SKU" },
-  { key: "barcode",    label: "Штрих-код" },
-  { key: "direct_cost", label: "Пряма собівартість" },
-  { key: "full_cost",  label: "Повна собівартість" },
-  { key: "unit",       label: "Од." },
-  { key: "description", label: "Опис" },
   { key: "image",      label: "Фото" },
+  { key: "name",       label: "Назва",        required: true },
+  { key: "sku",        label: "Артикул" },
+  { key: "barcode",    label: "Штрих-код" },
+  { key: "categories", label: "Категорія" },
+  { key: "unit",       label: "Од." },
   { key: "stock",      label: "Залишок" },
+  { key: "full_cost",  label: "Собівартість" },
   { key: "sale_price", label: "Ціна" },
   { key: "margin",     label: "Маржа %" },
   { key: "margin_currency", label: "Маржа ₴" },
@@ -1320,7 +1318,6 @@ export default function ProductsPage() {
         default: {
           let av = 0, bv = 0;
           if (sortKey === "stock")      { av = stockByProduct.get(a.id) ?? 0; bv = stockByProduct.get(b.id) ?? 0; }
-          if (sortKey === "direct_cost") { av = parseFloat(a.direct_cost ?? "0"); bv = parseFloat(b.direct_cost ?? "0"); }
           if (sortKey === "full_cost")  { av = parseFloat(a.full_cost  ?? "0"); bv = parseFloat(b.full_cost  ?? "0"); }
           if (sortKey === "sale_price") { av = parseFloat(a.sale_price ?? "0"); bv = parseFloat(b.sale_price ?? "0"); }
           if (sortKey === "margin")     {
@@ -1720,14 +1717,12 @@ export default function ProductsPage() {
                     switch (col.key) {
                       case "image":      return <th key="image" className="w-12 px-2 py-3" />;
                       case "name":       return <Th key="name" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>;
-                      case "sku":        return <Th key="sku" col="sku" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>SKU</Th>;
+                      case "sku":        return <Th key="sku" col="sku" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>;
                       case "barcode":    return <th key="barcode" className="px-4 py-3 font-medium">Штрих-код</th>;
-                      case "categories": return <th key="categories" className="px-4 py-3 font-medium">Категорії</th>;
+                      case "categories": return <th key="categories" className="px-4 py-3 font-medium">Категорія</th>;
                       case "unit":       return <th key="unit" className="px-4 py-3 font-medium">Од.</th>;
-                      case "description": return <th key="description" className="px-4 py-3 font-medium">Опис</th>;
                       case "stock":      return <Th key="stock" col="stock" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>;
-                      case "direct_cost": return <Th key="direct_cost" col="direct_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Пряма собів.</Th>;
-                      case "full_cost":  return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Повна собів.</Th>;
+                      case "full_cost":  return <Th key="full_cost" col="full_cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Собів.</Th>;
                       case "sale_price": return <Th key="sale_price" col="sale_price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Ціна</Th>;
                       case "margin":     return <Th key="margin" col="margin" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа %</Th>;
                       case "margin_currency": return <Th key="margin_currency" col="margin_currency" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Маржа ₴</Th>;
@@ -1827,11 +1822,6 @@ export default function ProductsPage() {
                           case "unit": return (
                             <td key="unit" className="px-4 py-3 text-xs text-[var(--text-muted)]">{p.unit}</td>
                           );
-                          case "description": return (
-                            <td key="description" className="max-w-[260px] px-4 py-3 text-sm text-[var(--text-muted)]">
-                              {p.description ? <span className="line-clamp-2">{p.description}</span> : <span className="text-[var(--text-faint)]">—</span>}
-                            </td>
-                          );
                           case "stock": return (
                             <td key="stock" className="px-4 py-3 text-right">
                               <span className={["font-mono text-sm tabular-nums",
@@ -1840,11 +1830,6 @@ export default function ProductsPage() {
                                   : "text-[var(--text)]"].join(" ")}>
                                 {Math.round(avail)}
                               </span>
-                            </td>
-                          );
-                          case "direct_cost": return (
-                            <td key="direct_cost" className="px-4 py-3 text-right text-sm tabular-nums">
-                              {p.direct_cost ? <span className="text-[var(--text-muted)]">{fmtPrice(p.direct_cost)}</span> : <span className="text-[var(--text-faint)]">—</span>}
                             </td>
                           );
                           case "full_cost": return (
