@@ -115,6 +115,42 @@ def test_ordage_spec_import_creates_product_for_unknown_material(
     assert created["cost_price"] == "7.2500"
 
 
+def test_ordage_spec_import_creates_missing_finished_product(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    header = [
+        "Назва виробу", "SKU виробу", "Од. вим. виробу",
+        "Пряма собівартість виробу", "Повна собівартість виробу",
+        "Назва матеріалу", "SKU матеріалу", "К-сть матеріалу", "Одиниця виміру матеріалу",
+        "Сер.зважена ціна матеріалу", "Назва роботи", "К-сть роботи", "Одиниця виміру роботи",
+        "Ціна роботи", "Додаткові витрати", "Вартість витрати",
+    ]
+    product_row = ["Новий виріб", "FG-NEW", "шт", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+    component_row = ["", "FG-NEW", "", "", "", "Новий матеріал", "", "2", "шт", "7.25", "", "", "", "", "", ""]
+    operation_row = ["", "FG-NEW", "", "", "", "", "", "", "", "", "Друк", "10", "хв", "0.10", "", ""]
+    content = "\n".join("\t".join(row) for row in [header, product_row, component_row, operation_row]).encode("utf-8-sig")
+
+    response = client.post(
+        "/api/warehouse/specs/import",
+        files={"file": ("specs.tsv", BytesIO(content), "text/tab-separated-values")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"updated": 1, "skipped": 0, "errors": []}
+
+    products = client.get("/api/warehouse/products", headers=auth_headers).json()
+    finished = next(p for p in products if p["sku"] == "FG-NEW")
+    assert finished["name"] == "Новий виріб"
+    assert finished["unit"] == "шт"
+
+    specs = client.get(f"/api/warehouse/products/{finished['id']}/specs", headers=auth_headers).json()
+    assert len(specs) == 1
+    assert specs[0]["components"][0]["product_name"] == "Новий матеріал"
+    assert specs[0]["operations"][0]["name"] == "Друк"
+
+
 def test_add_spec_component_creates_product_when_not_selected(
     client: TestClient,
     auth_headers: dict[str, str],

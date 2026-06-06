@@ -2664,7 +2664,13 @@ def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:
         if not sku:
             continue
         if product_name:
-            current = {"sku": sku, "unit": row[2].strip(), "components": [], "operations": []}
+            current = {
+                "name": product_name,
+                "sku": sku,
+                "unit": row[2].strip(),
+                "components": [],
+                "operations": [],
+            }
             products.append(current)
         elif current:
             mat_name = row[5].strip()
@@ -2737,9 +2743,17 @@ def import_ordage_specs(
     for item in parsed:
         product = product_by_sku.get(_norm_lookup(item["sku"]))
         if not product:
-            skipped += 1
-            errors.append({"sku": item["sku"], "reason": "не знайдено"})
-            continue
+            product = Product(
+                organization_id=org.id,
+                name=item["name"] or item["sku"],
+                sku=item["sku"],
+                unit=item["unit"] or "шт",
+                created_by_id=user.id,
+            )
+            db.add(product)
+            db.flush()
+            product_by_sku[_norm_lookup(product.sku)] = product
+            product_by_name[_norm_lookup(product.name)] = product
 
         spec = db.query(Specification).filter_by(product_id=product.id, is_default=True).first()
         if not spec:
