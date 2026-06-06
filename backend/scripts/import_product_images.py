@@ -18,7 +18,8 @@ from pathlib import Path
 try:
     import requests
 except ImportError:
-    print("pip install requests"); sys.exit(1)
+    print("pip install requests")
+    sys.exit(1)
 
 _EXT_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
              ".png": "image/png",  ".webp": "image/webp"}
@@ -70,7 +71,8 @@ def main(folder: str, api: str, token: str,
         if p.suffix.lower() in _EXT_MIME
     )
     if not photos:
-        print(f"No images found in {folder}"); return
+        print(f"No images found in {folder}")
+        return
 
     print(f"Loading products from {api}…")
     products = load_products(api, headers)
@@ -79,7 +81,8 @@ def main(folder: str, api: str, token: str,
     # when replacing: process each SKU only once (first file wins)
     seen_skus: set[str] = set()
     if skip_skus_file:
-        seen_skus = {l.strip() for l in open(skip_skus_file) if l.strip()}
+        with open(skip_skus_file) as skipped_file:
+            seen_skus = {line.strip() for line in skipped_file if line.strip()}
         print(f"Resuming — skipping {len(seen_skus)} already done SKUs\n")
 
     ok = skipped = deleted = errors = 0

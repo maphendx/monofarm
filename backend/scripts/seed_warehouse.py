@@ -57,7 +57,8 @@ def main():
     try:
         org = db.query(Organization).first()
         if not org:
-            print("No organization found"); return
+            print("No organization found")
+            return
         from app.models.user import User
         admin = db.query(User).filter_by(organization_id=org.id).first()
         uid = admin.id if admin else None
