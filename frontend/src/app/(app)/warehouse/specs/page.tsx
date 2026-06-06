@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
 import { AuthImage } from "@/components/ui/AuthImage";
+import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
@@ -224,6 +225,8 @@ export default function SpecsPage() {
   const withoutSpec = products.length - withSpec;
 
   const colSpan = 1 + COLS.filter((c) => colVis.isVisible(c.key)).length;
+
+  if (loading) return <PageSkeleton cols={13} />;
 
   return (
     <div className="space-y-4">
