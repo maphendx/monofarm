@@ -312,6 +312,14 @@ class StockEntryOut(BaseModel):
         from_attributes = True
 
 
+class StockSummaryOut(BaseModel):
+    product_id:   int
+    warehouse_id: int
+    quantity:     Decimal
+    reserved_qty: Decimal
+    available:    Decimal
+
+
 # ── Dashboard summary ─────────────────────────────────────────────────────────
 
 class DashboardLowStockOut(BaseModel):

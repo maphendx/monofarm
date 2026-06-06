@@ -45,7 +45,7 @@ from app.schemas.warehouse import (
     PutawayRequest, RelocateRequest, ReserveRequest,
     ShipPick, ShipRequest,
     SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
-    StockEntryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
+    StockEntryOut, StockSummaryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneOverviewOut, ZoneUpdate, ZoneWithCellsOut,
 )
 
@@ -2878,6 +2878,37 @@ def list_stock(
             updated_at=e.updated_at,
         ))
     return result
+
+
+@_full.get("/stock/summary", response_model=list[StockSummaryOut])
+def stock_summary(
+    warehouse_id: int | None = Query(None),
+    product_id:   int | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[StockSummaryOut]:
+    """Lightweight stock totals for list pages.
+
+    Use this when the UI only needs quantities. The full /stock endpoint also
+    resolves product data, images, cell locations, and production counters.
+    """
+    q = db.query(StockEntry).filter(StockEntry.organization_id == org.id)
+    if warehouse_id:
+        q = q.filter(StockEntry.warehouse_id == warehouse_id)
+    if product_id:
+        q = q.filter(StockEntry.product_id == product_id)
+
+    rows = q.order_by(StockEntry.warehouse_id, StockEntry.product_id).all()
+    return [
+        StockSummaryOut(
+            product_id=e.product_id,
+            warehouse_id=e.warehouse_id,
+            quantity=e.quantity,
+            reserved_qty=e.reserved_qty,
+            available=e.quantity - e.reserved_qty,
+        )
+        for e in rows
+    ]
 
 
 # ── Replenishment ─────────────────────────────────────────────────────────────

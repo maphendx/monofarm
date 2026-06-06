@@ -137,7 +137,7 @@ export default function WarehousesPage() {
     try {
       const [whs, stk] = await Promise.all([
         api<Warehouse[]>("/api/warehouse/warehouses"),
-        api<StockEntry[]>("/api/warehouse/stock"),
+        api<StockEntry[]>("/api/warehouse/stock/summary"),
       ]);
       setWarehouses(whs);
       setStock(stk);

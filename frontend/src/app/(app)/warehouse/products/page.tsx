@@ -1267,7 +1267,7 @@ export default function ProductsPage() {
     try {
       const [prods, stk, cs] = await Promise.all([
         api<Product[]>(`/api/warehouse/products${archived ? "?archived=true" : ""}`),
-        api<StockEntry[]>("/api/warehouse/stock"),
+        api<StockEntry[]>("/api/warehouse/stock/summary"),
         api<ProductCat[]>("/api/warehouse/categories"),
       ]);
       setProducts(prods);
