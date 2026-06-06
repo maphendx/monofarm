@@ -47,6 +47,7 @@ type SpecImportResult = {
 };
 
 type SortKey = "name" | "sku" | "direct_cost" | "full_cost" | "sale_price" | "margin";
+const PAGE_SIZES = [25, 50, 100] as const;
 
 function Th({ col, sortKey, sortDir, onSort, children, className = "" }: {
   col: SortKey; sortKey: SortKey; sortDir: "asc" | "desc";
@@ -118,6 +119,8 @@ export default function SpecsPage() {
   const [sortKey,      setSortKey]      = useState<SortKey>("name");
   const [sortDir,      setSortDir]      = useState<SortDir>("asc");
   const [filter,       setFilter]       = useState<"all" | "has" | "none">("all");
+  const [pageSize,     setPageSize]     = useState<number>(25);
+  const [page,         setPage]         = useState(1);
   const [importing,    setImporting]    = useState(false);
   const [importResult, setImportResult] = useState<SpecImportResult | null>(null);
   const [specProduct,  setSpecProduct]  = useState<SpecModalProduct | null>(null);
@@ -129,16 +132,13 @@ export default function SpecsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const specsPromise = api<Spec[]>("/api/warehouse/specs/defaults").catch(() => [] as Spec[]);
       const prods = await api<Product[]>("/api/warehouse/products");
       setProducts(prods);
       setSpecByProduct({});
       setLoading(false);
-      try {
-        const specs = await api<Spec[]>("/api/warehouse/specs/defaults");
-        setSpecByProduct(Object.fromEntries(specs.map((spec) => [spec.product_id, spec])));
-      } catch {
-        setSpecByProduct({});
-      }
+      const specs = await specsPromise;
+      setSpecByProduct(Object.fromEntries(specs.map((spec) => [spec.product_id, spec])));
     } finally {
       setLoading(false);
     }
@@ -213,6 +213,12 @@ export default function SpecsPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated = useMemo(() => sorted.slice((page - 1) * pageSize, page * pageSize), [sorted, page, pageSize]);
+
+  useEffect(() => { setPage(1); }, [search, filter, sortKey, sortDir, pageSize]);
+  useEffect(() => { setPage((p) => Math.min(p, totalPages)); }, [totalPages]);
 
   const withSpec    = products.filter((p) => specByProduct[p.id]).length;
   const withoutSpec = products.length - withSpec;
@@ -367,7 +373,7 @@ export default function SpecsPage() {
                   </td>
                 </tr>
               ) : (
-                sorted.map((p) => {
+                paginated.map((p) => {
                   const margin  = calcMargin(p.sale_price, p.full_cost);
                   const spec = specByProduct[p.id] ?? null;
                   const hasSpec = !!spec;
@@ -486,6 +492,58 @@ export default function SpecsPage() {
             </tbody>
           </table>
         </div>
+
+        {sorted.length > 0 && (
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <span>Рядків:</span>
+              {PAGE_SIZES.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setPageSize(s)}
+                  className={[
+                    "rounded px-2 py-0.5 text-sm",
+                    pageSize === s ? "bg-[var(--accent)] text-white" : "hover:bg-[var(--surface-hi)]",
+                  ].join(" ")}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="mr-2 text-sm text-[var(--text-faint)]">
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, sorted.length)} з {sorted.length}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex size-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-30"
+              >
+                ‹
+              </button>
+              {totalPages <= 7 && Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={[
+                    "flex size-7 items-center justify-center rounded-md text-sm",
+                    page === p ? "bg-[var(--accent)] text-white" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                  ].join(" ")}
+                >
+                  {p}
+                </button>
+              ))}
+              {totalPages > 7 && <span className="px-1 text-sm text-[var(--text-faint)]">{page} / {totalPages}</span>}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="flex size-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-30"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {specProduct && (
