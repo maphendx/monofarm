@@ -5,7 +5,10 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import csv
+import hashlib
 import io
+import re
+import unicodedata
 import uuid
 
 import openpyxl
@@ -256,6 +259,85 @@ def _get_spec_for_product(
 
 def _norm_lookup(value: str | None) -> str:
     return " ".join((value or "").casefold().split())
+
+
+def _component_sku_from_name(name: str) -> str:
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", ascii_name).strip("-").upper()
+    if len(slug) < 3:
+        slug = "COMP"
+    digest = hashlib.sha1(name.casefold().encode("utf-8")).hexdigest()[:8].upper()
+    return f"COMP-{slug[:24]}-{digest}"
+
+
+def _unique_component_sku(
+    db: Session,
+    org_id: int,
+    name: str,
+    preferred_sku: str | None = None,
+) -> str:
+    base = (preferred_sku or "").strip() or _component_sku_from_name(name)
+    base = base[:80] or _component_sku_from_name(name)
+    candidate = base
+    suffix = 2
+    while db.query(Product.id).filter(Product.organization_id == org_id, Product.sku == candidate).first():
+        tail = f"-{suffix}"
+        candidate = f"{base[:80 - len(tail)]}{tail}"
+        suffix += 1
+    return candidate
+
+
+def _ensure_component_product(
+    *,
+    db: Session,
+    org: Organization,
+    user: User | None,
+    name: str,
+    sku: str | None,
+    unit: str | None,
+    unit_price: Decimal | None,
+    product_by_sku: dict[str, Product] | None = None,
+    product_by_name: dict[str, Product] | None = None,
+) -> Product:
+    clean_name = name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Component name is required")
+
+    product = product_by_sku.get(_norm_lookup(sku)) if product_by_sku and sku else None
+    if product is None and product_by_name is not None:
+        product = product_by_name.get(_norm_lookup(clean_name))
+    if product is None and product_by_sku is None and sku:
+        product = db.query(Product).filter(Product.organization_id == org.id, Product.sku == sku.strip()).first()
+    if product is None and product_by_name is None:
+        product = next(
+            (
+                existing
+                for existing in db.query(Product).filter(Product.organization_id == org.id).all()
+                if _norm_lookup(existing.name) == _norm_lookup(clean_name)
+            ),
+            None,
+        )
+    if product is not None:
+        return product
+
+    _check_product_limit(org, db)
+    product = Product(
+        organization_id=org.id,
+        created_by_id=user.id if user else None,
+        name=clean_name,
+        sku=_unique_component_sku(db, org.id, clean_name, preferred_sku=sku),
+        categories=[],
+        unit=(unit or "").strip() or "шт",
+        cost_price=unit_price,
+        is_active=True,
+    )
+    db.add(product)
+    db.flush()
+    if product_by_sku is not None:
+        product_by_sku[_norm_lookup(product.sku)] = product
+    if product_by_name is not None:
+        product_by_name[_norm_lookup(product.name)] = product
+    return product
 
 
 def _component_payloads(
@@ -2640,7 +2722,7 @@ def import_ordage_specs(
     file: UploadFile      = File(...),
     db:   Session         = Depends(get_db),
     org:  Organization    = Depends(get_current_org),
-    _:    User            = Depends(require_roles(UserRole.admin)),
+    user: User            = Depends(require_roles(UserRole.admin)),
 ) -> OrdageSpecImportResult:
     content  = file.file.read()
     filename = (file.filename or "").lower()
@@ -2668,20 +2750,18 @@ def import_ordage_specs(
 
         db.query(SpecComponent).filter_by(specification_id=spec.id).delete()
         for i, c in enumerate(item["components"]):
-            component_product = (
-                product_by_sku.get(_norm_lookup(c.get("sku")))
-                if c.get("sku")
-                else None
+            component_product = _ensure_component_product(
+                db=db,
+                org=org,
+                user=user,
+                name=c["name"],
+                sku=c.get("sku"),
+                unit=c["unit"],
+                unit_price=c["unit_price"],
+                product_by_sku=product_by_sku,
+                product_by_name=product_by_name,
             )
-            if component_product is None:
-                component_product = product_by_name.get(_norm_lookup(c["name"]))
-            if component_product is None:
-                errors.append({
-                    "sku": item["sku"],
-                    "reason": f"матеріал не прив'язано до номенклатури: {c['name']}",
-                })
-
-            component_name = component_product.name if component_product else c["name"]
+            component_name = component_product.name
             component_unit = c["unit"] or (component_product.unit if component_product else "шт")
             component_price = c["unit_price"]
             if component_price is None and component_product and component_product.cost_price is not None:
@@ -2689,7 +2769,7 @@ def import_ordage_specs(
 
             db.add(SpecComponent(
                 specification_id=spec.id,
-                product_id=component_product.id if component_product else None,
+                product_id=component_product.id,
                 name=component_name, quantity=c["quantity"],
                 unit=component_unit, unit_price=component_price,
                 waste_pct=Decimal("0"), sort_order=i,
@@ -2747,23 +2827,29 @@ def add_component(
     payload: SpecComponentCreate,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
-    _:   User         = Depends(require_roles(UserRole.admin)),
+    user: User        = Depends(require_roles(UserRole.admin)),
 ) -> SpecOut:
     spec = _get_spec(spec_id, org, db)
     if payload.product_id is not None:
         product = _get_product(payload.product_id, org, db)
     else:
-        product = None
+        product = _ensure_component_product(
+            db=db,
+            org=org,
+            user=user,
+            name=payload.name,
+            sku=None,
+            unit=payload.unit,
+            unit_price=payload.unit_price,
+        )
     data = payload.model_dump()
     data["name"] = data["name"].strip()
+    data["product_id"] = product.id
     unit = (data["unit"] or "").strip()
-    if product is not None:
-        data["name"] = product.name
-        data["unit"] = unit or product.unit
-        if data["unit_price"] is None:
-            data["unit_price"] = product.cost_price
-    else:
-        data["unit"] = unit or "шт"
+    data["name"] = product.name
+    data["unit"] = unit or product.unit
+    if data["unit_price"] is None:
+        data["unit_price"] = product.cost_price
     comp = SpecComponent(specification_id=spec.id, **data)
     db.add(comp)
     db.commit()

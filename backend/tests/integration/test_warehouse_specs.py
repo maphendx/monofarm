@@ -74,3 +74,76 @@ def test_ordage_spec_import_links_component_by_material_sku(
     assert component["name"] == "PLA Black"
     assert component["unit"] == "г"
     assert component["unit_price"] == "0.7500"
+
+
+def test_ordage_spec_import_creates_product_for_unknown_material(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    finished = _create_product(client, auth_headers, name="Корпус", sku="FG-002", unit="шт")
+
+    header = [
+        "Назва виробу", "SKU виробу", "Од. вим. виробу",
+        "Пряма собівартість виробу", "Повна собівартість виробу",
+        "Назва матеріалу", "SKU матеріалу", "К-сть матеріалу", "Одиниця виміру матеріалу",
+        "Сер.зважена ціна матеріалу", "Назва роботи", "К-сть роботи", "Одиниця виміру роботи",
+        "Ціна роботи", "Додаткові витрати", "Вартість витрати",
+    ]
+    product_row = ["Корпус", "FG-002", "шт", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+    component_row = ["", "FG-002", "", "", "", "Новий матеріал", "", "2", "шт", "7.25", "", "", "", "", "", ""]
+    content = "\n".join("\t".join(row) for row in [header, product_row, component_row]).encode("utf-8-sig")
+
+    response = client.post(
+        "/api/warehouse/specs/import",
+        files={"file": ("specs.tsv", BytesIO(content), "text/tab-separated-values")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["errors"] == []
+
+    specs = client.get(f"/api/warehouse/products/{finished['id']}/specs", headers=auth_headers).json()
+    component = specs[0]["components"][0]
+    assert component["product_id"] is not None
+    assert component["product_name"] == "Новий матеріал"
+    assert component["unit_price"] == "7.2500"
+
+    products = client.get("/api/warehouse/products", headers=auth_headers).json()
+    created = next(p for p in products if p["id"] == component["product_id"])
+    assert created["name"] == "Новий матеріал"
+    assert created["sku"].startswith("COMP-")
+    assert created["cost_price"] == "7.2500"
+
+
+def test_add_spec_component_creates_product_when_not_selected(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    finished = _create_product(client, auth_headers, name="Кришка", sku="FG-003", unit="шт")
+    spec_response = client.post(
+        f"/api/warehouse/products/{finished['id']}/specs",
+        json={"name": "Основна"},
+        headers=auth_headers,
+    )
+    assert spec_response.status_code == 201, spec_response.text
+    spec = spec_response.json()
+
+    response = client.post(
+        f"/api/warehouse/specs/{spec['id']}/components",
+        json={
+            "name": "Гвинт M3",
+            "quantity": "4",
+            "unit": "шт",
+            "unit_price": "0.5",
+            "waste_pct": "0",
+            "sort_order": 0,
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201, response.text
+    component = response.json()["components"][0]
+    assert component["product_id"] is not None
+    assert component["product_name"] == "Гвинт M3"
+    assert component["name"] == "Гвинт M3"
+    assert component["unit_price"] == "0.5000"

@@ -737,7 +737,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                               <div className="flex flex-col gap-1">
                                 <span>{c.product_name ?? c.name}</span>
                                 <span className="w-fit rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
-                                  {c.product_id ? "номенклатура" : "кастомний компонент"}
+                                  номенклатура
                                 </span>
                               </div>
                             </td>
