@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 type SpecComponent = {
   id: number; name: string; quantity: string; unit: string;
   unit_price: string | null; waste_pct: string; sort_order: number;
+  material_id: number | null; product_id: number | null; product_name: string | null;
 };
 type SpecOperation = {
   id: number; type: string; name: string; sort_order: number;
@@ -71,6 +72,7 @@ export function SpecModal({
   const [cUnit,   setCUnit]   = useState("г");
   const [cPrice,  setCPrice]  = useState("");
   const [cWaste,  setCWaste]  = useState("0");
+  const [cProductId, setCProductId] = useState<number | null>(null);
   const [cBusy,   setCBusy]   = useState(false);
 
   // add operation
@@ -110,8 +112,9 @@ export function SpecModal({
 
   function pickCatalog(item: CatalogItem) {
     setCName(item.name);
+    setCProductId(item.id);
     setCUnit(item.unit || "г");
-    if (item.cost_price) setCPrice(parseFloat(item.cost_price).toFixed(4));
+    setCPrice(item.cost_price ? parseFloat(item.cost_price).toFixed(4) : "");
     setCSearch(item.name);
     setCDropOpen(false);
   }
@@ -147,6 +150,7 @@ export function SpecModal({
         method: "POST",
         body: JSON.stringify({
           name: cName.trim(), quantity: parseFloat(cQty),
+          product_id: cProductId,
           unit: cUnit.trim() || "г",
           unit_price: cPrice ? parseFloat(cPrice) : null,
           waste_pct: parseFloat(cWaste) || 0,
@@ -154,7 +158,7 @@ export function SpecModal({
         }),
       });
       setSpec(updated);
-      setCName(""); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0"); setCSearch("");
+      setCName(""); setCProductId(null); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0"); setCSearch("");
       setAddComp(false);
       setCost(null);
     } finally { setCBusy(false); }
@@ -248,7 +252,14 @@ export function SpecModal({
                       ) : (
                         spec.components.map((c) => (
                           <tr key={c.id} className="group">
-                            <td className="px-4 py-2.5">{c.name}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex flex-col gap-1">
+                                <span>{c.product_name ?? c.name}</span>
+                                <span className="w-fit rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
+                                  {c.product_id ? "номенклатура" : "кастомний компонент"}
+                                </span>
+                              </div>
+                            </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">{parseFloat(c.quantity).toFixed(3)}</td>
                             <td className="px-3 py-2.5 text-right text-[var(--text-muted)]">{c.unit}</td>
                             <td className="px-3 py-2.5 text-right tabular-nums text-[var(--text-muted)]">
@@ -277,6 +288,7 @@ export function SpecModal({
                               onChange={(e) => {
                                 setCSearch(e.target.value);
                                 setCName(e.target.value);
+                                setCProductId(null);
                                 setCDropOpen(true);
                               }}
                               onFocus={() => setCDropOpen(true)}

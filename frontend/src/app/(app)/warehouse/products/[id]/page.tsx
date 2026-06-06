@@ -75,7 +75,7 @@ function CostBar({ pct, cls }: { pct: number; cls: string }) {
 
 // ── AddComponentForm ──────────────────────────────────────────────────────────
 
-type WProduct = { id: number; name: string; sku: string };
+type WProduct = { id: number; name: string; sku: string; unit: string; cost_price: string | null };
 
 function AddComponentForm({
   specId, onAdded, nextOrder,
@@ -95,6 +95,15 @@ function AddComponentForm({
   function handleOpen() {
     setOpen(true);
     api<WProduct[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+  }
+
+  function handleProductChange(id: string) {
+    setProductId(id);
+    const product = products.find((p) => String(p.id) === id);
+    if (!product) return;
+    setName(product.name);
+    setUnit(product.unit || "g");
+    setPrice(product.cost_price ? parseFloat(product.cost_price).toFixed(4) : "");
   }
 
   if (!open) {
@@ -167,7 +176,7 @@ function AddComponentForm({
       {products.length > 0 && (
         <label className="flex-1 min-w-[160px]">
           <span className="mb-0.5 block text-[10px] text-[var(--text-faint)]">Продукт на складі</span>
-          <select value={productId} onChange={e => setProductId(e.target.value)}
+          <select value={productId} onChange={e => handleProductChange(e.target.value)}
             className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs">
             <option value="">— не прив’язано —</option>
             {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -531,7 +540,14 @@ export default function ProductDetailPage() {
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                   </button>
                                 </td>
-                                <td className="px-4 py-3"><span className="mr-1.5 text-[var(--text-faint)]">🧵</span>{c.name}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-col gap-1">
+                                    <span><span className="mr-1.5 text-[var(--text-faint)]">🧵</span>{c.product_name ?? c.name}</span>
+                                    <span className="w-fit rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
+                                      {c.product_id ? "номенклатура" : "кастомний компонент"}
+                                    </span>
+                                  </div>
+                                </td>
                                 <td className="px-4 py-3 text-right tabular-nums text-[var(--text-muted)]">{parseFloat(c.quantity).toFixed(2)} {c.unit}</td>
                                 <td className="px-4 py-3 text-right tabular-nums text-[var(--text-faint)]">{parseFloat(c.waste_pct) > 0 ? `${c.waste_pct}%` : "—"}</td>
                                 <td className="px-4 py-3 text-right tabular-nums text-[var(--text-faint)]">{c.unit_price ? `₴${fmt(c.unit_price)}` : "—"}</td>

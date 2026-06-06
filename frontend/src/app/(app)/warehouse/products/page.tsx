@@ -40,6 +40,7 @@ type Spec = {
 type SpecComponent = {
   id: number; name: string; quantity: string; unit: string;
   unit_price: string | null; waste_pct: string; sort_order: number;
+  material_id: number | null; product_id: number | null; product_name: string | null;
 };
 type SpecOperation = {
   id: number; type: string; name: string; sort_order: number;
@@ -51,6 +52,9 @@ type CostBreakdown = {
   material_cost: string; electricity_cost: string;
   labor_cost: string; other_cost: string;
   total: string; print_time_min: string; margin_pct: string | null;
+};
+type CatalogItem = {
+  id: number; name: string; sku: string; unit: string; cost_price: string | null;
 };
 
 type SortKey = "name" | "sku" | "stock" | "full_cost" | "sale_price" | "margin" | "margin_currency";
@@ -550,6 +554,10 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
   const [cUnit,   setCUnit]   = useState("г");
   const [cPrice,  setCPrice]  = useState("");
   const [cWaste,  setCWaste]  = useState("0");
+  const [cProductId, setCProductId] = useState<number | null>(null);
+  const [catalog,    setCatalog]    = useState<CatalogItem[]>([]);
+  const [cSearch,    setCSearch]    = useState("");
+  const [cDropOpen,  setCDropOpen]  = useState(false);
   const [cBusy,   setCBusy]   = useState(false);
 
   // Add operation form state
@@ -583,6 +591,22 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (addComp && catalog.length === 0) {
+      api<CatalogItem[]>("/api/warehouse/products").then(setCatalog).catch(() => {});
+    }
+    if (!addComp) { setCSearch(""); setCDropOpen(false); }
+  }, [addComp, catalog.length]);
+
+  function pickCatalog(item: CatalogItem) {
+    setCName(item.name);
+    setCProductId(item.id);
+    setCUnit(item.unit || "г");
+    setCPrice(item.cost_price ? parseFloat(item.cost_price).toFixed(4) : "");
+    setCSearch(item.name);
+    setCDropOpen(false);
+  }
+
   async function computeCost() {
     if (!spec) return;
     setCostBusy(true);
@@ -615,12 +639,13 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
         method: "POST",
         body: JSON.stringify({
           name: cName.trim(), quantity: parseFloat(cQty), unit: cUnit.trim() || "г",
+          product_id: cProductId,
           unit_price: cPrice ? parseFloat(cPrice) : null,
           waste_pct: parseFloat(cWaste) || 0, sort_order: spec.components.length,
         }),
       });
       setSpec(updated);
-      setCName(""); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0");
+      setCName(""); setCProductId(null); setCQty(""); setCUnit("г"); setCPrice(""); setCWaste("0"); setCSearch("");
       setAddComp(false);
       setCost(null);
     } finally { setCBusy(false); }
@@ -649,6 +674,12 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
   }
 
   const totalCost = cost ? parseFloat(cost.total) : null;
+  const catalogHits = cDropOpen && cSearch.trim().length > 0
+    ? (() => {
+        const q = cSearch.toLowerCase();
+        return catalog.filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q)).slice(0, 8);
+      })()
+    : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -702,7 +733,14 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                       <tbody className="divide-y divide-[var(--border)]">
                         {spec.components.map((c) => (
                           <tr key={c.id} className="group">
-                            <td className="px-4 py-2.5">{c.name}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex flex-col gap-1">
+                                <span>{c.product_name ?? c.name}</span>
+                                <span className="w-fit rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] text-[var(--text-faint)]">
+                                  {c.product_id ? "номенклатура" : "кастомний компонент"}
+                                </span>
+                              </div>
+                            </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">{parseFloat(c.quantity).toFixed(3)}</td>
                             <td className="px-3 py-2.5 text-right text-[var(--text-muted)]">{c.unit}</td>
                             <td className="px-3 py-2.5 text-right tabular-nums text-[var(--text-muted)]">{c.unit_price ? parseFloat(c.unit_price).toFixed(4) : "—"}</td>
@@ -719,10 +757,36 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                         {/* Add component form row */}
                         {addComp && (
                           <tr className="bg-[var(--bg)] ">
-                            <td className="px-4 py-2">
-                              <input autoFocus value={cName} onChange={(e) => setCName(e.target.value)}
-                                placeholder="Назва матеріалу"
-                                className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--border-strong)]  " />
+                            <td className="relative px-4 py-2">
+                              <input
+                                autoFocus
+                                value={cSearch}
+                                onChange={(e) => {
+                                  setCSearch(e.target.value);
+                                  setCName(e.target.value);
+                                  setCProductId(null);
+                                  setCDropOpen(true);
+                                }}
+                                onFocus={() => setCDropOpen(true)}
+                                onBlur={() => setTimeout(() => setCDropOpen(false), 150)}
+                                placeholder="Назва або SKU…"
+                                className="w-full rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none focus:border-[var(--border-strong)]  "
+                              />
+                              {catalogHits.length > 0 && (
+                                <div className="absolute left-0 top-full z-30 mt-0.5 w-72 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-xl">
+                                  {catalogHits.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onMouseDown={() => pickCatalog(item)}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
+                                    >
+                                      <span className="flex-1 truncate">{item.name}</span>
+                                      <span className="shrink-0 font-mono text-[10px] text-[var(--text-faint)]">{item.sku}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.001" min="0" value={cQty} onChange={(e) => setCQty(e.target.value)}

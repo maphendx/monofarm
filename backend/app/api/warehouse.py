@@ -254,13 +254,56 @@ def _get_spec_for_product(
     return spec
 
 
-def _spec_to_out(spec: Specification, db: Session) -> SpecOut:
+def _norm_lookup(value: str | None) -> str:
+    return " ".join((value or "").casefold().split())
+
+
+def _component_payloads(
+    components: list[SpecComponent],
+    db: Session,
+    org_id: int,
+    product_names: dict[int, str] | None = None,
+) -> list[dict]:
+    if product_names is None:
+        product_ids = {c.product_id for c in components if c.product_id is not None}
+        product_names = {}
+        if product_ids:
+            product_names = {
+                product_id: name
+                for product_id, name in (
+                    db.query(Product.id, Product.name)
+                    .filter(Product.organization_id == org_id, Product.id.in_(product_ids))
+                    .all()
+                )
+            }
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "product_id": c.product_id,
+            "product_name": product_names.get(c.product_id),
+            "material_id": c.material_id,
+            "quantity": c.quantity,
+            "unit": c.unit,
+            "unit_price": c.unit_price,
+            "waste_pct": c.waste_pct,
+            "sort_order": c.sort_order,
+        }
+        for c in components
+    ]
+
+
+def _spec_to_out(spec: Specification, db: Session, org_id: int) -> SpecOut:
     components = db.query(SpecComponent).filter(SpecComponent.specification_id == spec.id).order_by(SpecComponent.sort_order).all()
     operations = db.query(SpecOperation).filter(SpecOperation.specification_id == spec.id).order_by(SpecOperation.sort_order).all()
-    return SpecOut.model_validate({**spec.__dict__, "components": components, "operations": operations})
+    return SpecOut.model_validate({
+        **spec.__dict__,
+        "components": _component_payloads(components, db, org_id),
+        "operations": operations,
+    })
 
 
-def _specs_to_out(specs: list[Specification], db: Session) -> list[SpecOut]:
+def _specs_to_out(specs: list[Specification], db: Session, org_id: int) -> list[SpecOut]:
     spec_ids = [s.id for s in specs]
     if not spec_ids:
         return []
@@ -277,6 +320,18 @@ def _specs_to_out(specs: list[Specification], db: Session) -> list[SpecOut]:
     for component in components:
         components_by_spec.setdefault(component.specification_id, []).append(component)
 
+    component_product_ids = {c.product_id for c in components if c.product_id is not None}
+    component_product_names: dict[int, str] = {}
+    if component_product_ids:
+        component_product_names = {
+            product_id: name
+            for product_id, name in (
+                db.query(Product.id, Product.name)
+                .filter(Product.organization_id == org_id, Product.id.in_(component_product_ids))
+                .all()
+            )
+        }
+
     operations = (
         db.query(SpecOperation)
         .filter(SpecOperation.specification_id.in_(spec_ids))
@@ -289,7 +344,12 @@ def _specs_to_out(specs: list[Specification], db: Session) -> list[SpecOut]:
     return [
         SpecOut.model_validate({
             **spec.__dict__,
-            "components": components_by_spec.get(spec.id, []),
+            "components": _component_payloads(
+                components_by_spec.get(spec.id, []),
+                db,
+                org_id,
+                product_names=component_product_names,
+            ),
             "operations": operations_by_spec.get(spec.id, []),
         })
         for spec in specs
@@ -2381,7 +2441,7 @@ def list_specs(
 ) -> list[SpecOut]:
     _get_product(product_id, org, db)
     specs = db.query(Specification).filter(Specification.product_id == product_id).order_by(Specification.version).all()
-    return [_spec_to_out(s, db) for s in specs]
+    return [_spec_to_out(s, db, org.id) for s in specs]
 
 
 @_full.post("/products/{product_id}/specs", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
@@ -2400,7 +2460,7 @@ def create_spec(
     db.add(spec)
     db.commit()
     db.refresh(spec)
-    return _spec_to_out(spec, db)
+    return _spec_to_out(spec, db, org.id)
 
 
 _SPEC_TSV_HEADER = "\t".join([
@@ -2433,6 +2493,17 @@ def export_ordage_specs(
             db.query(SpecComponent).filter_by(specification_id=spec.id)
             .order_by(SpecComponent.sort_order).all()
         )
+        component_product_ids = {c.product_id for c in components if c.product_id is not None}
+        component_skus: dict[int, str] = {}
+        if component_product_ids:
+            component_skus = {
+                product_id: sku
+                for product_id, sku in (
+                    db.query(Product.id, Product.sku)
+                    .filter(Product.organization_id == org.id, Product.id.in_(component_product_ids))
+                    .all()
+                )
+            }
         operations = (
             db.query(SpecOperation).filter_by(specification_id=spec.id)
             .order_by(SpecOperation.sort_order).all()
@@ -2450,6 +2521,7 @@ def export_ordage_specs(
             r = blank16.copy()
             r[1]  = p.sku
             r[5]  = c.name
+            r[6]  = component_skus.get(c.product_id, "") if c.product_id else ""
             r[7]  = str(c.quantity)
             r[8]  = c.unit
             r[9]  = str(c.unit_price or "")
@@ -2494,7 +2566,7 @@ def list_default_specs(
         .order_by(Product.name)
         .all()
     )
-    return _specs_to_out(specs, db)
+    return _specs_to_out(specs, db, org.id)
 
 
 def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:
@@ -2520,8 +2592,9 @@ def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:
                 price = row[9].strip()
                 current["components"].append({
                     "name":       mat_name,
+                    "sku":        row[6].strip(),
                     "quantity":   Decimal(qty)   if qty   else Decimal("0"),
-                    "unit":       row[8].strip() or "шт",
+                    "unit":       row[8].strip(),
                     "unit_price": Decimal(price) if price else None,
                 })
             elif op_name:
@@ -2575,8 +2648,12 @@ def import_ordage_specs(
     updated, skipped = 0, 0
     errors: list[dict] = []
 
+    org_products = db.query(Product).filter(Product.organization_id == org.id).all()
+    product_by_sku = {_norm_lookup(p.sku): p for p in org_products if p.sku}
+    product_by_name = {_norm_lookup(p.name): p for p in org_products if p.name}
+
     for item in parsed:
-        product = db.query(Product).filter_by(organization_id=org.id, sku=item["sku"]).first()
+        product = product_by_sku.get(_norm_lookup(item["sku"]))
         if not product:
             skipped += 1
             errors.append({"sku": item["sku"], "reason": "не знайдено"})
@@ -2591,10 +2668,30 @@ def import_ordage_specs(
 
         db.query(SpecComponent).filter_by(specification_id=spec.id).delete()
         for i, c in enumerate(item["components"]):
+            component_product = (
+                product_by_sku.get(_norm_lookup(c.get("sku")))
+                if c.get("sku")
+                else None
+            )
+            if component_product is None:
+                component_product = product_by_name.get(_norm_lookup(c["name"]))
+            if component_product is None:
+                errors.append({
+                    "sku": item["sku"],
+                    "reason": f"матеріал не прив'язано до номенклатури: {c['name']}",
+                })
+
+            component_name = component_product.name if component_product else c["name"]
+            component_unit = c["unit"] or (component_product.unit if component_product else "шт")
+            component_price = c["unit_price"]
+            if component_price is None and component_product and component_product.cost_price is not None:
+                component_price = component_product.cost_price
+
             db.add(SpecComponent(
                 specification_id=spec.id,
-                name=c["name"], quantity=c["quantity"],
-                unit=c["unit"], unit_price=c["unit_price"],
+                product_id=component_product.id if component_product else None,
+                name=component_name, quantity=c["quantity"],
+                unit=component_unit, unit_price=component_price,
                 waste_pct=Decimal("0"), sort_order=i,
             ))
 
@@ -2626,7 +2723,7 @@ def get_spec(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> SpecOut:
-    return _spec_to_out(_get_spec(spec_id, org, db), db)
+    return _spec_to_out(_get_spec(spec_id, org, db), db, org.id)
 
 
 @_full.post("/specs/{spec_id}/set-default", response_model=SpecOut)
@@ -2641,7 +2738,7 @@ def set_default_spec(
     spec.is_default = True
     db.commit()
     db.refresh(spec)
-    return _spec_to_out(spec, db)
+    return _spec_to_out(spec, db, org.id)
 
 
 @_full.post("/specs/{spec_id}/components", response_model=SpecOut, status_code=status.HTTP_201_CREATED)
@@ -2654,11 +2751,23 @@ def add_component(
 ) -> SpecOut:
     spec = _get_spec(spec_id, org, db)
     if payload.product_id is not None:
-        _get_product(payload.product_id, org, db)
-    comp = SpecComponent(specification_id=spec.id, **payload.model_dump())
+        product = _get_product(payload.product_id, org, db)
+    else:
+        product = None
+    data = payload.model_dump()
+    data["name"] = data["name"].strip()
+    unit = (data["unit"] or "").strip()
+    if product is not None:
+        data["name"] = product.name
+        data["unit"] = unit or product.unit
+        if data["unit_price"] is None:
+            data["unit_price"] = product.cost_price
+    else:
+        data["unit"] = unit or "шт"
+    comp = SpecComponent(specification_id=spec.id, **data)
     db.add(comp)
     db.commit()
-    return _spec_to_out(spec, db)
+    return _spec_to_out(spec, db, org.id)
 
 
 @_full.delete("/specs/{spec_id}/components/{comp_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2689,7 +2798,7 @@ def add_operation(
     op = SpecOperation(specification_id=spec.id, **payload.model_dump())
     db.add(op)
     db.commit()
-    return _spec_to_out(spec, db)
+    return _spec_to_out(spec, db, org.id)
 
 
 @_full.delete("/specs/{spec_id}/operations/{op_id}", status_code=status.HTTP_204_NO_CONTENT)
