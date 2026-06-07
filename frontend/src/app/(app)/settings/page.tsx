@@ -10,6 +10,7 @@ import { useUser } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { usePageTitle } from "@/lib/usePageTitle";
+import type { BambuHealthOut } from "@/lib/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1187,6 +1188,80 @@ function HoroshopSection() {
 }
 
 
+function fmtHealthDt(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function HealthStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className="font-medium text-[var(--text)]">{value}</span>
+    </div>
+  );
+}
+
+/** Admin-only Bambu Cloud diagnostics panel — `/api/orgs/me/bambu-health`. */
+function BambuHealthPanel() {
+  const [health, setHealth] = useState<BambuHealthOut | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      api<BambuHealthOut>("/api/orgs/me/bambu-health")
+        .then((h) => { if (!cancelled) { setHealth(h); setError(null); } })
+        .catch((err) => { if (!cancelled) setError(err instanceof ApiError ? err.message : "Не вдалося завантажити діагностику"); });
+    }
+    load();
+    const t = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  if (error) return <p className="text-xs text-[var(--state-error)]">{error}</p>;
+  if (!health) return <p className="text-xs text-[var(--text-faint)]">Завантаження діагностики…</p>;
+
+  return (
+    <div className="space-y-3">
+      {health.auth.reauth_required && (
+        <div className="rounded-lg border border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] px-3 py-2 text-xs text-[var(--state-warn)]">
+          ⚠ Потрібна повторна авторизація Bambu — перепідключи акаунт вище, інакше хмарний друк не працюватиме.
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5 rounded-lg border border-[var(--border)] p-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">Авторизація</p>
+          <HealthStat label="Налаштовано" value={health.auth.configured ? "так" : "ні"} />
+          <HealthStat label="Тип" value={health.auth.auth_type ?? "—"} />
+          <HealthStat label="Повторна авторизація" value={health.auth.reauth_required ? "потрібна" : "не потрібна"} />
+          <HealthStat label="Останній успіх" value={fmtHealthDt(health.auth.last_success_at)} />
+        </div>
+        <div className="space-y-1.5 rounded-lg border border-[var(--border)] p-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">MQTT</p>
+          <HealthStat label="З'єднання" value={health.mqtt.connected ? "активне" : "немає"} />
+          <HealthStat label="Останнє повідомлення" value={fmtHealthDt(health.mqtt.last_message_at)} />
+          <HealthStat label="Пристрої під наглядом" value={health.mqtt.tracked_devices.length} />
+        </div>
+        <div className="space-y-1.5 rounded-lg border border-[var(--border)] p-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">Принтери</p>
+          <HealthStat label="Всього" value={health.printers.total} />
+          <HealthStat label="Bambu Cloud" value={health.printers.bambu_cloud} />
+          <HealthStat label="Онлайн" value={health.printers.online} />
+          <HealthStat label="Офлайн" value={health.printers.offline} />
+        </div>
+        <div className="space-y-1.5 rounded-lg border border-[var(--border)] p-3">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">Завдання</p>
+          <HealthStat label="Активні" value={health.jobs.active} />
+          <HealthStat label="У черзі" value={health.jobs.queued} />
+          <HealthStat label="Зависли / втрачені" value={health.jobs.stuck_or_lost} />
+          <HealthStat label="Недавні помилки" value={health.jobs.recent_failures} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrgSection({
   settings,
   onUpdate,
@@ -1392,6 +1467,10 @@ function OrgSection({
             >
               Перепідключити інший акаунт →
             </button>
+            <div className="border-t border-[var(--border)] pt-3">
+              <p className="mb-3 text-sm font-medium text-[var(--text)]">Діагностика хмари</p>
+              <BambuHealthPanel />
+            </div>
           </div>
         ) : codeStep === "sent" ? (
           <form onSubmit={verifyCode} className="space-y-3">

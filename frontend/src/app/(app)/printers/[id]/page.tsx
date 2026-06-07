@@ -13,7 +13,9 @@ import {
   stateLabel,
 } from "@/lib/printerLabels";
 import { StateIcon } from "@/components/printers/StateIcon";
-import type { Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup } from "@/lib/types";
+import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
+import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
+import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -749,6 +751,99 @@ function FilamentCard({ printer }: { printer: Printer }) {
           <span>↕ {meta.layer_height} мм</span>
         )}
       </div>
+    </Card>
+  );
+}
+
+// ── Bambu Cloud jobs card ─────────────────────────────────────────────────────
+
+function fmtJobDt(value: string | null): string {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function BambuJobsCard({ printer }: { printer: Printer }) {
+  const [activeJob, setActiveJob] = useState<BambuCloudJob | null>(null);
+  const [recent, setRecent] = useState<BambuCloudJob[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [active, list] = await Promise.all([
+        api<BambuCloudJob | null>(`/api/printers/${printer.id}/active-job`),
+        api<{ items: BambuCloudJob[] }>(`/api/bambu-jobs?printer_id=${printer.id}&limit=8`),
+      ]);
+      setActiveJob(active);
+      setRecent(list.items);
+    } catch {
+      /* ignore — non-critical panel */
+    } finally {
+      setLoaded(true);
+    }
+  }, [printer.id]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  // Poll faster while there's an active job, slower otherwise.
+  useEffect(() => {
+    const t = setInterval(() => void load(), activeJob ? 5000 : 25000);
+    return () => clearInterval(t);
+  }, [load, activeJob]);
+
+  if (!loaded) return null;
+  if (!activeJob && recent.length === 0) return null;
+
+  return (
+    <Card title="Bambu Cloud друк">
+      {activeJob && (
+        <button onClick={() => setOpenJobId(activeJob.id)}
+          className="mb-3 block w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-left transition hover:border-[var(--border-strong)]">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="truncate text-[13px] font-medium text-[var(--text)]" title={activeJob.file_name ?? ""}>
+              {activeJob.file_name ?? `Завдання #${activeJob.id}`}
+            </p>
+            <BambuJobStatusBadge status={activeJob.status} className="shrink-0" />
+          </div>
+          {activeJob.progress_pct != null && (
+            <div className="mb-1.5">
+              <div className="relative h-2 overflow-hidden rounded-sm bg-[var(--surface-hi)]">
+                <div className="h-full transition-[width] duration-1000 ease-linear"
+                  style={{ background: "var(--state-print)", width: `${activeJob.progress_pct}%` }} />
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-[var(--text-faint)]">
+            {activeJob.progress_pct != null && <span>{activeJob.progress_pct}%</span>}
+            {activeJob.eta_minutes != null && <span>⏱ ~{activeJob.eta_minutes} хв</span>}
+            <span>оновлено {fmtJobDt(activeJob.last_mqtt_at ?? activeJob.updated_at)}</span>
+          </div>
+        </button>
+      )}
+
+      {recent.length > 0 && (
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Останні завдання</p>
+          <ul className="space-y-1">
+            {recent.map((j) => (
+              <li key={j.id}>
+                <button onClick={() => setOpenJobId(j.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition hover:bg-[var(--surface-hi)]">
+                  <span className="truncate text-[var(--text-muted)]" title={j.file_name ?? ""}>{j.file_name ?? `#${j.id}`}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="text-[var(--text-faint)]">{fmtJobDt(j.created_at)}</span>
+                    <BambuJobStatusBadge status={j.status} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {openJobId != null && (
+        <BambuJobDetailModal jobId={openJobId} onClose={() => setOpenJobId(null)} onChanged={load} />
+      )}
     </Card>
   );
 }
@@ -1584,6 +1679,7 @@ export default function PrinterPage() {
         <div className="space-y-4">
           {(hasMoonraker || (isBambu && !!printer.bambu_dev_ip)) && <CameraCard printer={printer} />}
           {printer.current_filament_meta && <FilamentCard printer={printer} />}
+          {isBambu && printer.bambu_dev_id && <BambuJobsCard printer={printer} />}
         </div>
 
         {/* Col 3 — temps + connection */}

@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
-import type { GcodeFile, GcodeFileMeta, Printer } from "@/lib/types";
+import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, Printer } from "@/lib/types";
 
 // ── helpers (shared with StartPrintModal) ─────────────────────────────────────
 
@@ -112,6 +113,7 @@ export function SendModal({
   // shared result / busy
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [queuedJob, setQueuedJob] = useState<BambuQueuedResult | null>(null);
 
   // queue state
   const [quantity, setQuantity] = useState(1);
@@ -141,6 +143,7 @@ export function SendModal({
     if (!selectedId) return;
     setBusy(true);
     setResult(null);
+    setQueuedJob(null);
     try {
       const apiSlotMap: Record<number, number> = {};
       for (const i of usedSlots) apiSlotMap[i] = slotMap[i] ?? i;
@@ -152,11 +155,16 @@ export function SendModal({
         if (calibrateSlots.size !== usedSlots.length)
           body.calibrate_slots = Array.from(calibrateSlots).sort((a, b) => a - b);
       }
-      const res = await api<{ ok: boolean; printer_name: string; message: string }>(
+      const res = await api<{ ok: boolean; printer_name: string; message: string; dispatch_mode?: string; job_id?: number; printer_id?: number | null }>(
         `/api/files/${file.id}/send/${selectedId}`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      setResult({ ok: res.ok, message: res.message });
+      if (res.dispatch_mode === "cloud" && res.job_id != null) {
+        setQueuedJob(res as BambuQueuedResult);
+        setResult({ ok: true, message: `Друк поставлено в чергу на «${res.printer_name}»` });
+      } else {
+        setResult({ ok: res.ok, message: res.message });
+      }
     } catch (e) {
       setResult({ ok: false, message: e instanceof ApiError ? e.message : "Помилка" });
     } finally {
@@ -401,6 +409,12 @@ export function SendModal({
                 : "border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",
             ].join(" ")}>
               {result.ok ? "✓ " : "✕ "}{result.message}
+              {queuedJob && queuedJob.printer_id != null && (
+                <Link href={`/printers/${queuedJob.printer_id}`} onClick={onClose}
+                  className="mt-1 block text-sm font-medium underline hover:no-underline">
+                  Переглянути завдання →
+                </Link>
+              )}
             </div>
           )}
         </div>

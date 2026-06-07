@@ -207,3 +207,121 @@ export interface PlanEntry {
   done: boolean;
   created_at: string;
 }
+
+// ── Bambu Cloud V2 ────────────────────────────────────────────────────────────
+
+export type BambuCloudJobStatus =
+  | "queued"
+  | "validating"
+  | "creating_project"
+  | "uploading"
+  | "task_creating"
+  | "task_created"
+  | "acknowledged"
+  | "printing"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "lost";
+
+export interface BambuCloudJob {
+  id: number;
+  organization_id: number;
+  printer_id: number;
+  printer_name: string | null;
+  printer_model: string | null;
+  gcode_file_id: number | null;
+  created_by_user_id: number | null;
+  printer_bambu_dev_id: string | null;
+  file_name: string | null;
+  file_sha256: string | null;
+  file_size: number | null;
+  region: string | null;
+  dispatch_mode: string;
+  status: BambuCloudJobStatus;
+  status_reason: string | null;
+  correlation_id: string;
+  idempotency_key: string;
+  bambu_project_id: string | null;
+  bambu_model_id: string | null;
+  bambu_task_id: string | null;
+  error_code: string | null;
+  retry_count: number;
+  progress_pct: number | null;
+  eta_minutes: number | null;
+  created_at: string;
+  updated_at: string | null;
+  uploaded_at: string | null;
+  task_created_at: string | null;
+  printer_ack_at: string | null;
+  started_printing_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  last_mqtt_at: string | null;
+  is_terminal: boolean;
+  is_active: boolean;
+  can_retry: boolean;
+  error_message: string | null;
+}
+
+export interface BambuJobListOut {
+  items: BambuCloudJob[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BambuRetryResult {
+  ok: boolean;
+  job: BambuCloudJob;
+  message: string;
+}
+
+export interface BambuQueuedResult {
+  ok: boolean;
+  printer_id: number | null;
+  printer_name: string;
+  dispatch_mode: string;
+  message: string;
+  job_id: number;
+  status: BambuCloudJobStatus;
+  correlation_id: string;
+}
+
+export interface BambuHealthAuth {
+  configured: boolean;
+  reauth_required: boolean;
+  auth_type: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  access_token_expires_at: string | null;
+  region: string | null;
+}
+
+export interface BambuHealthMqtt {
+  connected: boolean;
+  last_message_at: string | null;
+  tracked_devices: string[];
+}
+
+export interface BambuHealthPrinters {
+  total: number;
+  bambu_cloud: number;
+  online: number;
+  offline: number;
+}
+
+export interface BambuHealthJobs {
+  active: number;
+  stuck_or_lost: number;
+  recent_failures: number;
+  queued: number;
+}
+
+export interface BambuHealthOut {
+  auth: BambuHealthAuth;
+  mqtt: BambuHealthMqtt;
+  printers: BambuHealthPrinters;
+  jobs: BambuHealthJobs;
+}

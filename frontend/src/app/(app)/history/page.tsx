@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useUser } from "@/lib/auth-context";
 import { useT } from "@/lib/i18n";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
 
 interface HistoryEntry {
   id: number;
@@ -16,7 +18,10 @@ interface HistoryEntry {
   finished_at: string | null;
   duration_minutes: number | null;
   result: string;
+  result_reason: string | null;
   filament_g: number | null;
+  source: string | null;
+  bambu_cloud_job_id: number | null;
 }
 
 const RESULT_STYLE: Record<string, string> = {
@@ -24,6 +29,13 @@ const RESULT_STYLE: Record<string, string> = {
   failed: "bg-[rgba(239,68,68,.10)] text-[var(--state-error)]",
   cancelled: "bg-[var(--surface-hi)] text-[var(--text-muted)]",
   in_progress: "bg-[rgba(56,189,248,.10)] text-[var(--accent)]",
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  cloud: "Bambu Cloud",
+  lan: "LAN",
+  moonraker: "Moonraker",
+  manual: "вручну",
 };
 
 // Labels are resolved via t() at render time in the table cell
@@ -43,9 +55,12 @@ function dur(min: number | null): string {
 export default function HistoryPage() {
   usePageTitle("nav.history");
   const t = useT();
+  const user = useUser();
+  const canSeeJobs = user.role === "admin" || user.role === "operator" || user.role === "manager";
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("");
+  const [openJobId, setOpenJobId] = useState<number | null>(null);
 
   useEffect(() => {
     const params = filter ? `?result=${filter}` : "";
@@ -86,6 +101,7 @@ export default function HistoryPage() {
               <tr>
                 <th className="px-4 py-3 text-left font-medium">{t("printers.title")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("files.title")}</th>
+                <th className="px-4 py-3 text-left font-medium">Джерело</th>
                 <th className="px-4 py-3 text-left font-medium">{t("analytics.start")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("printers.printTime")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("analytics.title")}</th>
@@ -101,12 +117,30 @@ export default function HistoryPage() {
                       {e.file_name ?? "—"}
                     </span>
                   </td>
+                  <td className="px-4 py-3">
+                    {e.source && (
+                      <span className="rounded px-2 py-0.5 text-xs font-medium bg-[var(--surface-hi)] text-[var(--text-muted)]">
+                        {SOURCE_LABEL[e.source] ?? e.source}
+                      </span>
+                    )}
+                    {e.bambu_cloud_job_id != null && canSeeJobs && (
+                      <button onClick={() => setOpenJobId(e.bambu_cloud_job_id)}
+                        className="ml-1.5 text-xs text-[var(--accent)] underline hover:no-underline">
+                        завдання #{e.bambu_cloud_job_id}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[var(--text-muted)]">{fmt(e.started_at)}</td>
                   <td className="px-4 py-3 text-[var(--text-muted)]">{dur(e.duration_minutes)}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${RESULT_STYLE[e.result] ?? ""}`}>
                       {e.result === "completed" ? `✓ ${t("tasks.done")}` : e.result === "failed" ? `✕ ${t("common.error")}` : e.result === "cancelled" ? `— ${t("tasks.cancelled")}` : e.result === "in_progress" ? t("dashboard.printing") : e.result}
                     </span>
+                    {e.result_reason && (
+                      <p className="mt-1 max-w-[200px] truncate text-xs text-[var(--text-faint)]" title={e.result_reason}>
+                        {e.result_reason}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-[var(--text-muted)]">
                     {e.filament_g != null ? `${e.filament_g.toFixed(0)} г` : "—"}
@@ -116,6 +150,10 @@ export default function HistoryPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {openJobId != null && (
+        <BambuJobDetailModal jobId={openJobId} onClose={() => setOpenJobId(null)} />
       )}
     </div>
   );
