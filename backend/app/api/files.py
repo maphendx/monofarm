@@ -8,24 +8,29 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import time
 import uuid
+from collections import defaultdict, deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.requests import Request
 
 from app.api.deps import get_current_org, require_roles
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
 from app.models.gcode_folder import GcodeFolder
 from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
-from app.services import bambu as bambu_svc
+from app.schemas.bambu_jobs import BambuQueuedResult
+from app.services import bambu_dispatch
 from app.services import moonraker as mr
 from app.services import storage as storage_svc
 from app.services import tunnel as _tunnel
@@ -37,6 +42,10 @@ MAX_FILE_BYTES = 500 * 1024 * 1024  # 500 MB
 
 router = APIRouter(prefix="/files", tags=["files"])
 folders_router = APIRouter(prefix="/folders", tags=["folders"])
+
+_BAMBU_SEND_LIMIT = 30
+_BAMBU_SEND_WINDOW_SECONDS = 60
+_bambu_send_hits: dict[str, deque[float]] = defaultdict(deque)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -459,15 +468,18 @@ def get_thumbnail(file_id: int, db: Session = Depends(get_db)):
     return FileResponse(path, media_type="image/png")
 
 
-@router.post("/{file_id}/send/{printer_id}", response_model=SendResult)
+@router.post("/{file_id}/send/{printer_id}", response_model=SendResult | BambuQueuedResult)
 async def send_to_printer(
+    request: Request,
     file_id: int,
     printer_id: int,
+    response: Response,
     payload: SendPayload = Body(default=SendPayload()),
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
-    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
-) -> SendResult:
+    user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> SendResult | BambuQueuedResult:
+    _ = request
     row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Файл не знайдено")
@@ -484,6 +496,9 @@ async def send_to_printer(
     with _src_ctx as src:
         # ── Bambu path: Cloud upload (Alibaba OSS) + Cloud task API ──
         if printer.kind == PrinterKind.bambu:
+            _check_bambu_send_rate_limit(request, org.id)
+            if not settings.BAMBU_CLOUD_V2_ENABLED:
+                raise HTTPException(status_code=503, detail="Bambu Cloud job system is disabled")
             if not printer.bambu_dev_id:
                 raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
             is_3mf = ".3mf" in Path(row.original_name).suffixes
@@ -504,19 +519,37 @@ async def send_to_printer(
                     ams_mapping.append(payload.slot_map.get(i, i))
             use_ams = any(v >= 0 for v in ams_mapping)
 
-            try:
-                await asyncio.to_thread(
-                    bambu_svc.cloud_upload_and_print,
-                    org.id,
-                    src.read_bytes(),
-                    row.original_name,
-                    printer.bambu_dev_id,
-                    ams_mapping,
-                    use_ams,
-                )
-                return SendResult(ok=True, printer_name=printer.name, message="Файл надіслано на Bambu")
-            except (bambu_svc.BambuError, RuntimeError) as e:
-                return SendResult(ok=False, printer_name=printer.name, message=str(e))
+            job = bambu_dispatch.create_cloud_job(
+                db,
+                org_id=org.id,
+                printer_id=printer.id,
+                printer_bambu_dev_id=printer.bambu_dev_id,
+                gcode_file_id=row.id,
+                file_name=row.original_name,
+                region=org.bambu_region or None,
+                created_by_user_id=user.id,
+                request_payload={
+                    "source": "files.send_to_printer",
+                    "ams_mapping": ams_mapping,
+                    "use_ams": use_ams,
+                    "slot_map": {str(k): v for k, v in payload.slot_map.items()},
+                },
+            )
+            if job.file_size is None:
+                job.file_size = row.size_bytes
+                db.commit()
+                db.refresh(job)
+
+            response.status_code = status.HTTP_202_ACCEPTED
+            return BambuQueuedResult(
+                ok=True,
+                printer_id=printer.id,
+                printer_name=printer.name,
+                message="Bambu Cloud print job queued",
+                job_id=job.id,
+                status=job.status,
+                correlation_id=job.correlation_id,
+            )
 
         # ── Moonraker path: optional gcode rewrite + upload + auto-start ──
         if not printer.moonraker_url:
@@ -600,3 +633,16 @@ async def send_to_printer(
             return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
         except mr.MoonrakerError as e:
             return SendResult(ok=False, printer_name=printer.name, message=str(e))
+
+
+def _check_bambu_send_rate_limit(request: Request, org_id: int) -> None:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    key = f"{org_id}:{ip}"
+    now = time.monotonic()
+    hits = _bambu_send_hits[key]
+    while hits and now - hits[0] > _BAMBU_SEND_WINDOW_SECONDS:
+        hits.popleft()
+    if len(hits) >= _BAMBU_SEND_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many Bambu Cloud send requests")
+    hits.append(now)

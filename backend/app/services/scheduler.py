@@ -46,6 +46,26 @@ def start() -> None:
         replace_existing=True,
     )
 
+    # Bambu Cloud job worker — dispatches queued cloud jobs off the API thread.
+    from app.workers.bambu_jobs import process_pending_bambu_cloud_jobs
+    _scheduler.add_job(
+        process_pending_bambu_cloud_jobs,
+        IntervalTrigger(seconds=5),
+        id="bambu_cloud_jobs",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    from app.workers.bambu_jobs import process_lost_bambu_cloud_jobs
+    _scheduler.add_job(
+        process_lost_bambu_cloud_jobs,
+        IntervalTrigger(minutes=1),
+        id="bambu_cloud_lost_jobs",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     _scheduler.start()
     log.info("Scheduler started (timezone=%s)", settings.TIMEZONE)
 

@@ -19,7 +19,19 @@ class PrintHistory(Base):
     duration_minutes: Mapped[int | None]
     # completed | failed | cancelled | in_progress
     result: Mapped[str] = mapped_column(String(32), nullable=False, default="in_progress")
+    result_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     filament_g: Mapped[float | None]
+
+    # cloud | lan | moonraker | manual
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    file_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    bambu_cloud_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bambu_cloud_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    bambu_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    bambu_project_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_print_history_org_started", "organization_id", "started_at"),

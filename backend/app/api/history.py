@@ -20,7 +20,14 @@ class PrintHistoryOut(BaseModel):
     finished_at: str | None
     duration_minutes: int | None
     result: str
+    result_reason: str | None = None
     filament_g: float | None
+    source: str | None = None
+    created_by_user_id: int | None = None
+    file_sha256: str | None = None
+    bambu_cloud_job_id: int | None = None
+    bambu_task_id: str | None = None
+    bambu_project_id: str | None = None
 
     class Config:
         from_attributes = True

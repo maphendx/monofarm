@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, Enum, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,12 @@ def _slugify(name: str) -> str:
     slug = name.lower().strip()
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     return slug.strip("-")[:60]
+
+
+class BambuAuthType(str, enum.Enum):
+    password = "password"
+    email_code = "email_code"
+    oauth_like = "oauth_like"
 
 
 class OrgPlan(str, enum.Enum):
@@ -93,6 +99,15 @@ class Organization(Base):
     bambu_password: Mapped[str] = mapped_column(String(255), default="", server_default="")
     bambu_refresh_token: Mapped[str] = mapped_column(String(512), default="", server_default="")
     bambu_region: Mapped[str] = mapped_column(String(8), default="", server_default="")
+
+    # Bambu Cloud auth lifecycle (encrypted token fields, populated by bambu_auth service)
+    bambu_access_token: Mapped[str] = mapped_column(String(2048), default="", server_default="")
+    bambu_access_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bambu_auth_type: Mapped[BambuAuthType | None] = mapped_column(Enum(BambuAuthType), nullable=True)
+    bambu_user_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    bambu_last_auth_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    bambu_last_auth_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bambu_reauth_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Telegram bot (per-org, runs in local agent)
     tg_bot_token:    Mapped[str] = mapped_column(String(512), default="", server_default="")  # Fernet-encrypted

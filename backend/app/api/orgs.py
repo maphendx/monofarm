@@ -217,12 +217,15 @@ def _bambu_api_base(region: str) -> str:
 
 
 @router.post("/me/bambu-send-code")
+@limiter.limit("5/minute")
 def bambu_send_code(
+    request: Request,
     payload: BambuSendCodeRequest,
     org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> dict:
     """Send a 6-digit email verification code via Bambu API (works for Google/OAuth accounts)."""
+    _ = request
     base = _bambu_api_base(payload.region or org.bambu_region or "eu")
     try:
         resp = _requests.post(
@@ -234,56 +237,40 @@ def bambu_send_code(
         raise HTTPException(status_code=502, detail=f"Bambu API недоступний: {e}") from e
 
     if resp.status_code not in (200, 201):
-        try:
-            msg = resp.json().get("message") or resp.text
-        except Exception:
-            msg = resp.text or f"HTTP {resp.status_code}"
+        msg = f"Bambu verification code request failed (HTTP {resp.status_code})"
         raise HTTPException(status_code=400, detail=msg)
     return {"ok": True}
 
 
 @router.post("/me/bambu-verify-code", response_model=OrgSettingsOut)
+@limiter.limit("5/minute")
 async def bambu_verify_code(
+    request: Request,
     payload: BambuVerifyCodeRequest,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> OrgSettingsOut:
-    """Verify email code → get Bambu token → save to org settings."""
-    base = _bambu_api_base(payload.region or org.bambu_region or "eu")
-    try:
-        resp = _requests.post(
-            f"{base}/v1/user-service/user/login",
-            json={"account": payload.email, "code": payload.code},
-            timeout=10,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Bambu API недоступний: {e}") from e
-
-    try:
-        data = resp.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail=f"Bambu повернув невалідну відповідь (HTTP {resp.status_code}): {resp.text[:200]}")
-
-    access_token = data.get("accessToken") or data.get("token")
-    if not access_token:
-        msg = data.get("message") or f"Невірний або прострочений код (HTTP {resp.status_code})"
-        raise HTTPException(status_code=400, detail=msg)
-
+    """Verify email code → get Bambu token → save to org settings via bambu_auth."""
+    _ = request
+    from app.services import bambu, bambu_auth
     from app.services.encryption import encrypt
+
+    region = payload.region or org.bambu_region or "eu"
+    try:
+        result = bambu_auth.login_with_email_code(payload.email, payload.code, region)
+    except bambu_auth.BambuAuthError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     org.bambu_email = encrypt(payload.email)
-    # Store the access token (JWT) — MQTT authentication requires the JWT access token,
-    # not the opaque refresh token. For Google/email-code accounts the JWT is long-lived.
-    org.bambu_refresh_token = encrypt(access_token)
     if payload.region:
         org.bambu_region = payload.region
     db.commit()
+
+    # Persists access/refresh token, expiry, auth_type, user_id and clears reauth flags.
+    bambu_auth.store_auth_result(org.id, result)
     db.refresh(org)
 
-    from app.services import bambu
-    bambu._access_tokens[org.id] = access_token
-    bambu._regions[org.id] = org.bambu_region or "eu"
-    bambu._extract_user_id(org.id, access_token)
     await bambu.shutdown(org.id)
     await bambu.init(org)
 

@@ -7,6 +7,8 @@ Works for all printer types (Bambu via MQTT cache, Moonraker via polling cache).
 import logging
 from datetime import datetime, timezone
 
+from sqlalchemy import or_
+
 from app.core.db import SessionLocal
 from app.models.organization import Organization
 from app.models.print_history import PrintHistory
@@ -67,6 +69,10 @@ def _check_org(db, org: Organization) -> None:
         prev = _prev.get(row.id, {})
         prev_state = prev.get("state", "unknown")
 
+        if _has_active_bambu_cloud_job(db, row):
+            _prev[row.id] = current
+            continue
+
         # idle/unknown/offline → printing: open new history entry
         if state in PRINTING_STATES and prev_state not in PRINTING_STATES:
             # Close any stale in_progress entry first
@@ -92,10 +98,35 @@ def _check_org(db, org: Organization) -> None:
         _prev[row.id] = current
 
 
+def _has_active_bambu_cloud_job(db, row: Printer) -> bool:
+    if row.kind != PrinterKind.bambu:
+        return False
+
+    from app.models.bambu_cloud_job import BambuCloudJob
+    from app.services.bambu_job_state import ACTIVE_STATUSES
+
+    return (
+        db.query(BambuCloudJob.id)
+        .filter(
+            BambuCloudJob.organization_id == row.organization_id,
+            BambuCloudJob.printer_id == row.id,
+            BambuCloudJob.dispatch_mode == "cloud",
+            BambuCloudJob.status.in_(ACTIVE_STATUSES),
+        )
+        .first()
+        is not None
+    )
+
+
 def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
     entry = (
         db.query(PrintHistory)
-        .filter(PrintHistory.printer_id == printer_id, PrintHistory.result == "in_progress")
+        .filter(
+            PrintHistory.printer_id == printer_id,
+            PrintHistory.result == "in_progress",
+            or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
+            PrintHistory.bambu_cloud_job_id.is_(None),
+        )
         .order_by(PrintHistory.started_at.desc())
         .first()
     )

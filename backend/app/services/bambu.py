@@ -16,10 +16,23 @@ import logging
 import ssl
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import requests
+from sqlalchemy.orm import Session
+
+from app.core import metrics
+from app.core.db import SessionLocal
+from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
+from app.services.bambu_errors import BambuErrorCode, error_details
+from app.services.bambu_job_state import (
+    ACTIVE_STATUSES as CLOUD_JOB_ACTIVE_STATUSES,
+    BambuJobTransitionError,
+    transition_job,
+)
+from app.services.bambu_observability import event_tags, log_event
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
@@ -30,6 +43,7 @@ CLOUD_TIMEOUT = 15
 FTPS_TIMEOUT = 30
 MQTT_KEEPALIVE = 60
 STATUS_CACHE_TTL = 30.0
+CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
     "us": {"api": "https://api.bambulab.com", "mqtt": "us.mqtt.bambulab.com"},
@@ -373,6 +387,7 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
     raw_state = print_data.get("gcode_state", "")
 
     prev = _state_cache.get(dev_id, {})
+    received_at = datetime.now(timezone.utc)
     progress_pct = print_data.get("mc_percent")
     remaining_min = print_data.get("mc_remaining_time")
     eta_minutes = int(remaining_min) if isinstance(remaining_min, (int, float)) and remaining_min > 0 else None
@@ -391,6 +406,7 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
 
     updated = {
         "ts": time.monotonic(),
+        "last_message_at": received_at.isoformat(),
         "state": _GCODE_STATE_MAP.get(raw_state, prev.get("state", "unknown")) if raw_state else prev.get("state", "unknown"),
         "raw_state": raw_state or prev.get("raw_state", ""),
         "progress_pct": int(progress_pct) if progress_pct is not None else prev.get("progress_pct"),
@@ -408,8 +424,19 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         ),
     }
     _state_cache[dev_id] = updated
+    if updated.get("state") != prev.get("state"):
+        log_event(
+            log,
+            logging.INFO,
+            "bambu.mqtt.state.changed",
+            org_id=_dev_to_org.get(dev_id),
+            dev_id=dev_id,
+            old_status=prev.get("state", "unknown"),
+            new_status=updated.get("state"),
+        )
     from app.services.cache import cache_set
     cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
+    _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
 
     ams_data = print_data.get("ams")
     if isinstance(ams_data, dict):
@@ -423,6 +450,245 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
                 cache_set(f"bambu:state:{dev_id}", _state_cache[dev_id], int(STATUS_CACHE_TTL))
             except (ValueError, TypeError):
                 pass
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_mqtt_task_id(print_data: dict[str, Any]) -> str | None:
+    for key in ("task_id", "taskId", "subtask_id", "subtaskId", "print_task_id", "printTaskId"):
+        value = print_data.get(key)
+        if value not in (None, ""):
+            return str(value)
+    project = print_data.get("project")
+    if isinstance(project, dict):
+        for key in ("task_id", "taskId", "subtask_id", "subtaskId"):
+            value = project.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return None
+
+
+def _normalize_cloud_job_name(value: str | None) -> str:
+    return Path(value or "").name.strip().lower()
+
+
+def _query_active_jobs_for_device(db: Session, dev_id: str) -> list[BambuCloudJob]:
+    return (
+        db.query(BambuCloudJob)
+        .filter(
+            BambuCloudJob.printer_bambu_dev_id == dev_id,
+            BambuCloudJob.status.in_(CLOUD_JOB_ACTIVE_STATUSES),
+        )
+        .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
+        .all()
+    )
+
+
+def _find_matching_cloud_job(
+    db: Session,
+    *,
+    dev_id: str,
+    print_data: dict[str, Any],
+    filename: str | None,
+    now: datetime,
+) -> BambuCloudJob | None:
+    task_id = _extract_mqtt_task_id(print_data)
+    if task_id:
+        matches = (
+            db.query(BambuCloudJob)
+            .filter(
+                BambuCloudJob.printer_bambu_dev_id == dev_id,
+                BambuCloudJob.bambu_task_id == task_id,
+                BambuCloudJob.status.in_(CLOUD_JOB_ACTIVE_STATUSES),
+            )
+            .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
+            .all()
+        )
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            log_event(
+                log,
+                logging.WARNING,
+                "bambu.cloud.mqtt.ambiguous",
+                task_id=task_id,
+                dev_id=dev_id,
+                matches=len(matches),
+            )
+            return None
+
+    active_jobs = [
+        job for job in _query_active_jobs_for_device(db, dev_id)
+        if job.status in (
+            BambuCloudJobStatus.task_created,
+            BambuCloudJobStatus.acknowledged,
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.paused,
+        )
+    ]
+    if len(active_jobs) == 1:
+        return active_jobs[0]
+    if len(active_jobs) > 1:
+        normalized = _normalize_cloud_job_name(filename)
+        if normalized:
+            cutoff = now - CLOUD_JOB_FILENAME_WINDOW
+            filename_matches = [
+                job for job in active_jobs
+                if job.created_at
+                and job.created_at >= cutoff
+                and _normalize_cloud_job_name(job.file_name) == normalized
+            ]
+            if len(filename_matches) == 1:
+                return filename_matches[0]
+        log_event(
+            log,
+            logging.INFO,
+            "bambu.cloud.mqtt.ambiguous",
+            dev_id=dev_id,
+            active_jobs=len(active_jobs),
+            filename=filename,
+        )
+    return None
+
+
+def _status_from_mqtt_report(
+    job: BambuCloudJob,
+    *,
+    raw_state: str,
+    progress_pct: int | None,
+    error_msg: str | None,
+) -> tuple[BambuCloudJobStatus | None, str | None]:
+    if raw_state in ("RUNNING", "PREPARE", "SLICING"):
+        return BambuCloudJobStatus.printing, "Printer reports print progress"
+    if raw_state == "PAUSE":
+        return BambuCloudJobStatus.paused, "Printer reports print paused"
+    if raw_state == "FINISH" or (
+        progress_pct is not None and progress_pct >= 100 and job.status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused)
+    ):
+        return BambuCloudJobStatus.completed, "Printer reports print completed"
+    if raw_state == "FAILED":
+        return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
+    if job.status == BambuCloudJobStatus.task_created and raw_state:
+        return BambuCloudJobStatus.acknowledged, "Printer acknowledged Bambu Cloud task"
+    return None, None
+
+
+def _sync_cloud_job_from_report(
+    dev_id: str,
+    print_data: dict[str, Any],
+    cached_state: dict[str, Any],
+    error_msg: str | None,
+    *,
+    session_factory=None,
+) -> BambuCloudJob | None:
+    session_factory = session_factory or SessionLocal
+    now = datetime.now(timezone.utc)
+    filename = cached_state.get("filename")
+    raw_state = str(print_data.get("gcode_state") or "")
+    progress_pct = _safe_int(print_data.get("mc_percent"))
+    eta_minutes = cached_state.get("eta_minutes")
+    if eta_minutes is not None:
+        eta_minutes = _safe_int(eta_minutes)
+
+    with session_factory() as db:
+        job = _find_matching_cloud_job(db, dev_id=dev_id, print_data=print_data, filename=filename, now=now)
+        if job is None:
+            return None
+
+        task_id = _extract_mqtt_task_id(print_data)
+        updates: dict[str, Any] = {"last_mqtt_at": now}
+        if task_id and not job.bambu_task_id:
+            updates["bambu_task_id"] = task_id
+        if progress_pct is not None:
+            updates["progress_pct"] = max(0, min(progress_pct, 100))
+        if eta_minutes is not None:
+            updates["eta_minutes"] = eta_minutes
+        if error_msg is not None:
+            updates["error_msg"] = error_msg
+
+        target_status, reason = _status_from_mqtt_report(
+            job,
+            raw_state=raw_state,
+            progress_pct=updates.get("progress_pct"),
+            error_msg=error_msg,
+        )
+        if target_status in (
+            BambuCloudJobStatus.acknowledged,
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.paused,
+            BambuCloudJobStatus.completed,
+            BambuCloudJobStatus.failed,
+        ) and job.printer_ack_at is None:
+            updates["printer_ack_at"] = now
+        if target_status in (
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.completed,
+        ) and job.started_printing_at is None:
+            updates["started_printing_at"] = now
+        if target_status == BambuCloudJobStatus.failed:
+            updates["error_code"] = BambuErrorCode.PRINT_FAILED_HMS.value
+            updates["error_details_json"] = error_details(
+                BambuErrorCode.PRINT_FAILED_HMS,
+                retryable=False,
+                raw_state=raw_state,
+                source="bambu_mqtt",
+                previous_error_code=(job.error_details_json or {}).get("error_code"),
+            )
+
+        try:
+            transition_job(job, target_status or job.status, reason=reason, now=now, **updates)
+        except BambuJobTransitionError as exc:
+            log_event(
+                log,
+                logging.INFO,
+                "bambu.cloud.mqtt.transition_rejected",
+                org_id=job.organization_id,
+                printer_id=job.printer_id,
+                dev_id=dev_id,
+                job_id=job.id,
+                correlation_id=job.correlation_id,
+                old_status=job.status.value,
+                new_status=(target_status or job.status).value,
+                reason=exc,
+            )
+            return None
+
+        db.commit()
+        db.refresh(job)
+        if progress_pct is not None:
+            log_event(
+                log,
+                logging.INFO,
+                "bambu.mqtt.job.progress",
+                org_id=job.organization_id,
+                printer_id=job.printer_id,
+                dev_id=dev_id,
+                job_id=job.id,
+                correlation_id=job.correlation_id,
+                status=job.status.value,
+                progress_pct=job.progress_pct,
+                eta_minutes=job.eta_minutes,
+            )
+        log_event(
+            log,
+            logging.INFO,
+            "bambu.cloud.mqtt.correlated",
+            org_id=job.organization_id,
+            printer_id=job.printer_id,
+            dev_id=dev_id,
+            job_id=job.id,
+            correlation_id=job.correlation_id,
+            status=job.status.value,
+        )
+        metrics.increment("bambu.mqtt.report.correlated.count", tags=event_tags(org_id=job.organization_id, status=job.status.value))
+        return job
 
 
 def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
@@ -724,6 +990,33 @@ def start_print(
 
 
 # ── Cloud upload + print (no LAN required) ───────────────────────────────────
+#
+# The three HTTP calls below are extracted as thin, reusable helpers so
+# `bambu_dispatch.py` (job-tracked cloud dispatch) can wrap them with its own
+# retry/auth policy without duplicating the request-building logic. They return
+# the raw `requests.Response` — callers decide how to interpret status/body.
+
+
+def _cloud_create_project(base: str, headers: dict[str, str], filename: str) -> requests.Response:
+    return requests.post(
+        f"{base}/v1/iot-service/api/user/project",
+        json={"name": filename},
+        headers=headers,
+        timeout=CLOUD_TIMEOUT,
+    )
+
+
+def _cloud_upload_to_oss(upload_url: str, file_bytes: bytes) -> requests.Response:
+    return requests.put(upload_url, data=file_bytes, headers={}, timeout=300)
+
+
+def _cloud_create_task(base: str, headers: dict[str, str], task_body: dict[str, Any]) -> requests.Response:
+    return requests.post(
+        f"{base}/v1/user-service/my/task",
+        json=task_body,
+        headers=headers,
+        timeout=CLOUD_TIMEOUT,
+    )
 
 
 def cloud_upload_and_print(
@@ -759,12 +1052,7 @@ def cloud_upload_and_print(
 
     # 1. Create project → get Alibaba OSS upload_url
     try:
-        resp = requests.post(
-            f"{base}/v1/iot-service/api/user/project",
-            json={"name": filename},
-            headers=hdrs,
-            timeout=CLOUD_TIMEOUT,
-        )
+        resp = _cloud_create_project(base, hdrs, filename)
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:
@@ -781,7 +1069,7 @@ def cloud_upload_and_print(
 
     # 2. PUT file bytes to Alibaba OSS presigned URL
     try:
-        oss = requests.put(upload_url, data=file_bytes, headers={}, timeout=300)
+        oss = _cloud_upload_to_oss(upload_url, file_bytes)
         oss.raise_for_status()
     except requests.RequestException as e:
         raise BambuError(f"Bambu Cloud OSS upload failed: {e}") from e
@@ -806,12 +1094,7 @@ def cloud_upload_and_print(
 
     log.info("Bambu Cloud task body: %s", task_body)
     try:
-        task_resp = requests.post(
-            f"{base}/v1/user-service/my/task",
-            json=task_body,
-            headers=hdrs,
-            timeout=CLOUD_TIMEOUT,
-        )
+        task_resp = _cloud_create_task(base, hdrs, task_body)
         body_text = task_resp.text
         task_resp.raise_for_status()
         log.info("Bambu Cloud: task created dev=%s project=%s", dev_id, project_id)

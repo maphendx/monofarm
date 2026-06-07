@@ -1,4 +1,4 @@
-from app.models.organization import Organization
+from app.models.organization import Organization, BambuAuthType
 from app.models.user import User, UserRole, is_platform_admin, is_tenant_admin
 from app.models.printer_group import PrinterGroup
 from app.models.printer import Printer, PrinterKind
@@ -10,9 +10,11 @@ from app.models.gcode_file import GcodeFile
 from app.models.gcode_folder import GcodeFolder
 from app.models.print_history import PrintHistory
 from app.models.api_key import ApiKey
+from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 
 __all__ = [
     "Organization",
+    "BambuAuthType",
     "User",
     "UserRole",
     "is_platform_admin",
@@ -31,4 +33,6 @@ __all__ = [
     "GcodeFolder",
     "PrintHistory",
     "ApiKey",
+    "BambuCloudJob",
+    "BambuCloudJobStatus",
 ]

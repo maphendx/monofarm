@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     BAMBU_PASSWORD: str = ""
     BAMBU_REFRESH_TOKEN: str = ""
     BAMBU_REGION: str = ""  # "us", "eu", or "cn"; empty = auto from login
+    BAMBU_CLOUD_V2_ENABLED: bool = True
 
     FARM_PUBLIC_URL: str = "http://localhost:3000"
 

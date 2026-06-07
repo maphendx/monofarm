@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -207,3 +208,150 @@ def test_send_bambu_only_accepts_3mf(client, auth_headers, cleanup_uploads):
     )
     # Should refuse: gcode not 3mf
     assert resp.status_code == 400
+
+
+def test_send_bambu_3mf_creates_queued_cloud_job(client, auth_headers, cleanup_uploads, db_session):
+    from app.models.bambu_cloud_job import BambuCloudJob
+
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={
+            "name": "Bambu-P1S",
+            "kind": "bambu",
+            "bambu_dev_id": "BAMBU123",
+            "bambu_access_code": "12345678",
+        },
+    ).json()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Metadata/plate_1.gcode", GCODE_SAMPLE.decode())
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("cloud_part.gcode.3mf", buf.getvalue(), "application/octet-stream")},
+    ).json()
+
+    resp = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {"0": 0, "1": 1}},
+    )
+
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["status"] == "queued"
+    assert body["job_id"]
+
+    job = db_session.get(BambuCloudJob, body["job_id"])
+    assert job is not None
+    assert job.printer_id == p["id"]
+    assert job.gcode_file_id == f["id"]
+    assert job.printer_bambu_dev_id == "BAMBU123"
+    assert job.file_name == "cloud_part.gcode.3mf"
+    assert job.file_size == f["size_bytes"]
+    assert job.request_payload_json["ams_mapping"] == [0, 1]
+
+
+def test_send_bambu_3mf_respects_cloud_feature_flag(client, auth_headers, cleanup_uploads, monkeypatch):
+    from app.api import files as files_api
+
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={
+            "name": "Bambu-Flag",
+            "kind": "bambu",
+            "bambu_dev_id": "BAMBU-FLAG",
+            "bambu_access_code": "12345678",
+        },
+    ).json()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Metadata/plate_1.gcode", GCODE_SAMPLE.decode())
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("flagged.3mf", buf.getvalue(), "application/octet-stream")},
+    ).json()
+
+    monkeypatch.setattr(files_api.settings, "BAMBU_CLOUD_V2_ENABLED", False)
+    resp = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {}},
+    )
+
+    assert resp.status_code == 503
+    assert "disabled" in resp.json()["detail"]
+
+
+def test_bambu_job_endpoints_list_active_cancel_and_retry(client, auth_headers, cleanup_uploads, db_session, monkeypatch):
+    from datetime import datetime, timezone
+
+    from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
+    from app.services import bambu_dispatch
+
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={
+            "name": "Bambu-A1",
+            "kind": "bambu",
+            "bambu_dev_id": "BAMBU-A1",
+            "bambu_access_code": "12345678",
+        },
+    ).json()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Metadata/plate_1.gcode", GCODE_SAMPLE.decode())
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("queued.3mf", buf.getvalue(), "application/octet-stream")},
+    ).json()
+    queued = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {}},
+    ).json()
+    job_id = queued["job_id"]
+
+    active = client.get(f"/api/printers/{p['id']}/active-job", headers=auth_headers)
+    assert active.status_code == 200
+    assert active.json()["id"] == job_id
+
+    listed = client.get("/api/bambu-jobs?statuses=queued", headers=auth_headers)
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["id"] == job_id
+
+    cancelled = client.post(f"/api/bambu-jobs/{job_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+
+    cancelled_retry = client.post(f"/api/bambu-jobs/{job_id}/retry", headers=auth_headers)
+    assert cancelled_retry.status_code == 409
+
+    job = db_session.get(BambuCloudJob, job_id)
+    job.status = BambuCloudJobStatus.failed
+    job.status_reason = "Retryable worker failure"
+    job.error_code = "DISPATCH_FAILED"
+    job.error_details_json = {"retryable": True}
+    job.failed_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        bambu_dispatch,
+        "dispatch_cloud_job",
+        MagicMock(side_effect=AssertionError("retry endpoint must not dispatch inline")),
+    )
+
+    retried = client.post(f"/api/bambu-jobs/{job_id}/retry", headers=auth_headers)
+    assert retried.status_code == 200
+    assert retried.json()["ok"] is True
+    assert retried.json()["job"]["status"] == "queued"
+    assert retried.json()["job"]["retry_count"] == 1

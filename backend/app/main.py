@@ -17,6 +17,7 @@ from app.api.analytics import router as analytics_router
 from app.api.history import router as history_router
 from app.api.horoshop import router as horoshop_router
 from app.api.auth import router as auth_router
+from app.api.bambu_jobs import router as bambu_jobs_router
 from app.api.deps import require_roles
 from app.api.farm_tasks import router as farm_tasks_router
 from app.api.filament_colors import router as filament_colors_router
@@ -134,6 +135,7 @@ async def serve_agent_file(filename: str) -> FileResponse:
 
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(bambu_jobs_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(orgs_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
