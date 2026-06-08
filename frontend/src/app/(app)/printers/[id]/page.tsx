@@ -38,10 +38,50 @@ function etaCompletionLabel(min: number | null): string | null {
   return `${d.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${time}`;
 }
 
+/** Unified backend badge — one consistent label per operational backend. */
 function transportLabel(p: Printer): string {
-  if (p.kind === "bambu") return "Bambu MQTT";
+  if (p.kind === "bambu") return p.bambu_lan_mode ? "Bambu LAN" : "Bambu Cloud";
   if (p.moonraker_url) return "Moonraker";
   return "Вручну";
+}
+
+type HealthTone = "ok" | "warn" | "bad" | "muted";
+
+interface HealthSummary {
+  tone: HealthTone;
+  label: string;
+  detail?: string;
+}
+
+/**
+ * Normalizes per-printer connectivity into one operator-facing vocabulary —
+ * connected / degraded / offline / no telemetry — regardless of backend.
+ */
+function healthSummary(p: Printer): HealthSummary {
+  if (!p.is_active) return { tone: "muted", label: "Вимкнено", detail: "Принтер деактивовано" };
+
+  if (p.source === "manual") {
+    return { tone: "muted", label: "Без телеметрії", detail: "Стан оновлюється вручну" };
+  }
+
+  if (p.state === "offline" || p.state === "not_connected") {
+    return { tone: "bad", label: "Офлайн", detail: "Немає зв'язку з принтером" };
+  }
+
+  const ageMin = p.updated_at ? (Date.now() - new Date(p.updated_at).getTime()) / 60_000 : null;
+  if (ageMin != null && ageMin > 15) {
+    return { tone: "warn", label: "Немає свіжих даних", detail: `Останній звіт ${fmtRelative(p.updated_at)}` };
+  }
+
+  if (p.state === "error" || p.error_msg) {
+    return { tone: "bad", label: "Помилка", detail: p.error_msg ?? "Принтер повідомив про помилку" };
+  }
+
+  if (p.flags?.length) {
+    return { tone: "warn", label: "Потребує уваги", detail: p.flags.map(flagLabel).join(" · ") };
+  }
+
+  return { tone: "ok", label: "На зв'язку", detail: ageMin != null ? `Звіт ${fmtRelative(p.updated_at)}` : undefined };
 }
 
 const TONE_COLOR: Record<string, string> = {
@@ -281,7 +321,7 @@ function JogCard({ printer }: { printer: Printer }) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">Керування · переміщення</p>
-        <span className="font-mono text-[10px] uppercase text-[var(--text-faint)] ">{isBambu ? "Bambu MQTT · G-code" : "Moonraker · G-code"}</span>
+        <span className="font-mono text-[10px] uppercase text-[var(--text-faint)] ">{isBambu ? `${transportLabel(printer)} · G-code` : "Moonraker · G-code"}</span>
       </div>
 
       <div className="p-5 space-y-5">
@@ -568,30 +608,41 @@ function JobHeroCard({
         </span>
       </div>
 
-      {hasCamera && (
-        <div className="relative aspect-video w-full overflow-hidden border-b border-[var(--border)] bg-[var(--bg)]">
-          {camError ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-              </svg>
-              <span className="text-xs">Камера недоступна</span>
-              <button onClick={() => { setCamError(false); setCamLoaded(false); }}
-                className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
-                Повторити
-              </button>
-            </div>
-          ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={camSrc}
-              alt="Camera"
-              className={`h-full w-full object-cover transition-opacity duration-300 ${camLoaded ? "opacity-100" : "opacity-0"}`}
-              onLoad={() => setCamLoaded(true)}
-              onError={() => setCamError(true)}
-            />
-          )}
-          {camLoaded && !camError && (
+      {/* ── camera panel — one consistent UI/placeholder regardless of source ── */}
+      <div className="relative aspect-video w-full overflow-hidden border-b border-[var(--border)] bg-[var(--bg)]">
+        {!hasCamera ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[var(--text-muted)]">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+            </svg>
+            <span className="text-xs">
+              {isBambuCam || printer.kind !== "bambu"
+                ? "Камера не налаштована для цього принтера"
+                : "Камера доступна через локальний агент — додайте LAN IP в налаштуваннях"}
+            </span>
+          </div>
+        ) : camError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+            </svg>
+            <span className="text-xs">Камера недоступна</span>
+            <button onClick={() => { setCamError(false); setCamLoaded(false); }}
+              className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
+              Повторити
+            </button>
+          </div>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={camSrc}
+            alt="Camera"
+            className={`h-full w-full object-cover transition-opacity duration-300 ${camLoaded ? "opacity-100" : "opacity-0"}`}
+            onLoad={() => setCamLoaded(true)}
+            onError={() => setCamError(true)}
+          />
+        )}
+        {hasCamera && camLoaded && !camError && (
             <>
               <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] backdrop-blur-sm">
                 <span className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--state-error)" }} />
@@ -615,8 +666,7 @@ function JobHeroCard({
               )}
             </>
           )}
-        </div>
-      )}
+      </div>
 
       {printer.error_msg && (
         <div className="flex items-start gap-2 border-b border-[var(--border)] bg-[rgba(239,68,68,.06)] px-5 py-3">
@@ -1497,13 +1547,20 @@ function fmtRelative(value: string | null): string {
   return `${hr} год тому`;
 }
 
+const HEALTH_TONE_COLOR: Record<HealthTone, string> = {
+  ok: "var(--state-ok)",
+  warn: "var(--state-warn)",
+  bad: "var(--state-error)",
+  muted: "var(--state-offline)",
+};
+
 function ConnectionCard({ printer }: { printer: Printer }) {
   const isBambu = printer.kind === "bambu";
   const hasMoonraker = !!printer.moonraker_url;
-  if (!isBambu && !hasMoonraker) return null;
+  const health = healthSummary(printer);
 
   const rows: { k: string; v: React.ReactNode }[] = [
-    { k: "Транспорт", v: transportLabel(printer) },
+    { k: "Бекенд", v: transportLabel(printer) },
   ];
   if (isBambu && printer.bambu_model) rows.push({ k: "Модель", v: printer.bambu_model });
   if (isBambu && printer.bambu_dev_id) rows.push({ k: "Серійний", v: <span className="font-mono">{printer.bambu_dev_id}</span> });
@@ -1518,18 +1575,35 @@ function ConnectionCard({ printer }: { printer: Printer }) {
       ),
     });
   }
-  rows.push({ k: "Останній звіт", v: fmtRelative(printer.updated_at) });
+  if (printer.source !== "manual") {
+    rows.push({ k: "Останній звіт", v: fmtRelative(printer.updated_at) });
+  }
 
   return (
-    <Card title="Підключення">
-      <div className="divide-y divide-[var(--border)]">
-        {rows.map((r) => (
-          <div key={r.k} className="flex items-center justify-between gap-3 py-2 text-xs first:pt-0 last:pb-0">
-            <span className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--text-faint)]">{r.k}</span>
-            <span className="truncate text-right text-[var(--text)]">{r.v}</span>
-          </div>
-        ))}
+    <Card title="Підключення та діагностика">
+      {/* ── unified health summary — same shape for every backend ── */}
+      <div className="mb-3 flex items-start gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+        <StatusDot color={HEALTH_TONE_COLOR[health.tone]} ping={health.tone === "ok"} />
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-[var(--text)]">{health.label}</p>
+          {health.detail && <p className="truncate text-[11px] text-[var(--text-faint)]">{health.detail}</p>}
+        </div>
       </div>
+
+      {printer.source === "manual" ? (
+        <p className="text-xs text-[var(--text-faint)]">
+          Цей принтер не підключений напряму — стан і завдання вносяться вручну.
+        </p>
+      ) : (
+        <div className="divide-y divide-[var(--border)]">
+          {rows.map((r) => (
+            <div key={r.k} className="flex items-center justify-between gap-3 py-2 text-xs first:pt-0 last:pb-0">
+              <span className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--text-faint)]">{r.k}</span>
+              <span className="truncate text-right text-[var(--text)]">{r.v}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
