@@ -1,3 +1,4 @@
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -16,8 +17,8 @@ class PrintHistoryOut(BaseModel):
     printer_id: int
     printer_name: str
     file_name: str | None
-    started_at: str
-    finished_at: str | None
+    started_at: datetime
+    finished_at: datetime | None
     duration_minutes: int | None
     result: str
     result_reason: str | None = None
