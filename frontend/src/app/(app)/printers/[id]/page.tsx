@@ -885,9 +885,13 @@ function fmtJobDt(value: string | null): string {
   return new Date(value).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+const JOBS_PAGE_LIMIT = 10;
+
 function BambuJobsCard({ printer }: { printer: Printer }) {
   const [activeJob, setActiveJob] = useState<BambuCloudJob | null>(null);
   const [recent, setRecent] = useState<BambuCloudJob[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [openJobId, setOpenJobId] = useState<number | null>(null);
 
@@ -895,10 +899,13 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
     try {
       const [active, list] = await Promise.all([
         api<BambuCloudJob | null>(`/api/printers/${printer.id}/active-job`),
-        api<{ items: BambuCloudJob[] }>(`/api/bambu-jobs?printer_id=${printer.id}&limit=8`),
+        api<{ items: BambuCloudJob[]; total: number }>(
+          `/api/bambu-jobs?printer_id=${printer.id}&limit=${JOBS_PAGE_LIMIT}`,
+        ),
       ]);
       setActiveJob(active);
       setRecent(list.items);
+      setTotal(list.total);
     } catch {
       /* ignore — non-critical panel */
     } finally {
@@ -906,9 +913,21 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
     }
   }, [printer.id]);
 
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const list = await api<{ items: BambuCloudJob[]; total: number }>(
+        `/api/bambu-jobs?printer_id=${printer.id}&limit=${JOBS_PAGE_LIMIT}&offset=${recent.length}`,
+      );
+      setRecent((prev) => [...prev, ...list.items]);
+      setTotal(list.total);
+    } catch { /* ignore */ } finally {
+      setLoadingMore(false);
+    }
+  }
+
   useEffect(() => { void load(); }, [load]);
 
-  // Poll faster while there's an active job, slower otherwise.
   useEffect(() => {
     const t = setInterval(() => void load(), activeJob ? 5000 : 25000);
     return () => clearInterval(t);
@@ -916,6 +935,8 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
 
   if (!loaded) return null;
   if (!activeJob && recent.length === 0) return null;
+
+  const hasMore = recent.length < total;
 
   return (
     <Card title="Bambu Cloud друк">
@@ -946,7 +967,15 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
 
       {recent.length > 0 && (
         <div>
-          <p className="mb-1.5 text-xs font-medium text-[var(--text-muted)]">Останні завдання</p>
+          <div className="-mt-1 mb-1.5 flex items-center justify-between">
+            <p className="text-xs font-medium text-[var(--text-muted)]">
+              Останні завдання{total > 0 ? ` · ${total}` : ""}
+            </p>
+            <Link href={`/printers/jobs?printer_id=${printer.id}`}
+              className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)]">
+              Всі →
+            </Link>
+          </div>
           <ul className="space-y-1">
             {recent.map((j) => (
               <li key={j.id}>
@@ -961,6 +990,15 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
               </li>
             ))}
           </ul>
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="mt-2 w-full rounded-md border border-[var(--border)] py-1.5 text-xs text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] disabled:opacity-50"
+            >
+              {loadingMore ? "…" : `Завантажити ще (${total - recent.length})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -1532,7 +1570,6 @@ function LoadedFilamentsCard({
     </>
   );
 }
-
 
 
 // ── connection card ───────────────────────────────────────────────────────────
