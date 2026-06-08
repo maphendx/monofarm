@@ -12,7 +12,6 @@ import {
   printerTone,
   stateLabel,
 } from "@/lib/printerLabels";
-import { StateIcon } from "@/components/printers/StateIcon";
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup } from "@/lib/types";
@@ -27,6 +26,43 @@ function formatEta(min: number | null): string | null {
   return m ? `${h} год ${m} хв` : `${h} год`;
 }
 
+function etaCompletionLabel(min: number | null): string | null {
+  if (!min || min <= 0) return null;
+  const d = new Date(Date.now() + min * 60_000);
+  const time = d.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return `сьогодні · ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `завтра · ${time}`;
+  return `${d.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${time}`;
+}
+
+function transportLabel(p: Printer): string {
+  if (p.kind === "bambu") return "Bambu MQTT";
+  if (p.moonraker_url) return "Moonraker";
+  return "Вручну";
+}
+
+const TONE_COLOR: Record<string, string> = {
+  printing: "var(--state-print)",
+  ok: "var(--state-ok)",
+  warn: "var(--state-warn)",
+  bad: "var(--state-error)",
+  idle: "var(--state-idle)",
+  muted: "var(--state-offline)",
+};
+
+function StatusDot({ color, ping = true }: { color: string; ping?: boolean }) {
+  return (
+    <span className="relative flex size-2 shrink-0">
+      {ping && (
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-50" style={{ background: color }} />
+      )}
+      <span className="relative inline-flex size-2 rounded-full" style={{ background: color }} />
+    </span>
+  );
+}
 
 function Card({ title, children, className = "", accent }: { title?: string; children: React.ReactNode; className?: string; accent?: string }) {
   return (
@@ -36,63 +72,6 @@ function Card({ title, children, className = "", accent }: { title?: string; chi
         {title && <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">{title}</p>}
         {children}
       </div>
-    </div>
-  );
-}
-
-// ── camera ────────────────────────────────────────────────────────────────────
-
-function CameraCard({ printer }: { printer: Printer }) {
-  const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_ip;
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError]   = useState(false);
-  const [tick, setTick]     = useState(0);
-  const token = getToken();
-
-  useEffect(() => {
-    if (isBambu) return;
-    const id = setInterval(() => setTick((n) => n + 1), 2500);
-    return () => clearInterval(id);
-  }, [isBambu]);
-
-  // Reset loaded on each snapshot tick so badge blinks off briefly if feed stalls
-  useEffect(() => {
-    if (!isBambu) setLoaded(false);
-  }, [tick, isBambu]);
-
-  const src = isBambu
-    ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
-    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${tick}&token=${token}`;
-
-  return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--bg)]">
-      {error ? (
-        <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-          </svg>
-          <span className="text-xs">Камера недоступна</span>
-          <button onClick={() => { setError(false); setLoaded(false); }}
-            className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
-            Повторити
-          </button>
-        </div>
-      ) : (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={src}
-          alt="Camera"
-          className={`h-full w-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
-          onLoad={() => setLoaded(true)}
-          onError={() => setError(true)}
-        />
-      )}
-      {loaded && !error && (
-        <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] backdrop-blur-sm">
-          <span className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--state-error)" }} />
-          LIVE
-        </span>
-      )}
     </div>
   );
 }
@@ -218,11 +197,9 @@ const BAMBU_SPEEDS = [
   { label: "Ludicrous", profile: 4, pct: 100 },
 ];
 
-function ControlPanel({ printer }: { printer: Printer }) {
+function JogCard({ printer }: { printer: Printer }) {
   const user = useUser();
   const [dist, setDist] = useState(10);
-  const [speed, setSpeed] = useState(100);
-  const [flow, setFlow] = useState(100);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -240,22 +217,6 @@ function ControlPanel({ printer }: { printer: Printer }) {
       await api(`/api/printers/${printer.id}/gcode`, {
         method: "POST",
         body: JSON.stringify({ script }),
-      });
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Помилка");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function setSpeedProfile(profile: number) {
-    if (busy) return;
-    setBusy(`sp${profile}`);
-    setErr(null);
-    try {
-      await api(`/api/printers/${printer.id}/speed-profile`, {
-        method: "POST",
-        body: JSON.stringify({ profile }),
       });
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Помилка");
@@ -315,26 +276,16 @@ function ControlPanel({ printer }: { printer: Printer }) {
     </button>
   );
 
-  const SPEED_COLORS = [
-    "border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
-    "border-[var(--state-print)] bg-[rgba(56,189,248,.10)] text-[var(--state-print)] hover:bg-[rgba(56,189,248,.15)]",
-    "border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)]",
-    "border-[var(--state-error)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)]",
-  ];
-
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">Керування</p>
-        <span className="text-[10px] text-[var(--text-muted)] ">{isBambu ? "Bambu MQTT" : "Moonraker"}</span>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">Керування · переміщення</p>
+        <span className="font-mono text-[10px] uppercase text-[var(--text-faint)] ">{isBambu ? "Bambu MQTT · G-code" : "Moonraker · G-code"}</span>
       </div>
 
       <div className="p-5 space-y-5">
-        {/* ── Movement ── */}
         <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Переміщення</p>
-
           {/* Step size */}
           <div className="mb-4 flex items-center gap-px overflow-hidden rounded-md border border-[var(--border)]  w-fit">
             {MOVE_DISTANCES.map((d) => (
@@ -401,28 +352,104 @@ function ControlPanel({ printer }: { printer: Printer }) {
 
         <div className="h-px bg-[var(--surface-hi)] " />
 
-        {/* ── Speed ── */}
+        {/* ── Utilities ── */}
         <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Швидкість друку</p>
-          {isBambu ? (
-            <div className="grid grid-cols-4 gap-2">
-              {BAMBU_SPEEDS.map((s, i) => (
-                <button
-                  key={s.profile}
-                  type="button"
-                  onClick={() => setSpeedProfile(s.profile)}
-                  disabled={busy !== null}
-                  className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-center text-[11px] font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition disabled:opacity-40 ${SPEED_COLORS[i]}`}
-                >
-                  <span className="text-[9px] font-bold tracking-widest opacity-60">
-                    {"▮".repeat(i + 1)}
-                  </span>
-                  {busy === `sp${s.profile}` ? "…" : s.label}
-                  <span className="text-[9px] opacity-50 tabular-nums">{s.pct}%</span>
-                </button>
-              ))}
-            </div>
-          ) : (
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Допоміжні</p>
+          <div className="flex flex-wrap gap-2">
+            {utilBtn("Мотори вимк", "M84", "motors-off", "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18")}
+            {utilBtn("Вент увімк", "M106 S255", "fan-on", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
+            {utilBtn("Вент вимк", "M107", "fan-off", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
+            {utilBtn("Охолодити", "M104 S0\nM140 S0", "cool-down", "M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "text-[var(--accent)]")}
+          </div>
+        </div>
+
+        {err && <p className="text-xs text-[var(--state-error)]">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+const SPEED_COLORS = [
+  "border-[var(--border-strong)] bg-[var(--bg)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+  "border-[var(--state-print)] bg-[rgba(56,189,248,.10)] text-[var(--state-print)] hover:bg-[rgba(56,189,248,.15)]",
+  "border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)]",
+  "border-[var(--state-error)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)]",
+];
+
+function SpeedCard({ printer }: { printer: Printer }) {
+  const user = useUser();
+  const [speed, setSpeed] = useState(100);
+  const [flow, setFlow] = useState(100);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const isBambu = printer.kind === "bambu" && !!printer.bambu_dev_id;
+  const isMoonraker = !!printer.moonraker_url;
+
+  if (!isBambu && !isMoonraker) return null;
+  if (user.role !== "admin" && user.role !== "operator") return null;
+
+  async function gcode(script: string, key: string) {
+    if (busy) return;
+    setBusy(key);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/gcode`, {
+        method: "POST",
+        body: JSON.stringify({ script }),
+      });
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setSpeedProfile(profile: number) {
+    if (busy) return;
+    setBusy(`sp${profile}`);
+    setErr(null);
+    try {
+      await api(`/api/printers/${printer.id}/speed-profile`, {
+        method: "POST",
+        body: JSON.stringify({ profile }),
+      });
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">Швидкість друку</p>
+        <span className="font-mono text-[10px] uppercase text-[var(--text-faint)] ">{isBambu ? "SPD_LVL · Bambu" : "M220 · Moonraker"}</span>
+      </div>
+
+      <div className="p-5 space-y-5">
+        {isBambu ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {BAMBU_SPEEDS.map((s, i) => (
+              <button
+                key={s.profile}
+                type="button"
+                onClick={() => setSpeedProfile(s.profile)}
+                disabled={busy !== null}
+                className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-center text-[11px] font-medium shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition disabled:opacity-40 ${SPEED_COLORS[i]}`}
+              >
+                <span className="text-[9px] font-bold tracking-widest opacity-60">
+                  {"▮".repeat(i + 1)}
+                </span>
+                {busy === `sp${s.profile}` ? "…" : s.label}
+                <span className="text-[9px] opacity-50 tabular-nums">{s.pct}%</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Швидкість</p>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={10} max={300} value={speed}
@@ -439,13 +466,12 @@ function ControlPanel({ printer }: { printer: Printer }) {
                 {busy === "speed" ? "…" : "Задати"}
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* ── Flow (Moonraker) ── */}
         {isMoonraker && (
           <div>
-            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Витрата пластику</p>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Витрата пластику</p>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={50} max={200} value={flow}
@@ -465,26 +491,13 @@ function ControlPanel({ printer }: { printer: Printer }) {
           </div>
         )}
 
-        <div className="h-px bg-[var(--surface-hi)] " />
-
-        {/* ── Utilities ── */}
-        <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Допоміжні</p>
-          <div className="flex flex-wrap gap-2">
-            {utilBtn("Мотори вимк", "M84", "motors-off", "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18")}
-            {utilBtn("Вент увімк", "M106 S255", "fan-on", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
-            {utilBtn("Вент вимк", "M107", "fan-off", "M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2 2 0 1 1 19.5 12H2")}
-            {utilBtn("Охолодити", "M104 S0\nM140 S0", "cool-down", "M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0z", "text-[var(--accent)]")}
-          </div>
-        </div>
-
         {err && <p className="text-xs text-[var(--state-error)]">{err}</p>}
       </div>
     </div>
   );
 }
 
-function PrintStatusCard({
+function JobHeroCard({
   printer,
   onUpdated,
 }: {
@@ -497,14 +510,38 @@ function PrintStatusCard({
   const [err, setErr] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmClearBed, setConfirmClearBed] = useState(false);
+  const [camLoaded, setCamLoaded] = useState(false);
+  const [camError, setCamError] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  const tone = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
   const isOperational = printer.state === "operational" || printer.state === "awaiting_bed_clear";
   const isError = printer.state === "error";
   const hasMoonraker = !!printer.moonraker_url;
+  const isBambuCam = printer.kind === "bambu" && !!printer.bambu_dev_ip;
+  const hasCamera = hasMoonraker || isBambuCam;
   const eta = formatEta(printer.eta_minutes);
+  const completion = etaCompletionLabel(printer.eta_minutes);
+  const dotColor = TONE_COLOR[printerTone(printer)] ?? "var(--state-idle)";
+  const token = getToken();
+
+  useEffect(() => {
+    if (isBambuCam || !hasCamera) return;
+    const id = setInterval(() => setTick((n) => n + 1), 2500);
+    return () => clearInterval(id);
+  }, [isBambuCam, hasCamera]);
+
+  useEffect(() => {
+    if (!isBambuCam) setCamLoaded(false);
+  }, [tick, isBambuCam]);
+
+  const camSrc = isBambuCam
+    ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
+    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${tick}&token=${token}`;
+
+  const meta = printer.current_filament_meta;
+  const totalGrams = meta?.used_g?.reduce((a, b) => a + b, 0);
 
   async function act(action: string) {
     if (busy) return;
@@ -522,146 +559,182 @@ function PrintStatusCard({
     }
   }
 
-  const stateBarColor = {
-    printing: "var(--state-print)", ok: "var(--state-ok)", warn: "var(--state-warn)",
-    bad: "var(--state-error)", idle: "var(--state-idle)", muted: "var(--surface-hi)",
-  }[tone] ?? "var(--state-idle)";
-
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
-      {/* State bar — 3px color accent across top */}
-      <div className="h-0.5 w-full" style={{ background: stateBarColor }} />
-
-      <div className="p-5">
-        {/* State row */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <StateIcon state={printer.state} size={16} />
-            <span className="text-sm font-semibold">{stateLabel(printer.state)}</span>
-            {printer.flags?.map((f) => (
-              <span key={f} className="badge badge-warn text-[10px]">
-                {flagLabel(f)}
-              </span>
-            ))}
-          </div>
-          <span className="font-mono text-[10px] text-[var(--text-muted)]  uppercase">{kindLabel(printer.kind)}</span>
-        </div>
-
-        {/* Error strip */}
-        {printer.error_msg && (
-          <div className="mb-4 flex items-start gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2.5">
-            <svg className="mt-0.5 shrink-0 text-[var(--state-error)]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <p className="text-xs text-[var(--state-error)]">{printer.error_msg}</p>
-          </div>
-        )}
-
-        {/* Job + progress */}
-        {(printer.job || isPrinting || isPaused) && (
-          <div className="mb-5 rounded-md border border-[var(--border)] bg-[var(--bg)] p-3  ">
-            {printer.job && (
-              <p className="mb-1 truncate text-[13px] font-medium text-[var(--text)] ">{printer.job}</p>
-            )}
-            {eta && (
-              <p className="mb-2.5 font-mono text-[11px] text-[var(--text-faint)]">⏱ {eta} залишилось</p>
-            )}
-            {printer.progress_pct != null && (
-              <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="font-mono text-[10px] text-[var(--text-faint)]">прогрес</span>
-                  <span className="font-mono text-sm font-bold tabular-nums text-[var(--state-print)]">
-                    {printer.progress_pct}%
-                  </span>
-                </div>
-                <div className="relative h-3 overflow-hidden rounded-sm bg-[var(--surface-hi)] ">
-                  <div
-                    className="h-full transition-[width] duration-1000 ease-linear"
-                    style={{ background: "var(--state-print)", width: `${printer.progress_pct}%` }}
-                  />
-                  {/* Tick marks */}
-                  {[25, 50, 75].map((t) => (
-                    <div key={t} className="absolute inset-y-0 w-px bg-[var(--border)]" style={{ left: `${t}%` }} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Action buttons */}
-        {canEdit && (
-          <div className="flex flex-wrap gap-2">
-            {isPrinting && (
-              <button onClick={() => act("pause")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-4 py-2 text-xs font-medium text-[var(--state-warn)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(245,158,11,.15)] disabled:opacity-40">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                {busy === "pause" ? "…" : "Пауза"}
-              </button>
-            )}
-            {isPaused && (
-              <button onClick={() => act("resume")} disabled={busy !== null}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                {busy === "resume" ? "…" : "Продовжити"}
-              </button>
-            )}
-            {(isPrinting || isPaused) && (
-              confirmCancel ? (
-                <div className="flex items-center gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2">
-                  <span className="text-xs text-[var(--state-error)]">Зупинити друк?</span>
-                  <button onClick={() => act("cancel")} disabled={busy !== null}
-                    className="text-xs font-bold text-[var(--state-error)] hover:underline disabled:opacity-40">
-                    {busy === "cancel" ? "…" : "Так"}
-                  </button>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <button onClick={() => setConfirmCancel(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
-                  className="flex items-center gap-1.5 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-4 py-2 text-xs font-medium text-[var(--state-error)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(239,68,68,.15)] disabled:opacity-40">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-                  Зупинити
-                </button>
-              )
-            )}
-            {isOperational && (
-              confirmClearBed ? (
-                <div className="flex items-center gap-2 rounded-md border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-3 py-2">
-                  <span className="text-xs text-[var(--state-ok)]">Стіл справді очищено?</span>
-                  <button onClick={() => act("clear-bed")} disabled={busy !== null}
-                    className="text-xs font-bold text-[var(--state-ok)] hover:underline disabled:opacity-40">
-                    {busy === "clear-bed" ? "…" : "Так"}
-                  </button>
-                  <span className="text-[var(--text-muted)]">·</span>
-                  <button onClick={() => setConfirmClearBed(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmClearBed(true)} disabled={busy !== null}
-                  className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                  Стіл очищено
-                </button>
-              )
-            )}
-            {isError && (
-              <button onClick={() => act("clear-error")} disabled={busy !== null}
-                className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
-                {busy === "clear-error" ? "…" : "Скинути помилку"}
-              </button>
-            )}
-            {isPrinting && hasMoonraker && (
-              <button onClick={() => act("skip-object")} disabled={busy !== null}
-                title="Потребує [exclude_object] в printer.cfg"
-                className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
-                {busy === "skip-object" ? "…" : "Пропустити об'єкт"}
-              </button>
-            )}
-          </div>
-        )}
-
-        {err && <p className="mt-3 text-xs text-[var(--state-error)]">{err}</p>}
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-faint)] ">Поточне завдання</p>
+        <span className="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--text-faint)]">
+          {transportLabel(printer)}
+        </span>
       </div>
+
+      {hasCamera && (
+        <div className="relative aspect-video w-full overflow-hidden border-b border-[var(--border)] bg-[var(--bg)]">
+          {camError ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-[var(--text-muted)]">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+              </svg>
+              <span className="text-xs">Камера недоступна</span>
+              <button onClick={() => { setCamError(false); setCamLoaded(false); }}
+                className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
+                Повторити
+              </button>
+            </div>
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={camSrc}
+              alt="Camera"
+              className={`h-full w-full object-cover transition-opacity duration-300 ${camLoaded ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setCamLoaded(true)}
+              onError={() => setCamError(true)}
+            />
+          )}
+          {camLoaded && !camError && (
+            <>
+              <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] backdrop-blur-sm">
+                <span className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--state-error)" }} />
+                LIVE
+              </span>
+              {(printer.extruder_temp != null || printer.bed_temp != null) && (
+                <div className="absolute bottom-3 left-3 flex gap-4 rounded-md bg-black/55 px-3 py-1.5 backdrop-blur-sm">
+                  {printer.extruder_temp != null && (
+                    <div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-faint)]">Сопло</div>
+                      <div className="font-mono text-sm font-semibold text-[var(--text-hi)]">{Math.round(printer.extruder_temp)}°</div>
+                    </div>
+                  )}
+                  {printer.bed_temp != null && (
+                    <div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-[var(--text-faint)]">Стіл</div>
+                      <div className="font-mono text-sm font-semibold text-[var(--text-hi)]">{Math.round(printer.bed_temp)}°</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {printer.error_msg && (
+        <div className="flex items-start gap-2 border-b border-[var(--border)] bg-[rgba(239,68,68,.06)] px-5 py-3">
+          <svg className="mt-0.5 shrink-0 text-[var(--state-error)]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <p className="text-xs text-[var(--state-error)]">{printer.error_msg}</p>
+        </div>
+      )}
+
+      {(printer.job || isPrinting || isPaused) && (
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-[var(--border)] px-5 py-3.5">
+          <div className="flex items-center gap-2">
+            <StatusDot color={dotColor} ping={isPrinting} />
+            <span className="text-xs font-medium" style={{ color: dotColor }}>{stateLabel(printer.state)}</span>
+          </div>
+          <div className="min-w-0">
+            {printer.job && <p className="truncate font-mono text-[13px] font-medium text-[var(--text)] ">{printer.job}</p>}
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-[var(--text-faint)]">
+              {meta?.types?.[0] && <span>{meta.types[0]}</span>}
+              {totalGrams != null && totalGrams > 0 && <span>{Math.round(totalGrams)} г</span>}
+              {meta?.layer_height != null && <span>{meta.layer_height} мм</span>}
+              <span>джерело <b className="text-[var(--text)]">{printer.source}</b></span>
+            </div>
+          </div>
+          {eta && (
+            <div className="text-right">
+              <div className="font-mono text-lg font-semibold tabular-nums text-[var(--text-hi)]">{eta}</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-dim)]">
+                {completion ? `завершення · ${completion}` : "залишилось"}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {printer.progress_pct != null && (
+        <div className="border-b border-[var(--border)] px-5 py-3.5">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-[13px] font-semibold text-[var(--text-hi)]">прогрес · <b style={{ color: "var(--state-print)" }}>{printer.progress_pct}%</b></span>
+          </div>
+          <div className="relative h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)]">
+            <div className="h-full rounded-full transition-[width] duration-1000 ease-linear" style={{ background: "var(--state-print)", width: `${printer.progress_pct}%` }} />
+          </div>
+        </div>
+      )}
+
+      {canEdit && (isPrinting || isPaused || isOperational || isError) && (
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3.5">
+          {isPrinting && (
+            <button onClick={() => act("pause")} disabled={busy !== null}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-4 py-2 text-xs font-medium text-[var(--state-warn)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(245,158,11,.15)] disabled:opacity-40">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              {busy === "pause" ? "…" : "Пауза"}
+            </button>
+          )}
+          {isPaused && (
+            <button onClick={() => act("resume")} disabled={busy !== null}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              {busy === "resume" ? "…" : "Продовжити"}
+            </button>
+          )}
+          {(isPrinting || isPaused) && (
+            confirmCancel ? (
+              <div className="flex items-center gap-2 rounded-md border border-[rgba(239,68,68,.2)] bg-[rgba(239,68,68,.08)] px-3 py-2">
+                <span className="text-xs text-[var(--state-error)]">Зупинити друк?</span>
+                <button onClick={() => act("cancel")} disabled={busy !== null}
+                  className="text-xs font-bold text-[var(--state-error)] hover:underline disabled:opacity-40">
+                  {busy === "cancel" ? "…" : "Так"}
+                </button>
+                <span className="text-[var(--text-muted)]">·</span>
+                <button onClick={() => setConfirmCancel(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
+                className="flex items-center gap-1.5 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-4 py-2 text-xs font-medium text-[var(--state-error)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(239,68,68,.15)] disabled:opacity-40">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+                Зупинити
+              </button>
+            )
+          )}
+          {isOperational && (
+            confirmClearBed ? (
+              <div className="flex items-center gap-2 rounded-md border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-3 py-2">
+                <span className="text-xs text-[var(--state-ok)]">Стіл справді очищено?</span>
+                <button onClick={() => act("clear-bed")} disabled={busy !== null}
+                  className="text-xs font-bold text-[var(--state-ok)] hover:underline disabled:opacity-40">
+                  {busy === "clear-bed" ? "…" : "Так"}
+                </button>
+                <span className="text-[var(--text-muted)]">·</span>
+                <button onClick={() => setConfirmClearBed(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmClearBed(true)} disabled={busy !== null}
+                className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Стіл очищено
+              </button>
+            )
+          )}
+          {isError && (
+            <button onClick={() => act("clear-error")} disabled={busy !== null}
+              className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
+              {busy === "clear-error" ? "…" : "Скинути помилку"}
+            </button>
+          )}
+          {isPrinting && hasMoonraker && (
+            <button onClick={() => act("skip-object")} disabled={busy !== null}
+              title="Потребує [exclude_object] в printer.cfg"
+              className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
+              {busy === "skip-object" ? "…" : "Пропустити об'єкт"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {err && <p className="px-5 pb-3.5 text-xs text-[var(--state-error)]">{err}</p>}
     </div>
   );
 }
@@ -1245,18 +1318,30 @@ function LoadedFilamentsCard({
             <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-5">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {slots.map((s, i) => {
               const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
+              const isActive = printer.active_tray === s.slot;
               return (
-                <div key={i} className="flex flex-col items-center gap-1.5 text-center">
-                  <SpoolIcon color={s.color} size={72} />
-                  <div className="max-w-[84px]">
-                    {s.color_name && <div className="truncate text-[10px] font-medium text-[var(--text)] ">{s.color_name}</div>}
-                    <div className="text-xs font-semibold leading-tight">{s.type}</div>
-                    {s.brand && <div className="truncate text-[10px] text-[var(--text-muted)]">{s.brand}</div>}
-                    {invItem && <div className="text-[10px] text-[var(--text-faint)]">{invItem.grams_remaining} г</div>}
-                    <div className="mt-0.5 text-[10px] text-[var(--text-faint)]">#{i + 1}</div>
+                <div
+                  key={i}
+                  className={[
+                    "relative grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors",
+                    isActive ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)] bg-[var(--surface-2)]",
+                  ].join(" ")}
+                >
+                  {isActive && (
+                    <span className="absolute right-2 top-2 size-1.5 rounded-full" style={{ background: "var(--accent)" }} />
+                  )}
+                  <SpoolIcon color={s.color} size={32} />
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium text-[var(--text)] ">
+                      {s.color_name ? `${s.type} · ${s.color_name}` : s.type}
+                    </div>
+                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
+                      <span>#{i + 1}{s.brand ? ` · ${s.brand}` : ""}</span>
+                      {invItem && <span className="text-[var(--text-muted)]">· {invItem.grams_remaining} г</span>}
+                    </div>
                   </div>
                 </div>
               );
@@ -1399,6 +1484,124 @@ function LoadedFilamentsCard({
 }
 
 
+
+// ── connection card ───────────────────────────────────────────────────────────
+
+function fmtRelative(value: string | null): string {
+  if (!value) return "—";
+  const sec = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+  if (sec < 60) return `${sec} с тому`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} хв тому`;
+  const hr = Math.round(min / 60);
+  return `${hr} год тому`;
+}
+
+function ConnectionCard({ printer }: { printer: Printer }) {
+  const isBambu = printer.kind === "bambu";
+  const hasMoonraker = !!printer.moonraker_url;
+  if (!isBambu && !hasMoonraker) return null;
+
+  const rows: { k: string; v: React.ReactNode }[] = [
+    { k: "Транспорт", v: transportLabel(printer) },
+  ];
+  if (isBambu && printer.bambu_model) rows.push({ k: "Модель", v: printer.bambu_model });
+  if (isBambu && printer.bambu_dev_id) rows.push({ k: "Серійний", v: <span className="font-mono">{printer.bambu_dev_id}</span> });
+  if (printer.bambu_dev_ip) rows.push({ k: "IP · LAN", v: <span className="font-mono">{printer.bambu_dev_ip}</span> });
+  if (hasMoonraker) {
+    rows.push({
+      k: "Moonraker",
+      v: (
+        <a href={printer.moonraker_url!} target="_blank" rel="noopener noreferrer" className="font-mono text-[var(--accent)] hover:underline">
+          {printer.moonraker_url}
+        </a>
+      ),
+    });
+  }
+  rows.push({ k: "Останній звіт", v: fmtRelative(printer.updated_at) });
+
+  return (
+    <Card title="Підключення">
+      <div className="divide-y divide-[var(--border)]">
+        {rows.map((r) => (
+          <div key={r.k} className="flex items-center justify-between gap-3 py-2 text-xs first:pt-0 last:pb-0">
+            <span className="font-mono text-[10.5px] uppercase tracking-wider text-[var(--text-faint)]">{r.k}</span>
+            <span className="truncate text-right text-[var(--text)]">{r.v}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── print history card ────────────────────────────────────────────────────────
+
+interface PrinterHistoryEntry {
+  id: number;
+  file_name: string | null;
+  started_at: string;
+  duration_minutes: number | null;
+  result: string;
+  filament_g: number | null;
+  source: string | null;
+}
+
+function fmtHistTime(value: string): string {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  if (days <= 0) return "сьогодні";
+  if (days === 1) return "вчора";
+  return `${days} дн тому`;
+}
+
+function fmtHistDuration(min: number | null): string {
+  if (!min) return "—";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? `${h} г ${m} хв` : `${m} хв`;
+}
+
+function PrintHistoryCard({ printer }: { printer: Printer }) {
+  const [entries, setEntries] = useState<PrinterHistoryEntry[] | null>(null);
+
+  useEffect(() => {
+    api<PrinterHistoryEntry[]>(`/api/history?printer_id=${printer.id}&limit=8`)
+      .then(setEntries)
+      .catch(() => setEntries([]));
+  }, [printer.id]);
+
+  if (!entries || entries.length === 0) return null;
+
+  const successCount = entries.filter((e) => e.result === "completed").length;
+  const successPct = Math.round((successCount / entries.length) * 100);
+
+  return (
+    <Card title="Історія друку">
+      <div className="-mt-1 mb-3 flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{entries.length} записів · {successPct}% успішно</span>
+        <Link href="/history" className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] ">Усі →</Link>
+      </div>
+      <ul className="-mx-5 divide-y divide-[var(--border)]">
+        {entries.map((e) => (
+          <li key={e.id} className="flex items-center gap-3 px-5 py-2.5 text-xs">
+            <span className={`size-1.5 shrink-0 rounded-full ${
+              e.result === "completed" ? "bg-[var(--state-ok)]" : e.result === "failed" ? "bg-[var(--state-error)]" : "bg-[var(--text-dim)]"
+            }`} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-mono text-[11.5px] text-[var(--text)]">{e.file_name ?? "—"}</p>
+              {(e.filament_g != null || e.source) && (
+                <p className="font-mono text-[10px] text-[var(--text-faint)]">
+                  {[e.filament_g != null ? `${Math.round(e.filament_g)} г` : null, e.source].filter(Boolean).join(" · ")}
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 font-mono text-[10.5px] text-[var(--text-faint)]">{fmtHistDuration(e.duration_minutes)}</span>
+            <span className="shrink-0 font-mono text-[10.5px] text-[var(--text-dim)]">{fmtHistTime(e.started_at)}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
 
 // ── settings card ─────────────────────────────────────────────────────────────
 
@@ -1626,91 +1829,81 @@ export default function PrinterPage() {
     );
   }
 
-  const hasMoonraker = !!printer.moonraker_url;
   const isBambu = printer.kind === "bambu";
 
   return (
     <div className="space-y-4">
       {/* ── header ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4 ">
-        <div className="flex items-center gap-3 min-w-0">
-          <Link href="/dashboard"
-            className="flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-[var(--text)]  shrink-0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-          </Link>
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold">{printer.name}</h1>
-            <div className="flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-              <span>{kindLabel(printer.kind)}</span>
-              {printer.bambu_model && <><span>·</span><span>{printer.bambu_model}</span></>}
-              {printer.group_name && <><span>·</span><span>{printer.group_name}</span></>}
+      <div className="space-y-3 border-b border-[var(--border)] pb-4 ">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <Link href="/dashboard"
+              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-bold text-[var(--text-hi)]">{printer.name}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-faint)]">
+                <span className="inline-flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
+                  <span className="size-1.5 rounded-full" style={{ background: "var(--state-ok)" }} />
+                  {transportLabel(printer)}
+                </span>
+                <span>{kindLabel(printer.kind)}</span>
+                {printer.bambu_model && <><span className="text-[var(--text-dim)]">·</span><span>{printer.bambu_model}</span></>}
+                {printer.bambu_dev_id && <><span className="text-[var(--text-dim)]">·</span><span className="font-mono text-[11px]">{printer.bambu_dev_id}</span></>}
+                {printer.bambu_dev_ip && <><span className="text-[var(--text-dim)]">·</span><span className="font-mono text-[11px]">{printer.bambu_dev_ip}</span></>}
+                {printer.group_name && <><span className="text-[var(--text-dim)]">·</span><span>{printer.group_name}</span></>}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <StateIcon state={printer.state} size={10} />
-          <span className="text-sm text-[var(--text-muted)] ">{stateLabel(printer.state)}</span>
-          <button onClick={() => void load()}
-            className="ml-2 rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
-            title="Оновити">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          </button>
-          <button onClick={() => setSettingsOpen(true)}
-            className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
-            title="Налаштування принтера">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {printer.flags?.map((f) => (
+              <span key={f} className="badge badge-warn text-[10px]">{flagLabel(f)}</span>
+            ))}
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1.5 pl-2.5 pr-3 text-xs text-[var(--text)]">
+              <StatusDot color={TONE_COLOR[printerTone(printer)] ?? "var(--state-idle)"} ping={printer.state === "printing"} />
+              <span>
+                {stateLabel(printer.state)}
+                {printer.state === "printing" && formatEta(printer.eta_minutes) ? ` · ще ${formatEta(printer.eta_minutes)}` : ""}
+              </span>
+            </div>
+            <button onClick={() => void load()}
+              className="flex size-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]"
+              title="Оновити">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+            <button onClick={() => setSettingsOpen(true)}
+              className="flex size-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]"
+              title="Налаштування принтера">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ── main grid — 3 columns ── */}
-      <div className="grid gap-4 xl:grid-cols-[360px_1fr_300px] lg:grid-cols-2">
+      {/* ── main grid — 2 columns ── */}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
 
-        {/* Col 1 — status + loaded filaments */}
-        <div className="space-y-4">
-          <PrintStatusCard printer={printer} onUpdated={load} />
-          <LoadedFilamentsCard printer={printer} onUpdated={load} />
-        </div>
-
-        {/* Col 2 — camera + job filament meta */}
-        <div className="space-y-4">
-          {(hasMoonraker || (isBambu && !!printer.bambu_dev_ip)) && <CameraCard printer={printer} />}
+        {/* Col 1 — job, filaments, movement */}
+        <div className="min-w-0 space-y-4">
+          <JobHeroCard printer={printer} onUpdated={load} />
           {printer.current_filament_meta && <FilamentCard printer={printer} />}
-          {isBambu && printer.bambu_dev_id && <BambuJobsCard printer={printer} />}
+          <LoadedFilamentsCard printer={printer} onUpdated={load} />
+          <JogCard printer={printer} />
         </div>
 
-        {/* Col 3 — temps + connection */}
-        <div className="space-y-4">
+        {/* Col 2 — temps, speed, connection, jobs, history */}
+        <div className="min-w-0 space-y-4">
           <TemperaturesCard printer={printer} />
-          {(isBambu || hasMoonraker) && (
-            <Card title="Підключення">
-              <div className="space-y-2 text-xs text-[var(--text-muted)] ">
-                {isBambu && printer.bambu_dev_id && (
-                  <div className="flex items-center justify-between">
-                    <span>Dev ID</span>
-                    <span className="font-mono text-[10px]">{printer.bambu_dev_id}</span>
-                  </div>
-                )}
-                {hasMoonraker && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px]">{printer.moonraker_url}</span>
-                    <a href={printer.moonraker_url!} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 rounded border border-[var(--border)] px-2 py-0.5 text-[10px] hover:bg-[var(--surface-hi)]  ">
-                      Mainsail
-                    </a>
-                  </div>
-                )}
-              </div>
-            </Card>
-          )}
+          <SpeedCard printer={printer} />
+          <ConnectionCard printer={printer} />
+          {isBambu && printer.bambu_dev_id && <BambuJobsCard printer={printer} />}
+          <PrintHistoryCard printer={printer} />
         </div>
       </div>
-
-      {/* ── Controls — always visible, full width ── */}
-      <ControlPanel printer={printer} />
 
       {/* ── Settings modal ── */}
       {settingsOpen && (
