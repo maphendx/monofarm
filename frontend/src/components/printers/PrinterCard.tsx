@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { SlotStrip } from "@/components/printers/SlotStrip";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
@@ -34,7 +33,53 @@ function formatEta(min: number | null): string | null {
   return m ? `${h}г ${m}хв` : `${h}год`;
 }
 
+function parseMetaColor(color: string | null | undefined): string {
+  if (!color) return "var(--surface-hi)";
+  return color.startsWith("#") ? color.slice(0, 7) : color;
+}
 
+function CurrentPrintMaterials({ meta }: { meta: Printer["current_filament_meta"] }) {
+  const colors = meta?.colors ?? [];
+  const types = meta?.types ?? [];
+  const grams = meta?.used_g ?? [];
+  const count = Math.max(colors.length, types.length, grams.length);
+  if (count === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/35 px-2.5 py-2">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
+          Матеріали
+        </span>
+        <span className="text-[10px] text-[var(--text-faint)]">{count} слот</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {Array.from({ length: count }).map((_, i) => (
+          <div
+            key={i}
+            className="flex min-w-0 items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)]/70 px-2 py-1.5"
+            title={`T${i + 1}${types[i] ? ` · ${types[i]}` : ""}${grams[i] ? ` · ${grams[i]}г` : ""}`}
+          >
+            <span
+              className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-black/10 shadow-inner"
+              style={{ backgroundColor: parseMetaColor(colors[i]) }}
+            >
+              <span className="h-3 w-3 rounded-full border border-black/20 bg-[var(--surface)]/90" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[11px] font-semibold text-[var(--text)]">
+                T{i + 1}{types[i] ? ` · ${types[i]}` : ""}
+              </span>
+              {grams[i] != null && (
+                <span className="block text-[10px] text-[var(--text-faint)]">{grams[i]}г</span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function PrinterCard({
   printer,
@@ -156,9 +201,7 @@ export function PrinterCard({
         </div>
       ) : null}
 
-      {printer.current_filament_meta && (
-        <FilamentSwatches meta={printer.current_filament_meta} size={9} />
-      )}
+      <CurrentPrintMaterials meta={printer.current_filament_meta} />
 
       {/* Flags */}
       {printer.flags?.length > 0 && (
