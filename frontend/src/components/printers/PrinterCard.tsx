@@ -38,6 +38,84 @@ function parseMetaColor(color: string | null | undefined): string {
   return color.startsWith("#") ? color.slice(0, 7) : color;
 }
 
+function slotLabel(printer: Printer, slotIndex: number, unitIndex?: number | null, external?: boolean): string {
+  if (external) return "EXT";
+  if (printer.kind === "bambu") {
+    const unit = unitIndex ?? Math.floor(slotIndex / 4);
+    return `AMS${unit + 1}-T${slotIndex - unit * 4 + 1}`;
+  }
+  return `T${slotIndex + 1}`;
+}
+
+function LoadedSpoolMaterials({ printer }: { printer: Printer }) {
+  const slotItems = (printer.slots ?? [])
+    .filter((s) => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
+    .map((s) => ({
+      key: `slot-${s.slot_index}`,
+      label: slotLabel(printer, s.slot_index, s.unit_index, s.is_external),
+      material: s.material ?? "Матеріал",
+      colorName: s.color,
+      brand: s.brand,
+      grams: s.grams_at_load,
+      hex: s.hex_color ?? parseMetaColor(s.color),
+      active: printer.active_tray === s.slot_index,
+    }));
+
+  const loadedItems = (printer.loaded_filaments ?? [])
+    .filter((s) => !s.empty && (s.filament_id || s.color || s.type || s.brand))
+    .map((s, i) => ({
+      key: `loaded-${s.slot}-${i}`,
+      label: slotLabel(printer, s.slot, s.unit_id, false),
+      material: s.type || "Матеріал",
+      colorName: s.color_name,
+      brand: s.brand,
+      grams: null,
+      hex: parseMetaColor(s.color),
+      active: printer.active_tray === s.slot,
+    }));
+
+  const items = slotItems.length > 0 ? slotItems : loadedItems;
+  if (items.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/35 px-2.5 py-2">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
+          Котушки
+        </span>
+        <span className="text-[10px] text-[var(--text-faint)]">{items.length} слот</span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {items.map((item) => (
+          <div
+            key={item.key}
+            className={[
+              "flex min-w-0 items-center gap-2 rounded-md border bg-[var(--surface)]/70 px-2 py-1.5",
+              item.active ? "border-[var(--accent)]" : "border-[var(--border)]",
+            ].join(" ")}
+            title={[item.label, item.material, item.colorName, item.brand, item.grams != null ? `${item.grams}г` : null].filter(Boolean).join(" · ")}
+          >
+            <span
+              className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-black/10 shadow-inner"
+              style={{ backgroundColor: item.hex }}
+            >
+              <span className="h-3 w-3 rounded-full border border-black/20 bg-[var(--surface)]/90" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[11px] font-semibold text-[var(--text)]">
+                {item.label} · {item.material}
+              </span>
+              <span className="block truncate text-[10px] text-[var(--text-faint)]">
+                {[item.colorName, item.brand, item.grams != null ? `${item.grams}г` : null].filter(Boolean).join(" · ") || item.hex}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CurrentPrintMaterials({ meta }: { meta: Printer["current_filament_meta"] }) {
   const colors = meta?.colors ?? [];
   const types = meta?.types ?? [];
@@ -49,7 +127,7 @@ function CurrentPrintMaterials({ meta }: { meta: Printer["current_filament_meta"
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/35 px-2.5 py-2">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">
-          Матеріали
+          У друці
         </span>
         <span className="text-[10px] text-[var(--text-faint)]">{count} слот</span>
       </div>
@@ -201,6 +279,7 @@ export function PrinterCard({
         </div>
       ) : null}
 
+      <LoadedSpoolMaterials printer={printer} />
       <CurrentPrintMaterials meta={printer.current_filament_meta} />
 
       {/* Flags */}

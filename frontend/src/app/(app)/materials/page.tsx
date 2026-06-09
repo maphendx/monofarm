@@ -19,6 +19,18 @@ const FULL_SPOOL_G = 1000;
 const MATERIALS = ["PLA", "PETG", "ABS", "ASA", "TPU", "PA", "PC", "HIPS", "PVA", "PP"];
 const BRANDS = ["Bambu Lab", "eSun", "Polymaker", "Polydream", "Prusament", "Creality", "FormFutura", "Sunlu"];
 
+function normalizeHex(value: string): string {
+  const raw = value.trim().replace(/^#/, "");
+  if (!raw) return "";
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return value.trim();
+  return `#${raw.toUpperCase()}`;
+}
+
+function validHexOrFallback(value: string, fallback = "#000000"): string {
+  const hex = normalizeHex(value);
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : fallback;
+}
+
 // ── SVG spool ─────────────────────────────────────────────────────────────────
 
 function SpoolSVG({ hexColor }: { hexColor: string | null }) {
@@ -113,6 +125,11 @@ function FilamentCard({
           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)] ">
             {[f.brand, f.material].filter(Boolean).join(" · ")}
           </p>
+          {f.hex_color && (
+            <p className="mt-0.5 font-mono text-[10px] uppercase text-[var(--text-faint)]">
+              {f.hex_color}
+            </p>
+          )}
         </div>
 
         {/* progress */}
@@ -242,12 +259,17 @@ function FilamentFormModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!color.trim() || !material.trim()) return;
+    const normalizedHex = normalizeHex(hexColor);
+    if (normalizedHex && !/^#[0-9a-fA-F]{6}$/.test(normalizedHex)) {
+      setError("HEX має бути у форматі #RRGGBB");
+      return;
+    }
     setBusy(true); setError(null);
     try {
       const body = {
         material: material.trim(),
         color: color.trim(),
-        hex_color: hexColor.trim() || null,
+        hex_color: normalizedHex || null,
         brand: brand.trim() || null,
         grams_remaining: gramsRemaining,
         min_grams: parseInt(minGrams) || 0,
@@ -320,7 +342,7 @@ function FilamentFormModal({
                         : "border-[var(--border)] hover:border-[var(--border-strong)] ",
                     ].join(" ")}>
                     <div style={{ width: `${20 + (g / 1200) * 16}px`, height: `${20 + (g / 1200) * 16}px` }}>
-                      <SpoolSVG hexColor={hexColor || "#9ca3af"} />
+                      <SpoolSVG hexColor={validHexOrFallback(hexColor, "#9ca3af")} />
                     </div>
                     <span className="text-[10px] font-medium tabular-nums text-[var(--text-muted)] ">
                       {g >= 1000 ? `${(g / 1000).toLocaleString()}kg` : `${g}g`}
@@ -401,10 +423,11 @@ function FilamentFormModal({
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">HEX код</span>
                 <div className="flex gap-1.5">
-                  <input type="color" value={hexColor || "#000000"} onChange={e => setHexColor(e.target.value)}
+                  <input type="color" value={validHexOrFallback(hexColor)} onChange={e => setHexColor(e.target.value)}
                     className="h-[34px] w-9 shrink-0 cursor-pointer rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-0.5  " />
                   <input type="text" value={hexColor} onChange={e => setHexColor(e.target.value)}
-                    placeholder="#000000" maxLength={7} className={`flex-1 font-mono ${inp}`} />
+                    onBlur={() => setHexColor((v) => normalizeHex(v))}
+                    placeholder="#RRGGBB" maxLength={7} className={`flex-1 font-mono uppercase ${inp}`} />
                 </div>
               </label>
             </div>
@@ -412,11 +435,12 @@ function FilamentFormModal({
             {/* live spool preview */}
             <div className="flex items-center gap-3 rounded-lg bg-[var(--bg)] px-3 py-2.5 ">
               <div className="h-12 w-12 shrink-0">
-                <SpoolSVG hexColor={hexColor || null} />
+                <SpoolSVG hexColor={validHexOrFallback(hexColor, "#E8DBB7")} />
               </div>
               <div>
                 <p className="text-sm font-medium">{color || "Назва кольору"}</p>
                 <p className="text-xs text-[var(--text-faint)]">{[brand, material].filter(Boolean).join(" · ") || "Виробник · Матеріал"}</p>
+                <p className="mt-0.5 font-mono text-[10px] uppercase text-[var(--text-faint)]">{normalizeHex(hexColor) || "#RRGGBB"}</p>
                 <p className="mt-0.5 text-xs font-medium tabular-nums text-[var(--text-muted)]">{gramsRemaining} / {gramsTotal} г</p>
               </div>
             </div>
@@ -703,6 +727,7 @@ export default function FilamentPage() {
     return filaments.filter(f =>
       f.material.toLowerCase().includes(q) ||
       f.color.toLowerCase().includes(q) ||
+      (f.hex_color ?? "").toLowerCase().includes(q) ||
       (f.brand ?? "").toLowerCase().includes(q) ||
       (f.sku ?? "").toLowerCase().includes(q) ||
       (f.label_id ?? "").toLowerCase().includes(q),

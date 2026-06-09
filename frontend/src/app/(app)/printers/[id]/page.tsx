@@ -791,9 +791,16 @@ function JobHeroCard({
 
 // ── spool icon helpers ────────────────────────────────────────────────────────
 
-function colorHex(c: string): string {
-  if (!c) return "#888888";
-  return c.startsWith("#") ? c.slice(0, 7) : c;
+function normalizeHex(value: string): string {
+  const raw = value.trim().replace(/^#/, "");
+  if (!raw) return "";
+  if (!/^[0-9a-fA-F]{6}$/.test(raw)) return value.trim();
+  return `#${raw.toUpperCase()}`;
+}
+
+function colorHex(c: string | null | undefined): string {
+  const hex = normalizeHex(c ?? "");
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#888888";
 }
 
 /** SVG spool icon mimicking a real filament reel */
@@ -1367,7 +1374,13 @@ function LoadedFilamentsCard({
     if (filamentId === null) { update(i, { filament_id: null }); return; }
     const f = inventory.find((x) => x.id === filamentId);
     if (!f) return;
-    update(i, { filament_id: f.id, color: colorHex(f.color), color_name: null, type: f.material, brand: f.brand ?? null });
+    update(i, {
+      filament_id: f.id,
+      color: f.hex_color ?? colorHex(f.color),
+      color_name: f.color,
+      type: f.material,
+      brand: f.brand ?? null,
+    });
   }
 
   async function save() {
@@ -1484,6 +1497,18 @@ function LoadedFilamentsCard({
                   </div>
                 </div>
 
+                {/* explicit HEX */}
+                <input
+                  type="text"
+                  value={s.color}
+                  onChange={(e) => update(i, { color: e.target.value, color_name: null, filament_id: null })}
+                  onBlur={() => update(i, { color: normalizeHex(s.color) || "#888888" })}
+                  placeholder="#RRGGBB"
+                  maxLength={7}
+                  className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 font-mono text-xs uppercase outline-none"
+                  title="HEX колір"
+                />
+
                 {/* color name badge */}
                 {s.color_name && (
                   <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] ">{s.color_name}</span>
@@ -1519,7 +1544,7 @@ function LoadedFilamentsCard({
                     <option value="">— Інвентар —</option>
                     {inventory.map((f) => (
                       <option key={f.id} value={f.id}>
-                        {f.material} {f.color} {f.brand ? `· ${f.brand}` : ""}
+                        {f.material} {f.color} {f.hex_color ? `· ${f.hex_color}` : ""} {f.brand ? `· ${f.brand}` : ""}
                       </option>
                     ))}
                   </select>

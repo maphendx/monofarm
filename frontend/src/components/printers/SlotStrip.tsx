@@ -67,6 +67,7 @@ function SlotPicker({
       !q ||
       f.material.toLowerCase().includes(q) ||
       f.color.toLowerCase().includes(q) ||
+      (f.hex_color ?? "").toLowerCase().includes(q) ||
       (f.brand ?? "").toLowerCase().includes(q),
   );
 
@@ -88,7 +89,7 @@ function SlotPicker({
 
   // Position: below the anchor dot, clamped to viewport
   const GAP = 6;
-  const PICKER_W = 220;
+  const PICKER_W = 280;
   const viewW = typeof window !== "undefined" ? window.innerWidth : 9999;
   let left = anchorRect.left + anchorRect.width / 2 - PICKER_W / 2;
   if (left + PICKER_W > viewW - 8) left = viewW - PICKER_W - 8;
@@ -161,6 +162,11 @@ function SlotPicker({
                       {f.color}
                       {f.brand ? ` · ${f.brand}` : ""}
                     </span>
+                    {f.hex_color && (
+                      <span className="mt-0.5 block font-mono text-[10px] uppercase text-[var(--text-faint)]">
+                        {f.hex_color}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 tabular-nums text-[var(--text-muted)]">
                     {f.grams_remaining}г
@@ -303,7 +309,7 @@ export function SlotStrip({
     if (filaments !== null || loadingFilaments) return;
     setLoadingFilaments(true);
     try {
-      const list = await api<Filament[]>("/api/filaments");
+      const list = await api<Filament[]>("/api/materials");
       setFilaments(list);
     } catch {
       setFilaments([]);

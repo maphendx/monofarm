@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
 import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, Printer } from "@/lib/types";
@@ -30,12 +30,62 @@ export function fmtMinutes(m: number): string {
 
 type SlotMatch = "ok" | "type_mismatch" | "missing";
 
+function normalizeSlotColor(color: string | null | undefined): string | null {
+  if (!color) return null;
+  const raw = color.trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6,8}$/.test(raw)) return null;
+  return `#${raw.slice(0, 6).toLowerCase()}`;
+}
+
+function printerMaterialSlots(printer: Printer) {
+  const slots = (printer.slots ?? [])
+    .filter((s) => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
+    .map((s) => ({
+      slot: s.slot_index,
+      type: s.material,
+      color: s.hex_color ?? s.color,
+      colorName: s.color,
+    }));
+  if (slots.length > 0) return slots;
+  return (printer.loaded_filaments ?? [])
+    .filter((s) => !s.empty && (s.filament_id || s.color || s.type))
+    .map((s) => ({
+      slot: s.slot,
+      type: s.type,
+      color: s.color,
+      colorName: s.color_name,
+    }));
+}
+
+function autoMapSlots(meta: GcodeFileMeta | null, printer: Printer): Record<number, number> {
+  const targets = printerMaterialSlots(printer);
+  const usedTargets = new Set<number>();
+  const map: Record<number, number> = {};
+
+  for (const sourceSlot of usedSlotIndices(meta)) {
+    const fileColor = normalizeSlotColor(meta?.colors?.[sourceSlot]);
+    const fileType = meta?.types?.[sourceSlot]?.toLowerCase();
+    const sameColor = fileColor
+      ? targets.filter((t) => !usedTargets.has(t.slot) && normalizeSlotColor(t.color) === fileColor)
+      : [];
+    const exact = sameColor.find((t) => !fileType || !t.type || t.type.toLowerCase() === fileType) ?? sameColor[0];
+    const fallback = targets.find((t) => t.slot === sourceSlot && !usedTargets.has(t.slot))
+      ?? targets.find((t) => !usedTargets.has(t.slot) && fileType && t.type?.toLowerCase() === fileType);
+    const picked = exact ?? fallback;
+    map[sourceSlot] = picked?.slot ?? sourceSlot;
+    if (picked) usedTargets.add(picked.slot);
+  }
+
+  return map;
+}
+
 export function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
   if (!meta) return [];
   return usedSlotIndices(meta).map((i) => {
     const fileColor = meta.colors?.[i] ?? null;
     const fileType = meta.types?.[i] ?? null;
-    const printerSlot = printer.loaded_filaments.find((s) => s.slot === i);
+    const mappedSlot = autoMapSlots(meta, printer)[i] ?? i;
+    const printerSlot = printerMaterialSlots(printer).find((s) => s.slot === mappedSlot);
     const printerColor = printerSlot?.color ?? null;
     const printerType = printerSlot?.type ?? null;
     let match: SlotMatch = "missing";
@@ -43,7 +93,7 @@ export function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
       const typeOk = !fileType || !printerType || fileType.toLowerCase() === printerType.toLowerCase();
       match = typeOk ? "ok" : "type_mismatch";
     }
-    return { slot: i + 1, fileColor, fileType, match, printerColor, printerType };
+    return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor, printerType };
   });
 }
 
@@ -125,12 +175,17 @@ export function SendModal({
   const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
   const isMoonraker = !!selectedPrinter?.moonraker_url;
 
+  useEffect(() => {
+    if (!selectedPrinter) return;
+    setSlotMap(autoMapSlots(file.filament_meta, selectedPrinter));
+    setCalibrateSlots(new Set(usedSlots));
+  }, [file.filament_meta, selectedPrinter?.id, usedSlots]);
+
   function selectPrinter(id: number) {
     setSelectedId(id);
     setResult(null);
-    const identity: Record<number, number> = {};
-    for (const i of usedSlots) identity[i] = i;
-    setSlotMap(identity);
+    const printer = sendablePrinters.find((p) => p.id === id);
+    setSlotMap(printer ? autoMapSlots(file.filament_meta, printer) : {});
     setCalibrateSlots(new Set(usedSlots));
   }
 
@@ -297,7 +352,7 @@ export function SendModal({
                                   : "badge badge-error",
                               ].join(" ")}>
                                 {s.fileColor && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: s.fileColor }} />}
-                                {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot}
+                                {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot} → {s.targetSlot}
                                 {s.match === "type_mismatch" && s.printerType && ` (є ${s.printerType})`}
                               </div>
                             ))}
@@ -338,10 +393,10 @@ export function SendModal({
                           <select value={currentPrinterSlot}
                             onChange={(e) => setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))}
                             className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-[var(--border-focus)]  ">
-                            {selectedPrinter.loaded_filaments.length > 0
-                              ? selectedPrinter.loaded_filaments.map((lf) => (
+                            {printerMaterialSlots(selectedPrinter).length > 0
+                              ? printerMaterialSlots(selectedPrinter).map((lf) => (
                                   <option key={lf.slot} value={lf.slot}>
-                                    Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}{lf.color_name ? ` · ${lf.color_name}` : ""}
+                                    Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
                                   </option>
                                 ))
                               : Array.from({ length: 4 }).map((_, s) => (
@@ -349,9 +404,9 @@ export function SendModal({
                                 ))}
                           </select>
                           {(() => {
-                            const lf = selectedPrinter.loaded_filaments.find((f) => f.slot === currentPrinterSlot);
+                            const lf = printerMaterialSlots(selectedPrinter).find((f) => f.slot === currentPrinterSlot);
                             return lf?.color ? (
-                              <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} title={lf.color_name ?? lf.color} />
+                              <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} title={lf.colorName ?? lf.color} />
                             ) : null;
                           })()}
                         </div>

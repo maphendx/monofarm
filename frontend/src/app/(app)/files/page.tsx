@@ -88,13 +88,64 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
 
 // ── Slot compat ───────────────────────────────────────────────────────────────
 type SlotMatch = "ok" | "type_mismatch" | "missing";
+
+function normalizeSlotColor(color: string | null | undefined): string | null {
+  if (!color) return null;
+  const raw = color.trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6,8}$/.test(raw)) return null;
+  return `#${raw.slice(0, 6).toLowerCase()}`;
+}
+
+function printerMaterialSlots(printer: Printer) {
+  const slots = (printer.slots ?? [])
+    .filter(s => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
+    .map(s => ({
+      slot: s.slot_index,
+      type: s.material,
+      color: s.hex_color ?? s.color,
+      colorName: s.color,
+    }));
+  if (slots.length > 0) return slots;
+  return (printer.loaded_filaments ?? [])
+    .filter(s => !s.empty && (s.filament_id || s.color || s.type))
+    .map(s => ({
+      slot: s.slot,
+      type: s.type,
+      color: s.color,
+      colorName: s.color_name,
+    }));
+}
+
+function autoMapSlots(meta: GcodeFileMeta | null, printer: Printer): Record<number, number> {
+  const targets = printerMaterialSlots(printer);
+  const usedTargets = new Set<number>();
+  const map: Record<number, number> = {};
+
+  for (const sourceSlot of usedSlotIndices(meta)) {
+    const fileColor = normalizeSlotColor(meta?.colors?.[sourceSlot]);
+    const fileType = meta?.types?.[sourceSlot]?.toLowerCase();
+    const sameColor = fileColor
+      ? targets.filter(t => !usedTargets.has(t.slot) && normalizeSlotColor(t.color) === fileColor)
+      : [];
+    const exact = sameColor.find(t => !fileType || !t.type || t.type.toLowerCase() === fileType) ?? sameColor[0];
+    const fallback = targets.find(t => t.slot === sourceSlot && !usedTargets.has(t.slot))
+      ?? targets.find(t => !usedTargets.has(t.slot) && fileType && t.type?.toLowerCase() === fileType);
+    const picked = exact ?? fallback;
+    map[sourceSlot] = picked?.slot ?? sourceSlot;
+    if (picked) usedTargets.add(picked.slot);
+  }
+
+  return map;
+}
+
 function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
   if (!meta) return [];
   return usedSlotIndices(meta).map(i => {
     const fileColor = meta.colors?.[i] ?? null, fileType = meta.types?.[i] ?? null;
-    const ps = printer.loaded_filaments.find(s => s.slot === i);
+    const mappedSlot = autoMapSlots(meta, printer)[i] ?? i;
+    const ps = printerMaterialSlots(printer).find(s => s.slot === mappedSlot);
     const match: SlotMatch = !ps ? "missing" : (!fileType || !ps.type || fileType.toLowerCase() === ps.type.toLowerCase()) ? "ok" : "type_mismatch";
-    return { slot: i + 1, fileColor, fileType, match, printerColor: ps?.color ?? null, printerType: ps?.type ?? null };
+    return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor: ps?.color ?? null, printerType: ps?.type ?? null };
   });
 }
 function compatBadge(slots: ReturnType<typeof checkSlots>) {
@@ -124,11 +175,16 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
   const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
   const isMoonraker = !!selected?.moonraker_url;
 
+  useEffect(() => {
+    if (!selected) return;
+    setSlotMap(autoMapSlots(file.filament_meta, selected));
+    setCalibrateSlots(new Set(usedSlots));
+  }, [file.filament_meta, selected?.id, usedSlots]);
+
   function selectPrinter(id: number) {
     setSelectedId(id); setResult(null);
-    const m: Record<number, number> = {};
-    usedSlots.forEach(i => (m[i] = i));
-    setSlotMap(m);
+    const printer = sendable.find(p => p.id === id);
+    setSlotMap(printer ? autoMapSlots(file.filament_meta, printer) : {});
     setCalibrateSlots(new Set(usedSlots));
   }
 
@@ -161,9 +217,9 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
     type: file.filament_meta?.types?.[i] ?? null,
     grams: file.filament_meta?.used_g?.[i] ?? null,
   }));
-  const targetSlotOptions = selected?.loaded_filaments.length
-    ? selected.loaded_filaments
-    : Array.from({ length: 4 }, (_, slot) => ({ slot, type: null, color: null }));
+  const targetSlotOptions = selected && printerMaterialSlots(selected).length > 0
+    ? printerMaterialSlots(selected)
+    : Array.from({ length: 4 }, (_, slot) => ({ slot, type: null, color: null, colorName: null }));
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-3 sm:p-6">
@@ -260,7 +316,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                         >
                           {targetSlotOptions.map(lf => (
                             <option key={lf.slot} value={lf.slot}>
-                              Принтер слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}
+                              Принтер слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
                             </option>
                           ))}
                         </select>
@@ -348,7 +404,7 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
                                   <div className="flex items-center gap-2">
                                     <span className="h-7 w-7 shrink-0 rounded-full border border-black/10" style={{ background: s.printerColor ?? s.fileColor ?? "var(--surface-hi)" }} />
                                     <div className="min-w-0">
-                                      <p className="truncate text-xs font-medium text-[var(--text)]">Слот {s.slot}</p>
+                                      <p className="truncate text-xs font-medium text-[var(--text)]">Слот {s.slot} → {s.targetSlot}</p>
                                       <p className="truncate text-[11px] text-[var(--text-muted)]">{s.printerType ?? "порожній"}</p>
                                     </div>
                                   </div>
