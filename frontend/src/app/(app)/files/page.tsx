@@ -669,6 +669,7 @@ export default function FilesPage() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight") ? Number(searchParams.get("highlight")) : null;
   const defaultPrinterId = searchParams.get("printer") ? Number(searchParams.get("printer")) : null;
+  const slicerLatest = searchParams.get("slicer") === "latest";
 
   const [files, setFiles] = useState<GcodeFile[]>([]);
   const [folders, setFolders] = useState<GcodeFolder[]>([]);
@@ -692,6 +693,8 @@ export default function FilesPage() {
   const [renamingFolder, setRenamingFolder] = useState<GcodeFolder | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoOpenAttemptsRef = useRef(0);
+  const autoOpenKeyRef = useRef("");
 
   // ── Load ──
   const load = useCallback(async () => {
@@ -708,12 +711,32 @@ export default function FilesPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-open send modal from ?highlight=
+  // Auto-open send modal from slicer redirects. The upload can be visible to
+  // the UI a moment after Orca opens Device tab, so retry briefly instead of
+  // requiring a manual page refresh.
   useEffect(() => {
-    if (!highlightId || loading || sendFile) return;
-    const f = files.find(f => f.id === highlightId);
-    if (f) setSendFile(f);
-  }, [highlightId, loading, files]); // eslint-disable-line react-hooks/exhaustive-deps
+    const key = highlightId ? `highlight:${highlightId}` : slicerLatest ? "latest" : "";
+    if (autoOpenKeyRef.current !== key) {
+      autoOpenKeyRef.current = key;
+      autoOpenAttemptsRef.current = 0;
+    }
+    if (!key || loading || sendFile) return;
+
+    const target = highlightId
+      ? files.find(f => f.id === highlightId) ?? null
+      : [...files].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0] ?? null;
+
+    if (target) {
+      setCurrentFolderId(target.folder_id ?? null);
+      setSendFile(target);
+      return;
+    }
+
+    if (autoOpenAttemptsRef.current >= 15) return;
+    autoOpenAttemptsRef.current += 1;
+    const t = window.setTimeout(() => { void load(); }, 1000);
+    return () => window.clearTimeout(t);
+  }, [highlightId, slicerLatest, loading, files, sendFile, load]);
 
   // ── Upload ──
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
