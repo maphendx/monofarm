@@ -3,6 +3,8 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { setToken } from "@/lib/api";
+
 function WebviewAuthInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -12,7 +14,7 @@ function WebviewAuthInner() {
     const next = searchParams.get("next") ?? "/files";
 
     if (token) {
-      localStorage.setItem("access_token", token);
+      setToken(token);
     }
 
     router.replace(next);

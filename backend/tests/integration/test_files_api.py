@@ -91,6 +91,28 @@ def test_upload_handles_double_extension_gcode_3mf(client, auth_headers, cleanup
     assert body["filament_meta"]["types"] == ["PLA", "PETG"]
 
 
+def test_moonraker_upload_shim_stores_file_with_bearer_token(client, auth_headers, cleanup_uploads):
+    resp = client.post(
+        "/server/files/upload",
+        headers=auth_headers,
+        data={"root": "gcodes", "print": "true"},
+        files={"file": ("orca_part.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["item"]["path"] == "orca_part.gcode"
+    assert body["item"]["root"] == "gcodes"
+    assert body["print_started"] is False
+    assert body["action"] == "create_file"
+    assert body["monofarm"]["file_id"] > 0
+    assert body["monofarm"]["print_requested"] is True
+    assert "/auth/webview" in body["url"]
+    assert resp.headers["location"].endswith("/orca_part.gcode")
+
+    files = client.get("/api/files", headers=auth_headers).json()
+    assert any(f["original_name"] == "orca_part.gcode" for f in files)
+
+
 def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads, admin_user):
     from app.services import storage as storage_svc
     up = client.post(

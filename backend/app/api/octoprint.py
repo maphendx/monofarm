@@ -31,7 +31,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -52,6 +52,7 @@ MAX_FILE_BYTES = 500 * 1024 * 1024
 
 router = APIRouter(prefix="/api", tags=["octoprint"])
 orca_router = APIRouter(tags=["octoprint"])
+moonraker_router = APIRouter(tags=["moonraker-compat"])
 
 
 # ── Auth helper ───────────────────────────────────────────────────────────────
@@ -83,6 +84,19 @@ def _resolve_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User inactive")
     return user
+
+
+def _resolve_slicer_user(
+    x_api_key: str | None,
+    authorization: str | None,
+    db: Session,
+) -> User:
+    """Accept OrcaSlicer auth from either OctoPrint or Klipper host modes."""
+    token = x_api_key
+    if not token and authorization:
+        scheme, _, value = authorization.partition(" ")
+        token = value if scheme.lower() == "bearer" else authorization
+    return _resolve_user(token, db)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -271,6 +285,28 @@ def _build_response(row: GcodeFile, user: User) -> dict:
     }
 
 
+def _moonraker_upload_response(row: GcodeFile, user: User, print_requested: bool) -> dict:
+    """Build a Moonraker-shaped upload response for Orca Klipper host mode."""
+    response = _build_response(row, user)
+    return {
+        "item": {
+            "path": row.original_name,
+            "root": "gcodes",
+            "size": row.size_bytes,
+            "permissions": "rw",
+        },
+        "print_started": False,
+        "print_queued": False,
+        "action": "create_file",
+        "monofarm": {
+            "file_id": row.id,
+            "print_requested": print_requested,
+            "url": response["url"],
+        },
+        "url": response["url"],
+    }
+
+
 # ── Generic OctoPrint endpoints (/api/...) ────────────────────────────────────
 
 @router.get("/version")
@@ -349,3 +385,62 @@ async def orca_upload(
                 pass  # file is stored — don't fail the upload response
 
     return _build_response(row, user)
+
+
+# ── Moonraker-compatible endpoints for Orca Klipper host mode ─────────────────
+# Configure OrcaSlicer: Host Type = Klipper/Moonraker, URL = https://api...
+
+@moonraker_router.get("/server/info")
+def moonraker_server_info() -> dict:
+    return {
+        "result": {
+            "klippy_connected": True,
+            "klippy_state": "ready",
+            "components": ["server", "file_manager", "octoprint_compat"],
+            "failed_components": [],
+            "registered_directories": ["gcodes"],
+            "warnings": [],
+            "websocket_count": 0,
+            "moonraker_version": "monofarm-shim",
+            "api_version": [1, 0, 0],
+            "api_version_string": "1.0.0",
+        }
+    }
+
+
+@moonraker_router.get("/printer/info")
+def moonraker_printer_info(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {"result": {"state": "ready", "state_message": "Monofarm upload shim ready"}}
+
+
+@moonraker_router.post("/server/files/upload", status_code=status.HTTP_201_CREATED)
+async def moonraker_upload(
+    response: Response,
+    file: UploadFile,
+    root: str = Form(default="gcodes"),
+    path: str | None = Form(default=None),
+    print: str | None = Form(default=None),
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Receive Orca Klipper/Moonraker uploads and store them in Monofarm.
+
+    Orca's Klipper host mode posts here instead of OctoPrint's /api/files/local.
+    Monofarm still stores the file in the library; choosing the target printer
+    and slot remap happens in the Monofarm UI.
+    """
+    if root != "gcodes":
+        raise HTTPException(status_code=400, detail="Only gcodes root is supported")
+    _ = path
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    row = await _store_file(file, user.organization_id, db, uploaded_by_id=user.id)
+    from urllib.parse import quote
+
+    response.headers["Location"] = f"/server/files/gcodes/{quote(row.original_name)}"
+    return _moonraker_upload_response(row, user, print_requested=print == "true")

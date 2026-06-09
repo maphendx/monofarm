@@ -25,7 +25,7 @@ from app.api.filament_labels import router as filament_labels_router
 from app.api.filaments import router as filaments_router
 from app.api.files import router as files_router
 from app.api.files import folders_router as folders_router
-from app.api.octoprint import orca_router, router as octoprint_router
+from app.api.octoprint import moonraker_router, orca_router, router as octoprint_router
 from app.api.orgs import router as orgs_router
 from app.api.plan import router as plan_router
 from app.api.printer_groups import router as printer_groups_router
@@ -154,6 +154,7 @@ app.include_router(files_router, prefix="/api")
 app.include_router(folders_router, prefix="/api")
 app.include_router(octoprint_router)  # no prefix — OctoPrint paths are already /api/...
 app.include_router(orca_router)       # printer-scoped: /orca/{printer_id}/api/...
+app.include_router(moonraker_router)  # Moonraker shim: /server/files/upload
 app.include_router(plan_router, prefix="/api")
 app.include_router(agent_router)      # WebSocket + status endpoint
 app.include_router(agent_tg_router)   # Telegram bot data endpoints for local agent
