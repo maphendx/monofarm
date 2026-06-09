@@ -467,8 +467,13 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
 
     now = time.monotonic()
     cached = _status_cache.get(moonraker_url)
-    if cached and now - cached[0] < STATUS_CACHE_TTL:
-        return cached[1]
+    if isinstance(cached, tuple) and len(cached) == 2:
+        cached_at, cached_status = cached
+        if isinstance(cached_at, (int, float)) and isinstance(cached_status, dict):
+            if now - cached_at < STATUS_CACHE_TTL:
+                return cached_status
+    elif isinstance(cached, dict):
+        return cached
 
     base = _api_base(moonraker_url)
     try:
