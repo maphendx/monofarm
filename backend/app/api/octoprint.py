@@ -31,7 +31,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -416,6 +416,108 @@ def moonraker_printer_info(
 ) -> dict:
     _resolve_slicer_user(x_api_key, authorization, db)
     return {"result": {"state": "ready", "state_message": "Monofarm upload shim ready"}}
+
+
+@moonraker_router.get("/access/oneshot_token")
+def moonraker_oneshot_token(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {"result": "monofarm"}
+
+
+@moonraker_router.get("/server/files/roots")
+def moonraker_file_roots(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {"result": [{"name": "gcodes", "path": "gcodes", "permissions": "rw"}]}
+
+
+@moonraker_router.get("/server/files/list")
+def moonraker_file_list(
+    root: str = "gcodes",
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    if root != "gcodes":
+        raise HTTPException(status_code=400, detail="Only gcodes root is supported")
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {"result": []}
+
+
+@moonraker_router.get("/server/webcams/list")
+def moonraker_webcams_list(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {"result": {"webcams": []}}
+
+
+@moonraker_router.get("/printer/objects/list")
+def moonraker_objects_list(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    return {
+        "result": {
+            "objects": [
+                "webhooks",
+                "print_stats",
+                "virtual_sdcard",
+                "display_status",
+                "toolhead",
+                "extruder",
+                "heater_bed",
+                "pause_resume",
+                "idle_timeout",
+            ]
+        }
+    }
+
+
+def _moonraker_object_status() -> dict:
+    return {
+        "webhooks": {"state": "ready", "state_message": "Monofarm upload shim ready"},
+        "print_stats": {
+            "state": "standby",
+            "filename": "",
+            "message": "",
+            "print_duration": 0,
+            "total_duration": 0,
+            "filament_used": 0,
+        },
+        "virtual_sdcard": {"progress": 0, "is_active": False, "file_position": 0},
+        "display_status": {"progress": 0, "message": None},
+        "toolhead": {"homed_axes": "", "position": [0, 0, 0, 0], "estimated_print_time": 0},
+        "extruder": {"temperature": 0, "target": 0, "power": 0},
+        "heater_bed": {"temperature": 0, "target": 0, "power": 0},
+        "pause_resume": {"is_paused": False},
+        "idle_timeout": {"state": "Ready", "printing_time": 0},
+    }
+
+
+@moonraker_router.get("/printer/objects/query")
+def moonraker_objects_query(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict:
+    _resolve_slicer_user(x_api_key, authorization, db)
+    requested = set(request.query_params.keys())
+    all_status = _moonraker_object_status()
+    status_out = {k: v for k, v in all_status.items() if not requested or k in requested}
+    return {"result": {"eventtime": 0, "status": status_out}}
 
 
 @moonraker_router.post("/server/files/upload", status_code=status.HTTP_201_CREATED)
