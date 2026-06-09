@@ -30,7 +30,7 @@ import logging
 import sys
 from pathlib import Path
 
-AGENT_VERSION = "0.4.8"
+AGENT_VERSION = "0.5.0"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -154,6 +154,124 @@ async def _tg_reconfigure(new_token: str | None) -> None:
                 await _tg_start(new_token)
             except Exception as exc:
                 log.error("Failed to start Telegram bot: %s", exc)
+
+
+# ── Moonraker WebSocket subscriptions ────────────────────────────────────────
+
+# URL → asyncio.Task mapping for active Moonraker WS subscription loops
+_moonraker_sub_tasks: dict[str, "asyncio.Task[None]"] = {}
+
+# Objects to subscribe to — mirrors backend LIVE_STATUS_OBJECTS
+_MOONRAKER_OBJECTS = {
+    "print_stats": None,
+    "display_status": None,
+    "virtual_sdcard": None,
+    "extruder": None,
+    "heater_bed": None,
+}
+
+
+async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
+    """Maintain a persistent Moonraker WS subscription and push STATUS_PUSH to cloud.
+
+    Moonraker sends the full state in the subscribe response, then incremental
+    diffs via notify_status_update. We merge diffs into a full-state dict and
+    always forward the complete snapshot so the backend can parse it directly.
+    """
+    import urllib.parse as _urlparse
+
+    parsed = _urlparse.urlparse(moonraker_url)
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 7125
+    ws_url = f"ws://{host}:{port}/websocket"
+
+    subscribe_msg = json.dumps({
+        "jsonrpc": "2.0",
+        "method": "printer.objects.subscribe",
+        "params": {"objects": _MOONRAKER_OBJECTS},
+        "id": 1,
+    })
+
+    while True:
+        full_state: dict = {}
+        try:
+            async with websockets.connect(
+                ws_url, ping_interval=20, ping_timeout=10, open_timeout=10
+            ) as mr_ws:
+                log.info("MOONRAKER_SUBSCRIBE: connected %s", ws_url)
+                await mr_ws.send(subscribe_msg)
+                async for message in mr_ws:
+                    try:
+                        data = json.loads(message)
+                    except Exception:
+                        continue
+
+                    # Subscribe result — Moonraker returns full current state
+                    if data.get("id") == 1 and "result" in data:
+                        full_state = (data["result"] or {}).get("status") or {}
+
+                    # Incremental diff — merge into accumulated full state
+                    elif data.get("method") == "notify_status_update":
+                        params = data.get("params", [])
+                        if params and isinstance(params[0], dict):
+                            for key, val in params[0].items():
+                                existing = full_state.get(key)
+                                if isinstance(existing, dict) and isinstance(val, dict):
+                                    full_state[key] = {**existing, **val}
+                                else:
+                                    full_state[key] = val
+                    else:
+                        continue
+
+                    if not full_state:
+                        continue
+                    try:
+                        await cloud_ws.send(json.dumps({
+                            "type": "STATUS_PUSH",
+                            "url": moonraker_url,
+                            "status": full_state,
+                        }))
+                    except Exception as e:
+                        log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
+                        return  # cloud WS gone — task will be cancelled on reconnect
+
+        except asyncio.CancelledError:
+            log.debug("MOONRAKER_SUBSCRIBE: task cancelled for %s", moonraker_url)
+            return
+        except (OSError, websockets.exceptions.WebSocketException) as e:
+            log.debug("MOONRAKER_SUBSCRIBE: %s disconnected (%s) — retrying in 5s", moonraker_url, e)
+        except Exception as e:
+            log.warning("MOONRAKER_SUBSCRIBE: unexpected error for %s: %s — retrying", moonraker_url, e)
+
+        await asyncio.sleep(5)
+
+
+async def handle_moonraker_subscribe(cloud_ws, req: dict) -> None:
+    """Start (or restart) a Moonraker WS subscription for the given printer URL."""
+    req_id = req.get("id")
+    url = req.get("url", "").rstrip("/")
+    if not url:
+        await cloud_ws.send(json.dumps({
+            "id": req_id, "status": 400, "body": None, "error": "missing url",
+        }))
+        return
+
+    existing = _moonraker_sub_tasks.pop(url, None)
+    if existing and not existing.done():
+        existing.cancel()
+
+    task = asyncio.create_task(_moonraker_ws_loop(cloud_ws, url))
+    _moonraker_sub_tasks[url] = task
+
+    await cloud_ws.send(json.dumps({
+        "id": req_id, "status": 200, "body": {"ok": True}, "error": None,
+    }))
+
+
+def _cancel_all_subscriptions() -> None:
+    for task in list(_moonraker_sub_tasks.values()):
+        task.cancel()
+    _moonraker_sub_tasks.clear()
 
 
 def _load_config() -> dict[str, str]:
@@ -612,6 +730,29 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
     await ws.send(json.dumps(result))
 
 
+async def handle_print_zpl(ws, req: dict) -> None:
+    """Send raw ZPL to a network printer via TCP port 9100 (or custom port)."""
+    req_id = req.get("id")
+    body   = req.get("body") or {}
+    ip     = body.get("ip", "")
+    port   = int(body.get("port", 9100))
+    zpl    = body.get("zpl", "")
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(ip, port), timeout=5
+        )
+        writer.write(zpl.encode())
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+        result = {"id": req_id, "status": 200, "body": {"ok": True}, "error": None}
+        log.info("PRINT_ZPL: sent %d bytes to %s:%s", len(zpl), ip, port)
+    except Exception as e:
+        log.warning("PRINT_ZPL error %s:%s: %s", ip, port, e)
+        result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
+    await ws.send(json.dumps(result))
+
+
 async def _pair_flow(server: str) -> str:
     """Open browser to monofarm Settings and wait for the user to click 'Connect Agent'.
     The frontend sends the JWT to our localhost callback; we save it and return it.
@@ -710,50 +851,58 @@ async def run(server: str, token: str) -> None:
                 except Exception as exc:
                     log.debug("Could not fetch tg-config: %s", exc)
 
-                async for message in ws:
-                    try:
-                        req = json.loads(message)
-                    except json.JSONDecodeError:
-                        log.warning("Received invalid JSON from server")
-                        continue
+                try:
+                    async for message in ws:
+                        try:
+                            req = json.loads(message)
+                        except json.JSONDecodeError:
+                            log.warning("Received invalid JSON from server")
+                            continue
 
-                    msg_type = req.get("type", "")
-                    if msg_type == "TG_CONFIG":
-                        asyncio.create_task(_tg_reconfigure(req.get("token") or None))
-                        continue
-                    if msg_type == "TG_SEND":
-                        if _tg_app:
-                            async def _send(r=req) -> None:
-                                try:
-                                    await _tg_app.bot.send_message(
-                                        chat_id=r["chat_id"],
-                                        text=r["text"],
-                                        parse_mode=r.get("parse_mode"),
-                                    )
-                                except Exception as exc:
-                                    log.warning("TG_SEND failed: %s", exc)
-                            asyncio.create_task(_send())
+                        msg_type = req.get("type", "")
+                        if msg_type == "TG_CONFIG":
+                            asyncio.create_task(_tg_reconfigure(req.get("token") or None))
+                            continue
+                        if msg_type == "TG_SEND":
+                            if _tg_app:
+                                async def _send(r=req) -> None:
+                                    try:
+                                        await _tg_app.bot.send_message(
+                                            chat_id=r["chat_id"],
+                                            text=r["text"],
+                                            parse_mode=r.get("parse_mode"),
+                                        )
+                                    except Exception as exc:
+                                        log.warning("TG_SEND failed: %s", exc)
+                                asyncio.create_task(_send())
+                            else:
+                                log.warning("TG_SEND received but bot not running")
+                            continue
+
+                        method = req.get("method", "GET").upper()
+                        if method == "MOONRAKER_SUBSCRIBE":
+                            asyncio.create_task(handle_moonraker_subscribe(ws, req))
+                        elif method == "BAMBU_CAMERA":
+                            asyncio.create_task(handle_bambu_camera(ws, req))
+                        elif method == "FFMPEG_STREAM":
+                            asyncio.create_task(handle_ffmpeg_stream(ws, req))
+                        elif method == "DISCOVER_BAMBU":
+                            asyncio.create_task(handle_discover_bambu(ws, req))
+                        elif method == "DISCOVER_MOONRAKER":
+                            asyncio.create_task(handle_discover_moonraker(ws, req))
+                        elif method == "BAMBU_UPLOAD":
+                            asyncio.create_task(handle_bambu_upload(ws, req))
+                        elif method == "MOONRAKER_UPLOAD":
+                            asyncio.create_task(handle_moonraker_upload(ws, req))
+                        elif method == "PRINT_ZPL":
+                            asyncio.create_task(handle_print_zpl(ws, req))
+                        elif method == "STREAM":
+                            asyncio.create_task(handle_stream(ws, req))
                         else:
-                            log.warning("TG_SEND received but bot not running")
-                        continue
-
-                    method = req.get("method", "GET").upper()
-                    if method == "BAMBU_CAMERA":
-                        asyncio.create_task(handle_bambu_camera(ws, req))
-                    elif method == "FFMPEG_STREAM":
-                        asyncio.create_task(handle_ffmpeg_stream(ws, req))
-                    elif method == "DISCOVER_BAMBU":
-                        asyncio.create_task(handle_discover_bambu(ws, req))
-                    elif method == "DISCOVER_MOONRAKER":
-                        asyncio.create_task(handle_discover_moonraker(ws, req))
-                    elif method == "BAMBU_UPLOAD":
-                        asyncio.create_task(handle_bambu_upload(ws, req))
-                    elif method == "MOONRAKER_UPLOAD":
-                        asyncio.create_task(handle_moonraker_upload(ws, req))
-                    elif method == "STREAM":
-                        asyncio.create_task(handle_stream(ws, req))
-                    else:
-                        asyncio.create_task(handle_request(ws, req))
+                            asyncio.create_task(handle_request(ws, req))
+                finally:
+                    # Cloud WS dropped — cancel all Moonraker WS subscriptions
+                    _cancel_all_subscriptions()
 
         except websockets.exceptions.InvalidStatusCode as e:
             if e.status_code in (4001, 4002):

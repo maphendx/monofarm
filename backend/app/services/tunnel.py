@@ -80,6 +80,38 @@ async def register(org_id: int, ws: WebSocket) -> None:
         log.info("Agent reconnected for org %s — replacing old connection", org_id)
     _tunnels[org_id] = ws
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
+    asyncio.create_task(_subscribe_org_printers(org_id))
+
+
+async def _subscribe_org_printers(org_id: int) -> None:
+    """Send MOONRAKER_SUBSCRIBE for every active Moonraker printer in the org."""
+    await asyncio.sleep(0.5)  # let the agent finish its own setup first
+    ws = _tunnels.get(org_id)
+    if not ws:
+        return
+    from app.core.db import SessionLocal
+    from app.models.printer import Printer
+    with SessionLocal() as db:
+        printers = (
+            db.query(Printer)
+            .filter_by(organization_id=org_id, is_active=True)
+            .filter(Printer.moonraker_url.isnot(None))
+            .all()
+        )
+    for p in printers:
+        ws = _tunnels.get(org_id)
+        if not ws:
+            break
+        try:
+            await ws.send_text(json.dumps({
+                "id": str(uuid.uuid4()),
+                "method": "MOONRAKER_SUBSCRIBE",
+                "url": p.moonraker_url,
+            }))
+            log.debug("Sent MOONRAKER_SUBSCRIBE for %s (org %s)", p.moonraker_url, org_id)
+        except Exception as e:
+            log.debug("_subscribe_org_printers: send failed for %s: %s", p.moonraker_url, e)
+            break
 
 
 async def unregister(org_id: int) -> None:
@@ -140,9 +172,30 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     await send_telegram(org_id_tunnel, int(chat_id), reply_text, parse_mode)
 
 
+def _handle_status_push(data: dict) -> None:
+    """Cache a Moonraker status pushed by the agent's WS subscription."""
+    url = data.get("url") or ""
+    raw = data.get("status") or {}
+    if not url or not raw:
+        return
+    from app.services.moonraker import _parse_moonraker_status, _status_cache, STATUS_CACHE_TTL
+    from app.services.cache import cache_set
+    status = _parse_moonraker_status(raw)
+    # _status_cache is shared with moonraker module; tunnel path expects (timestamp, status)
+    _status_cache[url] = (time.monotonic(), status)
+    # Redis path used by moonraker.get_live_status (fresh + stale keys)
+    cache_set(f"mr:status:{url}", status, int(STATUS_CACHE_TTL))
+    cache_set(f"mr:stale:{url}", status, int(STATUS_CACHE_TTL * 10))
+    log.debug("STATUS_PUSH: cached %s state=%s", url, status.get("state"))
+
+
 async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
     msg_type = data.get("type")
+
+    if msg_type == "STATUS_PUSH":
+        _handle_status_push(data)
+        return
 
     if msg_type == "TG_BOT_USERNAME":
         await _handle_tg_bot_username({**data, "org_id": data.get("org_id") or org_id})
