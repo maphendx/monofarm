@@ -6,8 +6,6 @@ From here, files can be pushed to any Moonraker printer via /send/{printer_id}.
 """
 from __future__ import annotations
 
-import asyncio
-import tempfile
 import time
 import uuid
 from collections import defaultdict, deque
@@ -32,8 +30,8 @@ from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
 from app.services import bambu_dispatch
 from app.services import moonraker as mr
+from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
-from app.services import tunnel as _tunnel
 from app.services.gcode_meta import parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
 
@@ -558,76 +556,19 @@ async def send_to_printer(
                 detail=f"Принтер '{printer.name}' не має Moonraker URL",
             )
 
-        has_remap = any(k != v for k, v in payload.slot_map.items())
-        calibrate_set = (
-            set(payload.calibrate_slots) if payload.calibrate_slots is not None else None
-        )
-
-        meta = row.filament_meta or {}
-        used_g = meta.get("used_g") or []
-        slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 0)
-        used_set: set[int] | None = None
-        if used_g and slot_count:
-            candidate = {i for i in range(slot_count) if i >= len(used_g) or used_g[i] > 0}
-            if 0 < len(candidate) < slot_count:
-                used_set = candidate
-
-        has_options = (
-            payload.auto_bed_leveling is not None
-            or payload.timelapse is not None
-            or payload.ai_detection is not None
-            or used_set is not None
-            or calibrate_set is not None
-        )
-
         try:
-            working: bytes | None = None
-            if has_options:
-                working = await asyncio.to_thread(
-                    mr.apply_print_options,
-                    src,
-                    payload.auto_bed_leveling,
-                    payload.timelapse,
-                    payload.ai_detection,
-                    used_set,
-                    calibrate_set,
-                )
-            if has_remap:
-                base = working if working is not None else src
-                working = await asyncio.to_thread(mr.remap_slots, base, payload.slot_map)
-
-            upload_bytes: bytes | None = working
-            if upload_bytes is None and _tunnel.has_tunnel(org.id):
-                upload_bytes = src.read_bytes()
-
-            if _tunnel.has_tunnel(org.id):
-                await _tunnel.send_moonraker_upload(
-                    org.id,
-                    printer.moonraker_url,
-                    row.original_name,
-                    upload_bytes,  # type: ignore[arg-type]
-                    start_print=True,
-                )
-            elif working is not None:
-                with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
-                    tmp.write(working)
-                    tmp_path = Path(tmp.name)
-                try:
-                    await mr.async_upload_gcode(
-                        printer.moonraker_url,
-                        tmp_path,
-                        row.original_name,
-                        start_print=True,
-                    )
-                finally:
-                    tmp_path.unlink(missing_ok=True)
-            else:
-                await mr.async_upload_gcode(
-                    printer.moonraker_url,
-                    src,
-                    row.original_name,
-                    start_print=True,
-                )
+            await moonraker_dispatch.send_file_to_moonraker(
+                org_id=org.id,
+                moonraker_url=printer.moonraker_url,
+                src=src,
+                file_name=row.original_name,
+                filament_meta=row.filament_meta or {},
+                slot_map=payload.slot_map,
+                auto_bed_leveling=payload.auto_bed_leveling,
+                timelapse=payload.timelapse,
+                ai_detection=payload.ai_detection,
+                calibrate_slots=payload.calibrate_slots,
+            )
             return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
         except mr.MoonrakerError as e:
             return SendResult(ok=False, printer_name=printer.name, message=str(e))

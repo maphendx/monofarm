@@ -49,6 +49,8 @@ _ALLOWED_TRANSITIONS: dict[BambuCloudJobStatus, set[BambuCloudJobStatus]] = {
     },
     BambuCloudJobStatus.uploading: {
         BambuCloudJobStatus.task_creating,
+        # Moonraker provider: upload+start is one step — no cloud task stage.
+        BambuCloudJobStatus.printing,
         BambuCloudJobStatus.failed,
         BambuCloudJobStatus.cancelled,
         BambuCloudJobStatus.lost,

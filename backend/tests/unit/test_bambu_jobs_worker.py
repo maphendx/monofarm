@@ -79,6 +79,22 @@ def test_run_bambu_cloud_job_dispatches_queued_job_to_task_created():
     assert result.status == BambuCloudJobStatus.task_created
 
 
+def test_run_bambu_cloud_job_skips_job_without_registered_dispatcher():
+    job = _job(dispatch_mode="moonraker")
+    jobs = {job.id: job}
+
+    result = bambu_jobs.run_bambu_cloud_job(job.id, session_factory=_factory(jobs))
+
+    assert result is None
+    assert job.status == BambuCloudJobStatus.queued
+
+
+def test_dispatcher_registry_routes_cloud_jobs_to_bambu_dispatch():
+    from app.services import bambu_dispatch
+
+    assert bambu_jobs.DISPATCHERS["cloud"] is bambu_dispatch.dispatch_cloud_job
+
+
 def test_run_bambu_cloud_job_does_not_dispatch_when_printer_lock_is_held():
     job = _job()
     jobs = {job.id: job}

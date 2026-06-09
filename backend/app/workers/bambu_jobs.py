@@ -52,6 +52,14 @@ _org_semaphores_guard = threading.Lock()
 
 DispatchFn = Callable[[int], BambuCloudJob]
 
+# Provider dispatchers keyed by BambuCloudJob.dispatch_mode. The poller only
+# picks "cloud" jobs — other providers (Pass 2: "moonraker") dispatch in the
+# web process, where the agent tunnel lives, and are listed here only once
+# they have a worker-safe dispatch path.
+DISPATCHERS: dict[str, DispatchFn] = {
+    "cloud": bambu_dispatch.dispatch_cloud_job,
+}
+
 
 def _printer_lock(printer_id: int) -> threading.Lock:
     # TODO: replace/augment with Redis locks when multiple independent Bambu
@@ -90,6 +98,7 @@ def _select_candidate_job_ids(db: Session, limit: int = DEFAULT_BATCH_SIZE) -> l
         .filter(
             BambuCloudJob.status.in_(PICKUP_STATUSES),
             BambuCloudJob.retry_count < MAX_RETRY_COUNT,
+            BambuCloudJob.dispatch_mode.in_(tuple(DISPATCHERS)),
         )
         .order_by(BambuCloudJob.created_at.asc(), BambuCloudJob.id.asc())
         .limit(fetch_limit)
@@ -115,12 +124,13 @@ def _select_candidate_job_ids(db: Session, limit: int = DEFAULT_BATCH_SIZE) -> l
     return selected
 
 
-def _load_job_identity(job_id: int, session_factory=SessionLocal) -> tuple[int, int, BambuCloudJobStatus] | None:
+def _load_job_identity(job_id: int, session_factory=SessionLocal) -> tuple[int, int, BambuCloudJobStatus, str] | None:
     with session_factory() as db:
         job = db.get(BambuCloudJob, job_id)
         if job is None:
             return None
-        return job.printer_id, job.organization_id, job.status
+        # getattr default mirrors the column's server_default ("cloud").
+        return job.printer_id, job.organization_id, job.status, getattr(job, "dispatch_mode", "cloud")
 
 
 def _mark_worker_failure(job_id: int, exc: Exception, session_factory=SessionLocal) -> BambuCloudJob | None:
@@ -178,9 +188,14 @@ def run_bambu_cloud_job(
         log_event(log, logging.WARNING, "bambu.cloud.worker.job_missing", job_id=job_id)
         return None
 
-    printer_id, org_id, current_status = identity
+    printer_id, org_id, current_status, dispatch_mode = identity
     if current_status not in PICKUP_STATUSES:
         log_event(log, logging.INFO, "bambu.cloud.worker.skip", org_id=org_id, printer_id=printer_id, job_id=job_id, status=current_status.value)
+        return None
+
+    dispatch = dispatch_fn or DISPATCHERS.get(dispatch_mode)
+    if dispatch is None:
+        log_event(log, logging.INFO, "bambu.cloud.worker.skip", org_id=org_id, printer_id=printer_id, job_id=job_id, reason="no_dispatcher", dispatch_mode=dispatch_mode)
         return None
 
     with _running_guard:
@@ -208,7 +223,6 @@ def run_bambu_cloud_job(
     dispatch_start = time.monotonic()
     try:
         log_event(log, logging.INFO, "bambu.cloud.worker.dispatch_start", org_id=org_id, printer_id=printer_id, job_id=job_id)
-        dispatch = dispatch_fn or bambu_dispatch.dispatch_cloud_job
         dispatch(job_id)
         job = _bump_retry_count_if_retryable(job_id, session_factory=session_factory)
         if job is not None:
