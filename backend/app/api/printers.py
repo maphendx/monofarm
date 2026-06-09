@@ -400,7 +400,22 @@ async def get_printer(
         except Exception as e:
             log.debug("Printer detail live status timed out printer=%s: %s", row.id, e)
             live = moonraker.get_cached_live_status(row.moonraker_url) or {"state": "offline"}
-    return _to_dto(row, db, groups_by_id, prefetched_live=live)
+    from app.models.printer_slot import PrinterSlot as _PrinterSlot
+    slot_rows = db.query(_PrinterSlot).filter(_PrinterSlot.printer_id == row.id).all()
+    pslots = [{
+        "slot_index": s.slot_index,
+        "filament_id": s.filament_id,
+        "material": s.material,
+        "color": s.color,
+        "hex_color": s.hex_color,
+        "brand": s.brand,
+        "grams_at_load": s.grams_at_load,
+        "state": s.state.value,
+        "unit_index": s.unit_index,
+        "is_external": s.is_external,
+    } for s in slot_rows]
+
+    return _to_dto(row, db, groups_by_id, prefetched_live=live, prefetched_slots=pslots)
 
 
 @router.get("/{printer_id}/webcam/snapshot")
