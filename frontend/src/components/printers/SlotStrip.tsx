@@ -24,7 +24,7 @@ function groupByUnit(slots: PrinterSlotInfo[]): PrinterSlotInfo[][] {
   return groups;
 }
 
-function slotLabel(slot: PrinterSlotInfo, kind: PrinterKind): string {
+export function slotLabel(slot: PrinterSlotInfo, kind: PrinterKind): string {
   if (slot.is_external) return "External";
   if (kind === "bambu") {
     const unit = slot.unit_index ?? 0;
@@ -35,7 +35,7 @@ function slotLabel(slot: PrinterSlotInfo, kind: PrinterKind): string {
 
 // ── SlotPicker popup ──────────────────────────────────────────────────────────
 
-function SlotPicker({
+export function SlotPicker({
   slot,
   label,
   filaments,

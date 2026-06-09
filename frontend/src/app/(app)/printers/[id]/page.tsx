@@ -14,7 +14,7 @@ import {
 } from "@/lib/printerLabels";
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
-import { SlotStrip } from "@/components/printers/SlotStrip";
+import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1607,6 +1607,10 @@ function U1SlotsCard({
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
   const [slots, setSlots] = useState<PrinterSlotInfo[]>(printer.slots ?? []);
+  
+  const [openSlot, setOpenSlot] = useState<number | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [filaments, setFilaments] = useState<Filament[] | null>(null);
 
   useEffect(() => {
     setSlots(printer.slots ?? []);
@@ -1617,51 +1621,77 @@ function U1SlotsCard({
     onUpdated();
   }
 
+  async function handleOpen(e: React.MouseEvent<HTMLButtonElement>, slotIdx: number) {
+    if (!canEdit) return;
+    setAnchorRect(e.currentTarget.getBoundingClientRect());
+    setOpenSlot(slotIdx);
+    if (!filaments) {
+      try {
+        const data = await api<Filament[]>("/api/materials");
+        setFilaments(data);
+      } catch {
+        setFilaments([]);
+      }
+    }
+  }
+
   return (
-    <Card title="Пластик в принтері">
-      {slots.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-4 text-center">
-          <EmptySpoolIcon size={56} />
-          <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <SlotStrip
-            slots={slots}
-            kind={printer.kind}
-            editable={canEdit}
-            printerId={printer.id}
-            onSlotUpdated={handleSlotUpdated}
-          />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {slots.map((s) => {
-              const hex = colorHex(s.hex_color ?? s.color);
-              const empty = s.state === "empty" || !s.filament_id;
-              return (
-                <div
-                  key={s.slot_index}
-                  className="grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
-                >
-                  <SpoolIcon color={empty ? "#888888" : hex} size={32} />
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-medium text-[var(--text)]">
-                      {empty ? "—" : [s.material, s.color].filter(Boolean).join(" · ")}
-                    </div>
-                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
-                      <span>T{s.slot_index + 1}</span>
-                      {!empty && <span className="uppercase">· {s.hex_color ?? hex}</span>}
-                    </div>
-                    {!empty && s.brand && (
-                      <div className="truncate text-[10px] text-[var(--text-faint)]">{s.brand}</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+    <>
+      <Card title="Пластик в принтері">
+        {slots.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-4 text-center">
+            <EmptySpoolIcon size={56} />
+            <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {slots.map((s) => {
+                const hex = colorHex(s.hex_color ?? s.color);
+                const empty = s.state === "empty" || !s.filament_id;
+                return (
+                  <button
+                    key={s.slot_index}
+                    type="button"
+                    onClick={(e) => handleOpen(e, s.slot_index)}
+                    className={[
+                      "grid grid-cols-[auto_1fr] items-center gap-2.5 text-left rounded-lg border px-3 py-2.5 transition",
+                      canEdit ? "hover:border-[var(--border-focus)] cursor-pointer" : "cursor-default",
+                      "border-[var(--border)] bg-[var(--surface-2)]",
+                    ].join(" ")}
+                  >
+                    <SpoolIcon color={empty ? "#888888" : hex} size={32} />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-medium text-[var(--text)]">
+                        {empty ? "—" : [s.material, s.color].filter(Boolean).join(" · ")}
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
+                        <span>T{s.slot_index + 1}</span>
+                        {!empty && <span className="uppercase">· {s.hex_color ?? hex}</span>}
+                      </div>
+                      {!empty && s.brand && (
+                        <div className="truncate text-[10px] text-[var(--text-faint)]">{s.brand}</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Card>
+      {openSlot !== null && anchorRect && filaments !== null && (
+        <SlotPicker
+          slot={slots.find((s) => s.slot_index === openSlot)!}
+          label={slotLabel(slots.find((s) => s.slot_index === openSlot)!, printer.kind)}
+          filaments={filaments}
+          printerId={printer.id}
+          anchorRect={anchorRect}
+          onClose={() => setOpenSlot(null)}
+          onSaved={handleSlotUpdated}
+        />
       )}
-    </Card>
+    </>
   );
 }
 
