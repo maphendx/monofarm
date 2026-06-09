@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -103,6 +103,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _frontend_url(path: str = "") -> str:
+    base = settings.FARM_PUBLIC_URL.rstrip("/")
+    for prefix in ("https://api.", "http://api."):
+        if base.startswith(prefix):
+            base = base.replace(prefix, prefix[:prefix.index("api.")], 1)
+            break
+    return f"{base}{path}"
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    return RedirectResponse(_frontend_url("/files"))
 
 
 @app.get("/api/health")
