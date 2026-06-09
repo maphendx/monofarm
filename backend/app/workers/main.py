@@ -35,7 +35,9 @@ def _redis_cmd_relay() -> None:
 
     Web workers publish to 'bambu:cmd' when they have no local MQTT client.
     This thread picks them up and publishes to the real MQTT broker.
+    Reconnects automatically on socket timeouts or connection drops.
     """
+    import time as _time
     from app.services.cache import _r
     from app.services.bambu import _mqtt_clients, _dev_to_org
 
@@ -44,27 +46,35 @@ def _redis_cmd_relay() -> None:
         log.warning("Redis not configured — Bambu command relay disabled")
         return
 
-    pubsub = r.pubsub()
-    pubsub.subscribe("bambu:cmd")
-    log.info("Redis cmd relay: subscribed to bambu:cmd")
-
-    for message in pubsub.listen():
-        if message["type"] != "message":
-            continue
+    backoff = 1
+    while True:
         try:
-            cmd = json.loads(message["data"])
-            topic: str = cmd["topic"]
-            payload: str = cmd["payload"]
-            dev_id = topic.split("/")[1] if "/" in topic else ""
-            org_id = _dev_to_org.get(dev_id)
-            client = _mqtt_clients.get(org_id) if org_id is not None else None
-            if client is not None:
-                client.publish(topic, payload)
-                log.debug("Redis cmd relay: forwarded cmd to %s", topic)
-            else:
-                log.warning("Redis cmd relay: no MQTT client for dev_id=%s (org_id=%s)", dev_id, org_id)
+            pubsub = r.pubsub()
+            pubsub.subscribe("bambu:cmd")
+            log.info("Redis cmd relay: subscribed to bambu:cmd")
+            backoff = 1
+
+            for message in pubsub.listen():
+                if message["type"] != "message":
+                    continue
+                try:
+                    cmd = json.loads(message["data"])
+                    topic: str = cmd["topic"]
+                    payload: str = cmd["payload"]
+                    dev_id = topic.split("/")[1] if "/" in topic else ""
+                    org_id = _dev_to_org.get(dev_id)
+                    client = _mqtt_clients.get(org_id) if org_id is not None else None
+                    if client is not None:
+                        client.publish(topic, payload)
+                        log.debug("Redis cmd relay: forwarded cmd to %s", topic)
+                    else:
+                        log.warning("Redis cmd relay: no MQTT client for dev_id=%s (org_id=%s)", dev_id, org_id)
+                except Exception as e:
+                    log.warning("Redis cmd relay error: %s", e)
         except Exception as e:
-            log.warning("Redis cmd relay error: %s", e)
+            log.warning("Redis cmd relay: connection lost (%s), reconnecting in %ds", e, backoff)
+            _time.sleep(backoff)
+            backoff = min(backoff * 2, 30)
 
 
 async def _refresh_bambu_subscriptions() -> None:

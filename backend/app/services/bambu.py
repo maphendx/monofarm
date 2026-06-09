@@ -1079,7 +1079,6 @@ def cloud_upload_and_print(
         "modelId": model_id,
         "projectId": project_id,
         "title": filename,
-        "cover": cover_url,
         "deviceId": dev_id,
         "plateIndex": 1,
         "useAms": use_ams,
@@ -1089,6 +1088,8 @@ def cloud_upload_and_print(
         "layerInspect": False,
         "timelapse": False,
     }
+    if cover_url:
+        task_body["cover"] = cover_url
     if ams_mapping is not None:
         task_body["amsMapping"] = ams_mapping
 

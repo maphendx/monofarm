@@ -45,6 +45,13 @@ def renew() -> bool:
     if current and current.decode() == wid:
         r.expire(LOCK_KEY, LOCK_TTL)
         return True
+    if current is None:
+        # Key expired (Redis restart / TTL mismatch) — try to re-acquire rather
+        # than immediately yielding leadership to no one.
+        reacquired = r.set(LOCK_KEY, wid, nx=True, ex=LOCK_TTL)
+        if reacquired:
+            log.info("Scheduler leader lock re-acquired after expiry (%s)", wid)
+            return True
     log.warning("Scheduler leader lock lost (now held by %s)", current)
     return False
 
