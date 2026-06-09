@@ -30,6 +30,7 @@ from app.api.orgs import router as orgs_router
 from app.api.plan import router as plan_router
 from app.api.printer_groups import router as printer_groups_router
 from app.api.printers import router as printers_router
+from app.api.slots import router as slots_router
 from app.api.tasks import router as tasks_router
 from app.api.users import router as users_router, roles_router
 from app.api.warehouse import router as warehouse_router
@@ -143,6 +144,7 @@ app.include_router(roles_router, prefix="/api")
 app.include_router(api_keys_router, prefix="/api")
 app.include_router(printer_groups_router, prefix="/api")
 app.include_router(printers_router, prefix="/api")
+app.include_router(slots_router, prefix="/api")
 app.include_router(tasks_router, prefix="/api")
 app.include_router(farm_tasks_router, prefix="/api")
 app.include_router(filament_labels_router, prefix="/api")

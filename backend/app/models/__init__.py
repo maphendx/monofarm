@@ -9,6 +9,7 @@ from app.models.filament_color import FilamentColor
 from app.models.gcode_file import GcodeFile
 from app.models.gcode_folder import GcodeFolder
 from app.models.print_history import PrintHistory
+from app.models.printer_slot import PrinterSlot, SlotEvent, SlotState, SlotEventType
 from app.models.api_key import ApiKey
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 
@@ -35,4 +36,8 @@ __all__ = [
     "ApiKey",
     "BambuCloudJob",
     "BambuCloudJobStatus",
+    "PrinterSlot",
+    "SlotEvent",
+    "SlotState",
+    "SlotEventType",
 ]

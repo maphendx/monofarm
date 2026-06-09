@@ -118,6 +118,7 @@ def _to_dto(
     db: Session | None = None,
     groups_by_id: dict[int, str] | None = None,
     prefetched_live: dict | None = None,
+    prefetched_slots: list | None = None,
 ) -> PrinterOut:
     group_name: str | None = None
     if printer.group_id is not None:
@@ -126,6 +127,16 @@ def _to_dto(
         elif db is not None:
             g = db.get(PrinterGroup, printer.group_id)
             group_name = g.name if g else None
+
+    u1_slots: list[dict] | None = None
+    if printer.kind == PrinterKind.snapmaker_u1 and prefetched_slots is not None:
+        by_idx = {s["slot_index"]: s for s in prefetched_slots}
+        u1_slots = [
+            by_idx.get(i, {"slot_index": i, "state": "empty", "filament_id": None,
+                           "material": None, "color": None, "hex_color": None, "brand": None,
+                           "grams_at_load": None})
+            for i in range(4)
+        ]
 
     base = dict(
         id=printer.id,
@@ -139,6 +150,7 @@ def _to_dto(
         group_id=printer.group_id,
         group_name=group_name,
         loaded_filaments=printer.loaded_filaments or [],
+        slots=u1_slots,
     )
 
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
@@ -593,10 +605,29 @@ async def list_printers(
     else:
         live_by_url = {}
 
+    # Batch-fetch PrinterSlot rows for all U1 printers in one query
+    from app.models.printer_slot import PrinterSlot as _PrinterSlot
+    u1_ids = [r.id for r in rows if r.kind == PrinterKind.snapmaker_u1]
+    slots_by_printer: dict[int, list[dict]] = {}
+    if u1_ids:
+        slot_rows = db.query(_PrinterSlot).filter(_PrinterSlot.printer_id.in_(u1_ids)).all()
+        for s in slot_rows:
+            slots_by_printer.setdefault(s.printer_id, []).append({
+                "slot_index": s.slot_index,
+                "filament_id": s.filament_id,
+                "material": s.material,
+                "color": s.color,
+                "hex_color": s.hex_color,
+                "brand": s.brand,
+                "grams_at_load": s.grams_at_load,
+                "state": s.state.value,
+            })
+
     out: list[PrinterOut] = []
     for row in rows:
         prefetched = live_by_url.get(row.moonraker_url) if row.moonraker_url else None
-        out.append(_to_dto(row, db, groups_by_id, prefetched_live=prefetched))
+        pslots = slots_by_printer.get(row.id) if row.kind == PrinterKind.snapmaker_u1 else None
+        out.append(_to_dto(row, db, groups_by_id, prefetched_live=prefetched, prefetched_slots=pslots))
     return out
 
 

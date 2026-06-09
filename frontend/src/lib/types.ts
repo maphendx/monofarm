@@ -63,6 +63,19 @@ export interface FilamentSlot {
   unit_id: number | null;
 }
 
+export type SlotState = "empty" | "loaded" | "loading" | "unloading" | "error" | "runout";
+
+export interface PrinterSlotInfo {
+  slot_index: number;
+  filament_id: number | null;
+  material: string | null;
+  color: string | null;
+  hex_color: string | null;
+  brand: string | null;
+  grams_at_load: number | null;
+  state: SlotState;
+}
+
 export interface FilamentColor {
   id: number;
   name: string;
@@ -98,6 +111,7 @@ export interface Printer {
   current_filament_meta: FilamentMeta | null;
   error_msg: string | null;
   active_tray: number | null;
+  slots: PrinterSlotInfo[] | null;
 }
 
 export interface FilamentMeta {

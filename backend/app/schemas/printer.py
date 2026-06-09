@@ -95,5 +95,8 @@ class PrinterOut(BaseModel):
     # Multi-material system
     active_tray: int | None = None   # currently printing slot (0-based, 254=external)
 
+    # U1 physical slot state — None for non-U1 printers; always 4 entries for U1
+    slots: list[dict] | None = None
+
     class Config:
         from_attributes = True
