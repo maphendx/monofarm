@@ -1606,37 +1606,90 @@ function U1SlotsCard({
 }) {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
-  const [slots, setSlots] = useState<PrinterSlotInfo[]>(printer.slots ?? []);
   
-  const [openSlot, setOpenSlot] = useState<number | null>(null);
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-  const [filaments, setFilaments] = useState<Filament[] | null>(null);
+  const [slots, setSlots] = useState<PrinterSlotInfo[]>(printer.slots ?? []);
+  const [inventory, setInventory] = useState<Filament[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [paletteSlot, setPaletteSlot] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setSlots(printer.slots ?? []);
   }, [printer.slots]);
 
-  function handleSlotUpdated(updated: PrinterSlotInfo) {
-    setSlots((prev) => prev.map((s) => (s.slot_index === updated.slot_index ? updated : s)));
-    onUpdated();
+  useEffect(() => {
+    if (editing && inventory.length === 0) {
+      api<Filament[]>("/api/materials").then(setInventory).catch(() => {});
+    }
+  }, [editing, inventory.length]);
+
+  function updateDraft(slotIdx: number, patch: Partial<PrinterSlotInfo>) {
+    setSlots((prev) => prev.map((s) => (s.slot_index === slotIdx ? { ...s, ...patch } : s)));
   }
 
-  async function handleOpen(e: React.MouseEvent<HTMLButtonElement>, slotIdx: number) {
-    if (!canEdit) return;
-    setAnchorRect(e.currentTarget.getBoundingClientRect());
-    setOpenSlot(slotIdx);
-    if (!filaments) {
-      try {
-        const data = await api<Filament[]>("/api/materials");
-        setFilaments(data);
-      } catch {
-        setFilaments([]);
-      }
+  function pickFromInventory(slotIdx: number, filamentId: number | null) {
+    if (filamentId === null) { updateDraft(slotIdx, { filament_id: null }); return; }
+    const f = inventory.find((x) => x.id === filamentId);
+    if (!f) return;
+    updateDraft(slotIdx, {
+      filament_id: f.id,
+      color: f.hex_color ?? colorHex(f.color),
+      hex_color: f.hex_color ?? colorHex(f.color),
+      material: f.material,
+      brand: f.brand ?? null,
+    });
+  }
+
+  function clearSlot(slotIdx: number) {
+    updateDraft(slotIdx, {
+      filament_id: null,
+      material: null,
+      color: null,
+      hex_color: null,
+      brand: null,
+    });
+  }
+
+  async function save() {
+    setBusy(true); setErr(null); setSaved(false);
+    try {
+      await Promise.all(
+        slots.map((s) =>
+          api(`/api/printers/${printer.id}/slots/${s.slot_index}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              filament_id: s.filament_id,
+              material: s.material || null,
+              color: s.color || null,
+              hex_color: s.hex_color || null,
+              brand: s.brand || null,
+            }),
+          })
+        )
+      );
+      onUpdated();
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка збереження");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <>
+      {paletteSlot !== null && (
+        <ColorPaletteModal
+          slotLabel={`T${paletteSlot + 1}`}
+          onPick={(c) => updateDraft(paletteSlot, { hex_color: c.hex_color, color: c.name, filament_id: null })}
+          onClose={() => setPaletteSlot(null)}
+        />
+      )}
+
       <Card title="Пластик в принтері">
         {slots.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-4 text-center">
@@ -1649,16 +1702,11 @@ function U1SlotsCard({
               {slots.map((s) => {
                 const hex = colorHex(s.hex_color ?? s.color);
                 const empty = s.state === "empty" || !s.filament_id;
+                const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
                 return (
-                  <button
+                  <div
                     key={s.slot_index}
-                    type="button"
-                    onClick={(e) => handleOpen(e, s.slot_index)}
-                    className={[
-                      "grid grid-cols-[auto_1fr] items-center gap-2.5 text-left rounded-lg border px-3 py-2.5 transition",
-                      canEdit ? "hover:border-[var(--border-focus)] cursor-pointer" : "cursor-default",
-                      "border-[var(--border)] bg-[var(--surface-2)]",
-                    ].join(" ")}
+                    className="grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
                   >
                     <SpoolIcon color={empty ? "#888888" : hex} size={32} />
                     <div className="min-w-0">
@@ -1668,29 +1716,139 @@ function U1SlotsCard({
                       <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
                         <span>T{s.slot_index + 1}</span>
                         {!empty && <span className="uppercase">· {s.hex_color ?? hex}</span>}
+                        {invItem && <span className="text-[var(--text-muted)]">· {invItem.grams_remaining} г</span>}
                       </div>
                       {!empty && s.brand && (
                         <div className="truncate text-[10px] text-[var(--text-faint)]">{s.brand}</div>
                       )}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
           </div>
         )}
+
+        <div className="mt-3 flex items-center gap-3">
+          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+          {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
+          {canEdit && !editing && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="ml-auto rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+            >
+              Редагувати
+            </button>
+          )}
+        </div>
+
+        {canEdit && editing && (
+          <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+            {slots.map((s) => (
+              <div
+                key={s.slot_index}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2"
+              >
+                <span className="w-6 shrink-0 text-center font-mono text-xs text-[var(--text-faint)]">
+                  T{s.slot_index + 1}
+                </span>
+
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    title="Вибрати з палітри"
+                    onClick={() => setPaletteSlot(s.slot_index)}
+                    className="size-7 rounded-full ring-2 ring-neutral-300 hover:ring-neutral-600 dark:hover:ring-neutral-300"
+                    style={{ backgroundColor: colorHex(s.hex_color ?? s.color) }}
+                  />
+                  <div className="relative" title="Власний HEX">
+                    <span className="flex size-5 items-center justify-center rounded border border-[var(--border)] text-[10px] text-[var(--text-faint)]">#</span>
+                    <input
+                      type="color"
+                      value={colorHex(s.hex_color ?? s.color)}
+                      onChange={(e) => updateDraft(s.slot_index, { hex_color: e.target.value, filament_id: null })}
+                      className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    />
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  value={s.hex_color ?? s.color ?? ""}
+                  onChange={(e) => updateDraft(s.slot_index, { hex_color: e.target.value, filament_id: null })}
+                  onBlur={() => updateDraft(s.slot_index, { hex_color: normalizeHex(s.hex_color ?? s.color ?? "") || "#888888" })}
+                  placeholder="#RRGGBB"
+                  maxLength={7}
+                  className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 font-mono text-xs uppercase outline-none"
+                  title="HEX колір"
+                />
+
+                <select
+                  value={s.material ?? ""}
+                  onChange={(e) => updateDraft(s.slot_index, { material: e.target.value || null })}
+                  className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm"
+                >
+                  <option value="">—</option>
+                  {PRESET_TYPES.map((t) => <option key={t}>{t}</option>)}
+                  {s.material && !PRESET_TYPES.includes(s.material) && <option value={s.material}>{s.material}</option>}
+                </select>
+
+                <input
+                  type="text"
+                  value={s.brand ?? ""}
+                  onChange={(e) => updateDraft(s.slot_index, { brand: e.target.value || null })}
+                  placeholder="Виробник"
+                  className="w-28 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none"
+                />
+
+                {inventory.length > 0 && (
+                  <select
+                    value={s.filament_id ?? ""}
+                    onChange={(e) => pickFromInventory(s.slot_index, e.target.value ? Number(e.target.value) : null)}
+                    className="max-w-[160px] rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs"
+                    title="Зв'язати з інвентарем"
+                  >
+                    <option value="">— Інвентар —</option>
+                    {inventory.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.material} {f.color} {f.hex_color ? `· ${f.hex_color}` : ""} {f.brand ? `· ${f.brand}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => clearSlot(s.slot_index)}
+                  className="ml-auto rounded px-2 py-1 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
+                  title="Очистити слот"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={save}
+                disabled={busy}
+                className="rounded-lg bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-hi)] disabled:opacity-50"
+              >
+                {busy ? "Зберігаю…" : "Зберегти"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+              >
+                Скасувати
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
-      {openSlot !== null && anchorRect && filaments !== null && (
-        <SlotPicker
-          slot={slots.find((s) => s.slot_index === openSlot)!}
-          label={slotLabel(slots.find((s) => s.slot_index === openSlot)!, printer.kind)}
-          filaments={filaments}
-          printerId={printer.id}
-          anchorRect={anchorRect}
-          onClose={() => setOpenSlot(null)}
-          onSaved={handleSlotUpdated}
-        />
-      )}
     </>
   );
 }
