@@ -27,8 +27,9 @@ class MoonrakerError(Exception):
     """Raised when Moonraker returns an error response."""
 
 
-# Local dicts kept as stale-data fallback when Redis is unavailable or a fetch fails
-_status_cache: dict[str, dict] = {}
+# Local cache kept as stale-data fallback when Redis is unavailable or a fetch fails.
+# Some tunnel paths store `(monotonic_timestamp, status)` so readers must unwrap it.
+_status_cache: dict[str, object] = {}
 _meta_cache: dict[tuple[str, str], dict] = {}
 
 
@@ -525,18 +526,9 @@ def get_live_status(moonraker_url: str) -> dict:
     if not moonraker_url:
         return {"state": "unknown"}
 
-    from app.services.cache import cache_get, cache_set
-    fresh_key = f"mr:status:{moonraker_url}"
-    stale_key = f"mr:stale:{moonraker_url}"
-
-    fresh = cache_get(fresh_key)
-    if fresh is not None:
-        return fresh
-
-    # Serve stale data instantly (from previous cycle) while fresh is missing
-    stale = cache_get(stale_key) or _status_cache.get(moonraker_url)
-    if stale is not None:
-        return stale
+    cached = get_cached_live_status(moonraker_url)
+    if cached is not None:
+        return cached
 
     # No cached data at all — must fetch (first ever load or >5min gap)
     try:
@@ -545,10 +537,45 @@ def get_live_status(moonraker_url: str) -> dict:
         log.debug("Moonraker status fetch failed for %s: %s", moonraker_url, e)
         return {"state": "offline"}
 
+    from app.services.cache import cache_set
+    fresh_key = f"mr:status:{moonraker_url}"
+    stale_key = f"mr:stale:{moonraker_url}"
     cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
     cache_set(stale_key, status, STALE_CACHE_TTL)
     _status_cache[moonraker_url] = status
     return status
+
+
+def _unwrap_cached_status(value: object) -> dict | None:
+    if isinstance(value, dict):
+        return value
+    if (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[1], dict)
+    ):
+        return value[1]
+    return None
+
+
+def get_cached_live_status(moonraker_url: str) -> dict | None:
+    """Return fresh/stale cached status without network I/O."""
+    if not moonraker_url:
+        return None
+
+    from app.services.cache import cache_get
+    fresh_key = f"mr:status:{moonraker_url}"
+    stale_key = f"mr:stale:{moonraker_url}"
+
+    fresh = cache_get(fresh_key)
+    if isinstance(fresh, dict):
+        return fresh
+
+    stale = cache_get(stale_key)
+    if isinstance(stale, dict):
+        return stale
+
+    return _unwrap_cached_status(_status_cache.get(moonraker_url))
 
 
 def invalidate_status(moonraker_url: str) -> None:

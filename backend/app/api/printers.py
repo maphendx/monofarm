@@ -386,10 +386,20 @@ async def get_printer(
     groups_by_id = {g.id: g.name for g in db.query(PrinterGroup).filter(PrinterGroup.organization_id == org.id).all()}
     live: dict | None = None
     if row.moonraker_url:
-        if _tunnel.has_tunnel(org.id):
-            live = await _tunnel.get_moonraker_status(org.id, row.moonraker_url)
-        else:
-            live = await asyncio.to_thread(moonraker.get_live_status, row.moonraker_url)
+        try:
+            if _tunnel.has_tunnel(org.id):
+                live = await asyncio.wait_for(
+                    _tunnel.get_moonraker_status(org.id, row.moonraker_url),
+                    timeout=1.2,
+                )
+            else:
+                live = await asyncio.wait_for(
+                    asyncio.to_thread(moonraker.get_live_status, row.moonraker_url),
+                    timeout=1.8,
+                )
+        except Exception as e:
+            log.debug("Printer detail live status timed out printer=%s: %s", row.id, e)
+            live = moonraker.get_cached_live_status(row.moonraker_url) or {"state": "offline"}
     return _to_dto(row, db, groups_by_id, prefetched_live=live)
 
 
