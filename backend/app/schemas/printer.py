@@ -98,5 +98,10 @@ class PrinterOut(BaseModel):
     # U1 physical slot state — None for non-U1 printers; always 4 entries for U1
     slots: list[dict] | None = None
 
+    # Klipper firmware metadata
+    firmware_version: str | None = None
+    power_watts: int | None = None
+    firmware_features: dict | None = None  # {feature: bool|None} from firmware_matrix
+
     class Config:
         from_attributes = True

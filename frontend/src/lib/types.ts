@@ -114,6 +114,9 @@ export interface Printer {
   error_msg: string | null;
   active_tray: number | null;
   slots: PrinterSlotInfo[] | null;
+  firmware_version: string | null;
+  power_watts: number | null;
+  firmware_features: Record<string, boolean | null> | null;
 }
 
 export interface FilamentMeta {

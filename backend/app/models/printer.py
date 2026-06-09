@@ -53,3 +53,7 @@ class Printer(Base):
 
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Klipper / hardware metadata (populated on first successful connect)
+    firmware_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    power_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)

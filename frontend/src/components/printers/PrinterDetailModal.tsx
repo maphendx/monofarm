@@ -290,6 +290,14 @@ export function PrinterDetailModal({
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[var(--text-muted)]">
           <span>{kindLabel(printer.kind)}</span>
           <span>{stateLabel(printer.state)}</span>
+          {printer.firmware_version && (
+            <span
+              title="Версія Klipper"
+              className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-xs font-mono text-[var(--text-muted)]"
+            >
+              {printer.firmware_version}
+            </span>
+          )}
           {printer.group_name && (
             <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]  ">
               {printer.group_name}

@@ -411,14 +411,66 @@ async def handle_discover_bambu(ws, req: dict) -> None:
     }))
 
 
+async def _discover_via_mdns() -> list[dict]:
+    """Try mDNS/Zeroconf for _moonraker._tcp.local. services (2s window).
+
+    Returns [] if zeroconf is not installed or no devices respond.
+    """
+    try:
+        import zeroconf as _zc
+    except ImportError:
+        return []
+
+    found: dict[str, dict] = {}
+
+    class _Listener:
+        def add_service(self, zc: "_zc.Zeroconf", type_: str, name: str) -> None:
+            info = zc.get_service_info(type_, name)
+            if not info:
+                return
+            for addr in info.parsed_addresses():
+                port = info.port or 7125
+                url = f"http://{addr}:{port}"
+                hostname = (info.server or "").rstrip(".")
+                found[url] = {"url": url, "name": hostname or addr}
+
+        def remove_service(self, *_) -> None:
+            pass
+
+        def update_service(self, *_) -> None:
+            pass
+
+    def _scan() -> list[dict]:
+        import time
+        zc = _zc.Zeroconf()
+        listener = _Listener()
+        _zc.ServiceBrowser(zc, "_moonraker._tcp.local.", listener)
+        time.sleep(2.0)
+        zc.close()
+        return list(found.values())
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_scan), timeout=5.0)
+    except Exception:
+        return []
+
+
 async def handle_discover_moonraker(ws, req: dict) -> None:
-    """Scan the local /24 subnet for Moonraker instances (port 7125)."""
+    """Scan the local network for Moonraker instances.
+
+    Strategy: mDNS first (fast, ~2s), then /24 TCP port scan for any host
+    not already found via mDNS. Results are merged and deduplicated.
+    """
     import ipaddress
 
     req_id = req.get("id")
-    results: list[dict] = []
 
-    # Determine local IPs to derive subnets to scan
+    # ── Step 1: mDNS (zeroconf) ───────────────────────────────────────────────
+    mdns_results = await _discover_via_mdns()
+    mdns_urls = {r["url"].rstrip("/") for r in mdns_results}
+    results: list[dict] = list(mdns_results)
+
+    # ── Step 2: /24 TCP scan ──────────────────────────────────────────────────
     subnets: set[str] = set()
     try:
         hostname = socket.gethostname()
@@ -442,15 +494,17 @@ async def handle_discover_moonraker(ws, req: dict) -> None:
                 await writer.wait_closed()
             except Exception:
                 pass
-            # Confirm it's Moonraker
+            url = f"http://{ip}:7125"
+            if url.rstrip("/") in mdns_urls:
+                return None  # already found via mDNS
             try:
                 async with httpx.AsyncClient(timeout=2.0) as client:
-                    r = await client.get(f"http://{ip}:7125/printer/info")
+                    r = await client.get(f"{url}/printer/info")
                     if r.status_code == 200:
                         data = r.json().get("result", {})
-                        return {"url": f"http://{ip}:7125", "name": data.get("hostname") or ip}
+                        return {"url": url, "name": data.get("hostname") or ip}
             except Exception:
-                return {"url": f"http://{ip}:7125", "name": ip}
+                return {"url": url, "name": ip}
         except Exception:
             return None
 
@@ -464,7 +518,9 @@ async def handle_discover_moonraker(ws, req: dict) -> None:
             pass
 
     probed = await asyncio.gather(*tasks)
-    results = [r for r in probed if r is not None]
+    for r in probed:
+        if r is not None:
+            results.append(r)
 
     import json as _json
     await ws.send(_json.dumps({

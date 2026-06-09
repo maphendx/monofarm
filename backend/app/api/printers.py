@@ -144,6 +144,7 @@ def _to_dto(
             # Bambu and others — return the slots as-is (sorted by slot_index)
             u1_slots = sorted(prefetched_slots, key=lambda s: s["slot_index"]) or None
 
+    from app.services.firmware_matrix import get_features as _fw_features
     base = dict(
         id=printer.id,
         name=printer.name,
@@ -157,6 +158,9 @@ def _to_dto(
         group_name=group_name,
         loaded_filaments=printer.loaded_filaments or [],
         slots=u1_slots,
+        firmware_version=printer.firmware_version,
+        power_watts=printer.power_watts,
+        firmware_features=_fw_features(printer.firmware_version) if printer.firmware_version else None,
     )
 
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
@@ -718,6 +722,50 @@ async def claim_bambu_printer(
     return _to_dto(row, db)
 
 
+@router.post("/moonraker/check")
+async def check_moonraker_connection(
+    payload: dict,
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    """Verify a Moonraker URL is reachable and return firmware info.
+
+    Works via the agent tunnel if connected, direct HTTP otherwise.
+    Returns {"ok": true, "firmware_version": ..., "hostname": ..., "features": {...}}
+    or {"ok": false, "error": "..."}.
+    """
+    from app.services.firmware_matrix import get_features as _fw_features
+    from app.services.moonraker import _api_base
+
+    url = (payload.get("url") or "").strip().rstrip("/")
+    if not url:
+        raise HTTPException(status_code=400, detail="url required")
+
+    base = _api_base(url)
+    try:
+        if _tunnel.has_tunnel(org.id):
+            resp = await _tunnel.proxy_request(org.id, "GET", f"{base}/printer/info", timeout=8.0)
+            if resp.get("status", 0) >= 400:
+                return {"ok": False, "error": f"HTTP {resp.get('status')}"}
+            info = (resp.get("body") or {}).get("result", {})
+        else:
+            def _fetch() -> dict:
+                import requests as _req
+                return _req.get(f"{base}/printer/info", timeout=5).json().get("result", {})
+            info = await asyncio.to_thread(_fetch)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    firmware_version = info.get("software_version") or None
+    hostname = info.get("hostname") or None
+    return {
+        "ok": True,
+        "firmware_version": firmware_version,
+        "hostname": hostname,
+        "features": _fw_features(firmware_version),
+    }
+
+
 @router.get("/moonraker/discovered")
 async def list_moonraker_discovered(
     db: Session = Depends(get_db),
@@ -787,11 +835,18 @@ async def claim_moonraker_printer(
         )
 
     name = (payload.get("name") or "Klipper Printer").strip()
+    fw = (payload.get("firmware_version") or "").strip() or None
+    kind_raw = payload.get("kind") or "other"
+    try:
+        kind = PrinterKind(kind_raw)
+    except ValueError:
+        kind = PrinterKind.other
     row = Printer(
         organization_id=org.id,
         name=name,
-        kind=PrinterKind.other,
+        kind=kind,
         moonraker_url=url,
+        firmware_version=fw,
     )
     db.add(row)
     db.commit()
