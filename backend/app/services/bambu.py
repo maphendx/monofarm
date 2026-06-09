@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core import metrics
 from app.core.db import SessionLocal
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
+from app.services import bambu_provider
 from app.services.bambu_errors import BambuErrorCode, error_details
 from app.services.bambu_job_state import (
     ACTIVE_STATUSES as CLOUD_JOB_ACTIVE_STATUSES,
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-CLOUD_TIMEOUT = 15
 FTPS_TIMEOUT = 30
 MQTT_KEEPALIVE = 60
 STATUS_CACHE_TTL = 30.0
@@ -126,13 +126,7 @@ def _fetch_user_id_from_api(org_id: int) -> None:
     """Fetch user_id from Bambu profile API (fallback when token is not a JWT)."""
     base = _api_base(org_id)
     try:
-        resp = requests.get(
-            f"{base}/v1/user-service/my/profile",
-            headers=_headers(org_id),
-            timeout=CLOUD_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = bambu_provider.get_user_profile(base, _headers(org_id))
         uid = str(data.get("uid") or data.get("userId") or data.get("user_id") or "")
         if uid:
             _user_ids[org_id] = uid
@@ -174,13 +168,10 @@ def _login_with_refresh_token(org: "Organization", stored_token: str) -> str:
     from app.services.encryption import decrypt
     base = _api_base(org.id)
     try:
-        resp = requests.post(
-            f"{base}/v1/user-service/user/login",
-            json={"account": decrypt(org.bambu_email), "refreshToken": stored_token, "loginType": "refreshToken"},
-            timeout=CLOUD_TIMEOUT,
+        data = bambu_provider.post_login(
+            base,
+            {"account": decrypt(org.bambu_email), "refreshToken": stored_token, "loginType": "refreshToken"},
         )
-        resp.raise_for_status()
-        data = resp.json()
     except requests.RequestException as e:
         raise BambuError(f"Bambu loginType=refreshToken failed: {e}") from e
 
@@ -235,13 +226,7 @@ def login(org: "Organization") -> str:
     _regions[org.id] = r
     base = _api_base(org.id)
     try:
-        resp = requests.post(
-            f"{base}/v1/user-service/user/login",
-            json={"account": _email, "password": _password, "apiError": ""},
-            timeout=CLOUD_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = bambu_provider.post_login(base, {"account": _email, "password": _password, "apiError": ""})
     except requests.RequestException as e:
         raise BambuError(f"Bambu login failed: {e}") from e
 
@@ -266,13 +251,7 @@ def refresh_token(org: "Organization", token: str) -> str:
     _regions[org.id] = r
     base = _api_base(org.id)
     try:
-        resp = requests.post(
-            f"{base}/v1/user-service/user/refreshtoken",
-            json={"refreshToken": token},
-            timeout=CLOUD_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = bambu_provider.post_refresh_token(base, token)
     except requests.RequestException as e:
         raise BambuError(f"Bambu token refresh failed: {e}") from e
 
@@ -305,13 +284,7 @@ def list_devices(org_id: int) -> list[dict]:
             return []
     base = _api_base(org_id)
     try:
-        resp = requests.get(
-            f"{base}/v1/iot-service/api/user/bind",
-            headers=_headers(org_id),
-            timeout=CLOUD_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = bambu_provider.get_user_bind(base, _headers(org_id))
     except requests.RequestException as e:
         log.warning("Bambu list_devices failed (org_id=%s): %s", org_id, e)
         return []
@@ -329,6 +302,18 @@ def list_devices(org_id: int) -> list[dict]:
         for d in devices
         if d.get("dev_id")
     ]
+
+
+def get_device_firmware_version(org_id: int, dev_id: str) -> str | None:
+    """Best-effort firmware version for a Bambu Cloud device. Never raises."""
+    if not _access_tokens.get(org_id):
+        return None
+    try:
+        data = bambu_provider.get_device_version(_api_base(org_id), _headers(org_id), dev_id)
+        return bambu_provider.extract_firmware_version(data)
+    except Exception as e:
+        log.debug("Bambu device version lookup failed (org_id=%s dev_id=%s): %s", org_id, dev_id, e)
+        return None
 
 
 def do_token_refresh() -> None:
@@ -998,25 +983,15 @@ def start_print(
 
 
 def _cloud_create_project(base: str, headers: dict[str, str], filename: str) -> requests.Response:
-    return requests.post(
-        f"{base}/v1/iot-service/api/user/project",
-        json={"name": filename},
-        headers=headers,
-        timeout=CLOUD_TIMEOUT,
-    )
+    return bambu_provider.create_project(base, headers, filename)
 
 
 def _cloud_upload_to_oss(upload_url: str, file_bytes: bytes) -> requests.Response:
-    return requests.put(upload_url, data=file_bytes, headers={}, timeout=300)
+    return bambu_provider.upload_to_oss(upload_url, file_bytes)
 
 
 def _cloud_create_task(base: str, headers: dict[str, str], task_body: dict[str, Any]) -> requests.Response:
-    return requests.post(
-        f"{base}/v1/user-service/my/task",
-        json=task_body,
-        headers=headers,
-        timeout=CLOUD_TIMEOUT,
-    )
+    return bambu_provider.create_task(base, headers, task_body)
 
 
 def cloud_upload_and_print(

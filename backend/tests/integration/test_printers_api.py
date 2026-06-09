@@ -74,6 +74,35 @@ def test_delete_printer(client, auth_headers):
     assert all(p["id"] != printer_id for p in listing.json())
 
 
+def test_claim_bambu_printer_stores_firmware_version(client, auth_headers, monkeypatch):
+    from app.services import bambu
+
+    monkeypatch.setattr(
+        bambu,
+        "list_devices",
+        lambda org_id: [
+            {
+                "dev_id": "BAMBU-CLAIM-1",
+                "name": "P1S Office",
+                "online": True,
+                "dev_model_name": "C12",
+                "dev_product_name": "P1S",
+                "dev_access_code": "12345678",
+            }
+        ],
+    )
+    monkeypatch.setattr(bambu, "get_device_firmware_version", lambda org_id, dev_id: "01.08.02.00")
+    monkeypatch.setattr(bambu, "subscribe_device", lambda dev_id, org_id: None)
+
+    resp = client.post("/api/printers/bambu/claim", headers=auth_headers, json={"dev_id": "BAMBU-CLAIM-1"})
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["kind"] == "bambu"
+    assert body["bambu_model"] == "P1S"
+    assert body["firmware_version"] == "01.08.02.00"
+
+
 def test_list_printers_includes_moonraker_offline_state(client, auth_headers, mock_external_services):
     create = client.post(
         "/api/printers",

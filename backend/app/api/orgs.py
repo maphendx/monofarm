@@ -1,5 +1,4 @@
 
-import requests as _requests
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -8,6 +7,7 @@ from app.api.deps import get_current_org, get_current_user, require_roles
 from app.core.db import get_db
 from app.core.ratelimit import limiter
 from app.core.security import create_access_token, create_verify_token, hash_password
+from app.services import bambu_provider
 from app.services import email as email_svc
 from app.models.organization import Organization, _slugify
 from app.models.user import User, UserRole
@@ -228,11 +228,7 @@ def bambu_send_code(
     _ = request
     base = _bambu_api_base(payload.region or org.bambu_region or "eu")
     try:
-        resp = _requests.post(
-            f"{base}/v1/user-service/user/sendemail/code",
-            json={"email": payload.email, "type": "codeLogin"},
-            timeout=10,
-        )
+        resp = bambu_provider.send_email_code(base, payload.email)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Bambu API недоступний: {e}") from e
 

@@ -756,6 +756,7 @@ async def claim_bambu_printer(
 
     bmodel = device.get("dev_product_name") or device.get("dev_model_name") or ""
     bvol = _bambu_build_volume(bmodel)
+    fw = await asyncio.to_thread(bambu.get_device_firmware_version, org.id, dev_id)
     row = Printer(
         organization_id=org.id,
         name=device["name"],
@@ -763,6 +764,7 @@ async def claim_bambu_printer(
         bambu_dev_id=dev_id,
         bambu_access_code=device.get("dev_access_code", ""),
         bambu_model=bmodel,
+        firmware_version=fw,
         build_x=bvol[0] if bvol else None,
         build_y=bvol[1] if bvol else None,
         build_z=bvol[2] if bvol else None,

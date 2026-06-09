@@ -66,7 +66,7 @@ def test_bambu_job_retry_limit_returns_409(client, auth_headers, db_session, tes
 def test_bambu_send_code_is_rate_limited(client, auth_headers, monkeypatch):
     from app.api import orgs
 
-    monkeypatch.setattr(orgs._requests, "post", lambda *args, **kwargs: SimpleNamespace(status_code=200))
+    monkeypatch.setattr(orgs.bambu_provider, "send_email_code", lambda base, email: SimpleNamespace(status_code=200))
     headers = {**auth_headers, "X-Forwarded-For": "203.0.113.77"}
 
     statuses = [

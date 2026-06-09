@@ -24,6 +24,7 @@ import requests
 
 from app.core import metrics
 from app.models.organization import BambuAuthType
+from app.services import bambu_provider
 from app.services.bambu_errors import BambuErrorCode
 from app.services.bambu_observability import event_tags, log_event
 
@@ -170,11 +171,6 @@ def _api_base(region: str | None) -> str:
     return _REGION_HOSTS.get(region or "us", _REGION_HOSTS["us"])["api"]
 
 
-def _cloud_timeout() -> int:
-    from app.services.bambu import CLOUD_TIMEOUT
-    return CLOUD_TIMEOUT
-
-
 def _decode_jwt_user_id(token: str) -> str | None:
     """Best-effort user_id extraction from a JWT access token (no signature check)."""
     import base64
@@ -203,9 +199,7 @@ def _expires_at_from_payload(data: dict) -> datetime | None:
 
 def _post_login(base: str, payload: dict) -> dict:
     try:
-        resp = requests.post(f"{base}/v1/user-service/user/login", json=payload, timeout=_cloud_timeout())
-        resp.raise_for_status()
-        return resp.json()
+        return bambu_provider.post_login(base, payload)
     except requests.RequestException as e:
         raise BambuAuthError(f"Bambu login request failed: {e}", error_code=BambuErrorCode.AUTH_INVALID) from e
 
@@ -259,13 +253,7 @@ def _refresh_impl(org_id: int) -> str:
     region = org.bambu_region or "us"
     base = _api_base(region)
     try:
-        resp = requests.post(
-            f"{base}/v1/user-service/user/refreshtoken",
-            json={"refreshToken": refresh_token},
-            timeout=_cloud_timeout(),
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = bambu_provider.post_refresh_token(base, refresh_token)
     except requests.RequestException as e:
         raise BambuAuthError(f"Bambu token refresh request failed: {e}", error_code=BambuErrorCode.AUTH_EXPIRED) from e
 
