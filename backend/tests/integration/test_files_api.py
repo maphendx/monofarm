@@ -108,6 +108,12 @@ def test_moonraker_upload_shim_stores_file_with_bearer_token(client, auth_header
     assert body["monofarm"]["print_requested"] is True
     assert "/auth/webview" in body["url"]
     assert resp.headers["location"].endswith("/orca_part.gcode")
+    assert "monofarm_slicer_next=" in resp.headers["set-cookie"]
+
+    redirect = client.get("/", follow_redirects=False)
+    assert redirect.status_code in (302, 307)
+    assert "/auth/webview" in redirect.headers["location"]
+    assert "highlight%3D" in redirect.headers["location"]
 
     files = client.get("/api/files", headers=auth_headers).json()
     assert any(f["original_name"] == "orca_part.gcode" for f in files)

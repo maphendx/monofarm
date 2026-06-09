@@ -285,6 +285,22 @@ def _build_response(row: GcodeFile, user: User) -> dict:
     }
 
 
+def _set_slicer_redirect_cookie(response: Response, row: GcodeFile, user: User) -> None:
+    """Remember the just-uploaded file for Orca's Device tab base-url load."""
+    from urllib.parse import quote
+
+    webview_url = _build_response(row, user)["url"]
+    response.set_cookie(
+        "monofarm_slicer_next",
+        quote(webview_url, safe=""),
+        max_age=15 * 60,
+        httponly=True,
+        secure=settings.FARM_PUBLIC_URL.startswith("https://"),
+        samesite="lax",
+        path="/",
+    )
+
+
 def _moonraker_upload_response(row: GcodeFile, user: User, print_requested: bool) -> dict:
     """Build a Moonraker-shaped upload response for Orca Klipper host mode."""
     response = _build_response(row, user)
@@ -325,6 +341,7 @@ def octo_printer(
 
 @router.post("/files/local", status_code=status.HTTP_201_CREATED)
 async def octo_upload(
+    response: Response,
     file: UploadFile,
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -332,6 +349,7 @@ async def octo_upload(
     """Upload to file library only (no auto-print). Use /orca/{id}/... for auto-print."""
     user = _resolve_user(x_api_key, db)
     row = await _store_file(file, user.organization_id, db, uploaded_by_id=user.id)
+    _set_slicer_redirect_cookie(response, row, user)
     return _build_response(row, user)
 
 
@@ -356,6 +374,7 @@ def orca_printer(
 @orca_router.post("/orca/{printer_id}/api/files/local", status_code=status.HTTP_201_CREATED)
 async def orca_upload(
     printer_id: int,
+    response: Response,
     file: UploadFile,
     # OrcaSlicer sends print=true when the user clicks "Send & Print"
     print: str | None = Form(default=None),
@@ -369,6 +388,7 @@ async def orca_upload(
     """
     user = _resolve_user(x_api_key, db)
     row = await _store_file(file, user.organization_id, db, uploaded_by_id=user.id)
+    _set_slicer_redirect_cookie(response, row, user)
 
     if print == "true":
         printer = (
@@ -542,6 +562,7 @@ async def moonraker_upload(
     _ = path
     user = _resolve_slicer_user(x_api_key, authorization, db)
     row = await _store_file(file, user.organization_id, db, uploaded_by_id=user.id)
+    _set_slicer_redirect_cookie(response, row, user)
     from urllib.parse import quote
 
     response.headers["Location"] = f"/server/files/gcodes/{quote(row.original_name)}"

@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -115,8 +115,17 @@ def _frontend_url(path: str = "") -> str:
 
 
 @app.get("/", include_in_schema=False)
-def root_redirect():
-    return RedirectResponse(_frontend_url("/files"))
+def root_redirect(request: Request):
+    from urllib.parse import unquote
+
+    next_url = request.cookies.get("monofarm_slicer_next")
+    target = unquote(next_url) if next_url else _frontend_url("/files?slicer=latest")
+    if not target.startswith(_frontend_url("/")):
+        target = _frontend_url("/files?slicer=latest")
+    response = RedirectResponse(target)
+    if next_url:
+        response.delete_cookie("monofarm_slicer_next", path="/")
+    return response
 
 
 @app.get("/api/health")
