@@ -53,6 +53,20 @@ interface HoroshopSettings {
   last_event_message: string | null;
 }
 
+interface SlicerApiKey {
+  id: number;
+  name: string;
+  scopes: string;
+  is_active: boolean;
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+interface SlicerApiKeyCreated extends SlicerApiKey {
+  key: string;
+}
+
 type SectionId =
   | "profile" | "general"
   | "organization" | "printers" | "users" | "filament"
@@ -895,6 +909,136 @@ function BadgeStatus({ ok }: { ok: boolean }) {
 }
 
 // ── KeyCRM Section ─────────────────────────────────────────────────────────
+
+function fmtApiKeyDate(value: string | null): string {
+  if (!value) return "ще не було";
+  return new Date(value).toLocaleString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function SlicerApiKeysSection() {
+  const [keys, setKeys] = useState<SlicerApiKey[]>([]);
+  const [name, setName] = useState("OrcaSlicer");
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      setKeys(await api<SlicerApiKey[]>("/api/api-keys"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не вдалося завантажити ключі");
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function createKey(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("create"); setError(null); setNewKey(null);
+    try {
+      const created = await api<SlicerApiKeyCreated>("/api/api-keys", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim() || "OrcaSlicer", scopes: "files:upload" }),
+      });
+      setNewKey(created.key);
+      setName("OrcaSlicer");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не вдалося створити ключ");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteKey(id: number) {
+    setBusy(`delete:${id}`); setError(null);
+    try {
+      await api(`/api/api-keys/${id}`, { method: "DELETE" });
+      setKeys((prev) => prev.filter((k) => k.id !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Не вдалося видалити ключ");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function copy(text: string) {
+    navigator.clipboard.writeText(text).then(() => toast.success("Скопійовано"));
+  }
+
+  return (
+    <SectionCard>
+      <SectionTitle>Slicer API Keys</SectionTitle>
+
+      <div className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
+        <p className="mb-2 text-sm font-medium">OrcaSlicer setup</p>
+        <div className="grid gap-2 text-xs text-[var(--text-muted)] sm:grid-cols-3">
+          <code className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5">Host Type: OctoPrint</code>
+          <code className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5">Hostname: https://api.monofarm.app</code>
+          <code className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5">API Key: mf_...</code>
+        </div>
+      </div>
+
+      {newKey && (
+        <div className="mb-5 rounded-lg border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] p-4">
+          <p className="mb-2 text-sm font-medium text-[var(--state-ok)]">Новий ключ створено. Скопіюй зараз — потім він не буде показаний.</p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 overflow-x-auto rounded border border-[rgba(34,197,94,.25)] bg-[var(--bg-elevated)] px-3 py-2 text-xs">
+              {newKey}
+            </code>
+            <button type="button" onClick={() => copy(newKey)} className="btn btn-primary btn-sm">
+              Копіювати
+            </button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={createKey} className="mb-5 flex flex-col gap-2 sm:flex-row">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Назва ключа"
+          className="input flex-1"
+        />
+        <button type="submit" disabled={busy === "create"} className="btn btn-primary disabled:opacity-50">
+          {busy === "create" ? "Створення…" : "Створити ключ"}
+        </button>
+      </form>
+
+      {error && <p className="mb-3 text-sm text-[var(--state-error)]">{error}</p>}
+
+      <div className="space-y-2">
+        {keys.length === 0 ? (
+          <p className="text-sm text-[var(--text-faint)]">Ключів ще немає.</p>
+        ) : keys.map((k) => (
+          <div key={k.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{k.name}</p>
+              <p className="text-xs text-[var(--text-faint)]">
+                Scope: {k.scopes} · останнє використання: {fmtApiKeyDate(k.last_used_at)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => deleteKey(k.id)}
+              disabled={busy === `delete:${k.id}`}
+              className="shrink-0 rounded-md border border-[rgba(239,68,68,.25)] px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)] disabled:opacity-50"
+            >
+              {busy === `delete:${k.id}` ? "…" : "Видалити"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
 
 function KeyCRMSection() {
   const [data,         setData]         = useState<{ keycrm_api_key: string; webhook_url: string; keycrm_configured: boolean } | null>(null);
@@ -2078,6 +2222,7 @@ export default function SettingsPage() {
         {active === "maintenance" && <ComingSoon label="Обслуговування" />}
         {active === "integrations" && (
           <div className="space-y-6">
+            <SlicerApiKeysSection />
             <AgentSection />
             <HoroshopSection />
             <KeyCRMSection />
