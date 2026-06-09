@@ -609,7 +609,12 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         if ams_mapping is not None:
             task_body["amsMapping"] = ams_mapping
 
-        log.info("bambu.cloud.task_create org_id=%s printer=%s ams_mapping=%s use_ams=%s", org_id, job.printer_bambu_dev_id, ams_mapping, use_ams)
+        log.info(
+            "bambu.cloud.task_create org_id=%s printer=%s model_id=%s project_id=%s "
+            "ams_mapping=%s use_ams=%s plate=%s",
+            org_id, job.printer_bambu_dev_id, model_id, project_id,
+            ams_mapping, use_ams, task_body.get("plateIndex"),
+        )
         job = advance_job_status(job_id, BambuCloudJobStatus.task_creating, request_payload_json=task_body)
 
         task_data = create_task_with_retry(org_id, task_body)
