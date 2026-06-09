@@ -106,6 +106,19 @@ export function compatBadge(slots: ReturnType<typeof checkSlots>) {
   return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
 }
 
+function fitCheck(meta: GcodeFileMeta | null, printer: Printer): "fits" | "oversize" | "unknown" {
+  const sx = meta?.print_size_x;
+  const sy = meta?.print_size_y;
+  const sz = meta?.print_size_z;
+  if (!sx && !sy && !sz) return "unknown";
+  if (!printer.build_x && !printer.build_y && !printer.build_z) return "unknown";
+  const TOL = 2;
+  if (sx && printer.build_x && sx > printer.build_x + TOL) return "oversize";
+  if (sy && printer.build_y && sy > printer.build_y + TOL) return "oversize";
+  if (sz && printer.build_z && sz > printer.build_z + TOL) return "oversize";
+  return "fits";
+}
+
 function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
   const indices = usedSlotIndices(meta);
   if (indices.length === 0) return null;
@@ -171,7 +184,15 @@ export function SendModal({
   const sendablePrinters = printers.filter(
     (p) => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)),
   );
-  const selectedPrinter = sendablePrinters.find((p) => p.id === selectedId) ?? null;
+  const fileHasDimensions = !!(
+    file.filament_meta?.print_size_x ||
+    file.filament_meta?.print_size_y ||
+    file.filament_meta?.print_size_z
+  );
+  const compatiblePrinters = fileHasDimensions
+    ? sendablePrinters.filter((p) => fitCheck(file.filament_meta, p) !== "oversize")
+    : sendablePrinters;
+  const selectedPrinter = compatiblePrinters.find((p) => p.id === selectedId) ?? null;
   const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
   const isMoonraker = !!selectedPrinter?.moonraker_url;
 
@@ -184,7 +205,7 @@ export function SendModal({
   function selectPrinter(id: number) {
     setSelectedId(id);
     setResult(null);
-    const printer = sendablePrinters.find((p) => p.id === id);
+    const printer = compatiblePrinters.find((p) => p.id === id);
     setSlotMap(printer ? autoMapSlots(file.filament_meta, printer) : {});
     setCalibrateSlots(new Set(usedSlots));
   }
@@ -271,12 +292,16 @@ export function SendModal({
         {file.filament_meta && (
           <div className="border-b border-[var(--border)] px-5 pb-4 pt-3 ">
             <SlotSwatches meta={file.filament_meta} />
-            {file.filament_meta.estimated_minutes && (
-              <p className="mt-1.5 text-xs text-[var(--text-faint)]">
-                ~{fmtMinutes(file.filament_meta.estimated_minutes)}
-                {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
-              </p>
-            )}
+            <p className="mt-1.5 text-xs text-[var(--text-faint)]">
+              {file.filament_meta.estimated_minutes && `~${fmtMinutes(file.filament_meta.estimated_minutes)}`}
+              {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
+              {(file.filament_meta.print_size_x || file.filament_meta.print_size_y || file.filament_meta.print_size_z) && (
+                <span className="ml-1">
+                  · {[file.filament_meta.print_size_x, file.filament_meta.print_size_y, file.filament_meta.print_size_z]
+                    .map((v) => (v != null ? `${v}` : "?")).join("×")} мм
+                </span>
+              )}
+            </p>
           </div>
         )}
 
@@ -314,13 +339,18 @@ export function SendModal({
           {/* ── print mode ── */}
           {mode === "print" && !result && (
             <>
-              {sendablePrinters.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)]">Немає доступних принтерів</p>
+              {compatiblePrinters.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">
+                  {fileHasDimensions && sendablePrinters.length > 0
+                    ? "Немає принтерів з достатнім столом для цього файлу"
+                    : "Немає доступних принтерів"}
+                </p>
               ) : (
                 <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
-                  {sendablePrinters.map((p) => {
+                  {compatiblePrinters.map((p) => {
                     const slots = checkSlots(file.filament_meta, p);
                     const compat = compatBadge(slots);
+                    const fit = fitCheck(file.filament_meta, p);
                     return (
                       <label key={p.id} className={[
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
@@ -334,7 +364,15 @@ export function SendModal({
                             className="accent-neutral-900 dark:accent-white" />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{p.name}</p>
+                            {p.build_x && p.build_y && p.build_z && (
+                              <p className="text-[10px] text-[var(--text-faint)]">
+                                {p.build_x}×{p.build_y}×{p.build_z} мм
+                              </p>
+                            )}
                           </div>
+                          {fit === "fits" && fileHasDimensions && (
+                            <span className="badge badge-ok shrink-0 text-[10px]">✓ влазить</span>
+                          )}
                           <span className={[
                             "shrink-0 rounded px-1.5 py-0.5 text-xs",
                             p.state === "printing" ? "badge badge-warn"

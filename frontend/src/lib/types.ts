@@ -117,6 +117,9 @@ export interface Printer {
   firmware_version: string | null;
   power_watts: number | null;
   firmware_features: Record<string, boolean | null> | null;
+  build_x: number | null;
+  build_y: number | null;
+  build_z: number | null;
 }
 
 export interface FilamentMeta {
@@ -193,6 +196,9 @@ export interface GcodeFileMeta {
   estimated_minutes?: number;
   total_layers?: number;
   layer_height?: number;
+  print_size_x?: number;
+  print_size_y?: number;
+  print_size_z?: number;
 }
 
 export interface GcodeFile {

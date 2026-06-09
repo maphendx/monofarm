@@ -37,6 +37,17 @@ PATTERNS = {
     "nozzle_diameter": re.compile(
         r"^;\s*nozzle_diameter\s*=\s*(.+)$", re.IGNORECASE
     ),
+    # Bounding box — PrusaSlicer / Snaporca / OrcaSlicer
+    "min_x": re.compile(r"^;(?:MINX|min_x)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    "max_x": re.compile(r"^;(?:MAXX|max_x)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    "min_y": re.compile(r"^;(?:MINY|min_y)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    "max_y": re.compile(r"^;(?:MAXY|max_y)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    "min_z": re.compile(r"^;(?:MINZ|min_z)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    "max_z": re.compile(r"^;(?:MAXZ|max_z)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
+    # OrcaSlicer / Bambu Studio: "; model size X: 85.4"
+    "size_x": re.compile(r"^;\s*model size X\s*:\s*([\d.]+)", re.IGNORECASE),
+    "size_y": re.compile(r"^;\s*model size Y\s*:\s*([\d.]+)", re.IGNORECASE),
+    "size_z": re.compile(r"^;\s*model size Z\s*:\s*([\d.]+)", re.IGNORECASE),
 }
 
 
@@ -164,6 +175,23 @@ def _parse_text(text: str) -> dict:
             out["layer_height"] = float(raw["layer_height"])
         except ValueError:
             pass
+
+    # Print dimensions — prefer explicit model size, fall back to MINX/MAXX bbox
+    try:
+        if "size_x" in raw:
+            out["print_size_x"] = round(float(raw["size_x"]), 1)
+        elif "min_x" in raw and "max_x" in raw:
+            out["print_size_x"] = round(float(raw["max_x"]) - float(raw["min_x"]), 1)
+        if "size_y" in raw:
+            out["print_size_y"] = round(float(raw["size_y"]), 1)
+        elif "min_y" in raw and "max_y" in raw:
+            out["print_size_y"] = round(float(raw["max_y"]) - float(raw["min_y"]), 1)
+        if "size_z" in raw:
+            out["print_size_z"] = round(float(raw["size_z"]), 1)
+        elif "min_z" in raw and "max_z" in raw:
+            out["print_size_z"] = round(float(raw["max_z"]) - float(raw["min_z"]), 1)
+    except (ValueError, KeyError):
+        pass
 
     return out
 

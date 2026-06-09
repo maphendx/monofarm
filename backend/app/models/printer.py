@@ -57,3 +57,8 @@ class Printer(Base):
     # Klipper / hardware metadata (populated on first successful connect)
     firmware_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     power_watts: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Build volume in mm (used to filter compatible files)
+    build_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    build_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    build_z: Mapped[int | None] = mapped_column(Integer, nullable=True)

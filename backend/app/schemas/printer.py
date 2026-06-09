@@ -26,6 +26,9 @@ class PrinterCreate(BaseModel):
     bambu_dev_ip: str | None = None
     bambu_model: str | None = None
     bambu_lan_mode: bool = False
+    build_x: int | None = None
+    build_y: int | None = None
+    build_z: int | None = None
 
 
 class PrinterUpdate(BaseModel):
@@ -37,6 +40,9 @@ class PrinterUpdate(BaseModel):
     bambu_dev_ip: str | None = None
     bambu_model: str | None = None
     bambu_lan_mode: bool | None = None
+    build_x: int | None = None
+    build_y: int | None = None
+    build_z: int | None = None
 
 
 class PrinterManualUpdate(BaseModel):
@@ -102,6 +108,11 @@ class PrinterOut(BaseModel):
     firmware_version: str | None = None
     power_watts: int | None = None
     firmware_features: dict | None = None  # {feature: bool|None} from firmware_matrix
+
+    # Build volume
+    build_x: int | None = None
+    build_y: int | None = None
+    build_z: int | None = None
 
     class Config:
         from_attributes = True

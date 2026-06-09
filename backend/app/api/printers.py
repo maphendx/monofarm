@@ -47,6 +47,28 @@ class SendGcodePayload(BaseModel):
 import re
 
 
+# Known Bambu build volumes (X × Y × Z in mm). Matched by substring in bambu_model.
+_BAMBU_VOLUMES: list[tuple[str, tuple[int, int, int]]] = [
+    ("A1 mini", (180, 180, 180)),
+    ("A1",      (256, 256, 256)),
+    ("P1S",     (256, 256, 256)),
+    ("P1P",     (220, 220, 220)),
+    ("X1C",     (256, 256, 256)),
+    ("X1E",     (256, 256, 256)),
+    ("H2D",     (350, 320, 325)),
+]
+
+
+def _bambu_build_volume(model: str | None) -> tuple[int, int, int] | None:
+    if not model:
+        return None
+    m = model.lower()
+    for key, vol in _BAMBU_VOLUMES:
+        if key.lower() in m:
+            return vol
+    return None
+
+
 def _natural_key(s: str) -> list:
     """Split a string into text/number chunks so A11 sorts after A10, not after A1."""
     return [int(chunk) if chunk.isdigit() else chunk.lower() for chunk in re.split(r"(\d+)", s)]
@@ -732,13 +754,18 @@ async def claim_bambu_printer(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found in Bambu Cloud account")
 
+    bmodel = device.get("dev_product_name") or device.get("dev_model_name") or ""
+    bvol = _bambu_build_volume(bmodel)
     row = Printer(
         organization_id=org.id,
         name=device["name"],
         kind=PrinterKind.bambu,
         bambu_dev_id=dev_id,
         bambu_access_code=device.get("dev_access_code", ""),
-        bambu_model=device.get("dev_product_name") or device.get("dev_model_name") or "",
+        bambu_model=bmodel,
+        build_x=bvol[0] if bvol else None,
+        build_y=bvol[1] if bvol else None,
+        build_z=bvol[2] if bvol else None,
     )
     db.add(row)
     db.commit()
@@ -894,6 +921,7 @@ def create_printer(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
         )
+    bvol = _bambu_build_volume(payload.bambu_model) if payload.kind == PrinterKind.bambu else None
     row = Printer(
         organization_id=org.id,
         name=payload.name,
@@ -904,6 +932,9 @@ def create_printer(
         bambu_dev_ip=payload.bambu_dev_ip,
         bambu_model=payload.bambu_model,
         bambu_lan_mode=payload.bambu_lan_mode,
+        build_x=payload.build_x if payload.build_x is not None else (bvol[0] if bvol else None),
+        build_y=payload.build_y if payload.build_y is not None else (bvol[1] if bvol else None),
+        build_z=payload.build_z if payload.build_z is not None else (bvol[2] if bvol else None),
     )
     db.add(row)
     db.commit()
@@ -941,8 +972,19 @@ def update_printer(
         row.bambu_dev_ip = payload.bambu_dev_ip.strip() or None
     if payload.bambu_model is not None:
         row.bambu_model = payload.bambu_model.strip() or None
+        # Auto-fill build volume when model name is set and no explicit override given
+        if row.kind == PrinterKind.bambu and payload.build_x is None:
+            bvol = _bambu_build_volume(row.bambu_model)
+            if bvol:
+                row.build_x, row.build_y, row.build_z = bvol
     if payload.bambu_lan_mode is not None:
         row.bambu_lan_mode = payload.bambu_lan_mode
+    if payload.build_x is not None:
+        row.build_x = payload.build_x
+    if payload.build_y is not None:
+        row.build_y = payload.build_y
+    if payload.build_z is not None:
+        row.build_z = payload.build_z
     db.commit()
     db.refresh(row)
 
