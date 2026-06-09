@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.filament import Filament
 from app.models.printer import Printer, PrinterKind
-from app.models.printer_slot import PrinterSlot, SlotEvent, SlotState
+from app.models.printer_slot import SlotEvent
 
 
 @pytest.fixture

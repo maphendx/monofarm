@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
+import httpx
 import requests
 
 
@@ -59,6 +60,25 @@ def _request(method: str, base: str, path: str, **kw) -> dict:
         return {}
 
 
+async def _async_request(method: str, base: str, path: str, **kw) -> dict:
+    url = f"{base}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
+            resp = await client.request(method, url, **kw)
+    except httpx.RequestError as e:
+        raise MoonrakerError(f"Не вдалося зʼєднатись з принтером: {e}") from e
+    if resp.status_code >= 400:
+        try:
+            err = resp.json().get("error", {}).get("message") or resp.text
+        except Exception:
+            err = resp.text
+        raise MoonrakerError(f"Moonraker {resp.status_code}: {err}")
+    try:
+        return resp.json()
+    except ValueError:
+        return {}
+
+
 def get_printer_state(moonraker_url: str) -> dict:
     """Returns a dict with at least: state, state_message, hostname.
     Use it to verify connectivity before more complex operations.
@@ -77,22 +97,45 @@ def query_objects(moonraker_url: str, objects: list[str] | None = None) -> dict:
 
 def upload_gcode(
     moonraker_url: str,
-    file_path: Path,
+    file_path: Path | bytes,
     filename: str | None = None,
     start_print: bool = False,
 ) -> dict:
-    """Upload a .gcode/.3mf to Moonraker's `gcodes` root.
-
-    When start_print=True, Moonraker queues the print immediately after upload.
-
-    Returns Moonraker's response: {item: {...}, print_started: bool, ...}.
-    """
+    """Upload a .gcode/.3mf to Moonraker's `gcodes` root."""
     base = _api_base(moonraker_url)
-    name = filename or file_path.name
-    with file_path.open("rb") as f:
-        files = {"file": (name, f, "application/octet-stream")}
-        data = {"root": "gcodes", "print": "true" if start_print else "false"}
-        return _request("POST", base, "/server/files/upload", files=files, data=data)
+
+    if isinstance(file_path, bytes):
+        name = filename or "upload.gcode"
+        content = file_path
+    else:
+        name = filename or file_path.name
+        content = file_path.read_bytes()
+
+    files = {"file": (name, content, "application/octet-stream")}
+    data = {"root": "gcodes", "print": "true" if start_print else "false"}
+    return _request("POST", base, "/server/files/upload", files=files, data=data)
+
+
+async def async_upload_gcode(
+    moonraker_url: str,
+    file_path: Path | bytes,
+    filename: str | None = None,
+    start_print: bool = False,
+) -> dict:
+    """Async upload a .gcode/.3mf to Moonraker's `gcodes` root."""
+    base = _api_base(moonraker_url)
+
+    if isinstance(file_path, bytes):
+        name = filename or "upload.gcode"
+        content = file_path
+    else:
+        import asyncio
+        name = filename or file_path.name
+        content = await asyncio.to_thread(file_path.read_bytes)
+
+    files = {"file": (name, content, "application/octet-stream")}
+    data = {"root": "gcodes", "print": "true" if start_print else "false"}
+    return await _async_request("POST", base, "/server/files/upload", files=files, data=data)
 
 
 def start_print(moonraker_url: str, filename: str) -> dict:
@@ -100,6 +143,14 @@ def start_print(moonraker_url: str, filename: str) -> dict:
     base = _api_base(moonraker_url)
     safe = quote(filename, safe="")
     return _request("POST", base, f"/printer/print/start?filename={safe}").get("result", {})
+
+
+async def async_start_print(moonraker_url: str, filename: str) -> dict:
+    """Async start printing an already-uploaded file."""
+    base = _api_base(moonraker_url)
+    safe = quote(filename, safe="")
+    res = await _async_request("POST", base, f"/printer/print/start?filename={safe}")
+    return res.get("result", {})
 
 
 def pause_print(moonraker_url: str) -> dict:

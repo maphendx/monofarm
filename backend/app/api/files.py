@@ -613,8 +613,7 @@ async def send_to_printer(
                     tmp.write(working)
                     tmp_path = Path(tmp.name)
                 try:
-                    await asyncio.to_thread(
-                        mr.upload_gcode,
+                    await mr.async_upload_gcode(
                         printer.moonraker_url,
                         tmp_path,
                         row.original_name,
@@ -623,8 +622,7 @@ async def send_to_printer(
                 finally:
                     tmp_path.unlink(missing_ok=True)
             else:
-                await asyncio.to_thread(
-                    mr.upload_gcode,
+                await mr.async_upload_gcode(
                     printer.moonraker_url,
                     src,
                     row.original_name,

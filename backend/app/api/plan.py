@@ -1,4 +1,3 @@
-import asyncio
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -30,8 +29,8 @@ router = APIRouter(prefix="/plan", tags=["plan"])
 
 
 def _to_out(entry: PlanEntry, db: Session) -> PlanEntryOut:
-    printer = db.get(Printer, entry.printer_id)
-    task = db.get(PrintTask, entry.task_id)
+    printer = entry.printer
+    task = entry.task
     return PlanEntryOut(
         id=entry.id,
         plan_date=entry.plan_date,
@@ -52,9 +51,11 @@ def get_plan(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[PlanEntryOut]:
+    from sqlalchemy.orm import joinedload
     target = plan_date or date.today()
     entries = (
         db.query(PlanEntry)
+        .options(joinedload(PlanEntry.printer), joinedload(PlanEntry.task))
         .filter(PlanEntry.plan_date == target, PlanEntry.organization_id == org.id)
         .order_by(PlanEntry.printer_id, PlanEntry.sequence, PlanEntry.created_at)
         .all()
@@ -161,8 +162,8 @@ async def send_entry_to_printer(
     url = printer.moonraker_url
 
     try:
-        await asyncio.to_thread(moonraker.upload_gcode, url, file_path, task.file_ref)
-        await asyncio.to_thread(moonraker.start_print, url, task.file_ref)
+        await moonraker.async_upload_gcode(url, file_path, task.file_ref)
+        await moonraker.async_start_print(url, task.file_ref)
     except moonraker.MoonrakerError as e:
         raise HTTPException(status_code=502, detail=str(e))
 

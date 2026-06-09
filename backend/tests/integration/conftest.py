@@ -118,11 +118,18 @@ def mock_external_services(monkeypatch) -> dict[str, MagicMock]:
     mr_upload = MagicMock(return_value={"item": {"path": "test.gcode"}, "print_started": False})
     monkeypatch.setattr(moonraker, "upload_gcode", mr_upload)
 
+    from unittest.mock import AsyncMock
+    mr_async_upload = AsyncMock(return_value={"item": {"path": "test.gcode"}, "print_started": False})
+    monkeypatch.setattr(moonraker, "async_upload_gcode", mr_async_upload, raising=False)
+
+    mr_async_start = AsyncMock(return_value={"result": "ok"})
+    monkeypatch.setattr(moonraker, "async_start_print", mr_async_start, raising=False)
+
     return {
         "bambu_list": bambu_list,
         "bambu_status": bambu_status,
         "moonraker_status": mr_status,
-        "moonraker_upload": mr_upload,
+        "moonraker_upload": mr_async_upload,  # the tests now call the async version
     }
 
 
