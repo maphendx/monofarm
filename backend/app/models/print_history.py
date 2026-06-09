@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Index, String
+from sqlalchemy import ForeignKey, Index, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -13,6 +15,7 @@ class PrintHistory(Base):
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
     printer_id: Mapped[int] = mapped_column(ForeignKey("printers.id", ondelete="CASCADE"), nullable=False)
     printer_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    printer_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     file_name: Mapped[str | None] = mapped_column(String(512))
     started_at: Mapped[datetime] = mapped_column(nullable=False, default=lambda: datetime.now(timezone.utc))
     finished_at: Mapped[datetime | None]
@@ -21,6 +24,11 @@ class PrintHistory(Base):
     result: Mapped[str] = mapped_column(String(32), nullable=False, default="in_progress")
     result_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     filament_g: Mapped[float | None]
+
+    # Per-slot consumption breakdown: [{slot_index, filament_id, grams, length_mm}]
+    slots_used: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Sum of (grams/1000 * cost_per_kg) across all slots
+    material_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     # cloud | lan | moonraker | manual
     source: Mapped[str | None] = mapped_column(String(16), nullable=True)

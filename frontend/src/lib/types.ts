@@ -74,6 +74,8 @@ export interface PrinterSlotInfo {
   brand: string | null;
   grams_at_load: number | null;
   state: SlotState;
+  unit_index: number | null;
+  is_external: boolean;
 }
 
 export interface FilamentColor {

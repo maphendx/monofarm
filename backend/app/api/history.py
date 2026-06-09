@@ -16,6 +16,7 @@ class PrintHistoryOut(BaseModel):
     id: int
     printer_id: int
     printer_name: str
+    printer_kind: str | None = None
     file_name: str | None
     started_at: datetime
     finished_at: datetime | None
@@ -23,6 +24,8 @@ class PrintHistoryOut(BaseModel):
     result: str
     result_reason: str | None = None
     filament_g: float | None
+    slots_used: list | None = None
+    material_cost: float | None = None
     source: str | None = None
     created_by_user_id: int | None = None
     file_sha256: str | None = None

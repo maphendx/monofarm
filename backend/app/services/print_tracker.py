@@ -92,7 +92,7 @@ def _check_org(db, org: Organization) -> None:
         # printing → done: close history entry
         elif prev_state in PRINTING_STATES and state not in PRINTING_STATES:
             result = "completed" if state == "operational" else ("failed" if state == "error" else "cancelled")
-            _close_stale(db, row.id, now, result)
+            _finalize_print(db, row, now, result)
             log.info("PrintHistory: %s on %s", result, row.name)
 
         _prev[row.id] = current
@@ -136,3 +136,24 @@ def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
         delta = now - entry.started_at.replace(tzinfo=timezone.utc) if entry.started_at.tzinfo is None else now - entry.started_at
         entry.duration_minutes = max(0, int(delta.total_seconds() / 60))
         db.commit()
+
+
+def _finalize_print(db, printer: Printer, now: datetime, result: str) -> None:
+    """Close stale in-progress entry and run consumption accounting for any printer kind."""
+    entry = (
+        db.query(PrintHistory)
+        .filter(
+            PrintHistory.printer_id == printer.id,
+            PrintHistory.result == "in_progress",
+            or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
+            PrintHistory.bambu_cloud_job_id.is_(None),
+        )
+        .order_by(PrintHistory.started_at.desc())
+        .first()
+    )
+    if not entry:
+        return
+
+    from app.services.print_costing import finalize_print
+    finalize_print(db, entry, printer, result, now=now)
+    db.commit()

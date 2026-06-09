@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,11 +26,15 @@ class SlotEventType(str, enum.Enum):
 
 
 class PrinterSlot(Base):
-    """One physical filament slot on a printer (source of truth for U1 toolheads).
+    """Universal filament slot — works for any printer kind.
 
-    slot_index is 0-based to match G-code T0..T3 and loaded_filaments JSONB.
+    slot_index convention (matches loaded_filaments JSONB and G-code tool numbers):
+      - Klipper / Moonraker: 0–N (T0..T3 for a 4-head toolchanger)
+      - Bambu AMS: unit_id * 4 + tray_id  (unit 0 trays 0-3 = slots 0-3, unit 1 = 4-7 …)
+      - External spool (Bambu vt_tray / any external): slot_index = 254, is_external = True
+
     Snapshot fields (material/color/hex_color/brand) are copied from the linked
-    Filament row at load time so they render without a join.
+    Filament row at load time so the UI renders without a join.
     """
     __tablename__ = "printer_slots"
 
@@ -38,6 +42,7 @@ class PrinterSlot(Base):
     printer_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("printers.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # See slot_index convention in class docstring
     slot_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     filament_id: Mapped[int | None] = mapped_column(
@@ -54,6 +59,13 @@ class PrinterSlot(Base):
     state: Mapped[SlotState] = mapped_column(
         Enum(SlotState), default=SlotState.empty, server_default="empty"
     )
+
+    # Multi-unit AMS support (Bambu): which AMS unit this tray belongs to.
+    # For Klipper/single-head: 0. For external spool: None.
+    unit_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # True only for slot_index=254 (Bambu external spool / vt_tray)
+    is_external: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
+import { SlotStrip } from "@/components/printers/SlotStrip";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
@@ -377,6 +378,12 @@ export function PrinterDetailModal({
                       size={14}
                       showLabel
                     />
+                  </div>
+                )}
+                {printer.slots && printer.slots.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-[var(--text-muted)]">Слоти</div>
+                    <SlotStrip slots={printer.slots} kind={printer.kind} />
                   </div>
                 )}
               </div>

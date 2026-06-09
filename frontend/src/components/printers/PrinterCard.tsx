@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
+import { SlotStrip } from "@/components/printers/SlotStrip";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
@@ -136,42 +137,10 @@ export function PrinterCard({
         </div>
       )}
 
-      {/* U1 physical slot swatches (4 fixed slots with state) */}
-      {printer.kind === "snapmaker_u1" && printer.slots && (
-        <div className="flex gap-1">
-          {printer.slots.map((s) => {
-            const isEmpty = s.state === "empty" || !s.filament_id;
-            const isRunout = s.state === "runout";
-            const hex = s.hex_color ?? (s.color?.startsWith("#") ? s.color : null);
-            return (
-              <span
-                key={s.slot_index}
-                title={
-                  isEmpty
-                    ? `Слот ${s.slot_index + 1}: порожній`
-                    : `Слот ${s.slot_index + 1}: ${s.material ?? ""}${s.brand ? ` · ${s.brand}` : ""}${s.grams_at_load ? ` · ${s.grams_at_load}г` : ""}${isRunout ? " · RUNOUT" : ""}`
-                }
-                className={[
-                  "relative size-3 rounded-full ring-1",
-                  isEmpty
-                    ? "ring-[var(--border)] bg-[var(--bg-elevated)]"
-                    : isRunout
-                      ? "ring-[var(--state-error)]"
-                      : "ring-[var(--border-strong)]",
-                ].join(" ")}
-                style={hex && !isEmpty ? { backgroundColor: hex } : undefined}
-              >
-                {isRunout && (
-                  <span className="absolute inset-0 rounded-full bg-[var(--state-error)] opacity-70" />
-                )}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Filament dots — Bambu AMS and other printers */}
-      {printer.kind !== "snapmaker_u1" && printer.loaded_filaments?.length > 0 && (
+      {/* Slot strip — all printer kinds; falls back to loaded_filaments dots for Bambu */}
+      {printer.slots && printer.slots.length > 0 ? (
+        <SlotStrip slots={printer.slots} kind={printer.kind} />
+      ) : printer.kind !== "snapmaker_u1" && printer.loaded_filaments?.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {printer.loaded_filaments.map((s, i) => {
             const hex = s.color.startsWith("#") ? s.color.slice(0, 7) : s.color;
@@ -185,7 +154,7 @@ export function PrinterCard({
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {printer.current_filament_meta && (
         <FilamentSwatches meta={printer.current_filament_meta} size={9} />

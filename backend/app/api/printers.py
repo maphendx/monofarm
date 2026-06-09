@@ -129,14 +129,20 @@ def _to_dto(
             group_name = g.name if g else None
 
     u1_slots: list[dict] | None = None
-    if printer.kind == PrinterKind.snapmaker_u1 and prefetched_slots is not None:
-        by_idx = {s["slot_index"]: s for s in prefetched_slots}
-        u1_slots = [
-            by_idx.get(i, {"slot_index": i, "state": "empty", "filament_id": None,
-                           "material": None, "color": None, "hex_color": None, "brand": None,
-                           "grams_at_load": None})
-            for i in range(4)
-        ]
+    if prefetched_slots is not None:
+        if printer.kind == PrinterKind.snapmaker_u1:
+            # Always show 4 slots for U1 (T0..T3), fill empties
+            by_idx = {s["slot_index"]: s for s in prefetched_slots}
+            u1_slots = [
+                by_idx.get(i, {"slot_index": i, "state": "empty", "filament_id": None,
+                               "material": None, "color": None, "hex_color": None,
+                               "brand": None, "grams_at_load": None,
+                               "unit_index": 0, "is_external": False})
+                for i in range(4)
+            ]
+        else:
+            # Bambu and others — return the slots as-is (sorted by slot_index)
+            u1_slots = sorted(prefetched_slots, key=lambda s: s["slot_index"]) or None
 
     base = dict(
         id=printer.id,
@@ -605,12 +611,12 @@ async def list_printers(
     else:
         live_by_url = {}
 
-    # Batch-fetch PrinterSlot rows for all U1 printers in one query
+    # Batch-fetch PrinterSlot rows for all printers in one query
     from app.models.printer_slot import PrinterSlot as _PrinterSlot
-    u1_ids = [r.id for r in rows if r.kind == PrinterKind.snapmaker_u1]
+    all_ids = [r.id for r in rows]
     slots_by_printer: dict[int, list[dict]] = {}
-    if u1_ids:
-        slot_rows = db.query(_PrinterSlot).filter(_PrinterSlot.printer_id.in_(u1_ids)).all()
+    if all_ids:
+        slot_rows = db.query(_PrinterSlot).filter(_PrinterSlot.printer_id.in_(all_ids)).all()
         for s in slot_rows:
             slots_by_printer.setdefault(s.printer_id, []).append({
                 "slot_index": s.slot_index,
@@ -621,12 +627,14 @@ async def list_printers(
                 "brand": s.brand,
                 "grams_at_load": s.grams_at_load,
                 "state": s.state.value,
+                "unit_index": s.unit_index,
+                "is_external": s.is_external,
             })
 
     out: list[PrinterOut] = []
     for row in rows:
         prefetched = live_by_url.get(row.moonraker_url) if row.moonraker_url else None
-        pslots = slots_by_printer.get(row.id) if row.kind == PrinterKind.snapmaker_u1 else None
+        pslots = slots_by_printer.get(row.id) or None
         out.append(_to_dto(row, db, groups_by_id, prefetched_live=prefetched, prefetched_slots=pslots))
     return out
 
