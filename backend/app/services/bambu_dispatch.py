@@ -586,6 +586,10 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
             correlation_id=job.correlation_id,
         )
 
+        stored = job.request_payload_json or {}
+        ams_mapping: list[int] | None = stored.get("ams_mapping")
+        use_ams: bool = stored.get("use_ams", True)
+
         task_body: dict[str, Any] = {
             "modelId": model_id,
             "projectId": project_id,
@@ -593,13 +597,16 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
             "cover": cover_url,
             "deviceId": job.printer_bambu_dev_id,
             "plateIndex": 1,
-            "useAms": True,
+            "useAms": use_ams,
             "bedLeveling": True,
             "flowCali": False,
             "vibrationCali": True,
             "layerInspect": False,
             "timelapse": False,
         }
+        if ams_mapping is not None:
+            task_body["amsMapping"] = ams_mapping
+
         job = advance_job_status(job_id, BambuCloudJobStatus.task_creating, request_payload_json=task_body)
 
         task_data = create_task_with_retry(org_id, task_body)
