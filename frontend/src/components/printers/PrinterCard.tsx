@@ -136,7 +136,20 @@ export function PrinterCard({
 
       {/* Slot strip — all printer kinds; falls back to loaded_filaments dots for Bambu */}
       {printer.slots && printer.slots.length > 0 ? (
-        <SlotStrip slots={printer.slots} kind={printer.kind} />
+        <SlotStrip
+          slots={printer.slots}
+          kind={printer.kind}
+          editable={canEdit}
+          printerId={printer.id}
+          onSlotUpdated={(updated) =>
+            onUpdated?.({
+              ...printer,
+              slots: (printer.slots ?? []).map((s) =>
+                s.slot_index === updated.slot_index ? updated : s
+              ),
+            })
+          }
+        />
       ) : printer.kind !== "snapmaker_u1" && printer.loaded_filaments?.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {printer.loaded_filaments.map((s, i) => {
