@@ -449,7 +449,9 @@ def _execute_with_retry(org_id: int, op_name: str, request_fn, *, auth_aware: bo
             continue
 
         if resp.status_code >= 400:
-            raise BambuValidationError(f"{op_name}: Bambu Cloud rejected the request (HTTP {resp.status_code})")
+            body_hint = (resp.text or "")[:400]
+            log.warning("bambu.cloud.%s.rejected org_id=%s status=%s body=%s", op_name, org_id, resp.status_code, body_hint)
+            raise BambuValidationError(f"{op_name}: Bambu Cloud rejected the request (HTTP {resp.status_code}) — {body_hint}")
 
         return resp
 
@@ -607,6 +609,7 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         if ams_mapping is not None:
             task_body["amsMapping"] = ams_mapping
 
+        log.info("bambu.cloud.task_create org_id=%s printer=%s ams_mapping=%s use_ams=%s", org_id, job.printer_bambu_dev_id, ams_mapping, use_ams)
         job = advance_job_status(job_id, BambuCloudJobStatus.task_creating, request_payload_json=task_body)
 
         task_data = create_task_with_retry(org_id, task_body)
