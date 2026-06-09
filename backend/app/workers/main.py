@@ -111,6 +111,11 @@ async def main() -> None:
 
     # APScheduler — only on the leader worker
     is_leader = leader.try_acquire()
+    if not is_leader:
+        # Stale lock from a previous deploy — wait for it to expire and retry once
+        log.info("Leader lock held by another worker — waiting %ds for expiry...", leader.LOCK_TTL + 2)
+        await asyncio.sleep(leader.LOCK_TTL + 2)
+        is_leader = leader.try_acquire()
     if is_leader:
         try:
             scheduler.start()
