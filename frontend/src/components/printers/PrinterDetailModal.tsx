@@ -391,7 +391,20 @@ export function PrinterDetailModal({
                 {printer.slots && printer.slots.length > 0 && (
                   <div>
                     <div className="mb-1 text-[var(--text-muted)]">Слоти</div>
-                    <SlotStrip slots={printer.slots} kind={printer.kind} />
+                    <SlotStrip
+                      slots={printer.slots}
+                      kind={printer.kind}
+                      editable={canEdit}
+                      printerId={printer.id}
+                      onSlotUpdated={(updated) =>
+                        onUpdated({
+                          ...printer,
+                          slots: (printer.slots ?? []).map((s) =>
+                            s.slot_index === updated.slot_index ? updated : s,
+                          ),
+                        })
+                      }
+                    />
                   </div>
                 )}
               </div>
