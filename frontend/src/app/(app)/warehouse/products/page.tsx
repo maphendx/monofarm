@@ -1340,7 +1340,31 @@ export default function ProductsPage() {
     } finally { setLoading(false); }
   }, []);
 
+  const refreshStock = useCallback(async () => {
+    try {
+      const stk = await api<StockEntry[]>("/api/warehouse/stock/summary");
+      setStock(stk);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => { load(showArchive); }, [load, showArchive]);
+
+  // Refresh stock when tab becomes visible again (user switches back from another page)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") refreshStock();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refreshStock]);
+
+  // Poll stock every 30s while tab is active
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") refreshStock();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [refreshStock]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<number, number>();
