@@ -157,6 +157,63 @@ function compatBadge(slots: ReturnType<typeof checkSlots>) {
   return { label: `тип не збігається (${mismatch})`, cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" };
 }
 
+// ── Send progress toast ───────────────────────────────────────────────────────
+function SendToast({ fileName, printerName, busy, result }: {
+  fileName: string;
+  printerName: string;
+  busy: boolean;
+  result: { ok: boolean; message: string } | null;
+}) {
+  const [pct, setPct] = useState(0);
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    if (!busy) return;
+    setShow(true);
+    setPct(0);
+    const id = setInterval(() => setPct(p => p < 90 ? Math.min(p + 1.5, 90) : p), 100);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  useEffect(() => {
+    if (busy || result === null) return;
+    setPct(100);
+    const tid = setTimeout(() => setShow(false), 3000);
+    return () => clearTimeout(tid);
+  }, [busy, result]);
+
+  if (!show) return null;
+  const done = !busy && result !== null;
+  const ok = done && result!.ok;
+
+  return (
+    <div className="fixed bottom-5 right-5 z-[9999] w-72 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-2xl">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-semibold text-[var(--text)]">
+          {!done ? "Надсилаємо…" : ok ? "✓ Відправлено" : "✕ Помилка"}
+        </span>
+        <span className="text-[10px] text-[var(--text-faint)] truncate max-w-[100px]">{printerName}</span>
+      </div>
+      <p className="mb-3 truncate text-[11px] text-[var(--text-muted)]">{fileName}</p>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)]">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${pct}%`,
+            background: !done ? "var(--accent)" : ok ? "var(--state-ok)" : "var(--state-error)",
+          }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between">
+        <span className="text-[10px] text-[var(--text-faint)] truncate max-w-[200px]">
+          {done ? result!.message : ""}
+        </span>
+        <span className="shrink-0 text-[10px] tabular-nums text-[var(--text-faint)]">{Math.round(pct)}%</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Send modal ────────────────────────────────────────────────────────────────
 function SendModal({ file, printers, onClose, defaultPrinterId }: {
   file: GcodeFile; printers: Printer[]; onClose: () => void; defaultPrinterId?: number;
@@ -442,6 +499,12 @@ function SendModal({ file, printers, onClose, defaultPrinterId }: {
           </div>
         </div>
       </div>
+      <SendToast
+        fileName={file.original_name}
+        printerName={selected?.name ?? ""}
+        busy={busy}
+        result={result}
+      />
     </div>
   );
 }

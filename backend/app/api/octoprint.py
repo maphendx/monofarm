@@ -396,13 +396,35 @@ async def orca_upload(
             .filter(Printer.id == printer_id, Printer.organization_id == user.organization_id)
             .first()
         )
-        if printer and printer.kind != PrinterKind.bambu:
-            slots = db.query(PrinterSlot).filter_by(printer_id=printer_id).all()
-            slot_map = _auto_slot_map(row.filament_meta, slots)
-            try:
-                await _autoprint_moonraker(printer, row, slot_map, user.organization_id)
-            except Exception:
-                pass  # file is stored — don't fail the upload response
+        if printer:
+            if printer.kind == PrinterKind.bambu:
+                if settings.BAMBU_CLOUD_V2_ENABLED and printer.bambu_dev_id:
+                    is_3mf = ".3mf" in Path(row.original_name).suffixes
+                    if is_3mf:
+                        try:
+                            from app.models.organization import Organization
+                            from app.services import bambu_dispatch
+                            org = db.get(Organization, user.organization_id)
+                            bambu_dispatch.create_cloud_job(
+                                db,
+                                org_id=user.organization_id,
+                                printer_id=printer.id,
+                                printer_bambu_dev_id=printer.bambu_dev_id,
+                                gcode_file_id=row.id,
+                                file_name=row.original_name,
+                                region=org.bambu_region if org else None,
+                                created_by_user_id=user.id,
+                                request_payload={"source": "orca.auto_print"},
+                            )
+                        except Exception:
+                            pass  # file is stored — don't fail the upload response
+            else:
+                slots = db.query(PrinterSlot).filter_by(printer_id=printer_id).all()
+                slot_map = _auto_slot_map(row.filament_meta, slots)
+                try:
+                    await _autoprint_moonraker(printer, row, slot_map, user.organization_id)
+                except Exception:
+                    pass  # file is stored — don't fail the upload response
 
     return _build_response(row, user)
 
