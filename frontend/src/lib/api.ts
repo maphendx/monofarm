@@ -91,6 +91,8 @@ export async function updatePlanEntry(
     blocked_reason: string | null;
     done: boolean;
     note: string | null;
+    plan_date: string | null;
+    printer_id: number | null;
   }>,
 ): Promise<PlanEntry> {
   return api<PlanEntry>(`/api/plan/${id}`, { method: "PATCH", body: JSON.stringify(patch) });

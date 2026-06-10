@@ -15,24 +15,21 @@ import { fmtTimeMins, fmtDuration } from "./utils";
  */
 export function ScheduleJobBlock({
   block,
-  cellWidthPx,
   onClick,
 }: {
   block: CalendarBlock;
-  cellWidthPx: number;
   onClick: () => void;
 }) {
   const { entry, startMins, endMins, isContinuation, totalDurationMins } = block;
   const isConflict = entry.conflict;
   const isBlocked  = !!entry.blocked_reason && entry.schedule_mode !== "asap";
 
-  const leftPct  = (startMins / 1440) * 100;
-  const widthPct = ((endMins - startMins) / 1440) * 100;
-
-  // Minimum visible width so short jobs don't disappear
+  const leftPct   = (startMins / 1440) * 100;
+  const widthPct  = ((endMins - startMins) / 1440) * 100;
   const minWidthPx = 36;
-  const computedWidthPx = (widthPct / 100) * cellWidthPx;
-  const tooNarrow = computedWidthPx < minWidthPx;
+
+  // Hide text when the block spans < 2% of the day (< ~29 min) so it stays legible
+  const tooNarrow = widthPct < 2;
 
   const startLabel = fmtTimeMins(startMins);
   const endLabel   = fmtTimeMins(endMins < 1440 ? endMins : 0); // 1440 = 00:00 next day
@@ -56,9 +53,16 @@ export function ScheduleJobBlock({
       : "border-t-[3px] border-t-[var(--accent)]"
     : "";
 
+  function onDragStart(e: React.DragEvent<HTMLButtonElement>) {
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id }));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
   return (
     <button
       type="button"
+      draggable
+      onDragStart={onDragStart}
       onClick={onClick}
       title={`${entry.task.title}\n${startLabel}–${endLabel} · ${fmtDuration(totalDurationMins)}`}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)` }}

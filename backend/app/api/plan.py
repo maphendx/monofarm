@@ -239,9 +239,18 @@ def update_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Plan entry not found")
 
-    # model_dump(exclude_unset=True) correctly handles null-clearing:
-    # sending {"start_time": null} → sets to None; omitting → unchanged.
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+
+    # printer_id change requires org-scoped validation
+    if "printer_id" in updates and updates["printer_id"] is not None:
+        new_printer = db.query(Printer).filter(
+            Printer.id == updates["printer_id"],
+            Printer.organization_id == org.id,
+        ).first()
+        if not new_printer:
+            raise HTTPException(status_code=404, detail="Printer not found")
+
+    for field, value in updates.items():
         setattr(entry, field, value)
 
     db.commit()

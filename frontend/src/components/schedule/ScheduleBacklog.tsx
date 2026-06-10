@@ -14,16 +14,24 @@ function BacklogItem({
   const duration = task.estimated_minutes;
   const material = [task.filament_type, task.filament_color].filter(Boolean).join(" · ");
 
+  function handleDragStart(e: React.DragEvent<HTMLButtonElement>) {
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "backlog", taskId: task.id }));
+    e.dataTransfer.effectAllowed = "move";
+  }
+
   return (
     <button
       type="button"
+      draggable
+      onDragStart={handleDragStart}
       onClick={() => onSchedule(task)}
-      className="group w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
+      className="group w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-2">
         <span className="truncate text-xs font-medium text-[var(--text)] group-hover:text-[var(--accent)]">
           {task.file_name ?? task.title}
         </span>
+        <span className="mt-px shrink-0 text-[10px] text-[var(--text-faint)] opacity-40 group-hover:opacity-70">⠿</span>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[var(--text-faint)]">
@@ -35,7 +43,7 @@ function BacklogItem({
       </div>
 
       <div className="mt-1.5 text-[9px] text-[var(--accent)] opacity-0 transition-opacity group-hover:opacity-100">
-        Натисніть щоб запланувати →
+        Перетягни на календар або натисни →
       </div>
     </button>
   );

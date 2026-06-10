@@ -31,6 +31,9 @@ class PlanEntryUpdate(BaseModel):
     window_end_at: datetime | None = None
     priority: int | None = None
     blocked_reason: str | None = None
+    # DnD rescheduling — validated in the router
+    plan_date: date | None = None
+    printer_id: int | None = None
 
 
 class PlanEntryOut(BaseModel):

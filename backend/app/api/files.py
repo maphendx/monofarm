@@ -106,6 +106,8 @@ class SendPayload(BaseModel):
     # 0-based extruder indices to calibrate. None = leave SM_PRINT_FLOW_CALIBRATE
     # lines untouched; empty list = skip calibration on every slot.
     calibrate_slots: list[int] | None = None
+    # Optional link to a PrintTask — used for schedule eligibility guard.
+    task_id: int | None = None
 
 
 class SendResult(BaseModel):
@@ -490,6 +492,41 @@ async def send_to_printer(
 
     if not storage_svc.exists(row.stored_name, org.id):
         raise HTTPException(status_code=404, detail="Файл відсутній")
+
+    # ── Schedule eligibility guard ──────────────────────────────────────────
+    # If the send is linked to a task that has a non-asap PlanEntry for today
+    # on this printer, enforce the scheduling constraint before dispatching.
+    if payload.task_id is not None:
+        from datetime import date as _date, datetime as _dt, timezone as _tz
+        from app.models.plan import PlanEntry as _PE
+        from app.services.schedule_conflict import check_eligibility as _chk
+
+        plan_entry = (
+            db.query(_PE)
+            .filter(
+                _PE.organization_id == org.id,
+                _PE.task_id == payload.task_id,
+                _PE.printer_id == printer_id,
+                _PE.plan_date == _date.today(),
+                _PE.schedule_mode != "asap",
+            )
+            .first()
+        )
+        if plan_entry:
+            eligible, reason = _chk(plan_entry, _dt.now(_tz.utc))
+            if not eligible:
+                _mode_msg = {
+                    "not_before": f"Завдання запланване не раніше {plan_entry.start_time}",
+                    "exact_time": f"Точний старт о {plan_entry.start_time}",
+                    "window": "Завдання поза дозволеним часовим вікном",
+                }
+                raise HTTPException(
+                    status_code=409,
+                    detail=_mode_msg.get(
+                        plan_entry.schedule_mode,
+                        f"Завдання заблоковане: {reason}",
+                    ),
+                )
 
     # File bytes are only needed by the legacy synchronous Moonraker path —
     # queued dispatchers read from storage themselves, so don't download the
