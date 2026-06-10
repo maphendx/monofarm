@@ -2,6 +2,7 @@
 
 import type { CalendarBlock } from "./utils";
 import { fmtTimeMins, fmtDuration } from "./utils";
+import { API_URL } from "@/lib/api";
 
 /**
  * A single timed block on the calendar timeline.
@@ -33,6 +34,11 @@ export function ScheduleJobBlock({
 
   const startLabel = fmtTimeMins(startMins);
   const endLabel   = fmtTimeMins(endMins < 1440 ? endMins : 0); // 1440 = 00:00 next day
+  const fileLabel  = entry.task.file_name ?? entry.task.title;
+  const taskLabel  = entry.task.title !== fileLabel ? entry.task.title : null;
+  const thumbSrc   = entry.task.has_thumbnail && entry.task.gcode_file_id
+    ? `${API_URL}/api/files/${entry.task.gcode_file_id}/thumbnail`
+    : null;
 
   const base =
     "absolute top-1 bottom-1 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
@@ -64,37 +70,60 @@ export function ScheduleJobBlock({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      title={`${entry.task.title}\n${startLabel}–${endLabel} · ${fmtDuration(totalDurationMins)}`}
+      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${startLabel}–${endLabel} · ${fmtDuration(totalDurationMins)}`}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)` }}
       className={`${base} ${colorCls} ${topBorder}`}
     >
-      <div className="flex h-full flex-col justify-start gap-0.5 px-1.5 pt-1">
-        {/* Title line */}
-        <span className={[
-          "truncate text-[10px] font-semibold leading-tight",
-          tooNarrow ? "opacity-0" : "",
-          isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
-        ].join(" ")}>
-          {isContinuation ? `↩ ${entry.task.title}` : entry.task.title}
-        </span>
-
-        {/* Time + duration */}
+      <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
         {!tooNarrow && (
-          <span className="truncate text-[9px] tabular-nums text-[var(--text-muted)]">
-            {isContinuation
-              ? `до ${endLabel}`
-              : `${startLabel}–${endMins >= 1440 ? "00:00↗" : endLabel}`}
-            {" · "}{fmtDuration(totalDurationMins)}
-          </span>
+          thumbSrc ? (
+            <img
+              src={thumbSrc}
+              alt=""
+              draggable={false}
+              className="h-8 w-8 shrink-0 rounded object-cover"
+            />
+          ) : (
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[8px] font-semibold uppercase text-[var(--text-faint)]">
+              3mf
+            </div>
+          )
         )}
 
-        {/* Conflict / blocked indicators */}
-        {!tooNarrow && isConflict && (
-          <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
-        )}
-        {!tooNarrow && isBlocked && !isConflict && (
-          <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
-        )}
+        <div className="flex min-w-0 flex-1 flex-col justify-start gap-0.5">
+          {/* File name line */}
+          <span className={[
+            "truncate text-[10px] font-semibold leading-tight",
+            tooNarrow ? "opacity-0" : "",
+            isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+          ].join(" ")}>
+            {isContinuation ? `↩ ${fileLabel}` : fileLabel}
+          </span>
+
+          {!tooNarrow && taskLabel && (
+            <span className="truncate text-[9px] leading-tight text-[var(--text-faint)]">
+              {taskLabel}
+            </span>
+          )}
+
+          {/* Time + duration */}
+          {!tooNarrow && (
+            <span className="truncate text-[9px] tabular-nums text-[var(--text-muted)]">
+              {isContinuation
+                ? `до ${endLabel}`
+                : `${startLabel}–${endMins >= 1440 ? "00:00↗" : endLabel}`}
+              {" · "}{fmtDuration(totalDurationMins)}
+            </span>
+          )}
+
+          {/* Conflict / blocked indicators */}
+          {!tooNarrow && isConflict && (
+            <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
+          )}
+          {!tooNarrow && isBlocked && !isConflict && (
+            <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
+          )}
+        </div>
       </div>
     </button>
   );

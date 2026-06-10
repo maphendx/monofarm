@@ -132,11 +132,14 @@ function buildZplFromTemplate(
     return [
       "^XA",
       "^CI28",
-      "^CW0,E:TT0003M_.TTF", // Swiss 721 (standard Zebra Unicode font)
-      "^CW0,E:TT0003M_.FNT", 
-      "^CW0,E:ARI000.FNT",   // Arial (often uploaded by ZDesigner)
-      "^CW0,E:CYRILLIC.FNT",
+      // ^CW0 commands are processed in order; the last *successful* one wins.
+      // Put TT0003M_.TTF last so Swiss 721 BT Unicode (Cyrillic-capable) takes
+      // priority over ARIAL.FNT when both files are present on the printer.
       "^CW0,E:ARIAL.FNT",
+      "^CW0,E:CYRILLIC.FNT",
+      "^CW0,E:ARI000.FNT",
+      "^CW0,E:TT0003M_.FNT",
+      "^CW0,E:TT0003M_.TTF", // Swiss 721 BT Unicode — highest priority
       `^PW${W}`,
       `^LL${H}`,
       "^LH0,0",
@@ -163,11 +166,11 @@ function buildZplFallback(items: WarehouseLabelItem[], qrVals: string[], wMm: nu
     return [
       "^XA",
       "^CI28",
-      "^CW0,E:TT0003M_.TTF",
-      "^CW0,E:TT0003M_.FNT",
-      "^CW0,E:ARI000.FNT",
-      "^CW0,E:CYRILLIC.FNT",
       "^CW0,E:ARIAL.FNT",
+      "^CW0,E:CYRILLIC.FNT",
+      "^CW0,E:ARI000.FNT",
+      "^CW0,E:TT0003M_.FNT",
+      "^CW0,E:TT0003M_.TTF",
       `^PW${W}`,
       `^LL${H}`,
       "^LH0,0",

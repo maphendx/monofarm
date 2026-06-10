@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
 import { API_URL, api, getToken } from "@/lib/api";
-import type { Filament } from "@/lib/types";
+import type { Filament, GcodeFile } from "@/lib/types";
 import {
   DEFAULT_FIELDS,
   LABEL_DIMS,

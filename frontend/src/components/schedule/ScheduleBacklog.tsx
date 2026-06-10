@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { PrintTask } from "@/lib/types";
 import { fmtDuration } from "./utils";
+import { API_URL } from "@/lib/api";
 
 function BacklogItem({
   task,
@@ -13,6 +14,10 @@ function BacklogItem({
 }) {
   const duration = task.estimated_minutes;
   const material = [task.filament_type, task.filament_color].filter(Boolean).join(" · ");
+  const fileLabel = task.file_name ?? task.title;
+  const thumbSrc = task.has_thumbnail && task.gcode_file_id
+    ? `${API_URL}/api/files/${task.gcode_file_id}/thumbnail`
+    : null;
 
   function handleDragStart(e: React.DragEvent<HTMLButtonElement>) {
     e.dataTransfer.setData("text/plain", JSON.stringify({ type: "backlog", taskId: task.id }));
@@ -27,11 +32,32 @@ function BacklogItem({
       onClick={() => onSchedule(task)}
       className="group w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] cursor-grab active:cursor-grabbing"
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="truncate text-xs font-medium text-[var(--text)] group-hover:text-[var(--accent)]">
-          {task.file_name ?? task.title}
-        </span>
-        <span className="mt-px shrink-0 text-[10px] text-[var(--text-faint)] opacity-40 group-hover:opacity-70">⠿</span>
+      <div className="flex items-start gap-2">
+        {thumbSrc ? (
+          <img
+            src={thumbSrc}
+            alt=""
+            draggable={false}
+            className="h-9 w-9 shrink-0 rounded object-cover"
+          />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[9px] font-semibold uppercase text-[var(--text-faint)]">
+            3mf
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <span className="truncate text-xs font-medium text-[var(--text)] group-hover:text-[var(--accent)]">
+              {fileLabel}
+            </span>
+            <span className="mt-px shrink-0 text-[10px] text-[var(--text-faint)] opacity-40 group-hover:opacity-70">⠿</span>
+          </div>
+          {task.title !== fileLabel && (
+            <span className="mt-0.5 block truncate text-[10px] text-[var(--text-faint)]">
+              {task.title}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-[var(--text-faint)]">

@@ -19,10 +19,13 @@ export interface LabelFields {
   sku: boolean;
   progress: boolean;
   labelId: boolean;
+  fileName: boolean;
+  fileThumbnail: boolean;
 }
 
 export const DEFAULT_FIELDS: LabelFields = {
-  barcode: true, colorName: false, brandMaterial: true, sku: true, progress: false, labelId: true,
+  barcode: true, colorName: false, brandMaterial: true, sku: true,
+  progress: false, labelId: true, fileName: false, fileThumbnail: false,
 };
 
 const FULL_G = 1000;
@@ -73,6 +76,8 @@ export function LabelPreview({
   customWmm,
   customHmm,
   fields = DEFAULT_FIELDS,
+  thumbnailUrl,
+  gcodeFileName,
 }: {
   filament: Filament;
   template: LabelTemplate;
@@ -82,6 +87,8 @@ export function LabelPreview({
   customWmm?: number;
   customHmm?: number;
   fields?: LabelFields;
+  thumbnailUrl?: string | null;
+  gcodeFileName?: string | null;
 }) {
   const pct = Math.min(100, Math.round((filament.grams_remaining / FULL_G) * 100));
   const barcodeText = (labelId && labelId.length > 0) ? labelId : (filament.sku ?? String(filament.id));
@@ -145,7 +152,6 @@ export function LabelPreview({
 
   // Text column starts after QR (or at left edge)
   const tx = !code128Mode && showBarcode ? qrX + qrSize + 8 : 10;
-  const tw = w - tx - 8;
 
   const isStd = template === "standard" || (template === "custom" && h >= 180);
   const fsTitle = isStd ? 13 : 10;
@@ -154,6 +160,15 @@ export function LabelPreview({
 
   // Bottom boundary for text (above code128 strip)
   const textBottom = h - code128AreaH - 4;
+
+  // File thumbnail at top-right corner
+  const showThumb    = fields.fileThumbnail && !!thumbnailUrl;
+  const showFileName = fields.fileName && !!gcodeFileName;
+  const thumbSize    = isStd ? 56 : 40;
+  const thumbX       = w - thumbSize - 6;
+
+  // Narrow text column when thumbnail occupies top-right
+  const tw = w - tx - (showThumb ? thumbSize + 14 : 8);
 
   return (
     <svg id="label-preview-svg" width={w} height={h} viewBox={`0 0 ${w} ${h}`}
@@ -205,8 +220,15 @@ export function LabelPreview({
 
       {/* SKU */}
       {fields.sku && filament.sku && (
-        <text x={tx} y={textBottom - 8} fontSize={fsSmall} fill="#9ca3af" fontFamily="monospace">
+        <text x={tx} y={textBottom - (showFileName ? 16 : 8)} fontSize={fsSmall} fill="#9ca3af" fontFamily="monospace">
           {filament.sku}
+        </text>
+      )}
+
+      {/* File name */}
+      {showFileName && (
+        <text x={tx} y={textBottom - 6} fontSize={fsSmall} fill="#6b7280" fontFamily="system-ui" fontStyle="italic">
+          {gcodeFileName!.length > 36 ? gcodeFileName!.slice(0, 33) + "…" : gcodeFileName}
         </text>
       )}
 
@@ -218,6 +240,22 @@ export function LabelPreview({
           <text x={tx + tw} y={textBottom - 10} fontSize={fsSmall} fill="#6b7280" textAnchor="end" fontFamily="system-ui">
             {pct}% · {filament.grams_remaining}/{FULL_G}g
           </text>
+        </>
+      )}
+
+      {/* File thumbnail — top right, stable href prevents browser reload on resize */}
+      {showThumb && (
+        <>
+          <defs>
+            <clipPath id={`label-thumb-${filament.id}`}>
+              <rect x={thumbX} y={6} width={thumbSize} height={thumbSize} rx={3} />
+            </clipPath>
+          </defs>
+          <image href={thumbnailUrl!} x={thumbX} y={6} width={thumbSize} height={thumbSize}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#label-thumb-${filament.id})`} />
+          <rect x={thumbX} y={6} width={thumbSize} height={thumbSize}
+            fill="none" stroke="#e5e7eb" strokeWidth={0.5} rx={3} />
         </>
       )}
 

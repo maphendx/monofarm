@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import type { CalendarEntry, CalendarLane } from "@/lib/types";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
@@ -166,7 +166,7 @@ export function ScheduleCalendar({
   onOpenModal,
   onRefresh,
 }: Props) {
-  const weekDates = getWeekDates(weekStart);
+  const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
   const todayStr  = isoDateStr(new Date());
 
   const [zoom, setZoom] = useState<Zoom>(2);
@@ -182,12 +182,35 @@ export function ScheduleCalendar({
   const [dropRelX,  setDropRelX]      = useState<number>(0);
   const [dropping, setDropping]       = useState(false);
   const [dropError, setDropError]     = useState<string | null>(null);
+  const dropPreviewRef = useRef<{ cell: string | null; mins: number | null }>({ cell: null, mins: null });
 
-  const blockMap   = buildCalendarBlocks(lanes, weekDates);
-  const untimedMap = buildUntimedMap(lanes, weekDates);
+  const blockMap   = useMemo(() => buildCalendarBlocks(lanes, weekDates), [lanes, weekDates]);
+  const untimedMap = useMemo(() => buildUntimedMap(lanes, weekDates), [lanes, weekDates]);
 
   function handleEntryClick(entry: CalendarEntry) {
     onOpenModal({ type: "edit", entry });
+  }
+
+  function findEntry(entryId: number): CalendarEntry | null {
+    for (const lane of lanes) {
+      for (const day of lane.days) {
+        const entry = day.entries.find(e => e.id === entryId);
+        if (entry) return entry;
+      }
+    }
+    return null;
+  }
+
+  function getDropMins(e: React.DragEvent<HTMLDivElement>): number {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width));
+    return Math.min(Math.round(relX * 1440 / 15) * 15, 1410);
+  }
+
+  function minsToStartTime(mins: number): string {
+    const hh = String(Math.floor(mins / 60)).padStart(2, "0");
+    const mm = String(mins % 60).padStart(2, "0");
+    return `${hh}:${mm}:00`;
   }
 
   // ── drop handler ────────────────────────────────────────────────────────────
@@ -207,16 +230,22 @@ export function ScheduleCalendar({
       return;
     }
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const relX = Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width));
-    const startMins = Math.min(Math.round(relX * 1440 / 15) * 15, 1410);
-    const hh = String(Math.floor(startMins / 60)).padStart(2, "0");
-    const mm = String(startMins % 60).padStart(2, "0");
-    const startTime = `${hh}:${mm}:00`;
+    const startMins = getDropMins(e);
+    const startTime = minsToStartTime(startMins);
 
     setDropping(true);
     try {
       if (data.type === "block") {
+        const current = findEntry(data.entryId);
+        if (
+          current &&
+          current.printer_id === printerId &&
+          current.plan_date === planDate &&
+          current.start_time === startTime &&
+          current.schedule_mode === "exact_time"
+        ) {
+          return;
+        }
         await updatePlanEntry(data.entryId, {
           plan_date: planDate,
           start_time: startTime,
@@ -350,11 +379,10 @@ export function ScheduleCalendar({
                 Принтерів не знайдено. Додайте принтери в Налаштуваннях.
               </div>
             ) : (
-              lanes.map(lane => (
-                <>
+                      lanes.map(lane => (
+                <Fragment key={lane.printer_id}>
                   {/* Label cell */}
                   <div
-                    key={`label-${lane.printer_id}`}
                     className="sticky left-0 z-10 flex flex-col justify-center border-b border-r border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
                     style={{ minHeight: rowH }}
                   >
@@ -390,13 +418,17 @@ export function ScheduleCalendar({
                         onDragOver={e => {
                           e.preventDefault();
                           e.dataTransfer.dropEffect = "move";
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setDropRelX(Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width)));
+                          const startMins = getDropMins(e);
+                          const last = dropPreviewRef.current;
+                          if (last.cell === cellKey && last.mins === startMins) return;
+                          dropPreviewRef.current = { cell: cellKey, mins: startMins };
+                          setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
                         }}
                         onDragLeave={e => {
                           // only clear if leaving the cell itself (not a child)
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            dropPreviewRef.current = { cell: null, mins: null };
                             setDropCell(null);
                           }
                         }}
@@ -418,7 +450,7 @@ export function ScheduleCalendar({
                       </div>
                     );
                   })}
-                </>
+                </Fragment>
               ))
             )}
           </div>

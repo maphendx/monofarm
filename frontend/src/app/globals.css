@@ -401,10 +401,10 @@ body {
   transition: border-color var(--dur-quick);
 }
 .printer-card:hover { border-color: var(--border-strong); }
-.printer-card.printing { border-top: 2px solid var(--state-print); padding-top: 15px; }
-.printer-card.ok      { border-top: 2px solid var(--state-ok);    padding-top: 15px; }
-.printer-card.warn    { border-top: 2px solid var(--state-warn);   padding-top: 15px; }
-.printer-card.error   { border-top: 2px solid var(--state-error);  padding-top: 15px; }
+.printer-card.printing { border-left: 3px solid var(--state-print); padding-left: 14px; background: color-mix(in srgb, var(--state-print) 7%, var(--surface)); }
+.printer-card.ok      { border-left: 3px solid var(--state-ok);    padding-left: 14px; background: color-mix(in srgb, var(--state-ok)    7%, var(--surface)); }
+.printer-card.warn    { border-left: 3px solid var(--state-warn);  padding-left: 14px; background: color-mix(in srgb, var(--state-warn)   7%, var(--surface)); }
+.printer-card.error   { border-left: 3px solid var(--state-error); padding-left: 14px; background: color-mix(in srgb, var(--state-error)  7%, var(--surface)); }
 .pc-head { display: flex; justify-content: space-between; align-items: flex-start; }
 .pc-id   { font-size: 16px; font-weight: 600; color: var(--text-hi); letter-spacing: -0.015em; }
 .pc-model { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
