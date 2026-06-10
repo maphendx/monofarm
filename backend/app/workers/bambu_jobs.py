@@ -12,7 +12,7 @@ import threading
 import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from sqlalchemy.orm import Session
@@ -31,6 +31,10 @@ DEFAULT_BATCH_SIZE = 10
 DEFAULT_MAX_WORKERS = 4
 DEFAULT_ORG_CONCURRENCY = 2
 MAX_RETRY_COUNT = 5
+# The web process dispatches jobs instantly via BackgroundTasks; this poller is
+# the crash-recovery sweeper. The grace window keeps it from racing a dispatch
+# already in flight in another process (in-process locks don't cross processes).
+PICKUP_GRACE = timedelta(seconds=45)
 
 PICKUP_STATUSES = (
     BambuCloudJobStatus.queued,
@@ -93,12 +97,14 @@ def _select_candidate_job_ids(db: Session, limit: int = DEFAULT_BATCH_SIZE) -> l
     org monopolizing every poll while keeping the query simple for Phase 5.
     """
     fetch_limit = max(limit * 5, limit)
+    stale_cutoff = datetime.now(timezone.utc) - PICKUP_GRACE
     rows = (
         db.query(BambuCloudJob)
         .filter(
             BambuCloudJob.status.in_(PICKUP_STATUSES),
             BambuCloudJob.retry_count < MAX_RETRY_COUNT,
             BambuCloudJob.dispatch_mode.in_(tuple(DISPATCHERS)),
+            BambuCloudJob.updated_at < stale_cutoff,
         )
         .order_by(BambuCloudJob.created_at.asc(), BambuCloudJob.id.asc())
         .limit(fetch_limit)

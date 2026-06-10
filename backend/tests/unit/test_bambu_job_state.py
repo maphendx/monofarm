@@ -15,7 +15,8 @@ def test_can_transition_allows_forward_lifecycle():
     assert can_transition(BambuCloudJobStatus.printing, BambuCloudJobStatus.completed)
 
 
-def test_can_transition_allows_moonraker_upload_straight_to_printing():
+def test_can_transition_allows_moonraker_flow_without_cloud_stages():
+    assert can_transition(BambuCloudJobStatus.validating, BambuCloudJobStatus.uploading)
     assert can_transition(BambuCloudJobStatus.uploading, BambuCloudJobStatus.printing)
 
 

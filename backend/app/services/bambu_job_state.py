@@ -37,6 +37,8 @@ _ALLOWED_TRANSITIONS: dict[BambuCloudJobStatus, set[BambuCloudJobStatus]] = {
     },
     BambuCloudJobStatus.validating: {
         BambuCloudJobStatus.creating_project,
+        # Moonraker provider: no cloud project stage — straight to upload.
+        BambuCloudJobStatus.uploading,
         BambuCloudJobStatus.failed,
         BambuCloudJobStatus.cancelled,
         BambuCloudJobStatus.lost,

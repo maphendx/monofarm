@@ -30,7 +30,13 @@ def _current_state(row: Printer) -> dict:
 
     if row.moonraker_url:
         live = moonraker.get_live_status(row.moonraker_url)
-        return {"state": live.get("state", "unknown"), "file": live.get("filename")}
+        return {
+            "state": live.get("state", "unknown"),
+            "file": live.get("filename"),
+            "progress_pct": live.get("progress_pct"),
+            "eta_minutes": live.get("eta_minutes"),
+            "error_msg": live.get("error_msg"),
+        }
 
     # manual / simplyprint — use manual_status
     return {"state": row.manual_status or "unknown", "file": row.manual_job}
@@ -69,7 +75,12 @@ def _check_org(db, org: Organization) -> None:
         prev = _prev.get(row.id, {})
         prev_state = prev.get("state", "unknown")
 
-        if _has_active_bambu_cloud_job(db, row):
+        job = _active_dispatch_job(db, row)
+        if job is not None:
+            # The job (not this tracker) owns the history row. Cloud jobs are
+            # correlated via MQTT; moonraker jobs are correlated here.
+            if job.dispatch_mode == "moonraker":
+                _sync_moonraker_job(db, row, job, current, now)
             _prev[row.id] = current
             continue
 
@@ -98,24 +109,75 @@ def _check_org(db, org: Organization) -> None:
         _prev[row.id] = current
 
 
-def _has_active_bambu_cloud_job(db, row: Printer) -> bool:
-    if row.kind != PrinterKind.bambu:
-        return False
-
+def _active_dispatch_job(db, row: Printer):
     from app.models.bambu_cloud_job import BambuCloudJob
     from app.services.bambu_job_state import ACTIVE_STATUSES
 
     return (
-        db.query(BambuCloudJob.id)
+        db.query(BambuCloudJob)
         .filter(
             BambuCloudJob.organization_id == row.organization_id,
             BambuCloudJob.printer_id == row.id,
-            BambuCloudJob.dispatch_mode == "cloud",
             BambuCloudJob.status.in_(ACTIVE_STATUSES),
         )
+        .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
         .first()
-        is not None
     )
+
+
+def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime) -> None:
+    """Correlate observed Moonraker state with the printer's active dispatch job.
+
+    The web-process dispatcher leaves the job in `printing`; this stamps
+    progress/telemetry each tick and closes the job (running filament
+    consumption accounting first — `finalize_print` only works on an
+    `in_progress` history row, which the job transition would finalize).
+    """
+    from app.models.bambu_cloud_job import BambuCloudJobStatus
+    from app.services.bambu_job_state import transition_job
+
+    if job.status not in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused):
+        return  # dispatch still in flight — the dispatcher owns it
+
+    state = current["state"]
+    updates: dict = {"last_mqtt_at": now}
+    if current.get("progress_pct") is not None:
+        updates["progress_pct"] = current["progress_pct"]
+    if current.get("eta_minutes") is not None:
+        updates["eta_minutes"] = current["eta_minutes"]
+
+    target = None
+    reason = None
+    if state == "paused" and job.status != BambuCloudJobStatus.paused:
+        target, reason = BambuCloudJobStatus.paused, "Printer reports print paused"
+    elif state in PRINTING_STATES and job.status == BambuCloudJobStatus.paused:
+        target, reason = BambuCloudJobStatus.printing, "Printer reports print progress"
+    elif state in DONE_STATES:
+        result = "completed" if state == "operational" else ("failed" if state == "error" else "cancelled")
+        target = {
+            "completed": BambuCloudJobStatus.completed,
+            "failed": BambuCloudJobStatus.failed,
+            "cancelled": BambuCloudJobStatus.cancelled,
+        }[result]
+        reason = f"Printer reports print {result}"
+        if state == "error" and current.get("error_msg"):
+            updates["error_msg"] = current["error_msg"]
+
+        entry = (
+            db.query(PrintHistory)
+            .filter(
+                PrintHistory.organization_id == job.organization_id,
+                PrintHistory.bambu_cloud_job_id == job.id,
+                PrintHistory.result == "in_progress",
+            )
+            .first()
+        )
+        if entry is not None:
+            from app.services.print_costing import finalize_print
+            finalize_print(db, entry, printer, result, now=now)
+
+    transition_job(job, target or job.status, reason=reason, now=now, **updates)
+    db.commit()
 
 
 def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:

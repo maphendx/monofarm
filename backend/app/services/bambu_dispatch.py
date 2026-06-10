@@ -219,6 +219,7 @@ def create_cloud_job(
     region: str | None = None,
     created_by_user_id: int | None = None,
     request_payload: dict[str, Any] | None = None,
+    dispatch_mode: str = "cloud",
 ) -> BambuCloudJob:
     """Create (or replay) a `BambuCloudJob` for this dispatch request.
 
@@ -259,6 +260,7 @@ def create_cloud_job(
         file_name=file_name,
         file_sha256=file_sha256,
         region=region,
+        dispatch_mode=dispatch_mode,
         status=BambuCloudJobStatus.queued,
         correlation_id=uuid.uuid4().hex,
         idempotency_key=idempotency_key,

@@ -12,6 +12,13 @@ def test_bambu_error_taxonomy_messages_and_retryability():
     assert "task creation" in to_technical_message(BambuErrorCode.TASK_CREATE_FAILED)
 
 
+def test_moonraker_error_codes_retryability():
+    assert is_retryable(BambuErrorCode.MOONRAKER_UPLOAD_FAILED)
+    assert not is_retryable(BambuErrorCode.FILE_INVALID)
+    assert not is_retryable(BambuErrorCode.PRINTER_NOT_CONFIGURED)
+    assert "Moonraker" in to_user_message(BambuErrorCode.MOONRAKER_UPLOAD_FAILED)
+
+
 def test_bambu_error_details_include_code_and_retryable_default():
     details = error_details(BambuErrorCode.PROJECT_CREATE_FAILED, stage="project")
 

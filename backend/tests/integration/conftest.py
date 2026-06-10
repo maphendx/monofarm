@@ -125,11 +125,18 @@ def mock_external_services(monkeypatch) -> dict[str, MagicMock]:
     mr_async_start = AsyncMock(return_value={"result": "ok"})
     monkeypatch.setattr(moonraker, "async_start_print", mr_async_start, raising=False)
 
+    # Instant-dispatch BackgroundTasks run synchronously under TestClient —
+    # stub the job runner so enqueue endpoints never really dispatch.
+    from app.workers import bambu_jobs as bambu_jobs_worker
+    bambu_run_job = MagicMock(return_value=None)
+    monkeypatch.setattr(bambu_jobs_worker, "run_bambu_cloud_job", bambu_run_job)
+
     return {
         "bambu_list": bambu_list,
         "bambu_status": bambu_status,
         "moonraker_status": mr_status,
         "moonraker_upload": mr_async_upload,  # the tests now call the async version
+        "bambu_run_job": bambu_run_job,
     }
 
 

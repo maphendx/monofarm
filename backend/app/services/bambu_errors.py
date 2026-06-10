@@ -29,6 +29,9 @@ class BambuErrorCode(str, enum.Enum):
     IDEMPOTENCY_REPLAY = "IDEMPOTENCY_REPLAY"
     DISPATCH_FAILED = "DISPATCH_FAILED"
     WORKER_DISPATCH_FAILED = "WORKER_DISPATCH_FAILED"
+    MOONRAKER_UPLOAD_FAILED = "MOONRAKER_UPLOAD_FAILED"
+    FILE_INVALID = "FILE_INVALID"
+    PRINTER_NOT_CONFIGURED = "PRINTER_NOT_CONFIGURED"
 
 
 _RETRYABLE = {
@@ -39,6 +42,7 @@ _RETRYABLE = {
     BambuErrorCode.TASK_CREATE_FAILED,
     BambuErrorCode.DISPATCH_FAILED,
     BambuErrorCode.WORKER_DISPATCH_FAILED,
+    BambuErrorCode.MOONRAKER_UPLOAD_FAILED,
 }
 
 _USER_MESSAGES: dict[BambuErrorCode, str] = {
@@ -60,6 +64,9 @@ _USER_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.IDEMPOTENCY_REPLAY: "Duplicate print request was collapsed into an existing job.",
     BambuErrorCode.DISPATCH_FAILED: "Bambu Cloud dispatch failed.",
     BambuErrorCode.WORKER_DISPATCH_FAILED: "Bambu Cloud worker failed before dispatch completed.",
+    BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload failed.",
+    BambuErrorCode.FILE_INVALID: "The selected file is missing or invalid.",
+    BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer connection is not configured.",
 }
 
 _TECHNICAL_MESSAGES: dict[BambuErrorCode, str] = {
@@ -81,6 +88,9 @@ _TECHNICAL_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.IDEMPOTENCY_REPLAY: "Idempotency key matched an existing non-terminal job.",
     BambuErrorCode.DISPATCH_FAILED: "Bambu Cloud dispatch failed after retry policy.",
     BambuErrorCode.WORKER_DISPATCH_FAILED: "Worker raised an uncaught exception while dispatching.",
+    BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload/start stage failed.",
+    BambuErrorCode.FILE_INVALID: "File validation failed before dispatch.",
+    BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer row is missing required connection fields.",
 }
 
 

@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -32,6 +32,7 @@ from app.services import bambu_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
+from app.workers import bambu_jobs as bambu_jobs_worker
 from app.services.gcode_meta import parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
 
@@ -472,6 +473,7 @@ async def send_to_printer(
     file_id: int,
     printer_id: int,
     response: Response,
+    background_tasks: BackgroundTasks,
     payload: SendPayload = Body(default=SendPayload()),
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -486,77 +488,119 @@ async def send_to_printer(
     if not printer:
         raise HTTPException(status_code=404, detail="Принтер не знайдено")
 
-    try:
-        _src_ctx = storage_svc.local_path_for(row.stored_name, org.id)
-    except FileNotFoundError:
+    if not storage_svc.exists(row.stored_name, org.id):
         raise HTTPException(status_code=404, detail="Файл відсутній")
 
-    with _src_ctx as src:
-        # ── Bambu path: Cloud upload (Alibaba OSS) + Cloud task API ──
-        if printer.kind == PrinterKind.bambu:
-            _check_bambu_send_rate_limit(request, org.id)
-            if not settings.BAMBU_CLOUD_V2_ENABLED:
-                raise HTTPException(status_code=503, detail="Bambu Cloud job system is disabled")
-            if not printer.bambu_dev_id:
-                raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
-            is_3mf = ".3mf" in Path(row.original_name).suffixes
-            if not is_3mf:
-                raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
+    # File bytes are only needed by the legacy synchronous Moonraker path —
+    # queued dispatchers read from storage themselves, so don't download the
+    # whole file here (S3 mode would pull it all into the request).
+    # ── Bambu path: Cloud upload (Alibaba OSS) + Cloud task API ──
+    if printer.kind == PrinterKind.bambu:
+        _check_bambu_send_rate_limit(request, org.id)
+        if not settings.BAMBU_CLOUD_V2_ENABLED:
+            raise HTTPException(status_code=503, detail="Bambu Cloud job system is disabled")
+        if not printer.bambu_dev_id:
+            raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
+        is_3mf = ".3mf" in Path(row.original_name).suffixes
+        if not is_3mf:
+            raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
-            # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
-            # -1 marks unused slots so Bambu doesn't try to load them.
-            meta = row.filament_meta or {}
-            slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 1)
-            used_g = meta.get("used_g") or []
-            ams_mapping: list[int] = []
-            for i in range(slot_count):
-                g = used_g[i] if i < len(used_g) else None
-                if g is not None and g <= 0:
-                    ams_mapping.append(-1)
-                else:
-                    ams_mapping.append(payload.slot_map.get(i, i))
-            use_ams = any(v >= 0 for v in ams_mapping)
+        # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
+        # -1 marks unused slots so Bambu doesn't try to load them.
+        meta = row.filament_meta or {}
+        slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 1)
+        used_g = meta.get("used_g") or []
+        ams_mapping: list[int] = []
+        for i in range(slot_count):
+            g = used_g[i] if i < len(used_g) else None
+            if g is not None and g <= 0:
+                ams_mapping.append(-1)
+            else:
+                ams_mapping.append(payload.slot_map.get(i, i))
+        use_ams = any(v >= 0 for v in ams_mapping)
 
-            job = bambu_dispatch.create_cloud_job(
-                db,
-                org_id=org.id,
-                printer_id=printer.id,
-                printer_bambu_dev_id=printer.bambu_dev_id,
-                gcode_file_id=row.id,
-                file_name=row.original_name,
-                region=org.bambu_region or None,
-                created_by_user_id=user.id,
-                request_payload={
-                    "source": "files.send_to_printer",
-                    "ams_mapping": ams_mapping,
-                    "use_ams": use_ams,
-                    "slot_map": {str(k): v for k, v in payload.slot_map.items()},
-                },
-            )
-            if job.file_size is None:
-                job.file_size = row.size_bytes
-                db.commit()
-                db.refresh(job)
+        job = bambu_dispatch.create_cloud_job(
+            db,
+            org_id=org.id,
+            printer_id=printer.id,
+            printer_bambu_dev_id=printer.bambu_dev_id,
+            gcode_file_id=row.id,
+            file_name=row.original_name,
+            region=org.bambu_region or None,
+            created_by_user_id=user.id,
+            request_payload={
+                "source": "files.send_to_printer",
+                "ams_mapping": ams_mapping,
+                "use_ams": use_ams,
+                "slot_map": {str(k): v for k, v in payload.slot_map.items()},
+            },
+        )
+        if job.file_size is None:
+            job.file_size = row.size_bytes
+            db.commit()
+            db.refresh(job)
 
-            response.status_code = status.HTTP_202_ACCEPTED
-            return BambuQueuedResult(
-                ok=True,
-                printer_id=printer.id,
-                printer_name=printer.name,
-                message="Bambu Cloud print job queued",
-                job_id=job.id,
-                status=job.status,
-                correlation_id=job.correlation_id,
-            )
+        # Instant dispatch off the request thread — the worker poller is a
+        # crash-recovery fallback (it skips jobs younger than its grace window).
+        background_tasks.add_task(bambu_jobs_worker.run_bambu_cloud_job, job.id)
+        response.status_code = status.HTTP_202_ACCEPTED
+        return BambuQueuedResult(
+            ok=True,
+            printer_id=printer.id,
+            printer_name=printer.name,
+            message="Bambu Cloud print job queued",
+            job_id=job.id,
+            status=job.status,
+            correlation_id=job.correlation_id,
+        )
 
-        # ── Moonraker path: optional gcode rewrite + upload + auto-start ──
-        if not printer.moonraker_url:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Принтер '{printer.name}' не має Moonraker URL",
-            )
+    # ── Moonraker path: optional gcode rewrite + upload + auto-start ──
+    if not printer.moonraker_url:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Принтер '{printer.name}' не має Moonraker URL",
+        )
 
-        try:
+    if settings.MOONRAKER_QUEUE_ENABLED:
+        _check_bambu_send_rate_limit(request, org.id)
+        job = bambu_dispatch.create_cloud_job(
+            db,
+            org_id=org.id,
+            printer_id=printer.id,
+            printer_bambu_dev_id=None,
+            gcode_file_id=row.id,
+            file_name=row.original_name,
+            created_by_user_id=user.id,
+            dispatch_mode="moonraker",
+            request_payload={
+                "source": "files.send_to_printer",
+                "slot_map": {str(k): v for k, v in payload.slot_map.items()},
+                "auto_bed_leveling": payload.auto_bed_leveling,
+                "timelapse": payload.timelapse,
+                "ai_detection": payload.ai_detection,
+                "calibrate_slots": payload.calibrate_slots,
+            },
+        )
+        if job.file_size is None:
+            job.file_size = row.size_bytes
+            db.commit()
+            db.refresh(job)
+
+        background_tasks.add_task(moonraker_dispatch.dispatch_moonraker_job, job.id)
+        response.status_code = status.HTTP_202_ACCEPTED
+        return BambuQueuedResult(
+            ok=True,
+            printer_id=printer.id,
+            printer_name=printer.name,
+            dispatch_mode="moonraker",
+            message="Print job queued",
+            job_id=job.id,
+            status=job.status,
+            correlation_id=job.correlation_id,
+        )
+
+    try:
+        with storage_svc.local_path_for(row.stored_name, org.id) as src:
             await moonraker_dispatch.send_file_to_moonraker(
                 org_id=org.id,
                 moonraker_url=printer.moonraker_url,
@@ -569,9 +613,9 @@ async def send_to_printer(
                 ai_detection=payload.ai_detection,
                 calibrate_slots=payload.calibrate_slots,
             )
-            return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
-        except mr.MoonrakerError as e:
-            return SendResult(ok=False, printer_name=printer.name, message=str(e))
+        return SendResult(ok=True, printer_name=printer.name, message="Файл успішно надіслано — друк стартує")
+    except mr.MoonrakerError as e:
+        return SendResult(ok=False, printer_name=printer.name, message=str(e))
 
 
 def _check_bambu_send_rate_limit(request: Request, org_id: int) -> None:

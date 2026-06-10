@@ -31,7 +31,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -376,6 +376,7 @@ async def orca_upload(
     printer_id: int,
     response: Response,
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     # OrcaSlicer sends print=true when the user clicks "Send & Print"
     print: str | None = Form(default=None),
     x_api_key: str | None = Header(default=None),
@@ -404,8 +405,9 @@ async def orca_upload(
                         try:
                             from app.models.organization import Organization
                             from app.services import bambu_dispatch
+                            from app.workers.bambu_jobs import run_bambu_cloud_job
                             org = db.get(Organization, user.organization_id)
-                            bambu_dispatch.create_cloud_job(
+                            job = bambu_dispatch.create_cloud_job(
                                 db,
                                 org_id=user.organization_id,
                                 printer_id=printer.id,
@@ -416,6 +418,7 @@ async def orca_upload(
                                 created_by_user_id=user.id,
                                 request_payload={"source": "orca.auto_print"},
                             )
+                            background_tasks.add_task(run_bambu_cloud_job, job.id)
                         except Exception:
                             pass  # file is stored — don't fail the upload response
             else:

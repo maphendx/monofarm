@@ -32,11 +32,13 @@ class Settings(BaseSettings):
     BAMBU_REFRESH_TOKEN: str = ""
     BAMBU_REGION: str = ""  # "us", "eu", or "cn"; empty = auto from login
     BAMBU_CLOUD_V2_ENABLED: bool = True
+    # Route Moonraker sends through the unified job queue (Pass 2). Off = legacy synchronous send.
+    MOONRAKER_QUEUE_ENABLED: bool = False
 
-    FARM_PUBLIC_URL: str = "http://localhost:3000"
+    FARM_PUBLIC_URL: str = "https://monofarm.app"
 
     TIMEZONE: str = "Europe/Kiev"
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "https://monofarm.app,http://localhost:3000"
 
     GO2RTC_URL: str = "http://localhost:1984"  # go2rtc sidecar; set empty to disable
 

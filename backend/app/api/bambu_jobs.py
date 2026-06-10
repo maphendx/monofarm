@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from starlette.requests import Request
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -121,6 +119,7 @@ def list_bambu_jobs(
 def retry_bambu_job(
     request: Request,
     job_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
@@ -141,6 +140,15 @@ def retry_bambu_job(
     job.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
+    # Instant re-dispatch in the web process: moonraker needs the agent tunnel
+    # (absent in the worker), and cloud jobs shouldn't wait out the worker's
+    # crash-recovery grace window.
+    if job.dispatch_mode == "moonraker":
+        from app.services.moonraker_dispatch import dispatch_moonraker_job
+        background_tasks.add_task(dispatch_moonraker_job, job.id)
+    else:
+        from app.workers.bambu_jobs import run_bambu_cloud_job
+        background_tasks.add_task(run_bambu_cloud_job, job.id)
     return BambuRetryResult(ok=True, job=job, message="Job queued for retry")
 
 

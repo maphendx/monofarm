@@ -60,7 +60,7 @@ def sync_bambu_cloud_job_history(
             file_name=job.file_name,
             started_at=started_at,
             result="in_progress",
-            source="cloud",
+            source=job.dispatch_mode or "cloud",
             bambu_cloud_job_id=job.id,
         )
         db.add(entry)
@@ -72,7 +72,7 @@ def sync_bambu_cloud_job_history(
     entry.file_name = job.file_name
     entry.file_sha256 = job.file_sha256
     entry.created_by_user_id = job.created_by_user_id
-    entry.source = "cloud"
+    entry.source = job.dispatch_mode or "cloud"
     entry.bambu_cloud_job_id = job.id
     entry.bambu_task_id = job.bambu_task_id
     entry.bambu_project_id = job.bambu_project_id

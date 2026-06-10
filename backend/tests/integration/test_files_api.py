@@ -166,6 +166,81 @@ def test_send_file_to_moonraker_printer_calls_upload(
     assert args[0] == "http://192.168.0.10"
 
 
+def test_send_to_bambu_schedules_instant_dispatch(
+    client, auth_headers, cleanup_uploads, mock_external_services
+):
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu-Instant", "kind": "bambu", "bambu_dev_id": "BAMBU-INSTANT"},
+    ).json()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Metadata/plate_1.gcode", GCODE_SAMPLE.decode())
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("instant.3mf", buf.getvalue(), "application/octet-stream")},
+    ).json()
+
+    resp = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {}},
+    )
+
+    assert resp.status_code == 202, resp.text
+    job_id = resp.json()["job_id"]
+    mock_external_services["bambu_run_job"].assert_called_once_with(job_id)
+
+
+def test_send_to_moonraker_queues_job_when_flag_enabled(
+    client, auth_headers, cleanup_uploads, mock_external_services, db_session, monkeypatch
+):
+    from app.core.config import settings
+    from app.models.bambu_cloud_job import BambuCloudJob
+    from app.services import moonraker_dispatch
+
+    monkeypatch.setattr(settings, "MOONRAKER_QUEUE_ENABLED", True)
+    dispatched: list[int] = []
+
+    async def fake_dispatch(job_id: int):
+        dispatched.append(job_id)
+
+    monkeypatch.setattr(moonraker_dispatch, "dispatch_moonraker_job", fake_dispatch)
+
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "U1-Q", "kind": "snapmaker_u1", "moonraker_url": "http://192.168.0.12"},
+    ).json()
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("queued.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+
+    resp = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {0: 1, 1: 0}, "timelapse": False},
+    )
+
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["dispatch_mode"] == "moonraker"
+    assert body["status"] == "queued"
+    job = db_session.get(BambuCloudJob, body["job_id"])
+    assert job.dispatch_mode == "moonraker"
+    assert job.file_size == f["size_bytes"]
+    assert job.request_payload_json["slot_map"] == {"0": 1, "1": 0}
+    assert job.request_payload_json["timelapse"] is False
+    # Dispatch went through the BackgroundTask, not the legacy synchronous path.
+    assert dispatched == [job.id]
+    mock_external_services["moonraker_upload"].assert_not_called()
+
+
 def test_send_file_with_slot_remap_uses_temp_file(
     client, auth_headers, cleanup_uploads, mock_external_services
 ):
