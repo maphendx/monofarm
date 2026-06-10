@@ -26,6 +26,41 @@ export function fmtDuration(minutes: number | null | undefined): string {
   return `${m}хв`;
 }
 
+function parseDurationFromText(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const normalized = text.replace(/[_-]+/g, " ");
+
+  const hoursMatch = normalized.match(/(?:^|[^\d])(\d{1,2})\s*(?:h|hr|hrs|hour|hours|г|год|ч)\s*(?:(\d{1,2})\s*(?:m|min|mins|minute|minutes|хв|м))?/iu);
+  if (hoursMatch) {
+    const hours = Number(hoursMatch[1] ?? 0);
+    const mins = Number(hoursMatch[2] ?? 0);
+    const total = hours * 60 + mins;
+    return total > 0 ? total : null;
+  }
+
+  const minsMatch = normalized.match(/(?:^|[^\d])(\d{1,4})\s*(?:m|min|mins|minute|minutes|хв)(?:[^\p{L}]|$)/iu);
+  if (minsMatch) {
+    const mins = Number(minsMatch[1] ?? 0);
+    return mins > 0 ? mins : null;
+  }
+
+  return null;
+}
+
+function getEntryDurationMins(entry: CalendarEntry): number {
+  if (entry.task.estimated_minutes && entry.task.estimated_minutes > 0) {
+    return entry.task.estimated_minutes;
+  }
+  if (entry.task.filament_meta?.estimated_minutes && entry.task.filament_meta.estimated_minutes > 0) {
+    return entry.task.filament_meta.estimated_minutes;
+  }
+  return (
+    parseDurationFromText(entry.task.file_name) ??
+    parseDurationFromText(entry.task.title) ??
+    0
+  );
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
 /** Date → "YYYY-MM-DD" in local time (avoids UTC shift). */
@@ -95,7 +130,7 @@ export function buildCalendarBlocks(
       for (const entry of day.entries) {
         if (!entry.start_time) continue; // untimed/asap — rendered separately
 
-        const duration = entry.task.estimated_minutes ?? 0;
+        const duration = getEntryDurationMins(entry);
         const startMins = parseTimeMins(entry.start_time);
         const totalEndMins = startMins + duration;
 
