@@ -28,9 +28,10 @@ import socket
 import ssl
 import logging
 import sys
+import threading
 from pathlib import Path
 
-AGENT_VERSION = "0.5.0"
+AGENT_VERSION = "0.5.1"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -170,6 +171,11 @@ _MOONRAKER_OBJECTS = {
     "heater_bed": None,
 }
 
+# dev_id → asyncio task/config for Bambu LAN-only MQTT subscriptions.
+_bambu_lan_sub_tasks: dict[str, "asyncio.Task[None]"] = {}
+_bambu_lan_sub_configs: dict[str, tuple[str, str]] = {}
+_BAMBU_LAN_CONFIG_INTERVAL = 15
+
 
 async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
     """Maintain a persistent Moonraker WS subscription and push STATUS_PUSH to cloud.
@@ -274,6 +280,243 @@ def _cancel_all_subscriptions() -> None:
     _moonraker_sub_tasks.clear()
 
 
+def _mqtt_rc_value(rc) -> int:
+    try:
+        return int(rc)
+    except Exception:
+        return int(getattr(rc, "value", 0) or 0)
+
+
+def ensure_bambu_mqtt_dependency() -> None:
+    """Best-effort self-heal for agents auto-updated from pre-LAN-MQTT builds."""
+    try:
+        import paho.mqtt.client  # noqa: F401
+        return
+    except ImportError:
+        pass
+
+    try:
+        import subprocess
+        log.info("Installing paho-mqtt for Bambu LAN support…")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
+            check=False,
+            timeout=60,
+        )
+    except Exception as exc:
+        log.debug("paho-mqtt install skipped: %s", exc)
+
+
+def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload: dict) -> None:
+    """Publish one Bambu LAN MQTT command from a worker thread."""
+    try:
+        import paho.mqtt.client as mqtt
+    except ImportError as exc:
+        raise RuntimeError("paho-mqtt is required for Bambu LAN MQTT") from exc
+
+    connected = threading.Event()
+    errors: list[str] = []
+
+    def _on_connect(client, userdata, flags, reason_code, properties=None):
+        rc = _mqtt_rc_value(reason_code)
+        if rc != 0:
+            errors.append(f"connect rc={rc}")
+        connected.set()
+
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        protocol=mqtt.MQTTv311,
+        client_id=f"monofarm-agent-cmd-{dev_id}",
+    )
+    client.username_pw_set("bblp", access_code)
+    client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+    client.tls_insecure_set(True)
+    client.on_connect = _on_connect
+
+    try:
+        client.connect(ip, 8883, 60)
+        client.loop_start()
+        if not connected.wait(10):
+            raise RuntimeError("connect timeout")
+        if errors:
+            raise RuntimeError(errors[-1])
+        info = client.publish(
+            f"device/{dev_id}/request",
+            json.dumps(payload, separators=(",", ":")),
+        )
+        info.wait_for_publish(timeout=10)
+        if not info.is_published():
+            raise RuntimeError("publish timeout")
+    finally:
+        try:
+            client.loop_stop()
+            client.disconnect()
+        except Exception:
+            pass
+
+
+async def handle_bambu_mqtt(ws, req: dict) -> None:
+    """Publish a Bambu LAN MQTT command on behalf of the cloud backend."""
+    req_id = req.get("id")
+    dev_id = req.get("dev_id", "")
+    ip = req.get("ip", "")
+    access_code = req.get("access_code", "")
+    payload = req.get("payload") or {}
+    try:
+        if not dev_id or not ip or not access_code or not isinstance(payload, dict):
+            raise ValueError("missing dev_id/ip/access_code/payload")
+        await asyncio.to_thread(_bambu_mqtt_publish_blocking, dev_id, ip, access_code, payload)
+        result = {"id": req_id, "status": 200, "body": {"ok": True}, "error": None}
+    except Exception as exc:
+        log.warning("BAMBU_MQTT error %s@%s: %s", dev_id, ip, exc)
+        result = {"id": req_id, "status": 502, "body": None, "error": str(exc)}
+    await ws.send(json.dumps(result))
+
+
+async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
+    """Maintain a direct LAN MQTT subscription and push reports to SaaS."""
+    try:
+        import paho.mqtt.client as mqtt
+    except ImportError:
+        log.warning("Bambu LAN monitor disabled: install paho-mqtt")
+        return
+
+    dev_id = printer.get("dev_id", "")
+    ip = printer.get("ip", "")
+    access_code = printer.get("access_code", "")
+    name = printer.get("name") or dev_id
+    if not dev_id or not ip or not access_code:
+        return
+
+    while True:
+        connected = asyncio.Event()
+        connect_errors: list[str] = []
+        loop = asyncio.get_running_loop()
+        client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            protocol=mqtt.MQTTv311,
+            client_id=f"monofarm-agent-lan-{dev_id}",
+        )
+        client.username_pw_set("bblp", access_code)
+        client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+        client.tls_insecure_set(True)
+
+        def _on_connect(client, userdata, flags, reason_code, properties=None):
+            rc = _mqtt_rc_value(reason_code)
+            if rc != 0:
+                log.warning("BAMBU_LAN_SUB connect failed %s (%s): rc=%s", name, ip, rc)
+                connect_errors.append(f"connect rc={rc}")
+                loop.call_soon_threadsafe(connected.set)
+                return
+            log.info("BAMBU_LAN_SUB connected %s (%s)", name, ip)
+            client.subscribe(f"device/{dev_id}/report")
+            client.publish(
+                f"device/{dev_id}/request",
+                json.dumps({"pushing": {"command": "pushall", "sequence_id": "0", "version": 1, "push_target": 1}},
+                           separators=(",", ":")),
+            )
+            loop.call_soon_threadsafe(connected.set)
+
+        def _on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
+            rc = _mqtt_rc_value(reason_code)
+            if rc != 0:
+                log.warning("BAMBU_LAN_SUB disconnected %s (%s): rc=%s", name, ip, rc)
+
+        def _on_message(client, userdata, msg):
+            try:
+                payload = json.loads(msg.payload)
+            except Exception:
+                return
+            asyncio.run_coroutine_threadsafe(
+                cloud_ws.send(json.dumps({
+                    "type": "BAMBU_STATUS_PUSH",
+                    "dev_id": dev_id,
+                    "payload": payload,
+                })),
+                loop,
+            )
+
+        client.on_connect = _on_connect
+        client.on_disconnect = _on_disconnect
+        client.on_message = _on_message
+
+        try:
+            client.connect_async(ip, 8883, 60)
+            client.loop_start()
+            await asyncio.wait_for(connected.wait(), timeout=12)
+            if connect_errors:
+                raise RuntimeError(connect_errors[-1])
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            client.loop_stop()
+            client.disconnect()
+            raise
+        except Exception as exc:
+            log.warning("BAMBU_LAN_SUB error %s (%s): %s — retrying", name, ip, exc)
+        finally:
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except Exception:
+                pass
+        await asyncio.sleep(5)
+
+
+async def _sync_bambu_lan_subscriptions(cloud_ws, printers: list[dict]) -> None:
+    wanted: dict[str, dict] = {
+        p["dev_id"]: p
+        for p in printers
+        if p.get("dev_id") and p.get("ip") and p.get("access_code")
+    }
+
+    for dev_id in list(_bambu_lan_sub_tasks):
+        if dev_id not in wanted:
+            _bambu_lan_sub_tasks.pop(dev_id).cancel()
+            _bambu_lan_sub_configs.pop(dev_id, None)
+
+    for dev_id, printer in wanted.items():
+        cfg = (printer["ip"], printer["access_code"])
+        task = _bambu_lan_sub_tasks.get(dev_id)
+        if task is not None and not task.done() and _bambu_lan_sub_configs.get(dev_id) == cfg:
+            continue
+        if task is not None:
+            task.cancel()
+        _bambu_lan_sub_configs[dev_id] = cfg
+        _bambu_lan_sub_tasks[dev_id] = asyncio.create_task(_bambu_lan_mqtt_loop(cloud_ws, printer))
+
+
+def _cancel_all_bambu_lan_subscriptions() -> None:
+    for task in list(_bambu_lan_sub_tasks.values()):
+        task.cancel()
+    _bambu_lan_sub_tasks.clear()
+    _bambu_lan_sub_configs.clear()
+
+
+async def _bambu_lan_config_loop(cloud_ws, server: str, token: str) -> None:
+    headers = {"Authorization": f"Bearer {token}"}
+    last_discover = 0.0
+    while True:
+        try:
+            now = asyncio.get_running_loop().time()
+            async with httpx.AsyncClient(timeout=10) as client:
+                if now - last_discover >= 60:
+                    try:
+                        await client.get(f"{server}/api/printers/bambu-discover", headers=headers)
+                        last_discover = now
+                    except Exception as exc:
+                        log.debug("Bambu LAN discovery refresh failed: %s", exc)
+                resp = await client.get(f"{server}/api/agent/bambu-lan-config", headers=headers)
+            if resp.status_code == 200:
+                printers = (resp.json() or {}).get("printers") or []
+                await _sync_bambu_lan_subscriptions(cloud_ws, printers)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.debug("Bambu LAN config refresh failed: %s", exc)
+        await asyncio.sleep(_BAMBU_LAN_CONFIG_INTERVAL)
+
+
 def _load_config() -> dict[str, str]:
     cfg = {"MONOFARM_SERVER": "https://api.monofarm.app", "MONOFARM_FRONTEND": "https://monofarm.app", "MONOFARM_TOKEN": ""}
     if CONFIG_FILE.exists():
@@ -310,6 +553,15 @@ async def check_for_update(server: str) -> None:
             src_resp.raise_for_status()
             script = Path(__file__).resolve()
             script.write_bytes(src_resp.content)
+            try:
+                import subprocess
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
+                    check=False,
+                    timeout=60,
+                )
+            except Exception as dep_exc:
+                log.debug("Dependency refresh skipped: %s", dep_exc)
             log.info("Updated to %s. Restarting…", remote)
             os.execv(sys.executable, [sys.executable] + sys.argv)
     except Exception as e:
@@ -880,6 +1132,7 @@ async def run(server: str, token: str) -> None:
         + f"/api/agent/connect?token={token}"
     )
     log.info("monofarm-agent v%s connecting to %s …", AGENT_VERSION, server)
+    ensure_bambu_mqtt_dependency()
     await check_for_update(server)
     asyncio.create_task(_update_loop(server))
 
@@ -893,6 +1146,7 @@ async def run(server: str, token: str) -> None:
                 max_size=None,  # allow large messages (base64 chunks)
             ) as ws:
                 log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
+                bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 
                 # Fetch TG config on every connect (token may have changed while disconnected)
                 try:
@@ -948,6 +1202,8 @@ async def run(server: str, token: str) -> None:
                             asyncio.create_task(handle_discover_moonraker(ws, req))
                         elif method == "BAMBU_UPLOAD":
                             asyncio.create_task(handle_bambu_upload(ws, req))
+                        elif method == "BAMBU_MQTT":
+                            asyncio.create_task(handle_bambu_mqtt(ws, req))
                         elif method == "MOONRAKER_UPLOAD":
                             asyncio.create_task(handle_moonraker_upload(ws, req))
                         elif method == "PRINT_ZPL":
@@ -959,6 +1215,8 @@ async def run(server: str, token: str) -> None:
                 finally:
                     # Cloud WS dropped — cancel all Moonraker WS subscriptions
                     _cancel_all_subscriptions()
+                    _cancel_all_bambu_lan_subscriptions()
+                    bambu_lan_task.cancel()
 
         except websockets.exceptions.InvalidStatusCode as e:
             if e.status_code in (4001, 4002):

@@ -189,12 +189,27 @@ def _handle_status_push(data: dict) -> None:
     log.debug("STATUS_PUSH: cached %s state=%s", url, status.get("state"))
 
 
+def _handle_bambu_status_push(data: dict, org_id: int) -> None:
+    """Cache a Bambu LAN MQTT report pushed by the agent."""
+    dev_id = (data.get("dev_id") or "").strip()
+    payload = data.get("payload") or {}
+    if not dev_id or not isinstance(payload, dict):
+        return
+    from app.services import bambu
+    bambu.handle_agent_report(org_id, dev_id, payload)
+    log.debug("BAMBU_STATUS_PUSH: cached %s", dev_id)
+
+
 async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
     msg_type = data.get("type")
 
     if msg_type == "STATUS_PUSH":
         _handle_status_push(data)
+        return
+
+    if msg_type == "BAMBU_STATUS_PUSH":
+        _handle_bambu_status_push(data, org_id)
         return
 
     if msg_type == "TG_BOT_USERNAME":
@@ -409,6 +424,44 @@ async def send_bambu_upload(
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_UPLOAD failed: {resp.get('error')}")
     return filename
+
+
+async def send_bambu_mqtt(
+    org_id: int,
+    dev_id: str,
+    dev_ip: str,
+    access_code: str,
+    payload: dict,
+    timeout: float = 20.0,
+) -> dict:
+    """Publish one Bambu LAN MQTT command through the local agent."""
+    ws = _tunnels.get(org_id)
+    if not ws:
+        raise RuntimeError(f"No agent connected for org {org_id}")
+
+    req_id = str(uuid.uuid4())
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future = loop.create_future()
+    _pending[req_id] = future
+
+    try:
+        await ws.send_text(json.dumps({
+            "id": req_id,
+            "method": "BAMBU_MQTT",
+            "dev_id": dev_id,
+            "ip": dev_ip,
+            "access_code": access_code,
+            "payload": payload,
+        }))
+        resp = await asyncio.wait_for(future, timeout=timeout)
+    except asyncio.TimeoutError:
+        raise RuntimeError(f"Agent BAMBU_MQTT timed out ({timeout}s) for {dev_ip}")
+    finally:
+        _pending.pop(req_id, None)
+
+    if resp.get("status", 0) >= 400 or resp.get("error"):
+        raise RuntimeError(f"BAMBU_MQTT failed: {resp.get('error')}")
+    return resp.get("body") or {"ok": True}
 
 
 async def send_moonraker_upload(

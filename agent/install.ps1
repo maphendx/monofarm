@@ -75,7 +75,7 @@ Write-Host "Creating virtual environment…"
 
 Write-Host "Installing dependencies…"
 & "$InstallDir\venv\Scripts\pip" install --quiet --upgrade pip
-& "$InstallDir\venv\Scripts\pip" install --quiet websockets httpx pystray Pillow
+& "$InstallDir\venv\Scripts\pip" install --quiet websockets httpx paho-mqtt pystray Pillow
 
 # ── Download agent files ──────────────────────────────────────────────────────
 

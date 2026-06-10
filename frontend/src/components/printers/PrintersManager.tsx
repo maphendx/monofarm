@@ -272,7 +272,12 @@ export function PrintersManager() {
   useEffect(() => {
     load();
     if (isAdmin) loadDiscovered();
-    api<{ devices: unknown[] }>("/api/printers/bambu-discover").then((r) => { if (r.devices?.length) load(); }).catch(() => {});
+    api<unknown>("/api/printers/bambu-discover")
+      .then((r) => {
+        const devices = Array.isArray(r) ? r : (r as { devices?: unknown[] }).devices;
+        if (devices?.length) load();
+      })
+      .catch(() => {});
   }, []);
 
   async function handleDelete(id: number) {

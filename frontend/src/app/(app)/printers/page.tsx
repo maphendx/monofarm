@@ -530,8 +530,11 @@ export default function PrintersPage() {
     if (isAdmin) loadDiscovered();
     // Silently run Bambu LAN discovery to populate missing IPs via agent UDP broadcast.
     // If new IPs are found, reload the list so FTPS send works immediately.
-    api<{ devices: { dev_id: string; ip: string }[] }>("/api/printers/bambu-discover")
-      .then((r) => { if (r.devices?.length) load(); })
+    api<unknown>("/api/printers/bambu-discover")
+      .then((r) => {
+        const devices = Array.isArray(r) ? r : (r as { devices?: unknown[] }).devices;
+        if (devices?.length) load();
+      })
       .catch(() => {});
   }, []);
 

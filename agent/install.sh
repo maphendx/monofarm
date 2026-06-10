@@ -51,8 +51,8 @@ echo "Creating virtual environment…"
 "$PYTHON" -m venv "$INSTALL_DIR/venv"
 VENV_PYTHON="$INSTALL_DIR/venv/bin/python"
 
-echo "Installing dependencies (websockets, httpx)…"
-"$INSTALL_DIR/venv/bin/pip" install --quiet websockets httpx
+echo "Installing dependencies (websockets, httpx, paho-mqtt)…"
+"$INSTALL_DIR/venv/bin/pip" install --quiet websockets httpx paho-mqtt
 
 # ── download agent ────────────────────────────────────────────────────────────
 

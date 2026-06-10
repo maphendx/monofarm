@@ -431,8 +431,11 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
     // One-time background Bambu LAN discovery to populate missing IPs.
-    api<{ devices: unknown[] }>("/api/printers/bambu-discover")
-      .then((r) => { if (r.devices?.length) load(); })
+    api<unknown>("/api/printers/bambu-discover")
+      .then((r) => {
+        const devices = Array.isArray(r) ? r : (r as { devices?: unknown[] }).devices;
+        if (devices?.length) load();
+      })
       .catch(() => {});
     const id = setInterval(() => { if (!document.hidden) load(); }, 30_000);
     return () => clearInterval(id);

@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.5.0"
+AGENT_VERSION = "0.5.1"
 
 
 @router.get("/api/agent/version")
@@ -31,6 +31,45 @@ def agent_version() -> dict:
 def agent_status(org: Organization = Depends(get_current_org)) -> dict:
     """Check whether a local agent is connected for this org."""
     return {"connected": tunnel.has_tunnel(org.id)}
+
+
+@router.get("/api/agent/bambu-lan-config")
+def bambu_lan_config(org: Organization = Depends(get_current_org)) -> dict:
+    """LAN-only Bambu printers the local agent should monitor.
+
+    This endpoint is consumed by monofarm-agent, not browser UI. The agent needs
+    each printer's LAN access code to subscribe to local MQTT and push live
+    reports back through the existing WebSocket tunnel.
+    """
+    from app.core.db import SessionLocal
+    from app.models.printer import Printer, PrinterKind
+
+    with SessionLocal() as db:
+        rows = (
+            db.query(Printer)
+            .filter(
+                Printer.organization_id == org.id,
+                Printer.kind == PrinterKind.bambu,
+                Printer.bambu_lan_mode.is_(True),
+                Printer.is_active.is_(True),
+                Printer.bambu_dev_id.isnot(None),
+                Printer.bambu_dev_ip.isnot(None),
+                Printer.bambu_access_code.isnot(None),
+            )
+            .all()
+        )
+        printers = [
+            {
+                "id": row.id,
+                "name": row.name,
+                "dev_id": row.bambu_dev_id,
+                "ip": row.bambu_dev_ip,
+                "access_code": row.bambu_access_code,
+            }
+            for row in rows
+            if row.bambu_dev_id and row.bambu_dev_ip and row.bambu_access_code
+        ]
+    return {"printers": printers}
 
 
 class PrintZplRequest(BaseModel):

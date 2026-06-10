@@ -189,7 +189,7 @@ python -m scripts.seed_u1 6      # N рядків
 
 ## Local Agent
 
-`agent/monofarm_agent.py` — запускається на фермовому ПК, підключається до хмарного бекенду через WebSocket тунель. Методи: `GET/POST` (HTTP proxy), `STREAM`, `BAMBU_CAMERA` (native TLS), `FFMPEG_STREAM`, `DISCOVER_BAMBU`.
+`agent/monofarm_agent.py` — запускається на фермовому ПК, підключається до хмарного бекенду через WebSocket тунель. Методи: `GET/POST` (HTTP proxy), `STREAM`, `BAMBU_CAMERA` (native TLS), `FFMPEG_STREAM`, `DISCOVER_BAMBU`, `DISCOVER_MOONRAKER`, `BAMBU_UPLOAD`, `BAMBU_MQTT`. Для Bambu LAN-only агент тримає локальний MQTT subscription і пушить live-статус у backend.
 
 ```bash
 pip install websockets httpx

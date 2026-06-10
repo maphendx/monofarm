@@ -388,6 +388,23 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         return
     dev_id = parts[1]
 
+    _handle_report_payload(dev_id, payload)
+
+
+def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> None:
+    """Ingest a Bambu LAN MQTT report forwarded by monofarm-agent.
+
+    The agent owns LAN connectivity when the backend runs in the cloud. Once a
+    report reaches this function, reuse the same parser/cache/job correlation
+    path as cloud MQTT so the rest of the app sees one live-state source.
+    """
+    if not dev_id:
+        return
+    _dev_to_org[dev_id] = org_id
+    _handle_report_payload(dev_id, payload)
+
+
+def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
     print_data = payload.get("print", {})
     if not print_data:
         return
@@ -975,15 +992,15 @@ def stop_print(dev_id: str) -> None:
     _publish(dev_id, {"print": {"command": "stop", "sequence_id": _next_seq()}})
 
 
-def start_print(
+def build_start_print_payload(
     dev_id: str,
     subtask_name: str,
     ams_mapping: list[int] | None = None,
     use_ams: bool = True,
     http_url: str | None = None,
     ftp_filename: str | None = None,
-) -> None:
-    """Send MQTT project_file command to start printing.
+) -> dict[str, Any]:
+    """Build a Bambu MQTT project_file command.
 
     Prefers http_url (printer downloads from R2 — no LAN FTPS needed).
     Falls back to ftp://ftp_filename for local-disk setups.
@@ -1013,6 +1030,26 @@ def start_print(
     }
     if ams_mapping is not None:
         cmd["print"]["ams_mapping"] = ams_mapping
+    return cmd
+
+
+def start_print(
+    dev_id: str,
+    subtask_name: str,
+    ams_mapping: list[int] | None = None,
+    use_ams: bool = True,
+    http_url: str | None = None,
+    ftp_filename: str | None = None,
+) -> None:
+    """Send MQTT project_file command to start printing."""
+    cmd = build_start_print_payload(
+        dev_id,
+        subtask_name,
+        ams_mapping=ams_mapping,
+        use_ams=use_ams,
+        http_url=http_url,
+        ftp_filename=ftp_filename,
+    )
     _publish(dev_id, cmd)
 
 

@@ -8,7 +8,7 @@ Tray icon: green = connected, yellow = connecting, grey = disconnected.
 Right-click menu: Open Settings, Open Dashboard, Stop/Start Agent, Exit.
 
 Dependencies:
-    pip install pystray Pillow websockets httpx
+    pip install pystray Pillow websockets httpx paho-mqtt
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ except ImportError:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-AGENT_VERSION      = "0.5.0"
+AGENT_VERSION      = "0.5.1"
 UI_HTTP_PORT       = 4747   # browser navigates here for the HTML page
 UI_WS_PORT         = 4748   # browser WebSocket connects here for live updates
 CONFIG_DIR         = pathlib.Path.home() / ".monofarm-agent"
@@ -263,6 +263,7 @@ class App:
 
         cfg = load_config()
         if cfg["MONOFARM_TOKEN"]:
+            _ensure_bambu_mqtt_dependency()
             await self._do_start(cfg["MONOFARM_SERVER"], cfg["MONOFARM_TOKEN"])
             asyncio.create_task(self._update_loop(cfg["MONOFARM_SERVER"]))
 
@@ -363,6 +364,7 @@ class App:
 
     async def _do_start(self, server: str, token: str) -> None:
         self._do_stop()
+        _ensure_bambu_mqtt_dependency()
         self._agent_task   = asyncio.create_task(self._agent_loop(server, token))
         self._printer_task = asyncio.create_task(self._printer_loop(server, token))
 
@@ -403,6 +405,16 @@ class App:
         """Fetch claimed printers + undiscovered Bambu/Moonraker devices from backend."""
         headers = {"Authorization": f"Bearer {token}"}
         async with httpx.AsyncClient(timeout=8, verify=False) as client:
+            lan_bambu = []
+            try:
+                rb = await client.get(f"{server}/api/printers/bambu-discover", headers=headers)
+                if rb.status_code == 200:
+                    data = rb.json() or []
+                    lan_bambu = data.get("devices") if isinstance(data, dict) else data
+                    if not isinstance(lan_bambu, list):
+                        lan_bambu = []
+            except Exception as exc:
+                log.debug("Bambu LAN discovery skipped: %s", exc)
             r   = await client.get(f"{server}/api/printers", headers=headers)
             raw = r.json() if r.status_code == 200 else []
             rd  = await client.get(f"{server}/api/printers/bambu/discovered", headers=headers)
@@ -411,11 +423,19 @@ class App:
             disc_moon = rm.json() if rm.status_code == 200 else []
 
         claimed = await asyncio.gather(*[self._check_local(p) for p in raw], return_exceptions=False)
+        known_bambu_ids = {p.get("bambu_dev_id") for p in raw if p.get("bambu_dev_id")}
+        cloud_disc_ids = {d.get("dev_id") for d in disc_bambu if d.get("dev_id")}
         unclaimed_bambu = [
-            {"dev_id": d["dev_id"], "name": d["name"], "model": d.get("model", ""),
-             "kind": "bambu", "claimed": False, "local_ok": False, "local_ms": None}
+            {"dev_id": d["dev_id"], "name": d.get("name") or d["dev_id"], "model": d.get("model", ""),
+             "bambu_dev_ip": d.get("ip"), "kind": "bambu", "claimed": False, "local_ok": bool(d.get("ip")), "local_ms": None}
             for d in disc_bambu
         ]
+        unclaimed_bambu.extend(
+            {"dev_id": d["dev_id"], "name": d.get("name") or d["dev_id"], "model": d.get("model", ""),
+             "bambu_dev_ip": d.get("ip"), "kind": "bambu", "claimed": False, "local_ok": bool(d.get("ip")), "local_ms": None}
+            for d in lan_bambu
+            if d.get("dev_id") and d.get("dev_id") not in known_bambu_ids and d.get("dev_id") not in cloud_disc_ids
+        )
         unclaimed_moon = [
             {"url": d["url"], "name": d.get("name", "Klipper Printer"),
              "kind": "moonraker", "claimed": False, "local_ok": False, "local_ms": None}
@@ -531,26 +551,37 @@ class App:
                 ) as ws:
                     self._set_state("connected")
                     log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
-                    async for message in ws:
-                        try:
-                            req = json.loads(message)
-                        except Exception:
-                            continue
-                        method = req.get("method", "GET").upper()
-                        if method == "BAMBU_CAMERA":
-                            asyncio.create_task(_handle_bambu_camera(ws, req))
-                        elif method == "FFMPEG_STREAM":
-                            asyncio.create_task(_handle_ffmpeg_stream(ws, req))
-                        elif method == "DISCOVER_BAMBU":
-                            asyncio.create_task(_handle_discover_bambu(ws, req))
-                        elif method == "BAMBU_UPLOAD":
-                            asyncio.create_task(_handle_bambu_upload(ws, req))
-                        elif method == "MOONRAKER_UPLOAD":
-                            asyncio.create_task(_handle_moonraker_upload(ws, req))
-                        elif method == "STREAM":
-                            asyncio.create_task(_handle_stream(ws, req))
-                        else:
-                            asyncio.create_task(_handle_request(ws, req))
+                    bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
+                    try:
+                        async for message in ws:
+                            try:
+                                req = json.loads(message)
+                            except Exception:
+                                continue
+                            method = req.get("method", "GET").upper()
+                            if method == "BAMBU_CAMERA":
+                                asyncio.create_task(_handle_bambu_camera(ws, req))
+                            elif method == "FFMPEG_STREAM":
+                                asyncio.create_task(_handle_ffmpeg_stream(ws, req))
+                            elif method == "DISCOVER_BAMBU":
+                                asyncio.create_task(_handle_discover_bambu(ws, req))
+                            elif method == "DISCOVER_MOONRAKER":
+                                asyncio.create_task(_handle_discover_moonraker(ws, req))
+                            elif method == "BAMBU_UPLOAD":
+                                asyncio.create_task(_handle_bambu_upload(ws, req))
+                            elif method == "BAMBU_MQTT":
+                                asyncio.create_task(_handle_bambu_mqtt(ws, req))
+                            elif method == "MOONRAKER_UPLOAD":
+                                asyncio.create_task(_handle_moonraker_upload(ws, req))
+                            elif method == "PRINT_ZPL":
+                                asyncio.create_task(_handle_print_zpl(ws, req))
+                            elif method == "STREAM":
+                                asyncio.create_task(_handle_stream(ws, req))
+                            else:
+                                asyncio.create_task(_handle_request(ws, req))
+                    finally:
+                        _cancel_all_bambu_lan_subscriptions()
+                        bambu_lan_task.cancel()
 
             except asyncio.CancelledError:
                 return
@@ -590,6 +621,15 @@ async def _check_for_update(server: str) -> None:
                 r = await client.get(f"{server}/agent/{fname}")
                 r.raise_for_status()
                 (script_dir / fname).write_bytes(r.content)
+            try:
+                import subprocess
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
+                    check=False,
+                    timeout=60,
+                )
+            except Exception as dep_exc:
+                log.debug("Dependency refresh skipped: %s", dep_exc)
             log.info("Updated to %s — restarting…", remote)
             os.execv(sys.executable, [sys.executable] + sys.argv)
     except Exception as e:
@@ -630,8 +670,14 @@ try:
         handle_bambu_camera   as _handle_bambu_camera,
         handle_ffmpeg_stream  as _handle_ffmpeg_stream,
         handle_discover_bambu as _handle_discover_bambu,
+        handle_discover_moonraker as _handle_discover_moonraker,
         handle_bambu_upload   as _handle_bambu_upload,
+        handle_bambu_mqtt     as _handle_bambu_mqtt,
         handle_moonraker_upload as _handle_moonraker_upload,
+        handle_print_zpl      as _handle_print_zpl,
+        _bambu_lan_config_loop,
+        _cancel_all_bambu_lan_subscriptions,
+        ensure_bambu_mqtt_dependency as _ensure_bambu_mqtt_dependency,
     )
 except ImportError:
     log.warning("monofarm_agent.py not found — proxy handlers unavailable")
@@ -642,7 +688,18 @@ except ImportError:
 
     _handle_request = _handle_stream = _handle_bambu_camera = _stub
     _handle_ffmpeg_stream = _handle_discover_bambu = _stub
-    _handle_bambu_upload = _handle_moonraker_upload = _stub
+    _handle_discover_moonraker = _stub
+    _handle_bambu_upload = _handle_bambu_mqtt = _handle_moonraker_upload = _stub
+    _handle_print_zpl = _stub
+
+    async def _bambu_lan_config_loop(*_args, **_kwargs):  # type: ignore
+        return None
+
+    def _cancel_all_bambu_lan_subscriptions() -> None:  # type: ignore
+        return None
+
+    def _ensure_bambu_mqtt_dependency() -> None:  # type: ignore
+        return None
 
 
 # ── Browser UI HTML ───────────────────────────────────────────────────────────

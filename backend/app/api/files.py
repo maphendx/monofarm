@@ -28,10 +28,11 @@ from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
-from app.services import bambu_dispatch
+from app.services import bambu, bambu_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
+from app.services import tunnel as _tunnel
 from app.workers import bambu_jobs as bambu_jobs_worker
 from app.services.gcode_meta import parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
@@ -534,8 +535,6 @@ async def send_to_printer(
     # ── Bambu path: Cloud upload (Alibaba OSS) + Cloud task API ──
     if printer.kind == PrinterKind.bambu:
         _check_bambu_send_rate_limit(request, org.id)
-        if not settings.BAMBU_CLOUD_V2_ENABLED:
-            raise HTTPException(status_code=503, detail="Bambu Cloud job system is disabled")
         if not printer.bambu_dev_id:
             raise HTTPException(status_code=400, detail="У принтера немає Bambu dev_id")
         is_3mf = ".3mf" in Path(row.original_name).suffixes
@@ -555,6 +554,73 @@ async def send_to_printer(
             else:
                 ams_mapping.append(payload.slot_map.get(i, i))
         use_ams = any(v >= 0 for v in ams_mapping)
+
+        if printer.bambu_lan_mode:
+            if not printer.bambu_dev_ip or not printer.bambu_access_code:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Для Bambu LAN потрібні IP адреса та LAN Access Code",
+                )
+            lan_filename = Path(row.original_name).name
+            try:
+                if _tunnel.has_tunnel(org.id):
+                    presigned = storage_svc.presigned_url(row.stored_name, org.id, expires=900)
+                    file_bytes = None
+                    if not presigned:
+                        file_bytes = await asyncio.to_thread(storage_svc.get_bytes, row.stored_name, org.id)
+                    uploaded_name = await _tunnel.send_bambu_upload(
+                        org.id,
+                        printer.bambu_dev_ip,
+                        printer.bambu_access_code,
+                        lan_filename,
+                        file_bytes=file_bytes,
+                        presigned_url=presigned,
+                    )
+                    start_payload = bambu.build_start_print_payload(
+                        printer.bambu_dev_id,
+                        row.original_name,
+                        ams_mapping=ams_mapping,
+                        use_ams=use_ams,
+                        ftp_filename=uploaded_name,
+                    )
+                    await _tunnel.send_bambu_mqtt(
+                        org.id,
+                        printer.bambu_dev_id,
+                        printer.bambu_dev_ip,
+                        printer.bambu_access_code,
+                        start_payload,
+                    )
+                else:
+                    with storage_svc.local_path_for(row.stored_name, org.id) as src:
+                        uploaded_name = await asyncio.to_thread(
+                            bambu.upload_3mf,
+                            printer.bambu_dev_ip,
+                            printer.bambu_access_code,
+                            src,
+                            lan_filename,
+                        )
+                    await asyncio.to_thread(
+                        bambu.start_print,
+                        printer.bambu_dev_id,
+                        row.original_name,
+                        ams_mapping,
+                        use_ams,
+                        None,
+                        uploaded_name,
+                    )
+            except (RuntimeError, bambu.BambuError, OSError, FileNotFoundError) as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Bambu LAN друк не стартував: {exc}. Перевір, що agent підключений і має доступ до принтера.",
+                ) from exc
+            return SendResult(
+                ok=True,
+                printer_name=printer.name,
+                message="Файл надіслано через Bambu LAN agent — друк стартує",
+            )
+
+        if not settings.BAMBU_CLOUD_V2_ENABLED:
+            raise HTTPException(status_code=503, detail="Bambu Cloud job system is disabled")
 
         job = bambu_dispatch.create_cloud_job(
             db,
