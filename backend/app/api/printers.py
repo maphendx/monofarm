@@ -697,7 +697,7 @@ async def list_bambu_discovered(
     _user: User = Depends(require_roles(UserRole.admin)),
 ) -> list[dict]:
     """Bambu Cloud devices not yet claimed into this org."""
-    devices = await asyncio.to_thread(bambu.list_devices, org.id)
+    devices = await asyncio.to_thread(lambda: bambu.list_devices(org.id, force=True))
     if not devices:
         return []
     claimed_ids = {
@@ -749,7 +749,7 @@ async def claim_bambu_printer(
             detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
         )
 
-    devices = await asyncio.to_thread(bambu.list_devices, org.id)
+    devices = await asyncio.to_thread(lambda: bambu.list_devices(org.id, force=True))
     device = next((d for d in devices if d["dev_id"] == dev_id), None)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found in Bambu Cloud account")

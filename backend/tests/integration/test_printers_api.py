@@ -80,7 +80,7 @@ def test_claim_bambu_printer_stores_firmware_version(client, auth_headers, monke
     monkeypatch.setattr(
         bambu,
         "list_devices",
-        lambda org_id: [
+        lambda org_id, **_kw: [
             {
                 "dev_id": "BAMBU-CLAIM-1",
                 "name": "P1S Office",

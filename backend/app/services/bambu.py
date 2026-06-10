@@ -43,6 +43,11 @@ log = logging.getLogger(__name__)
 FTPS_TIMEOUT = 30
 MQTT_KEEPALIVE = 60
 STATUS_CACHE_TTL = 30.0
+DEVICE_LIST_CACHE_TTL = 60
+# MQTT reports arrive ~1/s per printing device — persist to Redis on change
+# or at most this often, so Upstash isn't hammered with identical payloads.
+REDIS_STATE_WRITE_INTERVAL = 5.0
+REDIS_AMS_WRITE_INTERVAL = 60.0
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
@@ -81,6 +86,9 @@ _seq_lock = threading.Lock()
 _state_cache: dict[str, dict[str, Any]] = {}
 # dev_id → list[dict]  — AMS tray data
 _ams_cache: dict[str, list[dict]] = {}
+# dev_id → monotonic ts of last Redis write (throttling, see REDIS_*_WRITE_INTERVAL)
+_last_state_redis_write: dict[str, float] = {}
+_last_ams_redis_write: dict[str, float] = {}
 # dev_id → org_id  — routes publish to the right MQTT client
 _dev_to_org: dict[str, int] = {}
 # dev_id → paho Client  — per-device LAN MQTT clients (older firmware, no cloud)
@@ -265,8 +273,19 @@ def refresh_token(org: "Organization", token: str) -> str:
     return access
 
 
-def list_devices(org_id: int) -> list[dict]:
-    """Get printers bound to the Bambu Cloud account for an org."""
+def list_devices(org_id: int, *, force: bool = False) -> list[dict]:
+    """Get printers bound to the Bambu Cloud account for an org.
+
+    Cached for DEVICE_LIST_CACHE_TTL — every printer listing used to hit
+    Bambu Cloud directly. `force=True` bypasses the cache (claim/discovery).
+    """
+    from app.services.cache import cache_get, cache_set
+
+    if not force:
+        cached = cache_get(f"bambu:devices:{org_id}")
+        if cached is not None:
+            return cached
+
     token = _access_tokens.get(org_id)
     if not token:
         # Token missing (e.g. after server restart) — try to re-login from DB
@@ -290,7 +309,7 @@ def list_devices(org_id: int) -> list[dict]:
         return []
 
     devices = data.get("devices") or []
-    return [
+    result = [
         {
             "dev_id": d.get("dev_id", ""),
             "name": d.get("name", ""),
@@ -302,6 +321,10 @@ def list_devices(org_id: int) -> list[dict]:
         for d in devices
         if d.get("dev_id")
     ]
+    # Error paths above return [] without caching, so a transient cloud
+    # failure never hides printers for the whole TTL.
+    cache_set(f"bambu:devices:{org_id}", result, DEVICE_LIST_CACHE_TTL)
+    return result
 
 
 def get_device_firmware_version(org_id: int, dev_id: str) -> str | None:
@@ -407,9 +430,12 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         "error_msg": error_msg if error_msg is not None else (
             None if raw_state in ("IDLE", "RUNNING", "FINISH") else prev.get("error_msg")
         ),
+        # Carry forward — reports without AMS data must not drop the active tray
+        "active_tray": prev.get("active_tray"),
     }
+    state_changed = updated.get("state") != prev.get("state")
     _state_cache[dev_id] = updated
-    if updated.get("state") != prev.get("state"):
+    if state_changed:
         log_event(
             log,
             logging.INFO,
@@ -419,9 +445,6 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
             old_status=prev.get("state", "unknown"),
             new_status=updated.get("state"),
         )
-    from app.services.cache import cache_set
-    cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
-    _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
 
     ams_data = print_data.get("ams")
     if isinstance(ams_data, dict):
@@ -431,10 +454,23 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         if tray_now is not None:
             try:
                 t = int(tray_now)
-                _state_cache[dev_id]["active_tray"] = 254 if t == 255 else t
-                cache_set(f"bambu:state:{dev_id}", _state_cache[dev_id], int(STATUS_CACHE_TTL))
+                updated["active_tray"] = 254 if t == 255 else t
             except (ValueError, TypeError):
                 pass
+
+    # Persist to Redis on meaningful change, else at most every few seconds —
+    # reports stream ~1/s per printing device and the payload rarely differs.
+    from app.services.cache import cache_set
+    now_mono = time.monotonic()
+    if (
+        state_changed
+        or updated.get("error_msg") != prev.get("error_msg")
+        or updated.get("active_tray") != prev.get("active_tray")
+        or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
+    ):
+        cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
+        _last_state_redis_write[dev_id] = now_mono
+    _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
 
 
 def _safe_int(value: Any) -> int | None:
@@ -715,9 +751,15 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
         })
 
     if trays:
+        changed = _ams_cache.get(dev_id) != trays
         _ams_cache[dev_id] = trays
-        from app.services.cache import cache_set
-        cache_set(f"bambu:ams:{dev_id}", trays, 300)
+        now_mono = time.monotonic()
+        # Tray contents rarely change — refresh Redis on change or before the
+        # 300s TTL runs out, not on every report.
+        if changed or now_mono - _last_ams_redis_write.get(dev_id, 0.0) >= REDIS_AMS_WRITE_INTERVAL:
+            from app.services.cache import cache_set
+            cache_set(f"bambu:ams:{dev_id}", trays, 300)
+            _last_ams_redis_write[dev_id] = now_mono
 
 
 # ── HMS error lookup ──────────────────────────────────────────────────────────
