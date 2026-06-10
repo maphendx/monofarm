@@ -29,11 +29,16 @@ export function ScheduleJobBlock({
   const widthPct  = ((endMins - startMins) / 1440) * 100;
   const minWidthPx = 36;
 
-  // Hide text when the block spans < 2% of the day (< ~29 min) so it stays legible
-  const tooNarrow = widthPct < 2;
+  const isCompact = widthPct < 2;
 
   const startLabel = fmtTimeMins(startMins);
   const endLabel   = fmtTimeMins(endMins < 1440 ? endMins : 0); // 1440 = 00:00 next day
+  const timeLabel  = isContinuation
+    ? `до ${endLabel}`
+    : endMins > startMins
+    ? `${startLabel}–${endMins >= 1440 ? "00:00↗" : endLabel}`
+    : startLabel;
+  const durationLabel = fmtDuration(totalDurationMins);
   const fileLabel  = entry.task.file_name ?? entry.task.title;
   const taskLabel  = entry.task.title !== fileLabel ? entry.task.title : null;
   const thumbSrc   = entry.task.has_thumbnail && entry.task.gcode_file_id
@@ -41,7 +46,7 @@ export function ScheduleJobBlock({
     : null;
 
   const base =
-    "absolute top-1 bottom-1 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
+    "absolute top-1 bottom-1 rounded overflow-visible cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
 
   const colorCls = isConflict
     ? "bg-[rgba(217,119,6,.18)] border border-[rgba(217,119,6,.45)]"
@@ -70,13 +75,46 @@ export function ScheduleJobBlock({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${startLabel}–${endLabel} · ${fmtDuration(totalDurationMins)}`}
+      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}`}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)` }}
       className={`${base} ${colorCls} ${topBorder}`}
     >
-      <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
-        {!tooNarrow && (
-          thumbSrc ? (
+      {isCompact && (
+        <div className={[
+          "absolute left-1 top-1 z-10 flex min-w-[180px] max-w-[240px] items-center gap-1.5 rounded border px-1.5 py-1 shadow-sm backdrop-blur",
+          isConflict
+            ? "border-[rgba(217,119,6,.45)] bg-[var(--bg-elevated)]/95"
+            : "border-[var(--accent)] bg-[var(--bg-elevated)]/95",
+        ].join(" ")}>
+          {thumbSrc ? (
+            <img
+              src={thumbSrc}
+              alt=""
+              draggable={false}
+              className="h-5 w-5 shrink-0 rounded object-cover"
+            />
+          ) : (
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[7px] font-semibold uppercase text-[var(--text-faint)]">
+              3mf
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <span className={[
+              "block truncate text-[10px] font-semibold leading-tight",
+              isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+            ].join(" ")}>
+              {isContinuation ? `↩ ${fileLabel}` : fileLabel}
+            </span>
+            <span className="block truncate text-[9px] tabular-nums leading-tight text-[var(--text-muted)]">
+              {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!isCompact && (
+        <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
+          {thumbSrc ? (
             <img
               src={thumbSrc}
               alt=""
@@ -87,44 +125,38 @@ export function ScheduleJobBlock({
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[8px] font-semibold uppercase text-[var(--text-faint)]">
               3mf
             </div>
-          )
-        )}
-
-        <div className="flex min-w-0 flex-1 flex-col justify-start gap-0.5">
-          {/* File name line */}
-          <span className={[
-            "truncate text-[10px] font-semibold leading-tight",
-            tooNarrow ? "opacity-0" : "",
-            isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
-          ].join(" ")}>
-            {isContinuation ? `↩ ${fileLabel}` : fileLabel}
-          </span>
-
-          {!tooNarrow && taskLabel && (
-            <span className="truncate text-[9px] leading-tight text-[var(--text-faint)]">
-              {taskLabel}
-            </span>
           )}
 
-          {/* Time + duration */}
-          {!tooNarrow && (
+          <div className="flex min-w-0 flex-1 flex-col justify-start gap-0.5">
+            {/* File name line */}
+            <span className={[
+              "truncate text-[10px] font-semibold leading-tight",
+              isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+            ].join(" ")}>
+              {isContinuation ? `↩ ${fileLabel}` : fileLabel}
+            </span>
+
+            {taskLabel && (
+              <span className="truncate text-[9px] leading-tight text-[var(--text-faint)]">
+                {taskLabel}
+              </span>
+            )}
+
+            {/* Time + duration */}
             <span className="truncate text-[9px] tabular-nums text-[var(--text-muted)]">
-              {isContinuation
-                ? `до ${endLabel}`
-                : `${startLabel}–${endMins >= 1440 ? "00:00↗" : endLabel}`}
-              {" · "}{fmtDuration(totalDurationMins)}
+              {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
             </span>
-          )}
 
-          {/* Conflict / blocked indicators */}
-          {!tooNarrow && isConflict && (
-            <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
-          )}
-          {!tooNarrow && isBlocked && !isConflict && (
-            <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
-          )}
+            {/* Conflict / blocked indicators */}
+            {isConflict && (
+              <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
+            )}
+            {isBlocked && !isConflict && (
+              <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </button>
   );
 }
