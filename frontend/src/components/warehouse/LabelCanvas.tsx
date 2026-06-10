@@ -86,11 +86,12 @@ export function substituteVars(tpl: string, vars: LabelDataVars): string {
 // ─── Element renderer ────────────────────────────────────────────────────────
 
 function ElementRenderer({
-  el, vars, barcodeUrls,
+  el, vars, barcodeUrls, zplDpi,
 }: {
   el: LabelElement;
   vars: LabelDataVars;
   barcodeUrls?: Record<string, string>;
+  zplDpi?: number;
 }) {
   const pos: React.CSSProperties = {
     width: "100%",
@@ -121,6 +122,24 @@ function ElementRenderer({
 
     case "qr": {
       const qrVal = substituteVars(el.value ?? "", vars) || " ";
+      if (zplDpi) {
+        // Mirror the ZPL ^BQ magnification cap so the canvas matches the print output.
+        // ^BQ mag is 1–10; at mag=10 and 300 DPI → max QR = 10×21 dots = 17.8 mm.
+        const boxDots = Math.min(
+          Math.floor(el.w * zplDpi / 25.4),
+          Math.floor(el.h * zplDpi / 25.4),
+        );
+        const mag   = Math.min(10, Math.max(1, Math.floor(boxDots / 21)));
+        const qrMm  = mag * 21 * 25.4 / zplDpi;
+        const offX  = Math.max(0, (el.w - qrMm) / 2);
+        const offY  = Math.max(0, (el.h - qrMm) / 2);
+        return (
+          <div style={{ ...pos, position: "relative" }}>
+            <QRCode value={qrVal} level={el.level ?? "M"} size={128}
+              style={{ position: "absolute", left: `${offX}mm`, top: `${offY}mm`, width: `${qrMm}mm`, height: `${qrMm}mm`, display: "block" }} />
+          </div>
+        );
+      }
       return (
         <div style={pos}>
           <QRCode value={qrVal} level={el.level ?? "M"} size={128}
@@ -213,6 +232,7 @@ export function LabelCanvas({
   selected,
   onSelect,
   noBorder,
+  zplDpi,
 }: {
   template: LabelTemplate;
   vars: LabelDataVars;
@@ -221,6 +241,8 @@ export function LabelCanvas({
   onSelect?: (id: string) => void;
   /** Pass true in editor to remove the border — it shifts absolute positions */
   noBorder?: boolean;
+  /** When set, QR elements are rendered at the actual ZPL-limited size (mag 1–10 cap) */
+  zplDpi?: number;
 }) {
   return (
     <div style={{
@@ -246,7 +268,7 @@ export function LabelCanvas({
             boxSizing: "border-box",
           }}
         >
-          <ElementRenderer el={el} vars={vars} barcodeUrls={barcodeUrls} />
+          <ElementRenderer el={el} vars={vars} barcodeUrls={barcodeUrls} zplDpi={zplDpi} />
         </div>
       ))}
     </div>

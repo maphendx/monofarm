@@ -730,6 +730,7 @@ function QueuePageInner() {
                 setWeekStart(d);
               }}
               onOpenModal={setScheduleModal}
+              onRefresh={() => { loadCalendar(); load(); }}
             />
           </div>
           <div className="w-72 shrink-0 border-l border-[var(--border)] overflow-y-auto">

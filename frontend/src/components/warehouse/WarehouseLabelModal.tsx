@@ -81,9 +81,10 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): str
       if (!val) return "";
       // QR total size ≈ mag × 21 dots (for model 2, ~21 modules).
       // Canvas renders QR filling the entire el.w × el.h box.
-      // Calculate mag to best fill the box, then center-offset the QR.
+      // Use floor (not round) so qrDots never exceeds boxDots — overflow would
+      // cause centering to clamp at 0 and the QR would bleed outside its element.
       const boxDots = Math.min(w, h);
-      const mag = Math.min(10, Math.max(1, Math.round(boxDots / 21)));
+      const mag = Math.min(10, Math.max(1, Math.floor(boxDots / 21)));
       const qrDots = mag * 21;
       // Center the QR within the bounding box
       const ox = Math.max(0, Math.round((w - qrDots) / 2));
@@ -733,15 +734,17 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
         <button onClick={downloadZpl} disabled={!activeTpl || totalLabels === 0} className="btn btn-ghost btn-sm disabled:opacity-40" title="Завантажити ZPL файл">
           ↓ ZPL
         </button>
-        <select
-          value={zplDpi}
-          onChange={e => { const v = parseInt(e.target.value) as 203|300|600; setZplDpi(v); localStorage.setItem("zebra_dpi", String(v)); }}
-          title="DPI принтера (GX420t=203, GX430t=300)"
-          className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs text-[var(--text-muted)] outline-none hover:border-[var(--accent)] cursor-pointer">
-          <option value={203}>203 DPI</option>
-          <option value={300}>300 DPI</option>
-          <option value={600}>600 DPI</option>
-        </select>
+        <label className="flex items-center gap-1.5 cursor-pointer" title="GX420t=203, GX430t=300, ZD620=300">
+          <span className="text-[10px] text-text-faint whitespace-nowrap">DPI:</span>
+          <select
+            value={zplDpi}
+            onChange={e => { const v = parseInt(e.target.value) as 203|300|600; setZplDpi(v); localStorage.setItem("zebra_dpi", String(v)); }}
+            className="rounded-md border border-border-strong bg-bg-elevated px-2 py-1.5 text-xs text-text-muted outline-none hover:border-accent cursor-pointer">
+            <option value={203}>203 (GX420t)</option>
+            <option value={300}>300 (GX430t)</option>
+            <option value={600}>600</option>
+          </select>
+        </label>
         <button onClick={printZebra} disabled={busy || !activeTpl || totalLabels === 0} className="btn btn-secondary btn-sm disabled:opacity-40">
           {busy ? "…" : `Zebra${totalLabels > 1 ? ` (${totalLabels})` : ""}`}
         </button>
@@ -817,7 +820,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
                   {/* Rendered label — noBorder so elements start at 0,0 exactly */}
                   <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
                     <LabelCanvas template={displayTpl} vars={previewVars} barcodeUrls={previewBcUrls}
-                      noBorder={editMode} />
+                      noBorder={editMode} zplDpi={zplDpi} />
                   </div>
 
                   {/* Decorative border drawn on top (doesn't affect positioning) */}
