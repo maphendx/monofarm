@@ -434,7 +434,7 @@ export default function DashboardPage() {
     api<{ devices: unknown[] }>("/api/printers/bambu-discover")
       .then((r) => { if (r.devices?.length) load(); })
       .catch(() => {});
-    const id = setInterval(load, 30_000);
+    const id = setInterval(() => { if (!document.hidden) load(); }, 30_000);
     return () => clearInterval(id);
   }, [load]);
 

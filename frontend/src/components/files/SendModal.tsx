@@ -157,13 +157,17 @@ export function SendModal({
   printers,
   onClose,
   defaultPrinterId,
+  askMode = false,
 }: {
   file: GcodeFile;
   printers: Printer[];
   onClose: () => void;
   defaultPrinterId?: number;
+  /** Show a save / print / queue chooser first (slicer auto-open flow). */
+  askMode?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("print");
+  const [choosing, setChoosing] = useState(askMode);
 
   // print-now state
   const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
@@ -235,7 +239,7 @@ export function SendModal({
         `/api/files/${file.id}/send/${selectedId}`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      if (res.dispatch_mode === "cloud" && res.job_id != null) {
+      if (res.job_id != null) {
         setQueuedJob(res as BambuQueuedResult);
         setResult({ ok: true, message: `Друк поставлено в чергу на «${res.printer_name}»` });
       } else {
@@ -274,7 +278,7 @@ export function SendModal({
         </div>
 
         {/* mode tabs */}
-        <div className="flex border-b border-[var(--border)] ">
+        {!choosing && <div className="flex border-b border-[var(--border)] ">
           {MODES.map((m) => (
             <button key={m.key} onClick={() => switchMode(m.key)}
               className={[
@@ -286,7 +290,7 @@ export function SendModal({
               {m.label}
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* filament meta row */}
         {file.filament_meta && (
@@ -308,15 +312,33 @@ export function SendModal({
         {/* body */}
         <div className="space-y-4 px-5 py-4">
 
+          {/* ── chooser (slicer auto-open): save / print / queue ── */}
+          {choosing && (
+            <div className="space-y-2">
+              {[
+                { key: "save" as Mode, title: "Зберегти у файли", desc: "Файл уже в бібліотеці — надіслати можна пізніше" },
+                { key: "print" as Mode, title: "Обрати принтер", desc: "Запустити друк просто зараз" },
+                { key: "queue" as Mode, title: "Поставити в чергу", desc: "Додати в чергу друку з кількістю" },
+              ].map((o) => (
+                <button key={o.key} type="button"
+                  onClick={() => { setChoosing(false); switchMode(o.key); }}
+                  className="block w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]">
+                  <p className="text-sm font-medium text-[var(--text)]">{o.title}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{o.desc}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* ── save mode ── */}
-          {mode === "save" && (
+          {!choosing && mode === "save" && (
             <p className="text-sm text-[var(--text-muted)] ">
               Файл вже збережено в бібліотеці. Ви можете надіслати його на принтер пізніше.
             </p>
           )}
 
           {/* ── queue mode ── */}
-          {mode === "queue" && !result && (
+          {!choosing && mode === "queue" && !result && (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <label className="text-sm text-[var(--text)] ">Кількість</label>
@@ -337,7 +359,7 @@ export function SendModal({
           )}
 
           {/* ── print mode ── */}
-          {mode === "print" && !result && (
+          {!choosing && mode === "print" && !result && (
             <>
               {compatiblePrinters.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">
@@ -517,18 +539,18 @@ export function SendModal({
           <button onClick={onClose} className="btn btn-ghost">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
-          {!result?.ok && mode === "print" && (
+          {!choosing && !result?.ok && mode === "print" && (
             <button onClick={sendPrint} disabled={!selectedId || busy}
               className="btn btn-primary disabled:opacity-40">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
           )}
-          {!result?.ok && mode === "save" && (
+          {!choosing && !result?.ok && mode === "save" && (
             <button onClick={onClose} className="btn btn-primary">
               Готово
             </button>
           )}
-          {!result?.ok && mode === "queue" && (
+          {!choosing && !result?.ok && mode === "queue" && (
             <button onClick={addToQueue} disabled={busy}
               className="btn btn-primary disabled:opacity-40">
               {busy ? "Додаю…" : "Додати в чергу"}

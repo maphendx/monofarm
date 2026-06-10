@@ -164,7 +164,7 @@ export function Sidebar({
       setAgentLastChecked(new Date());
     }
     check();
-    const id = setInterval(check, 30_000);
+    const id = setInterval(() => { if (!document.hidden) void check(); }, 30_000);
     return () => clearInterval(id);
   }, []);
 

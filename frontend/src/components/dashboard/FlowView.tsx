@@ -127,7 +127,7 @@ export function FlowView({ printers }: Props) {
       });
     }
     fetch();
-    const id = setInterval(fetch, 60_000);
+    const id = setInterval(() => { if (!document.hidden) fetch(); }, 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -165,7 +165,7 @@ export function FlowView({ printers }: Props) {
       } catch {}
     }
     poll();
-    const id = setInterval(poll, 20_000);
+    const id = setInterval(() => { if (!document.hidden) poll(); }, 20_000);
     return () => clearInterval(id);
   }, []);
 

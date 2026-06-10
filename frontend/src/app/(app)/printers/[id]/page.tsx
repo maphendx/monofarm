@@ -569,7 +569,7 @@ function JobHeroCard({
 
   useEffect(() => {
     if (isBambuCam || !hasCamera) return;
-    const id = setInterval(() => setTick((n) => n + 1), 2500);
+    const id = setInterval(() => { if (!document.hidden) setTick((n) => n + 1); }, 2500);
     return () => clearInterval(id);
   }, [isBambuCam, hasCamera]);
 
@@ -937,7 +937,7 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    const t = setInterval(() => void load(), activeJob ? 5000 : 25000);
+    const t = setInterval(() => { if (!document.hidden) void load(); }, activeJob ? 5000 : 25000);
     return () => clearInterval(t);
   }, [load, activeJob]);
 
@@ -947,7 +947,7 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
   const hasMore = recent.length < total;
 
   return (
-    <Card title="Bambu Cloud друк">
+    <Card title="Завдання друку">
       {activeJob && (
         <button onClick={() => setOpenJobId(activeJob.id)}
           className="mb-3 block w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-left transition hover:border-[var(--border-strong)]">
@@ -2195,7 +2195,7 @@ export default function PrinterPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    intervalRef.current = setInterval(() => void load(), 10_000);
+    intervalRef.current = setInterval(() => { if (!document.hidden) void load(); }, 10_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -2297,7 +2297,7 @@ export default function PrinterPage() {
           <TemperaturesCard printer={printer} />
           <SpeedCard printer={printer} />
           <ConnectionCard printer={printer} />
-          {isBambu && printer.bambu_dev_id && <BambuJobsCard printer={printer} />}
+          {((isBambu && printer.bambu_dev_id) || !!printer.moonraker_url) && <BambuJobsCard printer={printer} />}
           <PrintHistoryCard printer={printer} />
         </div>
       </div>

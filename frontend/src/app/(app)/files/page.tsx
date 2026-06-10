@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, api, getToken } from "@/lib/api";
+import { SendModal } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
@@ -82,429 +83,6 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
           {types[i] ?? `S${i + 1}`}
         </span>
       ))}
-    </div>
-  );
-}
-
-// ── Slot compat ───────────────────────────────────────────────────────────────
-type SlotMatch = "ok" | "type_mismatch" | "missing";
-
-function normalizeSlotColor(color: string | null | undefined): string | null {
-  if (!color) return null;
-  const raw = color.trim().replace(/^#/, "");
-  if (!/^[0-9a-fA-F]{6,8}$/.test(raw)) return null;
-  return `#${raw.slice(0, 6).toLowerCase()}`;
-}
-
-function printerMaterialSlots(printer: Printer) {
-  const slots = (printer.slots ?? [])
-    .filter(s => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
-    .map(s => ({
-      slot: s.slot_index,
-      type: s.material,
-      color: s.hex_color ?? s.color,
-      colorName: s.color,
-    }));
-  if (slots.length > 0) return slots;
-  return (printer.loaded_filaments ?? [])
-    .filter(s => !s.empty && (s.filament_id || s.color || s.type))
-    .map(s => ({
-      slot: s.slot,
-      type: s.type,
-      color: s.color,
-      colorName: s.color_name,
-    }));
-}
-
-function autoMapSlots(meta: GcodeFileMeta | null, printer: Printer): Record<number, number> {
-  const targets = printerMaterialSlots(printer);
-  const usedTargets = new Set<number>();
-  const map: Record<number, number> = {};
-
-  for (const sourceSlot of usedSlotIndices(meta)) {
-    const fileColor = normalizeSlotColor(meta?.colors?.[sourceSlot]);
-    const fileType = meta?.types?.[sourceSlot]?.toLowerCase();
-    const sameColor = fileColor
-      ? targets.filter(t => !usedTargets.has(t.slot) && normalizeSlotColor(t.color) === fileColor)
-      : [];
-    const exact = sameColor.find(t => !fileType || !t.type || t.type.toLowerCase() === fileType) ?? sameColor[0];
-    const fallback = targets.find(t => t.slot === sourceSlot && !usedTargets.has(t.slot))
-      ?? targets.find(t => !usedTargets.has(t.slot) && fileType && t.type?.toLowerCase() === fileType);
-    const picked = exact ?? fallback;
-    map[sourceSlot] = picked?.slot ?? sourceSlot;
-    if (picked) usedTargets.add(picked.slot);
-  }
-
-  return map;
-}
-
-function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
-  if (!meta) return [];
-  return usedSlotIndices(meta).map(i => {
-    const fileColor = meta.colors?.[i] ?? null, fileType = meta.types?.[i] ?? null;
-    const mappedSlot = autoMapSlots(meta, printer)[i] ?? i;
-    const ps = printerMaterialSlots(printer).find(s => s.slot === mappedSlot);
-    const match: SlotMatch = !ps ? "missing" : (!fileType || !ps.type || fileType.toLowerCase() === ps.type.toLowerCase()) ? "ok" : "type_mismatch";
-    return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor: ps?.color ?? null, printerType: ps?.type ?? null };
-  });
-}
-function compatBadge(slots: ReturnType<typeof checkSlots>) {
-  if (!slots.length) return { label: "немає даних", cls: "bg-[var(--surface-2)] text-[var(--text-faint)]" };
-  const missing = slots.filter(s => s.match === "missing").length;
-  const mismatch = slots.filter(s => s.match === "type_mismatch").length;
-  if (!missing && !mismatch) return { label: "✓ сумісний", cls: "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" };
-  if (missing > 0) return { label: `${missing} слот відсутні`, cls: "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]" };
-  return { label: `тип не збігається (${mismatch})`, cls: "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]" };
-}
-
-// ── Send progress toast ───────────────────────────────────────────────────────
-function SendToast({ fileName, printerName, busy, result }: {
-  fileName: string;
-  printerName: string;
-  busy: boolean;
-  result: { ok: boolean; message: string } | null;
-}) {
-  const [pct, setPct] = useState(0);
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    if (!busy) return;
-    setShow(true);
-    setPct(0);
-    const id = setInterval(() => setPct(p => p < 90 ? Math.min(p + 1.5, 90) : p), 100);
-    return () => clearInterval(id);
-  }, [busy]);
-
-  useEffect(() => {
-    if (busy || result === null) return;
-    setPct(100);
-    const tid = setTimeout(() => setShow(false), 3000);
-    return () => clearTimeout(tid);
-  }, [busy, result]);
-
-  if (!show) return null;
-  const done = !busy && result !== null;
-  const ok = done && result!.ok;
-
-  return (
-    <div className="fixed bottom-5 right-5 z-[9999] w-72 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 shadow-2xl">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-semibold text-[var(--text)]">
-          {!done ? "Надсилаємо…" : ok ? "✓ Відправлено" : "✕ Помилка"}
-        </span>
-        <span className="text-[10px] text-[var(--text-faint)] truncate max-w-[100px]">{printerName}</span>
-      </div>
-      <p className="mb-3 truncate text-[11px] text-[var(--text-muted)]">{fileName}</p>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)]">
-        <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{
-            width: `${pct}%`,
-            background: !done ? "var(--accent)" : ok ? "var(--state-ok)" : "var(--state-error)",
-          }}
-        />
-      </div>
-      <div className="mt-1.5 flex items-center justify-between">
-        <span className="text-[10px] text-[var(--text-faint)] truncate max-w-[200px]">
-          {done ? result!.message : ""}
-        </span>
-        <span className="shrink-0 text-[10px] tabular-nums text-[var(--text-faint)]">{Math.round(pct)}%</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Send modal ────────────────────────────────────────────────────────────────
-function SendModal({ file, printers, onClose, defaultPrinterId }: {
-  file: GcodeFile; printers: Printer[]; onClose: () => void; defaultPrinterId?: number;
-}) {
-  const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [slotMap, setSlotMap] = useState<Record<number, number>>({});
-  const [autoBedLeveling, setAutoBedLeveling] = useState(true);
-  const [timelapse, setTimelapse] = useState(true);
-  const [aiDetection, setAiDetection] = useState(true);
-  const [calibrateSlots, setCalibrateSlots] = useState<Set<number>>(new Set());
-
-  const sendable = printers.filter(p => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)));
-  const selected = sendable.find(p => p.id === selectedId) ?? null;
-  const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
-  const isMoonraker = !!selected?.moonraker_url;
-
-  useEffect(() => {
-    if (!selected) return;
-    setSlotMap(autoMapSlots(file.filament_meta, selected));
-    setCalibrateSlots(new Set(usedSlots));
-  }, [file.filament_meta, selected?.id, usedSlots]);
-
-  function selectPrinter(id: number) {
-    setSelectedId(id); setResult(null);
-    const printer = sendable.find(p => p.id === id);
-    setSlotMap(printer ? autoMapSlots(file.filament_meta, printer) : {});
-    setCalibrateSlots(new Set(usedSlots));
-  }
-
-  async function send() {
-    if (!selectedId) return;
-    setBusy(true); setResult(null);
-    try {
-      const apiMap: Record<number, number> = {};
-      usedSlots.forEach(i => (apiMap[i] = slotMap[i] ?? i));
-      const body: Record<string, unknown> = { slot_map: apiMap };
-      if (isMoonraker) {
-        if (!autoBedLeveling) body.auto_bed_leveling = false;
-        if (!timelapse) body.timelapse = false;
-        if (!aiDetection) body.ai_detection = false;
-        if (calibrateSlots.size !== usedSlots.length)
-          body.calibrate_slots = Array.from(calibrateSlots).sort((a, b) => a - b);
-      }
-      const res = await api<{ ok: boolean; printer_name: string; message: string }>(
-        `/api/files/${file.id}/send/${selectedId}`, { method: "POST", body: JSON.stringify(body) }
-      );
-      setResult({ ok: res.ok, message: res.message });
-    } catch (e) {
-      setResult({ ok: false, message: e instanceof ApiError ? e.message : "Помилка" });
-    } finally { setBusy(false); }
-  }
-
-  const materialRows = usedSlots.map(i => ({
-    slot: i,
-    color: file.filament_meta?.colors?.[i] ?? null,
-    type: file.filament_meta?.types?.[i] ?? null,
-    grams: file.filament_meta?.used_g?.[i] ?? null,
-  }));
-  const targetSlotOptions = selected && printerMaterialSlots(selected).length > 0
-    ? printerMaterialSlots(selected)
-    : Array.from({ length: 4 }, (_, slot) => ({ slot, type: null, color: null, colorName: null }));
-
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-3 sm:p-6">
-      <div className="mx-auto flex min-h-[calc(100vh-24px)] w-full max-w-6xl items-center sm:min-h-[calc(100vh-48px)]">
-        <div className="flex max-h-[94vh] w-full flex-col overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
-          <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 sm:px-6">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-faint)]">Відправка зі слайсера</p>
-              <h2 className="mt-1 truncate text-xl font-semibold text-[var(--text-hi)]">Вибір принтера і матеріалів</h2>
-              <p className="mt-1 truncate text-sm text-[var(--text-muted)]">{file.original_name}</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--border)] text-xl leading-none text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
-              aria-label="Закрити"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="grid flex-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(360px,470px)]">
-            <div className="space-y-4 overflow-y-auto border-b border-[var(--border)] p-4 sm:p-6 lg:border-b-0 lg:border-r">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-lg font-semibold text-[var(--text-muted)]">
-                    {file.original_name.split(".").pop()?.toUpperCase() ?? "G"}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[var(--text)]">{file.original_name}</p>
-                    <p className="mt-1 text-xs text-[var(--text-faint)]">
-                      {fmtSize(file.size_bytes)}
-                      {file.filament_meta?.estimated_minutes ? ` · ~${fmtMinutes(file.filament_meta.estimated_minutes)}` : ""}
-                      {file.filament_meta?.layer_height ? ` · шар ${file.filament_meta.layer_height} мм` : ""}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <section>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-[var(--text-hi)]">Котушки з файлу</h3>
-                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1 text-xs text-[var(--text-muted)]">
-                    {materialRows.length || 0} слотів
-                  </span>
-                </div>
-                {materialRows.length > 0 ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {materialRows.map(m => (
-                      <div key={m.slot} className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-black/10 shadow-inner"
-                            style={{ background: m.color ?? "var(--surface-2)" }}
-                          >
-                            <span className="h-7 w-7 rounded-full border border-black/20 bg-[var(--surface)]/90" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium uppercase tracking-wide text-[var(--text-faint)]">Файл слот {m.slot + 1}</p>
-                            <p className="truncate text-lg font-semibold text-[var(--text-hi)]">{m.type ?? "Матеріал"}</p>
-                            <p className="text-xs text-[var(--text-muted)]">{m.grams != null ? `${m.grams} г` : "витрата невідома"}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 text-sm text-[var(--text-muted)]">
-                    У файлі немає даних про матеріали.
-                  </div>
-                )}
-              </section>
-
-              {selected && usedSlots.length > 0 && !result && (
-                <section className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-[var(--text-hi)]">Ремап слотів</h3>
-                  <div className="grid gap-3">
-                    {materialRows.map(m => (
-                      <div key={m.slot} className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 p-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(180px,240px)] sm:items-center">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className="h-11 w-11 shrink-0 rounded-full border border-black/10"
-                            style={{ background: m.color ?? "var(--surface-hi)" }}
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-[var(--text)]">Слот {m.slot + 1} · {m.type ?? "Матеріал"}</p>
-                            <p className="text-xs text-[var(--text-faint)]">з gcode/3mf файлу</p>
-                          </div>
-                        </div>
-                        <span className="hidden text-center text-sm text-[var(--text-muted)] sm:block">→</span>
-                        <select
-                          value={slotMap[m.slot] ?? m.slot}
-                          onChange={e => setSlotMap(p => ({ ...p, [m.slot]: Number(e.target.value) }))}
-                          className="h-10 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] outline-none focus:border-accent"
-                        >
-                          {targetSlotOptions.map(lf => (
-                            <option key={lf.slot} value={lf.slot}>
-                              Принтер слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {selected && isMoonraker && !result && (
-                <section className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4">
-                  <h3 className="mb-3 text-sm font-semibold text-[var(--text-hi)]">Опції друку U1</h3>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {[["autoBedLeveling", "Автокалібрування", autoBedLeveling, setAutoBedLeveling],
-                      ["timelapse", "Таймлапс", timelapse, setTimelapse],
-                      ["aiDetection", "AI детекція", aiDetection, setAiDetection],
-                    ].map(([key, label, val, setter]) => (
-                      <label key={key as string} className="flex h-11 cursor-pointer items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)]/50 px-3 text-sm">
-                        <input type="checkbox" checked={val as boolean} onChange={e => (setter as (v: boolean) => void)(e.target.checked)} className="accent-[var(--accent)]" />
-                        <span className="truncate text-[var(--text-muted)]">{label as string}</span>
-                      </label>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {result && (
-                <div className={["rounded-lg px-4 py-3 text-sm", result.ok ? "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" : "bg-[rgba(239,68,68,.08)] text-[var(--state-error)]"].join(" ")}>
-                  {result.ok ? "✓ " : "✕ "}{result.message}
-                </div>
-              )}
-            </div>
-
-            <aside className="flex min-h-[420px] flex-col overflow-hidden bg-[var(--bg)]">
-              <div className="border-b border-[var(--border)] px-4 py-3 sm:px-5">
-                <h3 className="text-sm font-semibold text-[var(--text-hi)]">Принтери</h3>
-                <p className="text-xs text-[var(--text-faint)]">Обери реальний принтер перед стартом</p>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-                {sendable.length === 0 ? (
-                  <p className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-muted)]">Немає доступних принтерів</p>
-                ) : (
-                  <div className="grid gap-3">
-                    {sendable.map(p => {
-                      const slots = checkSlots(file.filament_meta, p);
-                      const compat = compatBadge(slots);
-                      const isSelected = selectedId === p.id;
-                      return (
-                        <button
-                          type="button"
-                          key={p.id}
-                          onClick={() => selectPrinter(p.id)}
-                          className={[
-                            "w-full rounded-lg border p-4 text-left transition",
-                            isSelected
-                              ? "border-accent bg-accent/10 shadow-sm shadow-accent/10"
-                              : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]/40",
-                          ].join(" ")}
-                        >
-                          <div className="mb-3 flex items-start gap-3">
-                            <span className={["mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
-                              isSelected ? "border-accent bg-accent text-white" : "border-[var(--border-strong)]"].join(" ")}>
-                              {isSelected ? "✓" : ""}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-base font-semibold text-[var(--text-hi)]">{p.name}</p>
-                              <p className="text-xs text-[var(--text-faint)]">{p.kind === "bambu" ? "Bambu Cloud" : "Moonraker / Klipper"}</p>
-                            </div>
-                            <span className={["shrink-0 rounded-md px-2 py-1 text-xs",
-                              p.state === "printing" ? "bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]"
-                                : p.state === "idle" || p.state === "operational" ? "bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]"
-                                : "bg-[var(--surface-2)] text-[var(--text-faint)]"].join(" ")}>
-                              {p.state ?? "—"}
-                            </span>
-                          </div>
-
-                          {slots.length > 0 && (
-                            <div className="grid grid-cols-2 gap-2">
-                              {slots.map(s => (
-                                <div key={s.slot} className={["rounded-md border px-2 py-2",
-                                  s.match === "ok" ? "border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.06)]"
-                                    : s.match === "type_mismatch" ? "border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.06)]"
-                                    : "border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.06)]"].join(" ")}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-7 w-7 shrink-0 rounded-full border border-black/10" style={{ background: s.printerColor ?? s.fileColor ?? "var(--surface-hi)" }} />
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-medium text-[var(--text)]">Слот {s.slot} → {s.targetSlot}</p>
-                                      <p className="truncate text-[11px] text-[var(--text-muted)]">{s.printerType ?? "порожній"}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-3 flex justify-end">
-                            <span className={`rounded-full px-2 py-1 text-xs ${compat.cls}`}>{compat.label}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </aside>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <p className="text-xs text-[var(--text-faint)]">
-              {selected ? `Обрано: ${selected.name}` : "Обери принтер, щоб активувати відправку"}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="h-10 rounded-md px-4 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
-                {result?.ok ? "Закрити" : "Скасувати"}
-              </button>
-              {!result?.ok && (
-                <button onClick={send} disabled={!selectedId || busy}
-                  className="h-10 rounded-md bg-accent px-5 text-sm font-semibold text-white hover:bg-accent/90 disabled:opacity-40">
-                  {busy ? "Надсилаю…" : "Надіслати на друк"}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      <SendToast
-        fileName={file.original_name}
-        printerName={selected?.name ?? ""}
-        busy={busy}
-        result={result}
-      />
     </div>
   );
 }
@@ -798,6 +376,8 @@ export default function FilesPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
+  // Slicer (Orca) auto-open shows a save / print / queue chooser first
+  const [sendAskMode, setSendAskMode] = useState(false);
   const [search, setSearch] = useState("");
 
   // Navigation: null = root, number = inside folder
@@ -847,6 +427,7 @@ export default function FilesPage() {
 
     if (target) {
       setCurrentFolderId(target.folder_id ?? null);
+      setSendAskMode(true);
       setSendFile(target);
       return;
     }
@@ -870,6 +451,7 @@ export default function FilesPage() {
       setFiles(prev => [saved, ...prev]);
       const updatedFolders = await api<GcodeFolder[]>("/api/folders");
       setFolders(updatedFolders);
+      setSendAskMode(false);
       setSendFile(saved);
     } catch (err) {
       setUploadError(err instanceof ApiError ? err.message : "Помилка завантаження");
@@ -1155,7 +737,7 @@ export default function FilesPage() {
               canEdit={canEdit}
               highlighted={f.id === highlightId}
               isDragging={draggedFile?.id === f.id}
-              onSend={() => setSendFile(f)}
+              onSend={() => { setSendAskMode(false); setSendFile(f); }}
               onDelete={() => handleDelete(f)}
               onDragStart={e => onFileDragStart(e, f)}
               onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}
@@ -1184,7 +766,7 @@ export default function FilesPage() {
 
       {/* send modal */}
       {sendFile && (
-        <SendModal file={sendFile} printers={printers} onClose={() => setSendFile(null)} defaultPrinterId={defaultPrinterId ?? undefined} />
+        <SendModal file={sendFile} printers={printers} onClose={() => setSendFile(null)} defaultPrinterId={defaultPrinterId ?? undefined} askMode={sendAskMode} />
       )}
 
       {/* create folder modal */}

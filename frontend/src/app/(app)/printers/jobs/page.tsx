@@ -61,7 +61,7 @@ export default function PrinterJobsPage() {
   // load printer list for filter dropdown
   useEffect(() => {
     api<Printer[]>("/api/printers").then((list) => {
-      setPrinters(list.filter((p) => p.kind === "bambu"));
+      setPrinters(list.filter((p) => p.kind === "bambu" || !!p.moonraker_url));
     }).catch(() => {});
   }, []);
 
@@ -94,7 +94,7 @@ export default function PrinterJobsPage() {
   // auto-refresh active tab every 8s
   useEffect(() => {
     if (statusFilter !== "active" && statusFilter !== "all") return;
-    const t = setInterval(() => void loadFresh(), 8000);
+    const t = setInterval(() => { if (!document.hidden) void loadFresh(); }, 8000);
     return () => clearInterval(t);
   }, [loadFresh, statusFilter]);
 
@@ -130,7 +130,7 @@ export default function PrinterJobsPage() {
             </svg>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-[var(--text-hi)]">Bambu Cloud Jobs</h1>
+            <h1 className="text-xl font-bold text-[var(--text-hi)]">Завдання друку</h1>
             {total > 0 && (
               <p className="text-xs text-[var(--text-faint)]">{total} завдань</p>
             )}

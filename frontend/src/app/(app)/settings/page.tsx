@@ -710,7 +710,7 @@ function AgentSection() {
         .then((r) => setConnected(r.connected))
         .catch(() => setConnected(false));
     poll();
-    const id = setInterval(poll, 5000);
+    const id = setInterval(() => { if (!document.hidden) void poll(); }, 10_000);
     return () => clearInterval(id);
   }, []);
 
@@ -1359,7 +1359,7 @@ function BambuHealthPanel() {
         .catch((err) => { if (!cancelled) setError(err instanceof ApiError ? err.message : "Не вдалося завантажити діагностику"); });
     }
     load();
-    const t = setInterval(load, 60_000);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 60_000);
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 

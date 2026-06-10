@@ -115,7 +115,7 @@ export function DynamicFavicon() {
     }
 
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(() => { if (!document.hidden) void tick(); }, 60_000);
     return () => { active = false; clearInterval(id); };
   }, []);
 
