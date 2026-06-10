@@ -222,6 +222,7 @@ export function ScheduleCalendar({
   ) {
     e.preventDefault();
     setDropCell(null);
+    dropPreviewRef.current = { cell: null, mins: null };
 
     let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number };
     try {
