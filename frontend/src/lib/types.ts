@@ -221,6 +221,8 @@ export interface GcodeFolder {
   created_at: string;
 }
 
+export type ScheduleMode = "asap" | "not_before" | "exact_time" | "window";
+
 export interface PlanEntry {
   id: number;
   plan_date: string;
@@ -232,6 +234,32 @@ export interface PlanEntry {
   note: string | null;
   done: boolean;
   created_at: string;
+  // Scheduling fields (Phase 2)
+  start_time: string | null;       // "HH:MM:SS" or null (asap)
+  end_time: string | null;         // computed by backend (capped at 23:59:59)
+  schedule_mode: ScheduleMode;
+  window_start_at: string | null;
+  window_end_at: string | null;
+  priority: number;
+  blocked_reason: string | null;
+  conflict: boolean;
+}
+
+// Calendar view types — returned by GET /api/plan/calendar
+export type CalendarEntry = PlanEntry;
+
+export interface CalendarDay {
+  printer_id: number;
+  printer_name: string;
+  plan_date: string;             // "YYYY-MM-DD"
+  entries: CalendarEntry[];
+}
+
+export interface CalendarLane {
+  printer_id: number;
+  printer_name: string;
+  printer_kind: string;          // "bambu" | "snapmaker_u1" | "other"
+  days: CalendarDay[];
 }
 
 // ── Bambu Cloud V2 ────────────────────────────────────────────────────────────

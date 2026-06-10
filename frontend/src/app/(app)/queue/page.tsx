@@ -1,17 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 
 import { AmountStepper } from "@/components/queue/AmountStepper";
 import { CreateTaskModal } from "@/components/plan/CreateTaskModal";
 import { SendModal } from "@/components/files/SendModal";
 import { Modal } from "@/components/ui/Modal";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, getPlanCalendar } from "@/lib/api";
 import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
-import type { Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
+import type { CalendarLane, Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { KanbanSkeleton } from "@/components/ui/ContentSkeleton";
+import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
+import { ScheduleBacklog } from "@/components/schedule/ScheduleBacklog";
+import { ScheduleModal } from "@/components/schedule/ScheduleModal";
+import type { ScheduleModalMode } from "@/components/schedule/ScheduleModal";
+import { getMondayOfWeek, isoDateStr, getWeekDates } from "@/components/schedule/utils";
 
 // ── mascot ────────────────────────────────────────────────────────────────────
 
@@ -484,11 +490,21 @@ function QueueRow({
 
 // ── page ──────────────────────────────────────────────────────────────────────
 
-export default function QueuePage() {
+function QueuePageInner() {
   usePageTitle("nav.plan");
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = (searchParams.get("view") ?? "list") as "list" | "calendar";
 
+  function setView(v: "list" | "calendar") {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("view", v);
+    router.replace(`/queue?${p.toString()}`);
+  }
+
+  // ── List-view state ──
   const [tasks, setTasks] = useState<PrintTask[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -507,6 +523,46 @@ export default function QueuePage() {
     sent: { task_id: number; printer_name: string }[];
     skipped: { task_id: number; reason: string }[];
   } | null>(null);
+
+  // ── Calendar-view state ──
+  const [weekStart, setWeekStart] = useState<Date>(() => getMondayOfWeek());
+  const [calendarLanes, setCalendarLanes] = useState<CalendarLane[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState<ScheduleModalMode | null>(null);
+
+  const scheduledTaskIds = useMemo<Set<number>>(() => {
+    const ids = new Set<number>();
+    for (const lane of calendarLanes) {
+      for (const day of lane.days) {
+        for (const entry of day.entries) {
+          ids.add(entry.task_id);
+        }
+      }
+    }
+    return ids;
+  }, [calendarLanes]);
+
+  const backlogTasks = useMemo(
+    () => tasks.filter(t => t.status === "queued" && !scheduledTaskIds.has(t.id)),
+    [tasks, scheduledTaskIds],
+  );
+
+  const loadCalendar = useCallback(async () => {
+    setCalendarLoading(true);
+    try {
+      const weekDates = getWeekDates(weekStart);
+      const start = isoDateStr(weekDates[0]);
+      const end   = isoDateStr(weekDates[6]);
+      const lanes = await getPlanCalendar(start, end);
+      setCalendarLanes(lanes);
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+    } finally { setCalendarLoading(false); }
+  }, [weekStart]);
+
+  useEffect(() => {
+    if (view === "calendar") loadCalendar();
+  }, [view, loadCalendar]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -609,7 +665,7 @@ export default function QueuePage() {
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
         <div className="flex items-center gap-4">
           <h1 className="text-base font-semibold">Черга друку</h1>
-          {(activeTab === "queued" || activeTab === "in_progress") && stats.jobs > 0 && (
+          {view === "list" && (activeTab === "queued" || activeTab === "in_progress") && stats.jobs > 0 && (
             <div className="hidden items-center gap-4 text-xs text-[var(--text-muted)] sm:flex">
               <span>{stats.jobs} завдань</span>
               {stats.totalMin > 0 && (
@@ -623,7 +679,24 @@ export default function QueuePage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {canEdit && activeTab === "queued" && (
+          {/* View toggle */}
+          <div className="flex rounded-md border border-[var(--border-strong)] bg-[var(--bg)] p-0.5">
+            {(["list", "calendar"] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={[
+                  "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors",
+                  view === v
+                    ? "bg-[var(--accent)] text-white"
+                    : "text-[var(--text-muted)] hover:text-[var(--text)]",
+                ].join(" ")}
+              >
+                {v === "list" ? "≡ Список" : "⊟ Календар"}
+              </button>
+            ))}
+          </div>
+          {canEdit && view === "list" && activeTab === "queued" && (
             <button onClick={handle1Click}
               className="flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)]">
               ≡ 1-CLICK PRINT
@@ -638,128 +711,163 @@ export default function QueuePage() {
         </div>
       </div>
 
-      {/* ── Tab bar ── */}
-      <div className="flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4">
-        {TABS.map(tab => (
-          <button key={tab.id}
-            onClick={() => { setActiveTab(tab.id); setSelected(new Set()); setSearch(""); }}
-            className={[
-              "flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors",
-              activeTab === tab.id
-                ? "border-[var(--accent)] font-medium text-[var(--text)]"
-                : "border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)]",
-            ].join(" ")}>
-            <span className={`h-2 w-2 shrink-0 rounded-full ${tab.dot}`} />
-            {tab.label}
-            <span className={[
-              "rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums",
-              activeTab === tab.id ? "bg-[var(--surface-hi)] text-[var(--text-muted)]" : "text-[var(--text-faint)]",
-            ].join(" ")}>
-              {counts[tab.id] ?? 0}
-            </span>
-          </button>
-        ))}
-
-        <div className="ml-auto flex items-center gap-2 py-1.5">
-          <input type="text" placeholder="Пошук…" value={search} onChange={e => setSearch(e.target.value)}
-            className="h-7 w-40 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]" />
-        </div>
-      </div>
-
-      {/* ── Alerts ── */}
-      {(error || distributeResult) && (
-        <div className="px-6 pt-3">
-          {error && (
-            <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
-          )}
-          {distributeResult && (
-            <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
-              Розподілено: {distributeResult.sent.length} завдань
-              {distributeResult.skipped.length > 0 && ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map(s => s.reason).join(", ")})`}
-            </div>
-          )}
+      {/* ── Calendar view ── */}
+      {view === "calendar" && (
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <ScheduleCalendar
+              lanes={calendarLanes}
+              weekStart={weekStart}
+              loading={calendarLoading}
+              onPrevWeek={() => {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() - 7);
+                setWeekStart(d);
+              }}
+              onNextWeek={() => {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() + 7);
+                setWeekStart(d);
+              }}
+              onOpenModal={setScheduleModal}
+            />
+          </div>
+          <div className="w-72 shrink-0 border-l border-[var(--border)] overflow-y-auto">
+            <ScheduleBacklog
+              tasks={backlogTasks}
+              onSchedule={task => setScheduleModal({ type: "schedule", task })}
+            />
+          </div>
         </div>
       )}
 
-      {/* ── Content ── */}
-      <div className="flex-1 px-6 py-4">
+      {/* ── List view ── */}
+      {view === "list" && (
+        <>
+          {/* Tab bar */}
+          <div className="flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4">
+            {TABS.map(tab => (
+              <button key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setSelected(new Set()); setSearch(""); }}
+                className={[
+                  "flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors",
+                  activeTab === tab.id
+                    ? "border-[var(--accent)] font-medium text-[var(--text)]"
+                    : "border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)]",
+                ].join(" ")}>
+                <span className={`h-2 w-2 shrink-0 rounded-full ${tab.dot}`} />
+                {tab.label}
+                <span className={[
+                  "rounded-full px-1.5 py-px text-[10px] font-medium tabular-nums",
+                  activeTab === tab.id ? "bg-[var(--surface-hi)] text-[var(--text-muted)]" : "text-[var(--text-faint)]",
+                ].join(" ")}>
+                  {counts[tab.id] ?? 0}
+                </span>
+              </button>
+            ))}
 
-        {/* In Progress: printer slot grid */}
-        {activeTab === "in_progress" && (
-          visible.length === 0 && activePrinters.length === 0 ? (
-            <EmptyState status="in_progress" onAdd={() => setCreateOpen(true)} />
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {activePrinters.map(p => (
-                <PrinterSlot key={p.id} printer={p} task={printerTaskMap.get(p.id) ?? null}
-                  onSend={setSendTask} onComplete={setCompleteTask} canEdit={canEdit} />
-              ))}
-              {/* unassigned in_progress tasks */}
-              {visible.filter(t => !t.assigned_printer_id).map(t => (
-                <div key={t.id} className="rounded-lg border border-[var(--state-warn)]/40 bg-[var(--bg-elevated)] p-3">
-                  <p className="truncate text-xs font-medium text-[var(--accent)]">{t.file_name ?? t.title}</p>
-                  <p className="mt-1 text-[10px] text-[var(--text-faint)]">Без принтера</p>
-                  {canEdit && (
-                    <button onClick={() => setCompleteTask(t)}
-                      className="mt-2 w-full rounded border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.07)] py-1 text-[10px] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.12)]">
-                      Завершити ✓
-                    </button>
-                  )}
+            <div className="ml-auto flex items-center gap-2 py-1.5">
+              <input type="text" placeholder="Пошук…" value={search} onChange={e => setSearch(e.target.value)}
+                className="h-7 w-40 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]" />
+            </div>
+          </div>
+
+          {/* Alerts */}
+          {(error || distributeResult) && (
+            <div className="px-6 pt-3">
+              {error && (
+                <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
+              )}
+              {distributeResult && (
+                <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
+                  Розподілено: {distributeResult.sent.length} завдань
+                  {distributeResult.skipped.length > 0 && ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map(s => s.reason).join(", ")})`}
                 </div>
-              ))}
+              )}
             </div>
-          )
-        )}
+          )}
 
-        {/* All other tabs: table */}
-        {activeTab !== "in_progress" && (
-          visible.length === 0 ? (
-            <EmptyState status={activeTab} onAdd={() => setCreateOpen(true)} />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full min-w-[900px] text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]/80 text-xs text-[var(--text-muted)]">
-                    <th className="w-8 px-3 py-2.5">
-                      <input type="checkbox" checked={allChecked}
-                        ref={el => { if (el) el.indeterminate = someChecked; }}
-                        onChange={toggleAll} className="accent-[var(--accent)] cursor-pointer" />
-                    </th>
-                    <th className="w-8 px-2 py-2.5 text-left">#</th>
-                    <th className="px-3 py-2.5 text-left">Файл</th>
-                    <th className="px-3 py-2.5 text-left">Теги</th>
-                    <th className="px-3 py-2.5 text-right">Вартість</th>
-                    <th className="px-3 py-2.5 text-right">Час</th>
-                    <th className="px-3 py-2.5 text-left">Матеріал</th>
-                    <th className="px-3 py-2.5 text-center">{activeTab === "done" ? "Результат" : "К-сть"}</th>
-                    <th className="px-3 py-2.5 text-left">Користувач</th>
-                    <th className="px-3 py-2.5 text-left">Додано</th>
-                    <th className="px-3 py-2.5 text-left">Принтер</th>
-                    <th className="w-8 px-2 py-2.5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((task, idx) => (
-                    <QueueRow
-                      key={task.id} index={idx + 1} task={task} status={activeTab}
-                      selected={selected.has(task.id)} onToggle={() => toggleOne(task.id)}
-                      onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
-                      onSend={() => setSendTask(task)} onComplete={() => setCompleteTask(task)}
-                      onRestore={() => handleRestore(task.id)} canEdit={canEdit}
-                    />
+          {/* Content */}
+          <div className="flex-1 px-6 py-4">
+
+            {/* In Progress: printer slot grid */}
+            {activeTab === "in_progress" && (
+              visible.length === 0 && activePrinters.length === 0 ? (
+                <EmptyState status="in_progress" onAdd={() => setCreateOpen(true)} />
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {activePrinters.map(p => (
+                    <PrinterSlot key={p.id} printer={p} task={printerTaskMap.get(p.id) ?? null}
+                      onSend={setSendTask} onComplete={setCompleteTask} canEdit={canEdit} />
                   ))}
-                </tbody>
-              </table>
-              <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                {selected.size > 0 ? `${selected.size} з ${visible.length} вибрано` : `${visible.length} завдань`}
-              </div>
-            </div>
-          )
-        )}
-      </div>
+                  {/* unassigned in_progress tasks */}
+                  {visible.filter(t => !t.assigned_printer_id).map(t => (
+                    <div key={t.id} className="rounded-lg border border-[var(--state-warn)]/40 bg-[var(--bg-elevated)] p-3">
+                      <p className="truncate text-xs font-medium text-[var(--accent)]">{t.file_name ?? t.title}</p>
+                      <p className="mt-1 text-[10px] text-[var(--text-faint)]">Без принтера</p>
+                      {canEdit && (
+                        <button onClick={() => setCompleteTask(t)}
+                          className="mt-2 w-full rounded border border-[rgba(34,197,94,.3)] bg-[rgba(34,197,94,.07)] py-1 text-[10px] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.12)]">
+                          Завершити ✓
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* All other tabs: table */}
+            {activeTab !== "in_progress" && (
+              visible.length === 0 ? (
+                <EmptyState status={activeTab} onAdd={() => setCreateOpen(true)} />
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] bg-[var(--bg-elevated)]/80 text-xs text-[var(--text-muted)]">
+                        <th className="w-8 px-3 py-2.5">
+                          <input type="checkbox" checked={allChecked}
+                            ref={el => { if (el) el.indeterminate = someChecked; }}
+                            onChange={toggleAll} className="accent-[var(--accent)] cursor-pointer" />
+                        </th>
+                        <th className="w-8 px-2 py-2.5 text-left">#</th>
+                        <th className="px-3 py-2.5 text-left">Файл</th>
+                        <th className="px-3 py-2.5 text-left">Теги</th>
+                        <th className="px-3 py-2.5 text-right">Вартість</th>
+                        <th className="px-3 py-2.5 text-right">Час</th>
+                        <th className="px-3 py-2.5 text-left">Матеріал</th>
+                        <th className="px-3 py-2.5 text-center">{activeTab === "done" ? "Результат" : "К-сть"}</th>
+                        <th className="px-3 py-2.5 text-left">Користувач</th>
+                        <th className="px-3 py-2.5 text-left">Додано</th>
+                        <th className="px-3 py-2.5 text-left">Принтер</th>
+                        <th className="w-8 px-2 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map((task, idx) => (
+                        <QueueRow
+                          key={task.id} index={idx + 1} task={task} status={activeTab}
+                          selected={selected.has(task.id)} onToggle={() => toggleOne(task.id)}
+                          onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
+                          onSend={() => setSendTask(task)} onComplete={() => setCompleteTask(task)}
+                          onRestore={() => handleRestore(task.id)} canEdit={canEdit}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                    {selected.size > 0 ? `${selected.size} з ${visible.length} вибрано` : `${visible.length} завдань`}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </>
+      )}
 
       {/* ── Modals ── */}
-      <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => setTasks(prev => [t, ...prev])} />
+      <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => { setTasks(prev => [t, ...prev]); if (view === "calendar") loadCalendar(); }} />
 
       {sendTask && sendTask.gcode_file_id && (
         <SendModal file={taskToGcodeFile(sendTask)} printers={printers} defaultPrinterId={sendTask.assigned_printer_id ?? undefined}
@@ -768,6 +876,23 @@ export default function QueuePage() {
 
       <CompleteModal task={completeTask} onClose={() => setCompleteTask(null)}
         onDone={t => { handleTaskUpdated(t); setCompleteTask(null); }} />
+
+      {scheduleModal && (
+        <ScheduleModal
+          mode={scheduleModal}
+          printers={printers}
+          onClose={() => setScheduleModal(null)}
+          onSaved={async () => { setScheduleModal(null); await Promise.all([load(), loadCalendar()]); }}
+        />
+      )}
     </div>
+  );
+}
+
+export default function QueuePage() {
+  return (
+    <Suspense>
+      <QueuePageInner />
+    </Suspense>
   );
 }

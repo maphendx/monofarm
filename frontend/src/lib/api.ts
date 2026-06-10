@@ -57,3 +57,45 @@ export async function api<T>(
   if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
 }
+
+// ── Calendar / Schedule helpers ───────────────────────────────────────────────
+
+import type { CalendarLane, PlanEntry } from "@/lib/types";
+
+export async function getPlanCalendar(start: string, end: string): Promise<CalendarLane[]> {
+  return api<CalendarLane[]>(`/api/plan/calendar?start=${start}&end=${end}`);
+}
+
+export async function createPlanEntry(payload: {
+  plan_date: string;
+  printer_id: number;
+  task_id: number;
+  start_time?: string | null;
+  schedule_mode?: string;
+  window_start_at?: string | null;
+  window_end_at?: string | null;
+  priority?: number;
+  note?: string | null;
+}): Promise<PlanEntry> {
+  return api<PlanEntry>("/api/plan", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function updatePlanEntry(
+  id: number,
+  patch: Partial<{
+    start_time: string | null;
+    schedule_mode: string;
+    window_start_at: string | null;
+    window_end_at: string | null;
+    priority: number;
+    blocked_reason: string | null;
+    done: boolean;
+    note: string | null;
+  }>,
+): Promise<PlanEntry> {
+  return api<PlanEntry>(`/api/plan/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export async function deletePlanEntry(id: number): Promise<void> {
+  return api<void>(`/api/plan/${id}`, { method: "DELETE" });
+}

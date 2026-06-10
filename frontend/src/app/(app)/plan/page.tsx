@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function PlanPage() {
-  redirect("/queue");
+  redirect("/queue?view=calendar");
 }

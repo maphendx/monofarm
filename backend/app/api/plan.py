@@ -1,9 +1,10 @@
-from datetime import date, datetime, timezone
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
@@ -12,12 +13,21 @@ from app.models.plan import PlanEntry
 from app.models.printer import Printer
 from app.models.task import PrintTask
 from app.models.user import UserRole
-from app.schemas.plan import PlanEntryCreate, PlanEntryOut, PlanEntryUpdate
+from app.schemas.plan import (
+    CalendarDayOut,
+    CalendarEntryOut,
+    CalendarLaneOut,
+    PlanEntryCreate,
+    PlanEntryOut,
+    PlanEntryUpdate,
+)
 from app.services import moonraker
+from app.services.schedule_conflict import detect_conflicts, entry_end_time
 
 
-# Files live under data/uploads/<task_id>/<original_filename>
 UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
+
+_CALENDAR_MAX_DAYS = 60
 
 
 class SendResult(BaseModel):
@@ -28,21 +38,128 @@ class SendResult(BaseModel):
 router = APIRouter(prefix="/plan", tags=["plan"])
 
 
-def _to_out(entry: PlanEntry, db: Session) -> PlanEntryOut:
+def _to_out(entry: PlanEntry, conflict_ids: set[int] | None = None) -> PlanEntryOut:
+    conflict = entry.id in (conflict_ids or set())
     printer = entry.printer
-    task = entry.task
     return PlanEntryOut(
         id=entry.id,
         plan_date=entry.plan_date,
         printer_id=entry.printer_id,
         printer_name=printer.name if printer else str(entry.printer_id),
         task_id=entry.task_id,
-        task=task,
+        task=entry.task,
         sequence=entry.sequence,
         note=entry.note,
         done=entry.done,
         created_at=entry.created_at,
+        start_time=entry.start_time,
+        schedule_mode=entry.schedule_mode,
+        window_start_at=entry.window_start_at,
+        window_end_at=entry.window_end_at,
+        priority=entry.priority,
+        blocked_reason=entry.blocked_reason,
+        conflict=conflict,
+        end_time=entry_end_time(entry),
     )
+
+
+def _load_entries(
+    db: Session,
+    org_id: int,
+    from_date: date,
+    to_date: date,
+) -> list[PlanEntry]:
+    return (
+        db.query(PlanEntry)
+        .options(joinedload(PlanEntry.printer), joinedload(PlanEntry.task))
+        .filter(
+            PlanEntry.organization_id == org_id,
+            PlanEntry.plan_date >= from_date,
+            PlanEntry.plan_date <= to_date,
+        )
+        .order_by(PlanEntry.printer_id, PlanEntry.plan_date, PlanEntry.sequence, PlanEntry.created_at)
+        .all()
+    )
+
+
+def _conflict_ids_for(entries: list[PlanEntry]) -> set[int]:
+    """Detect conflicts per (printer_id, plan_date) bucket — never cross-printer."""
+    by_group: dict[tuple[int, date], list[PlanEntry]] = defaultdict(list)
+    for e in entries:
+        by_group[(e.printer_id, e.plan_date)].append(e)
+    result: set[int] = set()
+    for group in by_group.values():
+        result.update(detect_conflicts(group))
+    return result
+
+
+@router.get("/calendar", response_model=list[CalendarLaneOut])
+def get_calendar(
+    start: date | None = None,
+    end: date | None = None,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[CalendarLaneOut]:
+    """Week (or any date-range) calendar view: one lane per printer, grouped by day.
+
+    Defaults to the current Monday–Sunday week. Returns ALL org printers — lanes
+    without entries are included as empty so the UI can render all printer rows.
+    Max range: 60 days.
+    """
+    today = date.today()
+    if start is None:
+        start = today - timedelta(days=today.weekday())  # Monday of current week
+    if end is None:
+        end = start + timedelta(days=6)
+
+    span = (end - start).days + 1
+    if span < 1 or span > _CALENDAR_MAX_DAYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Date range must be 1–{_CALENDAR_MAX_DAYS} days.",
+        )
+
+    # Load all printers so empty lanes are still returned
+    printers = (
+        db.query(Printer)
+        .filter(Printer.organization_id == org.id)
+        .order_by(Printer.id)
+        .all()
+    )
+
+    entries = _load_entries(db, org.id, start, end)
+    conflict_ids = _conflict_ids_for(entries)
+
+    # Group entries by printer_id → plan_date
+    by_printer: dict[int, dict[date, list[PlanEntry]]] = {p.id: {} for p in printers}
+    for e in entries:
+        if e.printer_id in by_printer:
+            by_printer[e.printer_id].setdefault(e.plan_date, []).append(e)
+
+    result: list[CalendarLaneOut] = []
+    for printer in printers:
+        day_map = by_printer[printer.id]
+        days: list[CalendarDayOut] = [
+            CalendarDayOut(
+                printer_id=printer.id,
+                printer_name=printer.name,
+                plan_date=d,
+                entries=[
+                    CalendarEntryOut(**_to_out(e, conflict_ids).model_dump())
+                    for e in day_entries
+                ],
+            )
+            for d, day_entries in sorted(day_map.items())
+        ]
+        result.append(
+            CalendarLaneOut(
+                printer_id=printer.id,
+                printer_name=printer.name,
+                printer_kind=printer.kind.value,
+                days=days,
+            )
+        )
+    return result
 
 
 @router.get("", response_model=list[PlanEntryOut])
@@ -51,16 +168,10 @@ def get_plan(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[PlanEntryOut]:
-    from sqlalchemy.orm import joinedload
     target = plan_date or date.today()
-    entries = (
-        db.query(PlanEntry)
-        .options(joinedload(PlanEntry.printer), joinedload(PlanEntry.task))
-        .filter(PlanEntry.plan_date == target, PlanEntry.organization_id == org.id)
-        .order_by(PlanEntry.printer_id, PlanEntry.sequence, PlanEntry.created_at)
-        .all()
-    )
-    return [_to_out(e, db) for e in entries]
+    entries = _load_entries(db, org.id, target, target)
+    conflict_ids = _conflict_ids_for(entries)
+    return [_to_out(e, conflict_ids) for e in entries]
 
 
 @router.post("", response_model=PlanEntryOut, status_code=status.HTTP_201_CREATED)
@@ -77,7 +188,7 @@ def create_entry(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    existing = (
+    existing_count = (
         db.query(PlanEntry)
         .filter(
             PlanEntry.plan_date == payload.plan_date,
@@ -91,13 +202,24 @@ def create_entry(
         plan_date=payload.plan_date,
         printer_id=payload.printer_id,
         task_id=payload.task_id,
-        sequence=existing,
+        sequence=existing_count,
         note=payload.note,
+        start_time=payload.start_time,
+        schedule_mode=payload.schedule_mode,
+        window_start_at=payload.window_start_at,
+        window_end_at=payload.window_end_at,
+        priority=payload.priority,
     )
     db.add(entry)
     db.commit()
-    db.refresh(entry)
-    return _to_out(entry, db)
+    # Reload with relationships eager-loaded
+    entry = (
+        db.query(PlanEntry)
+        .options(joinedload(PlanEntry.printer), joinedload(PlanEntry.task))
+        .filter(PlanEntry.id == entry.id)
+        .one()
+    )
+    return _to_out(entry)
 
 
 @router.patch("/{entry_id}", response_model=PlanEntryOut)
@@ -108,16 +230,23 @@ def update_entry(
     org: Organization = Depends(get_current_org),
     _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> PlanEntryOut:
-    entry = db.query(PlanEntry).filter(PlanEntry.id == entry_id, PlanEntry.organization_id == org.id).first()
+    entry = (
+        db.query(PlanEntry)
+        .options(joinedload(PlanEntry.printer), joinedload(PlanEntry.task))
+        .filter(PlanEntry.id == entry_id, PlanEntry.organization_id == org.id)
+        .first()
+    )
     if not entry:
         raise HTTPException(status_code=404, detail="Plan entry not found")
-    if payload.done is not None:
-        entry.done = payload.done
-    if payload.note is not None:
-        entry.note = payload.note
+
+    # model_dump(exclude_unset=True) correctly handles null-clearing:
+    # sending {"start_time": null} → sets to None; omitting → unchanged.
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(entry, field, value)
+
     db.commit()
     db.refresh(entry)
-    return _to_out(entry, db)
+    return _to_out(entry)
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
@@ -159,11 +288,9 @@ async def send_entry_to_printer(
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Файл відсутній на диску")
 
-    url = printer.moonraker_url
-
     try:
-        await moonraker.async_upload_gcode(url, file_path, task.file_ref)
-        await moonraker.async_start_print(url, task.file_ref)
+        await moonraker.async_upload_gcode(printer.moonraker_url, file_path, task.file_ref)
+        await moonraker.async_start_print(printer.moonraker_url, task.file_ref)
     except moonraker.MoonrakerError as e:
         raise HTTPException(status_code=502, detail=str(e))
 

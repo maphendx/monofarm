@@ -1,0 +1,159 @@
+/** Shared utilities for schedule/calendar components. */
+
+import type { CalendarEntry, CalendarLane } from "@/lib/types";
+
+// ── Time helpers ──────────────────────────────────────────────────────────────
+
+/** Parse "HH:MM:SS" or "HH:MM" → total minutes from midnight. */
+export function parseTimeMins(t: string): number {
+  const parts = t.split(":").map(Number);
+  return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+}
+
+/** Format total minutes → "HH:MM" (wraps at 1440). */
+export function fmtTimeMins(totalMins: number): string {
+  const m = ((totalMins % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/** Format a duration in minutes → "2г 30хв", "45хв", "2г". */
+export function fmtDuration(minutes: number | null | undefined): string {
+  if (!minutes) return "";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h}г ${m}хв`;
+  if (h) return `${h}г`;
+  return `${m}хв`;
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+/** Date → "YYYY-MM-DD" in local time (avoids UTC shift). */
+export function isoDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Return Monday of the week containing d. */
+export function getMondayOfWeek(d: Date = new Date()): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  const day = r.getDay();
+  r.setDate(r.getDate() - (day === 0 ? 6 : day - 1));
+  return r;
+}
+
+/** Return 7 Date objects Mon–Sun for the given Monday. */
+export function getWeekDates(monday: Date): Date[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+// ── Calendar block model ──────────────────────────────────────────────────────
+
+export interface CalendarBlock {
+  entry: CalendarEntry;
+  printerId: number;
+  dayIndex: number;         // 0–6 within the displayed week
+  startMins: number;        // minutes from 00:00 within this day
+  endMins: number;          // capped at 1440 for this day's column
+  isContinuation: boolean;  // true = overflow fragment from previous day
+  totalDurationMins: number;
+}
+
+type BlockMapKey = `${number}-${number}`; // `${printerId}-${dayIndex}`
+
+/**
+ * Pre-process lanes into positioned blocks for the calendar grid.
+ *
+ * Cross-midnight entries produce two blocks:
+ *   Block A in day N (startMins → 1440)
+ *   Block B in day N+1 (0 → overflow, isContinuation=true)
+ * If N+1 is outside the visible week, Block B is omitted.
+ */
+export function buildCalendarBlocks(
+  lanes: CalendarLane[],
+  weekDates: Date[],
+): Map<BlockMapKey, CalendarBlock[]> {
+  const weekStrs = weekDates.map(isoDateStr);
+  const map = new Map<BlockMapKey, CalendarBlock[]>();
+
+  const push = (printerId: number, dayIdx: number, block: CalendarBlock) => {
+    const key: BlockMapKey = `${printerId}-${dayIdx}`;
+    const arr = map.get(key) ?? [];
+    arr.push(block);
+    map.set(key, arr);
+  };
+
+  for (const lane of lanes) {
+    for (const day of lane.days) {
+      const dayIdx = weekStrs.indexOf(day.plan_date);
+      if (dayIdx === -1) continue;
+
+      for (const entry of day.entries) {
+        if (!entry.start_time) continue; // untimed/asap — rendered separately
+
+        const duration = entry.task.estimated_minutes ?? 0;
+        const startMins = parseTimeMins(entry.start_time);
+        const totalEndMins = startMins + duration;
+
+        if (totalEndMins <= 1440) {
+          push(lane.printer_id, dayIdx, {
+            entry, printerId: lane.printer_id,
+            dayIndex: dayIdx,
+            startMins, endMins: totalEndMins,
+            isContinuation: false, totalDurationMins: duration,
+          });
+        } else {
+          // Block A: fills to end of day N
+          push(lane.printer_id, dayIdx, {
+            entry, printerId: lane.printer_id,
+            dayIndex: dayIdx,
+            startMins, endMins: 1440,
+            isContinuation: false, totalDurationMins: duration,
+          });
+          // Block B: overflow into day N+1 (if within visible week)
+          if (dayIdx + 1 < 7) {
+            push(lane.printer_id, dayIdx + 1, {
+              entry, printerId: lane.printer_id,
+              dayIndex: dayIdx + 1,
+              startMins: 0, endMins: totalEndMins - 1440,
+              isContinuation: true, totalDurationMins: duration,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Collect untimed (asap / no start_time) entries per (printerId, dayIndex).
+ */
+export function buildUntimedMap(
+  lanes: CalendarLane[],
+  weekDates: Date[],
+): Map<BlockMapKey, CalendarEntry[]> {
+  const weekStrs = weekDates.map(isoDateStr);
+  const map = new Map<BlockMapKey, CalendarEntry[]>();
+
+  for (const lane of lanes) {
+    for (const day of lane.days) {
+      const dayIdx = weekStrs.indexOf(day.plan_date);
+      if (dayIdx === -1) continue;
+      for (const entry of day.entries) {
+        if (entry.start_time) continue;
+        const key: BlockMapKey = `${lane.printer_id}-${dayIdx}`;
+        const arr = map.get(key) ?? [];
+        arr.push(entry);
+        map.set(key, arr);
+      }
+    }
+  }
+
+  return map;
+}
