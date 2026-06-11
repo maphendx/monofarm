@@ -257,12 +257,12 @@ async def _autoprint_moonraker(
             )
 
 
-def _build_response(row: GcodeFile, user: User) -> dict:
+def _build_response(row: GcodeFile, user: User, next_path: str | None = None) -> dict:
     """Build the OctoPrint upload response with an authenticated webview URL.
 
     OrcaSlicer opens `url` in the Device tab webview after upload.
-    We route through /auth/webview so the JWT is stored before the
-    auth guard on /files runs.
+    We route through /auth/webview so the JWT is stored before the auth guard
+    on the target app route runs.
     """
     from urllib.parse import quote
 
@@ -271,7 +271,7 @@ def _build_response(row: GcodeFile, user: User) -> dict:
 
     # Short-lived token (15 min) for the webview session
     wv_token = create_access_token(str(user.id), user.role.value, user.organization_id)
-    next_url = quote(f"/files?highlight={row.id}", safe="")
+    next_url = quote(next_path or f"/files?highlight={row.id}", safe="")
     webview_url = f"{frontend}/auth/webview?token={wv_token}&next={next_url}"
 
     return {
@@ -291,11 +291,21 @@ def _build_response(row: GcodeFile, user: User) -> dict:
     }
 
 
-def _set_slicer_redirect_cookie(response: Response, row: GcodeFile, user: User) -> None:
+def _dashboard_slicer_path(row: GcodeFile, printer_id: int | None = None) -> str:
+    suffix = f"&printer={printer_id}" if printer_id is not None else ""
+    return f"/dashboard?slicerFile={row.id}&slicerAction=choose{suffix}"
+
+
+def _set_slicer_redirect_cookie(
+    response: Response,
+    row: GcodeFile,
+    user: User,
+    next_path: str | None = None,
+) -> None:
     """Remember the just-uploaded file for Orca's Device tab base-url load."""
     from urllib.parse import quote
 
-    webview_url = _build_response(row, user)["url"]
+    webview_url = _build_response(row, user, next_path=next_path)["url"]
     response.set_cookie(
         "monofarm_slicer_next",
         quote(webview_url, safe=""),
@@ -307,9 +317,14 @@ def _set_slicer_redirect_cookie(response: Response, row: GcodeFile, user: User) 
     )
 
 
-def _moonraker_upload_response(row: GcodeFile, user: User, print_requested: bool) -> dict:
+def _moonraker_upload_response(
+    row: GcodeFile,
+    user: User,
+    print_requested: bool,
+    next_path: str | None = None,
+) -> dict:
     """Build a Moonraker-shaped upload response for Orca Klipper host mode."""
-    response = _build_response(row, user)
+    response = _build_response(row, user, next_path=next_path)
     return {
         "item": {
             "path": row.original_name,
@@ -327,6 +342,19 @@ def _moonraker_upload_response(row: GcodeFile, user: User, print_requested: bool
         },
         "url": response["url"],
     }
+
+
+def _resolve_scoped_printer(printer_id: int | None, user: User, db: Session) -> Printer | None:
+    if printer_id is None:
+        return None
+    printer = (
+        db.query(Printer)
+        .filter(Printer.id == printer_id, Printer.organization_id == user.organization_id)
+        .first()
+    )
+    if not printer:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    return printer
 
 
 # ── Generic OctoPrint endpoints (/api/...) ────────────────────────────────────
@@ -442,7 +470,9 @@ async def orca_upload(
 # Configure OrcaSlicer: Host Type = Klipper/Moonraker, URL = https://api...
 
 @moonraker_router.get("/server/info")
-def moonraker_server_info() -> dict:
+@moonraker_router.get("/orca/{printer_id}/server/info")
+def moonraker_server_info(printer_id: int | None = None) -> dict:
+    _ = printer_id
     return {
         "result": {
             "klippy_connected": True,
@@ -460,37 +490,48 @@ def moonraker_server_info() -> dict:
 
 
 @moonraker_router.get("/printer/info")
+@moonraker_router.get("/orca/{printer_id}/printer/info")
 def moonraker_printer_info(
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {"result": {"state": "ready", "state_message": "Monofarm upload shim ready"}}
 
 
 @moonraker_router.get("/access/oneshot_token")
+@moonraker_router.get("/orca/{printer_id}/access/oneshot_token")
 def moonraker_oneshot_token(
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {"result": "monofarm"}
 
 
 @moonraker_router.get("/server/files/roots")
+@moonraker_router.get("/orca/{printer_id}/server/files/roots")
 def moonraker_file_roots(
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {"result": [{"name": "gcodes", "path": "gcodes", "permissions": "rw"}]}
 
 
 @moonraker_router.get("/server/files/list")
+@moonraker_router.get("/orca/{printer_id}/server/files/list")
 def moonraker_file_list(
+    printer_id: int | None = None,
     root: str = "gcodes",
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
@@ -498,27 +539,34 @@ def moonraker_file_list(
 ) -> dict:
     if root != "gcodes":
         raise HTTPException(status_code=400, detail="Only gcodes root is supported")
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {"result": []}
 
 
 @moonraker_router.get("/server/webcams/list")
+@moonraker_router.get("/orca/{printer_id}/server/webcams/list")
 def moonraker_webcams_list(
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {"result": {"webcams": []}}
 
 
 @moonraker_router.get("/printer/objects/list")
+@moonraker_router.get("/orca/{printer_id}/printer/objects/list")
 def moonraker_objects_list(
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     return {
         "result": {
             "objects": [
@@ -558,13 +606,16 @@ def _moonraker_object_status() -> dict:
 
 
 @moonraker_router.get("/printer/objects/query")
+@moonraker_router.get("/orca/{printer_id}/printer/objects/query")
 def moonraker_objects_query(
     request: Request,
+    printer_id: int | None = None,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
-    _resolve_slicer_user(x_api_key, authorization, db)
+    user = _resolve_slicer_user(x_api_key, authorization, db)
+    _resolve_scoped_printer(printer_id, user, db)
     requested = set(request.query_params.keys())
     all_status = _moonraker_object_status()
     status_out = {k: v for k, v in all_status.items() if not requested or k in requested}
@@ -572,9 +623,11 @@ def moonraker_objects_query(
 
 
 @moonraker_router.post("/server/files/upload", status_code=status.HTTP_201_CREATED)
+@moonraker_router.post("/orca/{printer_id}/server/files/upload", status_code=status.HTTP_201_CREATED)
 async def moonraker_upload(
     response: Response,
     file: UploadFile,
+    printer_id: int | None = None,
     root: str = Form(default="gcodes"),
     path: str | None = Form(default=None),
     print: str | None = Form(default=None),
@@ -592,9 +645,11 @@ async def moonraker_upload(
         raise HTTPException(status_code=400, detail="Only gcodes root is supported")
     _ = path
     user = _resolve_slicer_user(x_api_key, authorization, db)
+    printer = _resolve_scoped_printer(printer_id, user, db)
     row = await _store_file(file, user.organization_id, db, uploaded_by_id=user.id)
-    _set_slicer_redirect_cookie(response, row, user)
+    next_path = _dashboard_slicer_path(row, printer.id if printer else None)
+    _set_slicer_redirect_cookie(response, row, user, next_path=next_path)
     from urllib.parse import quote
 
     response.headers["Location"] = f"/server/files/gcodes/{quote(row.original_name)}"
-    return _moonraker_upload_response(row, user, print_requested=print == "true")
+    return _moonraker_upload_response(row, user, print_requested=print == "true", next_path=next_path)

@@ -354,6 +354,22 @@ async def upload_file(
     return _to_out(row, db)
 
 
+@router.get("/{file_id}", response_model=GcodeFileOut)
+def get_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> GcodeFileOut:
+    row = (
+        db.query(GcodeFile)
+        .filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не знайдено")
+    return _to_out(row, db)
+
+
 @router.patch("/{file_id}/move", response_model=GcodeFileOut)
 def move_file(
     file_id: int,

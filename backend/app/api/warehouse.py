@@ -118,7 +118,7 @@ def scan(
             if p:
                 stock_out.append(CellStockOut(
                     product_id=cs.product_id, product_name=p.name,
-                    product_sku=p.sku, quantity=cs.quantity,
+                    product_sku=p.sku, product_unit=p.unit, quantity=cs.quantity,
                     image_url=_product_image_url(p, org.id),
                 ))
         detail = CellDetailOut(
@@ -1134,6 +1134,7 @@ def _cell_stock_out(cs: CellStock, org_id: int) -> CellStockOut:
         product_id=cs.product_id,
         product_name=cs.product.name,
         product_sku=cs.product.sku,
+        product_unit=cs.product.unit,
         quantity=cs.quantity,
         image_url=_product_image_url(cs.product, org_id),
     )
@@ -1253,7 +1254,7 @@ def set_cell_stock(
     db.commit()
     return CellStockOut(
         product_id=payload.product_id, product_name=product.name,
-        product_sku=product.sku, quantity=payload.quantity,
+        product_sku=product.sku, product_unit=product.unit, quantity=payload.quantity,
         image_url=_product_image_url(product, org.id),
     )
 
@@ -1328,6 +1329,7 @@ def assign_cell_product(
         product_id=payload.product_id,
         product_name=product.name,
         product_sku=product.sku,
+        product_unit=product.unit,
         quantity=cs.quantity if cs else Decimal("0"),
         image_url=_product_image_url(product, org.id),
     )
@@ -1421,7 +1423,7 @@ def putaway_to_cell(
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     return CellStockOut(
         product_id=payload.product_id, product_name=product.name,
-        product_sku=product.sku, quantity=cs.quantity if cs else Decimal("0"),
+        product_sku=product.sku, product_unit=product.unit, quantity=cs.quantity if cs else Decimal("0"),
         image_url=_product_image_url(product, org.id),
     )
 

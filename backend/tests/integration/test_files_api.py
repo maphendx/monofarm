@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from http.cookies import SimpleCookie
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -62,6 +63,10 @@ def test_upload_gcode_parses_filament_meta(client, auth_headers, cleanup_uploads
     assert meta["used_g"] == [12.5, 3.2]
     assert meta["estimated_minutes"] == 90
 
+    fetched = client.get(f"/api/files/{body['id']}", headers=auth_headers)
+    assert fetched.status_code == 200
+    assert fetched.json()["original_name"] == "test_part.gcode"
+
 
 def test_upload_rejects_disallowed_extension(client, auth_headers):
     resp = client.post(
@@ -110,13 +115,42 @@ def test_moonraker_upload_shim_stores_file_with_bearer_token(client, auth_header
     assert resp.headers["location"].endswith("/orca_part.gcode")
     assert "monofarm_slicer_next=" in resp.headers["set-cookie"]
 
-    redirect = client.get("/", follow_redirects=False)
+    cookie = SimpleCookie(resp.headers["set-cookie"])["monofarm_slicer_next"].value
+    redirect = client.get(
+        "/",
+        headers={"Cookie": f"monofarm_slicer_next={cookie}"},
+        follow_redirects=False,
+    )
     assert redirect.status_code in (302, 307)
     assert "/auth/webview" in redirect.headers["location"]
-    assert "highlight%3D" in redirect.headers["location"]
+    assert "%2Fdashboard%3FslicerFile%3D" in redirect.headers["location"]
+    assert "slicerAction%3Dchoose" in redirect.headers["location"]
 
     files = client.get("/api/files", headers=auth_headers).json()
     assert any(f["original_name"] == "orca_part.gcode" for f in files)
+
+
+def test_scoped_moonraker_upload_redirects_to_dashboard_with_printer(
+    client, auth_headers, cleanup_uploads
+):
+    printer = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "U1-Scoped", "kind": "snapmaker_u1", "moonraker_url": "http://192.168.0.20"},
+    ).json()
+
+    resp = client.post(
+        f"/orca/{printer['id']}/server/files/upload",
+        headers=auth_headers,
+        data={"root": "gcodes", "print": "true"},
+        files={"file": ("scoped_part.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["monofarm"]["file_id"] > 0
+    assert "%2Fdashboard%3FslicerFile%3D" in body["url"]
+    assert f"printer%3D{printer['id']}" in body["url"]
+    assert "monofarm_slicer_next=" in resp.headers["set-cookie"]
 
 
 def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads, admin_user):

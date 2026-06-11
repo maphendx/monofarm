@@ -16,7 +16,7 @@ type WarehouseType = "raw" | "wip" | "finished" | "defect";
 type Warehouse = { id: number; name: string; type: WarehouseType; location: string | null; is_active: boolean };
 
 type Zone = { id: number; name: string; rows: number; cols: number; sort_order: number; cell_count: number };
-type CellStockItem = { product_id: number; product_name: string; product_sku: string; quantity: string; image_url?: string | null };
+type CellStockItem = { product_id: number; product_name: string; product_sku: string; product_unit?: string; quantity: string; image_url?: string | null };
 type Cell = { id: number; code: string; notes: string | null; stock: CellStockItem[] };
 type ZoneWithCells = Zone & { cells: Cell[] };
 
@@ -27,7 +27,50 @@ const TYPE_LABEL: Record<WarehouseType, string> = {
   finished: "Готова продукція", raw: "Сировина", wip: "В процесі", defect: "Брак",
 };
 
-const num = (s: string) => parseFloat(s) || 0;
+const num = (s: string) => parseQty(String(s)) || 0;
+const WHOLE_QTY_UNITS = new Set(["шт", "pcs", "pc", "piece", "pieces", "unit", "units", "од", "од."]);
+
+function isWholeQtyUnit(unit?: string | null) {
+  return WHOLE_QTY_UNITS.has((unit || "шт").trim().toLowerCase());
+}
+
+function parseQty(raw: string) {
+  const n = Number(raw.trim().replace(",", "."));
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function formatQtyInput(value: string | number, unit?: string | null) {
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  if (isWholeQtyUnit(unit) && Number.isInteger(n)) return String(n);
+  return String(Number(n.toFixed(4)));
+}
+
+function formatQtyDisplay(value: string | number, unit?: string | null) {
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return String(value);
+  return n.toLocaleString("uk-UA", { maximumFractionDigits: isWholeQtyUnit(unit) ? 0 : 3 });
+}
+
+function qtyStep(unit?: string | null) {
+  return isWholeQtyUnit(unit) ? "1" : "0.001";
+}
+
+function qtyInputMode(unit?: string | null) {
+  return isWholeQtyUnit(unit) ? "numeric" : "decimal";
+}
+
+function validQty(raw: string, unit?: string | null, { allowZero = false, max }: { allowZero?: boolean; max?: number } = {}) {
+  const n = parseQty(raw);
+  if (!Number.isFinite(n)) return false;
+  if (allowZero ? n < 0 : n <= 0) return false;
+  if (max != null && n > max) return false;
+  return !isWholeQtyUnit(unit) || Number.isInteger(n);
+}
+
+function stockDraftsFrom(rows: CellStockItem[]) {
+  return Object.fromEntries(rows.map((s) => [s.product_id, formatQtyInput(s.quantity, s.product_unit)]));
+}
 
 // ── ZoneModal — create / edit ─────────────────────────────────────────────────
 
@@ -122,7 +165,7 @@ function PutawayModal({
   onDone: () => void;
 }) {
   const [cellId, setCellId] = useState<string>(cells[0] ? String(cells[0].id) : "");
-  const [qty,    setQty]    = useState(item.unassigned);
+  const [qty,    setQty]    = useState(formatQtyInput(item.unassigned, item.unit));
   const [busy,   setBusy]   = useState(false);
   const [err,    setErr]    = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -134,7 +177,7 @@ function PutawayModal({
     try {
       await api(`/api/warehouse/cells/${cellId}/putaway`, {
         method: "POST",
-        body: JSON.stringify({ product_id: item.product_id, quantity: num(qty) }),
+        body: JSON.stringify({ product_id: item.product_id, quantity: parseQty(qty) }),
       });
       onDone(); onClose();
     } catch (e: unknown) {
@@ -148,7 +191,7 @@ function PutawayModal({
       <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl space-y-4 text-sm">
         <div>
           <h2 className="font-semibold">Розкласти товар</h2>
-          <p className="text-xs text-[var(--text-faint)]">{item.product_name} · нерозкладено {item.unassigned} {item.unit}</p>
+          <p className="text-xs text-[var(--text-faint)]">{item.product_name} · нерозкладено {formatQtyDisplay(item.unassigned, item.unit)} {item.unit}</p>
         </div>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Комірка</span>
@@ -156,14 +199,14 @@ function PutawayModal({
         </label>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
-          <input type="number" min="0" max={max} step="0.01" value={qty}
+          <input type="number" min="0" max={max} step={qtyStep(item.unit)} inputMode={qtyInputMode(item.unit)} value={qty}
             onChange={(e) => setQty(e.target.value)}
             className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-right font-mono outline-none focus:border-[var(--border-strong)]" />
         </label>
         {err && <p className="text-[var(--state-error)]">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
-          <button onClick={save} disabled={busy || !cellId || num(qty) <= 0 || num(qty) > max}
+          <button onClick={save} disabled={busy || !cellId || !validQty(qty, item.unit, { max })}
             className="btn btn-primary disabled:opacity-50">{busy ? "…" : "Розкласти"}</button>
         </div>
       </div>
@@ -174,10 +217,11 @@ function PutawayModal({
 // ── RelocateModal — move a product between cells ───────────────────────────────
 
 function RelocateModal({
-  productId, productName, fromCellId, available, cells, onClose, onDone,
+  productId, productName, productUnit, fromCellId, available, cells, onClose, onDone,
 }: {
   productId: number;
   productName: string;
+  productUnit?: string;
   fromCellId: number;
   available: number;
   cells: FlatCell[];
@@ -186,7 +230,7 @@ function RelocateModal({
 }) {
   const targets = cells.filter((c) => c.id !== fromCellId);
   const [toId, setToId] = useState<string>(targets[0] ? String(targets[0].id) : "");
-  const [qty,  setQty]  = useState(String(available));
+  const [qty,  setQty]  = useState(formatQtyInput(available, productUnit));
   const [busy, setBusy] = useState(false);
   const [err,  setErr]  = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -197,7 +241,7 @@ function RelocateModal({
     try {
       await api(`/api/warehouse/cells/relocate`, {
         method: "POST",
-        body: JSON.stringify({ product_id: productId, from_cell_id: fromCellId, to_cell_id: parseInt(toId), quantity: num(qty) }),
+        body: JSON.stringify({ product_id: productId, from_cell_id: fromCellId, to_cell_id: parseInt(toId), quantity: parseQty(qty) }),
       });
       onDone(); onClose();
     } catch (e: unknown) {
@@ -211,7 +255,7 @@ function RelocateModal({
       <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl space-y-4 text-sm">
         <div>
           <h2 className="font-semibold">Перемістити в іншу комірку</h2>
-          <p className="text-xs text-[var(--text-faint)]">{productName} · у комірці {available}</p>
+          <p className="text-xs text-[var(--text-faint)]">{productName} · у комірці {formatQtyDisplay(available, productUnit)} {productUnit ?? "шт"}</p>
         </div>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Куди</span>
@@ -219,14 +263,14 @@ function RelocateModal({
         </label>
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Кількість</span>
-          <input type="number" min="0" max={available} step="0.01" value={qty}
+          <input type="number" min="0" max={available} step={qtyStep(productUnit)} inputMode={qtyInputMode(productUnit)} value={qty}
             onChange={(e) => setQty(e.target.value)}
             className="w-full rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-right font-mono outline-none focus:border-[var(--border-strong)]" />
         </label>
         {err && <p className="text-[var(--state-error)]">{err}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button>
-          <button onClick={save} disabled={busy || !toId || num(qty) <= 0 || num(qty) > available}
+          <button onClick={save} disabled={busy || !toId || !validQty(qty, productUnit, { max: available })}
             className="btn btn-primary disabled:opacity-50">{busy ? "…" : "Перемістити"}</button>
         </div>
       </div>
@@ -249,6 +293,7 @@ function CellModal({
   onChanged: () => void;
 }) {
   const [stock,          setStock]          = useState<CellStockItem[]>(cell.stock);
+  const [stockDrafts,    setStockDrafts]    = useState<Record<number, string>>(() => stockDraftsFrom(cell.stock));
   const [addPid,         setAddPid]         = useState<string>("");
   const [addQty,         setAddQty]         = useState("1");
   const [busy,           setBusy]           = useState(false);
@@ -268,6 +313,17 @@ function CellModal({
 
   const inFlight = useRef(false);
 
+  function upsertStockItem(item: CellStockItem) {
+    setStock((prev) => {
+      const idx = prev.findIndex((s) => s.product_id === item.product_id);
+      return idx >= 0 ? prev.map((s, i) => i === idx ? item : s) : [...prev, item];
+    });
+    setStockDrafts((prev) => ({
+      ...prev,
+      [item.product_id]: formatQtyInput(item.quantity, item.product_unit),
+    }));
+  }
+
   function saveNotes() {
     if ((notes.trim() || null) === (cell.notes ?? null)) return;
     api(`/api/warehouse/cells/${cell.id}`, { method: "PATCH", body: JSON.stringify({ notes: notes.trim() }) })
@@ -283,17 +339,15 @@ function CellModal({
   }
 
   async function submitAssign() {
-    if (!assignPid || assignBusy) return;
+    const selectedProduct = allProducts.find((p) => p.id === assignPid);
+    if (!assignPid || assignBusy || !validQty(assignQty, selectedProduct?.unit, { allowZero: true })) return;
     setAssignBusy(true); setErr(null);
     try {
       const item = await api<CellStockItem>(`/api/warehouse/cells/${cell.id}/assign`, {
         method: "POST",
-        body: JSON.stringify({ product_id: assignPid, quantity: parseFloat(assignQty) || 0 }),
+        body: JSON.stringify({ product_id: assignPid, quantity: parseQty(assignQty) }),
       });
-      setStock((prev) => {
-        const idx = prev.findIndex((s) => s.product_id === item.product_id);
-        return idx >= 0 ? prev.map((s, i) => i === idx ? item : s) : [...prev, item];
-      });
+      upsertStockItem({ ...item, product_unit: item.product_unit ?? selectedProduct?.unit });
       setAssignOpen(false); setAssignPid(null); setAssignQty("1");
       onChanged();
     } catch (e: unknown) {
@@ -303,18 +357,40 @@ function CellModal({
 
   const usedIds = new Set(stock.map((s) => s.product_id));
   const addable = unassigned.filter((u) => num(u.unassigned) > 0 && !usedIds.has(u.product_id));
-  const addCap  = addPid ? num(unassigned.find((u) => u.product_id === parseInt(addPid))?.unassigned ?? "0") : 0;
+  const selectedAdd = addPid ? unassigned.find((u) => u.product_id === parseInt(addPid)) : undefined;
+  const selectedAssign = assignPid ? allProducts.find((p) => p.id === assignPid) : undefined;
+  const addCap  = selectedAdd ? num(selectedAdd.unassigned) : 0;
 
-  function setQty(pid: number, qty: number) {
+  function saveStockQty(item: CellStockItem) {
+    const raw = stockDrafts[item.product_id] ?? formatQtyInput(item.quantity, item.product_unit);
+    if (!validQty(raw, item.product_unit, { allowZero: true })) {
+      setErr(isWholeQtyUnit(item.product_unit) ? "Для штук введіть ціле число" : "Введіть коректну кількість");
+      setStockDrafts((prev) => ({ ...prev, [item.product_id]: formatQtyInput(item.quantity, item.product_unit) }));
+      return;
+    }
+    const qty = parseQty(raw);
+    if (qty === num(item.quantity)) {
+      setStockDrafts((prev) => ({ ...prev, [item.product_id]: formatQtyInput(item.quantity, item.product_unit) }));
+      return;
+    }
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setErr(null);
-    api<CellStockItem>(`/api/warehouse/cells/${cell.id}/stock`, {
-      method: "PUT",
-      body: JSON.stringify({ product_id: pid, quantity: qty }),
-    }).then((updated) => {
-      setStock((prev) => prev.map((s) => s.product_id === pid ? updated : s));
+    api<{ message: string }>(`/api/warehouse/scan-action`, {
+      method: "POST",
+      body: JSON.stringify({ action: "stocktake", product_id: item.product_id, quantity: qty, cell_id: cell.id }),
+    }).then(() => {
+      setStock((prev) => qty <= 0
+        ? prev.filter((s) => s.product_id !== item.product_id)
+        : prev.map((s) => s.product_id === item.product_id ? { ...s, quantity: String(qty) } : s));
+      setStockDrafts((prev) => {
+        const next = { ...prev };
+        if (qty <= 0) delete next[item.product_id];
+        else next[item.product_id] = formatQtyInput(qty, item.product_unit);
+        return next;
+      });
       onChanged();
     }).catch((e: unknown) => {
+      setStockDrafts((prev) => ({ ...prev, [item.product_id]: formatQtyInput(item.quantity, item.product_unit) }));
       setErr(e instanceof Error ? e.message : "Помилка");
     }).finally(() => { inFlight.current = false; setBusy(false); });
   }
@@ -326,10 +402,7 @@ function CellModal({
       method: "POST",
       body: JSON.stringify({ product_id: pid, quantity: qty }),
     }).then((updated) => {
-      setStock((prev) => {
-        const idx = prev.findIndex((s) => s.product_id === pid);
-        return idx >= 0 ? prev.map((s, i) => i === idx ? updated : s) : [...prev, updated];
-      });
+      upsertStockItem({ ...updated, product_unit: updated.product_unit ?? selectedAdd?.unit });
       setAddPid(""); setAddQty("1");
       onChanged();
     }).catch((e: unknown) => {
@@ -388,15 +461,21 @@ function CellModal({
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium">{s.product_name}</p>
-                    <p className="font-mono text-xs text-[var(--text-faint)]">{s.product_sku}</p>
+                    <p className="font-mono text-xs text-[var(--text-faint)]">{s.product_sku} · {s.product_unit ?? "шт"}</p>
                   </div>
                   <input
-                    type="number" min="0" step="0.01"
-                    defaultValue={num(s.quantity)}
-                    onBlur={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (!isNaN(v) && v !== num(s.quantity)) setQty(s.product_id, v);
+                    type="number" min="0" step={qtyStep(s.product_unit)} inputMode={qtyInputMode(s.product_unit)}
+                    value={stockDrafts[s.product_id] ?? formatQtyInput(s.quantity, s.product_unit)}
+                    onChange={(e) => setStockDrafts((prev) => ({ ...prev, [s.product_id]: e.target.value }))}
+                    onBlur={() => saveStockQty(s)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
                     }}
+                    disabled={busy}
+                    title="Фактична кількість у комірці"
                     className="w-20 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
@@ -426,19 +505,19 @@ function CellModal({
                 className="flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm outline-none focus:border-[var(--accent)]">
                 <option value="">+ Розкласти сюди…</option>
                 {addable.map((u) => (
-                  <option key={u.product_id} value={u.product_id}>{u.product_name} ({u.unassigned})</option>
+                  <option key={u.product_id} value={u.product_id}>{u.product_name} ({formatQtyDisplay(u.unassigned, u.unit)} {u.unit})</option>
                 ))}
               </select>
               {addPid && (
                 <>
                   <input
-                    type="number" min="0" max={addCap} step="0.01" value={addQty}
+                    type="number" min="0" max={addCap} step={qtyStep(selectedAdd?.unit)} inputMode={qtyInputMode(selectedAdd?.unit)} value={addQty}
                     onChange={(e) => setAddQty(e.target.value)}
                     className="w-20 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
-                    onClick={() => addProduct(parseInt(addPid), num(addQty))}
-                    disabled={busy || num(addQty) <= 0 || num(addQty) > addCap}
+                    onClick={() => addProduct(parseInt(addPid), parseQty(addQty))}
+                    disabled={busy || !validQty(addQty, selectedAdd?.unit, { max: addCap })}
                     className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)] disabled:opacity-50">
                     {busy ? "…" : "OK"}
                   </button>
@@ -505,14 +584,14 @@ function CellModal({
               {assignPid && (
                 <div className="flex gap-2">
                   <input
-                    type="number" min="0" step="0.01" value={assignQty}
+                    type="number" min="0" step={qtyStep(selectedAssign?.unit)} inputMode={qtyInputMode(selectedAssign?.unit)} value={assignQty}
                     onChange={(e) => setAssignQty(e.target.value)}
                     className="w-24 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-right font-mono text-sm outline-none focus:border-[var(--accent)]"
                   />
                   <button
                     type="button"
                     onClick={submitAssign}
-                    disabled={assignBusy || !(parseFloat(assignQty) >= 0)}
+                    disabled={assignBusy || !validQty(assignQty, selectedAssign?.unit, { allowZero: true })}
                     className="flex-1 rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {assignBusy ? "…" : "Призначити"}
@@ -538,6 +617,7 @@ function CellModal({
         <RelocateModal
           productId={relocate.product_id}
           productName={relocate.product_name}
+          productUnit={relocate.product_unit}
           fromCellId={cell.id}
           available={num(relocate.quantity)}
           cells={flatCells}
@@ -759,10 +839,11 @@ function ZoneAccordion({
                     const filled   = cell.stock.length > 0;
                     const multi    = cell.stock.length > 1;
                     const totalQty = cell.stock.reduce((s, i) => s + num(i.quantity), 0);
+                    const totalUnit = cell.stock.length === 1 ? cell.stock[0].product_unit ?? "шт" : "шт";
                     const barW     = Math.min(totalQty / 100 * 100, 100);
                     const isLow    = filled && totalQty > 0 && totalQty <= 5;
                     const title    = filled
-                      ? cell.stock.map((s) => `${s.product_name}: ${num(s.quantity)}`).join(", ")
+                      ? cell.stock.map((s) => `${s.product_name}: ${formatQtyDisplay(s.quantity, s.product_unit)} ${s.product_unit ?? "шт"}`).join(", ")
                       : cell.code;
 
                     return (
@@ -818,7 +899,7 @@ function ZoneAccordion({
                                   {cell.stock[0].product_name}
                                   {multi && <span className="text-[var(--text-faint)]"> +{cell.stock.length - 1}</span>}
                                 </p>
-                                <p className="font-mono text-[10px] text-[var(--accent)]">{totalQty} шт</p>
+                                <p className="font-mono text-[10px] text-[var(--accent)]">{formatQtyDisplay(totalQty, totalUnit)} {totalUnit}</p>
                               </div>
                             </div>
                           )
@@ -886,7 +967,7 @@ function UnassignedPanel({
               <p className="truncate text-sm font-medium">{it.product_name}</p>
               <p className="font-mono text-xs text-[var(--text-faint)]">{it.product_sku}</p>
             </div>
-            <span className="font-mono text-sm font-semibold tabular-nums">{it.unassigned} {it.unit}</span>
+            <span className="font-mono text-sm font-semibold tabular-nums">{formatQtyDisplay(it.unassigned, it.unit)} {it.unit}</span>
             <button
               onClick={() => onPutaway(it)}
               disabled={cells.length === 0}

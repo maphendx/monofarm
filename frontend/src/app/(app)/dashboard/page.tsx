@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
 import { FlowView } from "@/components/dashboard/FlowView";
+import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
@@ -18,7 +19,7 @@ import {
   printerTone,
   stateLabel,
 } from "@/lib/printerLabels";
-import type { Printer, PrinterKind } from "@/lib/types";
+import type { GcodeFile, Printer, PrinterKind } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 // ── StatusCard ────────────────────────────────────────────────────────────────
@@ -385,6 +386,7 @@ export default function DashboardPage() {
   usePageTitle("nav.dashboard");
   const user = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useT();
 
   const GROUP_OPTS: { id: GroupBy; label: string }[] = [
@@ -404,6 +406,16 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
   const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
+  const [slicerFile, setSlicerFile] = useState<GcodeFile | null>(null);
+  const [slicerError, setSlicerError] = useState<string | null>(null);
+
+  const slicerFileParam = searchParams.get("slicerFile");
+  const slicerPrinterParam = searchParams.get("printer");
+  const parsedSlicerFileId = slicerFileParam ? Number(slicerFileParam) : null;
+  const parsedSlicerPrinterId = slicerPrinterParam ? Number(slicerPrinterParam) : undefined;
+  const slicerFileId = parsedSlicerFileId && !Number.isNaN(parsedSlicerFileId) ? parsedSlicerFileId : null;
+  const slicerPrinterId = parsedSlicerPrinterId && !Number.isNaN(parsedSlicerPrinterId) ? parsedSlicerPrinterId : undefined;
+  const slicerAskMode = searchParams.get("slicerAction") === "choose";
 
   const load = useCallback(async () => {
     setError(null);
@@ -440,6 +452,24 @@ export default function DashboardPage() {
     const id = setInterval(() => { if (!document.hidden) load(); }, 30_000);
     return () => clearInterval(id);
   }, [load]);
+
+  useEffect(() => {
+    if (!slicerFileId || Number.isNaN(slicerFileId)) return;
+    let cancelled = false;
+    api<GcodeFile>(`/api/files/${slicerFileId}`)
+      .then((file) => {
+        if (!cancelled) {
+          setSlicerError(null);
+          setSlicerFile(file);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSlicerError(err instanceof ApiError ? err.message : "Не вдалося відкрити файл з OrcaSlicer");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [slicerFileId]);
 
   const filtered = useMemo(() => {
     let result: Printer[];
@@ -608,6 +638,12 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {slicerError && (
+        <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">
+          {slicerError}
+        </div>
+      )}
+
       {/* ── content ── */}
       {view === "flow" ? (
         <FlowView printers={printers} />
@@ -681,6 +717,16 @@ export default function DashboardPage() {
           printer={printPrinter}
           printers={printers}
           onClose={() => setPrintPrinter(null)}
+        />
+      )}
+
+      {slicerFile && (
+        <SendModal
+          file={slicerFile}
+          printers={printers}
+          defaultPrinterId={slicerPrinterId}
+          askMode={slicerAskMode}
+          onClose={() => setSlicerFile(null)}
         />
       )}
     </div>

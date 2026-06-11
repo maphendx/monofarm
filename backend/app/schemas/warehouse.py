@@ -657,6 +657,7 @@ class CellStockOut(BaseModel):
     product_id:   int
     product_name: str
     product_sku:  str
+    product_unit: str = "шт"
     quantity:     Decimal
     image_url:    str | None = None
 

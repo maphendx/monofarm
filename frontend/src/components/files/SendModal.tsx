@@ -1,10 +1,11 @@
 "use client";
 
+import { FolderDown, ListPlus, Printer as PrinterIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
-import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, Printer } from "@/lib/types";
+import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, Printer as PrinterType } from "@/lib/types";
 
 // ── helpers (shared with StartPrintModal) ─────────────────────────────────────
 
@@ -37,7 +38,7 @@ function normalizeSlotColor(color: string | null | undefined): string | null {
   return `#${raw.slice(0, 6).toLowerCase()}`;
 }
 
-function printerMaterialSlots(printer: Printer) {
+function printerMaterialSlots(printer: PrinterType) {
   const slots = (printer.slots ?? [])
     .filter((s) => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
     .map((s) => ({
@@ -57,7 +58,7 @@ function printerMaterialSlots(printer: Printer) {
     }));
 }
 
-function autoMapSlots(meta: GcodeFileMeta | null, printer: Printer): Record<number, number> {
+function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
   const targets = printerMaterialSlots(printer);
   const usedTargets = new Set<number>();
   const map: Record<number, number> = {};
@@ -79,7 +80,7 @@ function autoMapSlots(meta: GcodeFileMeta | null, printer: Printer): Record<numb
   return map;
 }
 
-export function checkSlots(meta: GcodeFileMeta | null, printer: Printer) {
+export function checkSlots(meta: GcodeFileMeta | null, printer: PrinterType) {
   if (!meta) return [];
   return usedSlotIndices(meta).map((i) => {
     const fileColor = meta.colors?.[i] ?? null;
@@ -106,7 +107,7 @@ export function compatBadge(slots: ReturnType<typeof checkSlots>) {
   return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
 }
 
-function fitCheck(meta: GcodeFileMeta | null, printer: Printer): "fits" | "oversize" | "unknown" {
+function fitCheck(meta: GcodeFileMeta | null, printer: PrinterType): "fits" | "oversize" | "unknown" {
   const sx = meta?.print_size_x;
   const sy = meta?.print_size_y;
   const sz = meta?.print_size_z;
@@ -150,6 +151,27 @@ const MODES: { key: Mode; label: string }[] = [
   { key: "queue", label: "У чергу" },
 ];
 
+const CHOOSER_OPTIONS = [
+  {
+    key: "save" as Mode,
+    title: "Зберегти",
+    desc: "Файл уже в бібліотеці, повернешся до нього пізніше",
+    icon: FolderDown,
+  },
+  {
+    key: "print" as Mode,
+    title: "Друкувати",
+    desc: "Вибрати принтер, перевірити слоти й запустити друк",
+    icon: PrinterIcon,
+  },
+  {
+    key: "queue" as Mode,
+    title: "У чергу",
+    desc: "Додати як завдання з потрібною кількістю",
+    icon: ListPlus,
+  },
+];
+
 // ── SendModal ─────────────────────────────────────────────────────────────────
 
 export function SendModal({
@@ -160,7 +182,7 @@ export function SendModal({
   askMode = false,
 }: {
   file: GcodeFile;
-  printers: Printer[];
+  printers: PrinterType[];
   onClose: () => void;
   defaultPrinterId?: number;
   /** Show a save / print / queue chooser first (slicer auto-open flow). */
@@ -220,7 +242,7 @@ export function SendModal({
   }
 
   async function sendPrint() {
-    if (!selectedId) return;
+    if (!selectedPrinter) return;
     setBusy(true);
     setResult(null);
     setQueuedJob(null);
@@ -269,11 +291,16 @@ export function SendModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl  ">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]">
+      <div className={[
+        "w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl",
+        choosing ? "max-w-3xl" : "max-w-sm",
+      ].join(" ")}>
         {/* header */}
-        <div className="border-b border-[var(--border)] px-5 py-4 ">
-          <h2 className="font-semibold">Файл завантажено</h2>
+        <div className="border-b border-[var(--border)] px-5 py-4 text-center ">
+          <h2 className={choosing ? "text-xl font-semibold" : "font-semibold"}>
+            {choosing ? "Що зробити з файлом?" : "Файл завантажено"}
+          </h2>
           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{file.original_name}</p>
         </div>
 
@@ -314,19 +341,21 @@ export function SendModal({
 
           {/* ── chooser (slicer auto-open): save / print / queue ── */}
           {choosing && (
-            <div className="space-y-2">
-              {[
-                { key: "save" as Mode, title: "Зберегти у файли", desc: "Файл уже в бібліотеці — надіслати можна пізніше" },
-                { key: "print" as Mode, title: "Обрати принтер", desc: "Запустити друк просто зараз" },
-                { key: "queue" as Mode, title: "Поставити в чергу", desc: "Додати в чергу друку з кількістю" },
-              ].map((o) => (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {CHOOSER_OPTIONS.map((o) => {
+                const Icon = o.icon;
+                return (
                 <button key={o.key} type="button"
                   onClick={() => { setChoosing(false); switchMode(o.key); }}
-                  className="block w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]">
-                  <p className="text-sm font-medium text-[var(--text)]">{o.title}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{o.desc}</p>
+                  className="group flex min-h-40 flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] p-5 text-center transition hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]">
+                  <span className="mb-3 flex size-12 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] transition group-hover:text-[var(--accent)]">
+                    <Icon size={27} strokeWidth={1.8} />
+                  </span>
+                  <p className="text-lg font-semibold text-[var(--text-hi)]">{o.title}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{o.desc}</p>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -501,7 +530,12 @@ export function SendModal({
                           return (
                             <label key={i} className="flex cursor-pointer items-center gap-1.5 text-xs">
                               <input type="checkbox" checked={calibrateSlots.has(i)} onChange={() => {
-                                setCalibrateSlots((prev) => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+                                setCalibrateSlots((prev) => {
+                                  const n = new Set(prev);
+                                  if (n.has(i)) n.delete(i);
+                                  else n.add(i);
+                                  return n;
+                                });
                               }} className="accent-neutral-900 dark:accent-white" />
                               {fileColor && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
                               <span className="truncate text-[var(--text)] ">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
@@ -540,7 +574,7 @@ export function SendModal({
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!choosing && !result?.ok && mode === "print" && (
-            <button onClick={sendPrint} disabled={!selectedId || busy}
+            <button onClick={sendPrint} disabled={!selectedPrinter || busy}
               className="btn btn-primary disabled:opacity-40">
               {busy ? "Надсилаю…" : "Надіслати"}
             </button>
