@@ -270,7 +270,7 @@ export function CreateMovementModal({
     <Modal
       open={open}
       onClose={onClose}
-      size="xl"
+      size="2xl"
       title="Рух товару"
       footer={
         <>
@@ -353,57 +353,68 @@ export function CreateMovementModal({
 
         {/* Product lines */}
         <div className="space-y-2">
-          <div className="grid items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]"
-            style={{ gridTemplateColumns: "1fr 72px 56px 80px 24px" }}>
-            <span>Товар</span>
-            <span className="text-right">К-сть</span>
-            <span className="text-center">Од.</span>
-            <span className="text-right">
-              Ціна/од.{meta.needsPrice && <span className="ml-0.5 text-[var(--state-error)]">*</span>}
-            </span>
-            <span />
-          </div>
+          {lines.map((line, idx) => (
+            <div key={line._key} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 space-y-2">
+              {/* Row header */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">
+                  Товар {lines.length > 1 ? idx + 1 : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeLine(line._key)}
+                  disabled={lines.length === 1}
+                  className="flex size-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-20 text-base leading-none"
+                >×</button>
+              </div>
 
-          {lines.map((line) => (
-            <div key={line._key} className="grid items-center gap-2"
-              style={{ gridTemplateColumns: "1fr 72px 56px 80px 24px" }}>
+              {/* Product search — full width */}
               <ProductSearch
                 products={products}
                 value={line.productId}
                 search={line.search}
                 onSelect={(p, text) => handleProductSelect(line._key, p, text)}
               />
-              <input
-                type="number" min="0.001" step="any" value={line.quantity}
-                onChange={(e) => setLine(line._key, { quantity: e.target.value })}
-                className="input text-right"
-              />
-              <select value={line.unit} onChange={(e) => setLine(line._key, { unit: e.target.value })} className="input px-1">
-                {["шт","г","кг","м","см","мм","л","мл","пара"].map((u) => <option key={u}>{u}</option>)}
-                {!["шт","г","кг","м","см","мм","л","мл","пара"].includes(line.unit) && (
-                  <option value={line.unit}>{line.unit}</option>
-                )}
-              </select>
-              <input
-                type="number" min="0" step="0.01" value={line.unitCost}
-                onChange={(e) => setLine(line._key, { unitCost: e.target.value })}
-                required={meta.needsPrice}
-                placeholder="₴"
-                className="input text-right"
-              />
-              <button
-                type="button"
-                onClick={() => removeLine(line._key)}
-                disabled={lines.length === 1}
-                className="flex size-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)] disabled:opacity-20"
-              >×</button>
+
+              {/* Qty / Unit / Price */}
+              <div className="grid grid-cols-3 gap-2">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">К-сть</span>
+                  <input
+                    type="number" min="0.001" step="any" value={line.quantity}
+                    onChange={(e) => setLine(line._key, { quantity: e.target.value })}
+                    className="input w-full text-right"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Од.</span>
+                  <select value={line.unit} onChange={(e) => setLine(line._key, { unit: e.target.value })} className="input w-full">
+                    {["шт","г","кг","м","см","мм","л","мл","пара"].map((u) => <option key={u}>{u}</option>)}
+                    {!["шт","г","кг","м","см","мм","л","мл","пара"].includes(line.unit) && (
+                      <option value={line.unit}>{line.unit}</option>
+                    )}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">
+                    Ціна/од.{meta.needsPrice && <span className="text-[var(--state-error)]">*</span>}
+                  </span>
+                  <input
+                    type="number" min="0" step="0.01" value={line.unitCost}
+                    onChange={(e) => setLine(line._key, { unitCost: e.target.value })}
+                    required={meta.needsPrice}
+                    placeholder="₴"
+                    className="input w-full text-right"
+                  />
+                </label>
+              </div>
             </div>
           ))}
 
           <button
             type="button"
             onClick={() => setLines((prev) => [...prev, newLine()])}
-            className="flex items-center gap-1.5 rounded-md border border-dashed border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] w-full justify-center"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border)] py-2 text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"
           >
             + Додати рядок
           </button>
@@ -424,7 +435,13 @@ export function CreateMovementModal({
         {/* Comment */}
         <label className="block">
           <span className="mb-1 block text-[var(--text-muted)]">Коментар</span>
-          <input value={reason} onChange={(e) => setReason(e.target.value)} className="input" />
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            className="input w-full resize-none"
+            placeholder="Необов'язково…"
+          />
         </label>
 
         {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
