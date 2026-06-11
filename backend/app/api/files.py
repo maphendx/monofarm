@@ -56,6 +56,10 @@ class FilamentMeta(BaseModel):
     estimated_minutes: int | None = None
     total_layers: int | None = None
     layer_height: float | None = None
+    nozzle_diameter: float | None = None
+    print_size_x: float | None = None
+    print_size_y: float | None = None
+    print_size_z: float | None = None
 
 
 class GcodeFileOut(BaseModel):

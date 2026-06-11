@@ -177,6 +177,12 @@ def _parse_text(text: str) -> dict:
             out["layer_height"] = float(raw["layer_height"])
         except ValueError:
             pass
+    if "nozzle_diameter" in raw:
+        try:
+            first = raw["nozzle_diameter"].replace(",", ";").split(";")[0].strip()
+            out["nozzle_diameter"] = round(float(first), 2)
+        except ValueError:
+            pass
 
     # Print dimensions — prefer explicit model size, fall back to MINX/MAXX bbox
     try:

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, api, getToken } from "@/lib/api";
-import { SendModal } from "@/components/files/SendModal";
+import { SendModal, checkSlots, compatBadge, fitCheck, nozzleCheck } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
@@ -83,6 +83,64 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
           {types[i] ?? `S${i + 1}`}
         </span>
       ))}
+    </div>
+  );
+}
+
+// ── Printer compat dots ───────────────────────────────────────────────────────
+function PrinterCompatDots({ file, printers, onSend }: { file: GcodeFile; printers: Printer[]; onSend: (p: Printer) => void }) {
+  const sendable = printers.filter(p => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)));
+  if (!sendable.length) return null;
+
+  const visible = sendable.slice(0, 7);
+  const overflow = sendable.length - visible.length;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {visible.map(p => {
+        const fit = fitCheck(file.filament_meta, p);
+        const nozzle = nozzleCheck(file.filament_meta, p);
+        const slots = checkSlots(file.filament_meta, p);
+        const hasMissing = slots.some(s => s.match === "missing");
+        const hasMismatch = slots.some(s => s.match === "type_mismatch");
+
+        let cls: string;
+        let tip: string;
+        if (fit === "oversize") {
+          cls = "bg-[rgba(239,68,68,.12)] text-[var(--state-error)] border border-[rgba(239,68,68,.2)]";
+          tip = `${p.name}: не влазить (${p.build_x}×${p.build_y}×${p.build_z} мм)`;
+        } else if (nozzle === "mismatch") {
+          cls = "bg-[rgba(234,179,8,.12)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
+          tip = `${p.name}: різне сопло (∅${p.nozzle_diameter} мм)`;
+        } else if (hasMissing) {
+          cls = "bg-[rgba(239,68,68,.10)] text-[var(--state-error)] border border-[rgba(239,68,68,.15)]";
+          tip = `${p.name}: відсутні слоти`;
+        } else if (hasMismatch) {
+          cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.15)]";
+          tip = `${p.name}: тип не збігається`;
+        } else if (fit === "fits" || slots.some(s => s.match === "ok")) {
+          cls = "bg-[rgba(34,197,94,.12)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
+          tip = `${p.name}: сумісний`;
+        } else {
+          cls = "bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]";
+          tip = `${p.name}`;
+        }
+
+        return (
+          <button
+            key={p.id}
+            type="button"
+            title={tip}
+            onClick={e => { e.stopPropagation(); onSend(p); }}
+            className={`flex max-w-[72px] items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition hover:opacity-80 ${cls}`}
+          >
+            <span className="truncate">{p.name}</span>
+          </button>
+        );
+      })}
+      {overflow > 0 && (
+        <span className="text-[10px] text-[var(--text-faint)]">+{overflow}</span>
+      )}
     </div>
   );
 }
@@ -221,9 +279,9 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
-function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, onDragStart, onDragEnd }: {
-  file: GcodeFile; canEdit: boolean; highlighted: boolean; isDragging: boolean;
-  onSend: () => void; onDelete: () => void;
+function FileCard({ file, printers, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onDragStart, onDragEnd }: {
+  file: GcodeFile; printers: Printer[]; canEdit: boolean; highlighted: boolean; isDragging: boolean;
+  onSend: () => void; onSendTo: (p: Printer) => void; onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
   const [confirmDel, setConfirmDel] = useState(false);
@@ -302,10 +360,20 @@ function FileCard({ file, canEdit, highlighted, isDragging, onSend, onDelete, on
       {/* filament swatches */}
       {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
 
-      {/* time estimate */}
-      {file.filament_meta?.estimated_minutes && (
-        <p className="text-[10px] text-[var(--text-muted)]">~{fmtMinutes(file.filament_meta.estimated_minutes)}</p>
+      {/* analysis row */}
+      {file.filament_meta && (
+        <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">
+          {file.filament_meta.estimated_minutes && `~${fmtMinutes(file.filament_meta.estimated_minutes)}`}
+          {file.filament_meta.total_layers ? ` · ${file.filament_meta.total_layers}L` : ""}
+          {file.filament_meta.layer_height ? ` · h${file.filament_meta.layer_height}` : ""}
+          {file.filament_meta.nozzle_diameter ? ` · ∅${file.filament_meta.nozzle_diameter}` : ""}
+          {(file.filament_meta.print_size_x || file.filament_meta.print_size_y || file.filament_meta.print_size_z) ?
+            ` · ${[file.filament_meta.print_size_x, file.filament_meta.print_size_y, file.filament_meta.print_size_z].map(v => v != null ? v : "?").join("×")}мм` : ""}
+        </p>
       )}
+
+      {/* printer compat */}
+      <PrinterCompatDots file={file} printers={printers} onSend={onSendTo} />
 
       {/* actions */}
       <div className="mt-auto flex gap-1.5 pt-1">
@@ -376,6 +444,7 @@ export default function FilesPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
+  const [defaultPrinterOverride, setDefaultPrinterOverride] = useState<number | null>(null);
   // Slicer (Orca) auto-open shows a save / print / queue chooser first
   const [sendAskMode, setSendAskMode] = useState(false);
   const [search, setSearch] = useState("");
@@ -736,10 +805,12 @@ export default function FilesPage() {
             <FileCard
               key={f.id}
               file={f}
+              printers={printers}
               canEdit={canEdit}
               highlighted={f.id === highlightId}
               isDragging={draggedFile?.id === f.id}
               onSend={() => { setSendAskMode(false); setSendFile(f); }}
+              onSendTo={p => { setSendAskMode(false); setSendFile(f); setDefaultPrinterOverride(p.id); }}
               onDelete={() => handleDelete(f)}
               onDragStart={e => onFileDragStart(e, f)}
               onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}
@@ -775,8 +846,9 @@ export default function FilesPage() {
             dismissedAutoOpenFileIdRef.current = sendFile.id;
             setSendAskMode(false);
             setSendFile(null);
+            setDefaultPrinterOverride(null);
           }}
-          defaultPrinterId={defaultPrinterId ?? undefined}
+          defaultPrinterId={defaultPrinterOverride ?? defaultPrinterId ?? undefined}
           askMode={sendAskMode}
         />
       )}

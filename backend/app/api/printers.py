@@ -987,6 +987,8 @@ def update_printer(
         row.build_y = payload.build_y
     if payload.build_z is not None:
         row.build_z = payload.build_z
+    if payload.nozzle_diameter is not None:
+        row.nozzle_diameter = payload.nozzle_diameter
     db.commit()
     db.refresh(row)
 

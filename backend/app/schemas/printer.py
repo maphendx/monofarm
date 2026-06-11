@@ -29,6 +29,7 @@ class PrinterCreate(BaseModel):
     build_x: int | None = None
     build_y: int | None = None
     build_z: int | None = None
+    nozzle_diameter: float | None = None
 
 
 class PrinterUpdate(BaseModel):
@@ -43,6 +44,7 @@ class PrinterUpdate(BaseModel):
     build_x: int | None = None
     build_y: int | None = None
     build_z: int | None = None
+    nozzle_diameter: float | None = None
 
 
 class PrinterManualUpdate(BaseModel):
@@ -113,6 +115,7 @@ class PrinterOut(BaseModel):
     build_x: int | None = None
     build_y: int | None = None
     build_z: int | None = None
+    nozzle_diameter: float | None = None
 
     class Config:
         from_attributes = True

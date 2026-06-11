@@ -120,6 +120,7 @@ export interface Printer {
   build_x: number | null;
   build_y: number | null;
   build_z: number | null;
+  nozzle_diameter: number | null;
 }
 
 export interface FilamentMeta {
@@ -196,6 +197,7 @@ export interface GcodeFileMeta {
   estimated_minutes?: number;
   total_layers?: number;
   layer_height?: number;
+  nozzle_diameter?: number;
   print_size_x?: number;
   print_size_y?: number;
   print_size_z?: number;

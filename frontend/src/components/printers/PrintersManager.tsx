@@ -40,14 +40,16 @@ interface PrinterForm {
   moonraker_url: string; bambu_dev_id: string;
   bambu_access_code: string; bambu_dev_ip: string;
   bambu_model: string; is_active: boolean;
+  build_x: string; build_y: string; build_z: string;
+  nozzle_diameter: string;
 }
 
 function emptyForm(): PrinterForm {
-  return { name: "", kind: "snapmaker_u1", moonraker_url: "", bambu_dev_id: "", bambu_access_code: "", bambu_dev_ip: "", bambu_model: "", is_active: true };
+  return { name: "", kind: "snapmaker_u1", moonraker_url: "", bambu_dev_id: "", bambu_access_code: "", bambu_dev_ip: "", bambu_model: "", is_active: true, build_x: "", build_y: "", build_z: "", nozzle_diameter: "" };
 }
 
 function printerToForm(p: Printer): PrinterForm {
-  return { name: p.name, kind: p.kind, moonraker_url: p.moonraker_url ?? "", bambu_dev_id: p.bambu_dev_id ?? "", bambu_access_code: "", bambu_dev_ip: p.bambu_dev_ip ?? "", bambu_model: p.bambu_model ?? "", is_active: p.is_active };
+  return { name: p.name, kind: p.kind, moonraker_url: p.moonraker_url ?? "", bambu_dev_id: p.bambu_dev_id ?? "", bambu_access_code: "", bambu_dev_ip: p.bambu_dev_ip ?? "", bambu_model: p.bambu_model ?? "", is_active: p.is_active, build_x: p.build_x?.toString() ?? "", build_y: p.build_y?.toString() ?? "", build_z: p.build_z?.toString() ?? "", nozzle_diameter: p.nozzle_diameter?.toString() ?? "" };
 }
 
 const inp = "input";
@@ -184,6 +186,10 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
     e.preventDefault(); setBusy(true); setError(null);
     const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, moonraker_url: form.moonraker_url.trim() || null, bambu_dev_id: form.bambu_dev_id.trim() || null, bambu_dev_ip: form.bambu_dev_ip.trim() || null, bambu_model: form.bambu_model.trim() || null, is_active: form.is_active };
     if (form.bambu_access_code.trim()) body.bambu_access_code = form.bambu_access_code.trim();
+    if (form.build_x.trim()) body.build_x = parseInt(form.build_x);
+    if (form.build_y.trim()) body.build_y = parseInt(form.build_y);
+    if (form.build_z.trim()) body.build_z = parseInt(form.build_z);
+    if (form.nozzle_diameter.trim()) body.nozzle_diameter = parseFloat(form.nozzle_diameter);
     try {
       if (isEdit) await api(`/api/printers/${printer!.id}`, { method: "PATCH", body: JSON.stringify(body) });
       else await api("/api/printers", { method: "POST", body: JSON.stringify(body) });
@@ -221,6 +227,23 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           <Field label="Модель" hint="(опційно)"><input type="text" value={form.bambu_model} onChange={(e) => set("bambu_model", e.target.value)} placeholder="P1S" className={inp} /></Field>
         </>)}
         {hasUrl && (<Field label="Moonraker URL" hint="(опційно для ручного)"><input type="url" value={form.moonraker_url} onChange={(e) => set("moonraker_url", e.target.value)} placeholder="http://192.168.31.210" className={inp} /></Field>)}
+        <div>
+          <span className="mb-1 block text-sm">Робочий об&apos;єм (мм) <span className="text-[var(--text-faint)] text-xs">(опційно)</span></span>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="block"><span className="mb-1 block text-xs text-[var(--text-muted)]">X (ширина)</span><input type="number" min="0" value={form.build_x} onChange={(e) => set("build_x", e.target.value)} placeholder="220" className={inp} /></label>
+            <label className="block"><span className="mb-1 block text-xs text-[var(--text-muted)]">Y (глибина)</span><input type="number" min="0" value={form.build_y} onChange={(e) => set("build_y", e.target.value)} placeholder="220" className={inp} /></label>
+            <label className="block"><span className="mb-1 block text-xs text-[var(--text-muted)]">Z (висота)</span><input type="number" min="0" value={form.build_z} onChange={(e) => set("build_z", e.target.value)} placeholder="240" className={inp} /></label>
+          </div>
+        </div>
+        <Field label="Діаметр сопла" hint="(опційно)">
+          <select value={form.nozzle_diameter} onChange={(e) => set("nozzle_diameter", e.target.value)} className={inp}>
+            <option value="">— не вказано —</option>
+            <option value="0.2">0.2 мм</option>
+            <option value="0.4">0.4 мм (стандарт)</option>
+            <option value="0.6">0.6 мм</option>
+            <option value="0.8">0.8 мм</option>
+          </select>
+        </Field>
         {isEdit && (<label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={form.is_active} onChange={(e) => set("is_active", e.target.checked)} className="h-4 w-4 rounded" /><span className="text-sm">Активний (показується на дашборді)</span></label>)}
         {error && <p className="text-sm text-[var(--state-error)]">{error}</p>}
       </form>

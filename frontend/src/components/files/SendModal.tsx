@@ -107,7 +107,7 @@ export function compatBadge(slots: ReturnType<typeof checkSlots>) {
   return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
 }
 
-function fitCheck(meta: GcodeFileMeta | null, printer: PrinterType): "fits" | "oversize" | "unknown" {
+export function fitCheck(meta: GcodeFileMeta | null, printer: PrinterType): "fits" | "oversize" | "unknown" {
   const sx = meta?.print_size_x;
   const sy = meta?.print_size_y;
   const sz = meta?.print_size_z;
@@ -118,6 +118,13 @@ function fitCheck(meta: GcodeFileMeta | null, printer: PrinterType): "fits" | "o
   if (sy && printer.build_y && sy > printer.build_y + TOL) return "oversize";
   if (sz && printer.build_z && sz > printer.build_z + TOL) return "oversize";
   return "fits";
+}
+
+export function nozzleCheck(meta: GcodeFileMeta | null, printer: PrinterType): "ok" | "mismatch" | "unknown" {
+  const fn = meta?.nozzle_diameter;
+  const pn = printer.nozzle_diameter;
+  if (!fn || !pn) return "unknown";
+  return Math.abs(fn - pn) < 0.05 ? "ok" : "mismatch";
 }
 
 function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
@@ -393,7 +400,9 @@ export function SendModal({
             <SlotSwatches meta={file.filament_meta} />
             <p className="mt-1.5 text-xs text-[var(--text-faint)]">
               {file.filament_meta.estimated_minutes && `~${fmtMinutes(file.filament_meta.estimated_minutes)}`}
-              {file.filament_meta.layer_height && ` · шар ${file.filament_meta.layer_height} мм`}
+              {file.filament_meta.total_layers && ` · ${file.filament_meta.total_layers} шарів`}
+              {file.filament_meta.layer_height && ` · h ${file.filament_meta.layer_height} мм`}
+              {file.filament_meta.nozzle_diameter && ` · ∅${file.filament_meta.nozzle_diameter} мм`}
               {(file.filament_meta.print_size_x || file.filament_meta.print_size_y || file.filament_meta.print_size_z) && (
                 <span className="ml-1">
                   · {[file.filament_meta.print_size_x, file.filament_meta.print_size_y, file.filament_meta.print_size_z]
@@ -472,6 +481,7 @@ export function SendModal({
                     const slots = checkSlots(file.filament_meta, p);
                     const compat = compatBadge(slots);
                     const fit = fitCheck(file.filament_meta, p);
+                    const nozzle = nozzleCheck(file.filament_meta, p);
                     return (
                       <label key={p.id} className={[
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
@@ -485,14 +495,19 @@ export function SendModal({
                             className="accent-neutral-900 dark:accent-white" />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{p.name}</p>
-                            {p.build_x && p.build_y && p.build_z && (
-                              <p className="text-[10px] text-[var(--text-faint)]">
-                                {p.build_x}×{p.build_y}×{p.build_z} мм
-                              </p>
-                            )}
+                            <p className="text-[10px] text-[var(--text-faint)]">
+                              {p.build_x && p.build_y && p.build_z ? `${p.build_x}×${p.build_y}×${p.build_z} мм` : ""}
+                              {p.nozzle_diameter ? `${p.build_x ? " · " : ""}∅${p.nozzle_diameter} мм` : ""}
+                            </p>
                           </div>
                           {fit === "fits" && fileHasDimensions && (
                             <span className="badge badge-ok shrink-0 text-[10px]">✓ влазить</span>
+                          )}
+                          {fit === "oversize" && (
+                            <span className="badge badge-error shrink-0 text-[10px]">✕ не влазить</span>
+                          )}
+                          {nozzle === "mismatch" && (
+                            <span className="badge badge-warn shrink-0 text-[10px]" title={`Файл: ∅${file.filament_meta?.nozzle_diameter} мм, принтер: ∅${p.nozzle_diameter} мм`}>∅ мм ≠</span>
                           )}
                           <span className={[
                             "shrink-0 rounded px-1.5 py-0.5 text-xs",

@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,3 +62,4 @@ class Printer(Base):
     build_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
     build_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     build_z: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    nozzle_diameter: Mapped[float | None] = mapped_column(Float, nullable=True)
