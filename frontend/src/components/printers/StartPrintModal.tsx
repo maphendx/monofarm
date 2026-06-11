@@ -38,7 +38,7 @@ export function StartPrintModal({
         file={selected}
         printers={printers}
         defaultPrinterId={printer.id}
-        onClose={() => setSelected(null)}
+        onClose={onClose}
       />
     );
   }

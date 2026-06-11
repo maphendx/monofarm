@@ -394,6 +394,7 @@ export default function FilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoOpenAttemptsRef = useRef(0);
   const autoOpenKeyRef = useRef("");
+  const dismissedAutoOpenFileIdRef = useRef<number | null>(null);
 
   // ── Load ──
   const load = useCallback(async () => {
@@ -426,6 +427,7 @@ export default function FilesPage() {
       : [...files].sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())[0] ?? null;
 
     if (target) {
+      if (dismissedAutoOpenFileIdRef.current === target.id) return;
       setCurrentFolderId(target.folder_id ?? null);
       setSendAskMode(true);
       setSendFile(target);
@@ -766,7 +768,17 @@ export default function FilesPage() {
 
       {/* send modal */}
       {sendFile && (
-        <SendModal file={sendFile} printers={printers} onClose={() => setSendFile(null)} defaultPrinterId={defaultPrinterId ?? undefined} askMode={sendAskMode} />
+        <SendModal
+          file={sendFile}
+          printers={printers}
+          onClose={() => {
+            dismissedAutoOpenFileIdRef.current = sendFile.id;
+            setSendAskMode(false);
+            setSendFile(null);
+          }}
+          defaultPrinterId={defaultPrinterId ?? undefined}
+          askMode={sendAskMode}
+        />
       )}
 
       {/* create folder modal */}
