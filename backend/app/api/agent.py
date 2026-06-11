@@ -9,16 +9,17 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.api.deps import get_current_org
+from app.api.deps import get_current_org, require_roles
 from app.core.security import decode_token
 from app.models.organization import Organization
+from app.models.user import User, UserRole
 from app.services import tunnel
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.5.1"
+AGENT_VERSION = "0.6.1"
 
 
 @router.get("/api/agent/version")
@@ -31,6 +32,21 @@ def agent_version() -> dict:
 def agent_status(org: Organization = Depends(get_current_org)) -> dict:
     """Check whether a local agent is connected for this org."""
     return {"connected": tunnel.has_tunnel(org.id)}
+
+
+@router.get("/api/agent/logs")
+async def agent_logs(
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin)),
+) -> dict:
+    """Recent log lines from the connected farm agent (remote diagnostics)."""
+    if not tunnel.has_tunnel(org.id):
+        raise HTTPException(status_code=503, detail="Агент не підключений")
+    result = await tunnel.proxy_request(org.id, method="AGENT_LOGS", url="", timeout=10)
+    if result.get("status") != 200:
+        raise HTTPException(status_code=502, detail=result.get("error") or "Агент не відповів")
+    body = result.get("body") or {}
+    return {"version": body.get("version"), "lines": body.get("lines") or []}
 
 
 @router.get("/api/agent/bambu-lan-config")

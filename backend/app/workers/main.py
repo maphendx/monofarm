@@ -61,11 +61,12 @@ def _redis_cmd_relay() -> None:
                     cmd = json.loads(message["data"])
                     topic: str = cmd["topic"]
                     payload: str = cmd["payload"]
+                    qos: int = int(cmd.get("qos", 0))
                     dev_id = topic.split("/")[1] if "/" in topic else ""
                     org_id = _dev_to_org.get(dev_id)
                     client = _mqtt_clients.get(org_id) if org_id is not None else None
                     if client is not None:
-                        client.publish(topic, payload)
+                        client.publish(topic, payload, qos=qos)
                         log.debug("Redis cmd relay: forwarded cmd to %s", topic)
                     else:
                         log.warning("Redis cmd relay: no MQTT client for dev_id=%s (org_id=%s)", dev_id, org_id)

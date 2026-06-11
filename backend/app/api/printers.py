@@ -1191,6 +1191,12 @@ def _require_printer(printer_id: int, db: Session, org_id: int) -> Printer:
     return row
 
 
+# pause/resume/stop for LAN-mode printers go through the agent's LAN MQTT:
+# post-Jan-2025 firmware ignores unsigned print.* commands over cloud MQTT
+# (X.509), while LAN + Developer Mode accepts them on every firmware.
+_BAMBU_LAN_COMMANDS = {"pause": "pause", "resume": "resume", "cancel": "stop"}
+
+
 async def _dispatch(
     printer_id: int,
     action: str,
@@ -1204,9 +1210,27 @@ async def _dispatch(
     import time as _time
     row = _require_printer(printer_id, db, org.id)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id and bambu_fn:
+        lan_via_agent = (
+            row.bambu_lan_mode
+            and row.bambu_dev_ip
+            and row.bambu_access_code
+            and action in _BAMBU_LAN_COMMANDS
+            and _tunnel.has_tunnel(org.id)
+        )
         try:
-            await asyncio.to_thread(bambu_fn, row.bambu_dev_id)
-        except bambu.BambuError as e:
+            if lan_via_agent:
+                payload = {"print": {
+                    "command": _BAMBU_LAN_COMMANDS[action],
+                    "param": "",
+                    "sequence_id": bambu._next_seq(),  # noqa: SLF001
+                }}
+                await _tunnel.send_bambu_mqtt(
+                    org.id, row.bambu_dev_id, row.bambu_dev_ip,
+                    row.bambu_access_code.strip(), payload,
+                )
+            else:
+                await asyncio.to_thread(bambu_fn, row.bambu_dev_id)
+        except (bambu.BambuError, RuntimeError) as e:
             raise HTTPException(status_code=502, detail=str(e))
         # Optimistically set transitional state — MQTT will correct it within seconds
         if optimistic_state and row.bambu_dev_id in bambu._state_cache:  # noqa: SLF001

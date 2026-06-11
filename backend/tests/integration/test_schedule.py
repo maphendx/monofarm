@@ -11,9 +11,8 @@ Covers:
 """
 from __future__ import annotations
 
-from datetime import date, time, timedelta
+from datetime import date, time
 
-import pytest
 
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind

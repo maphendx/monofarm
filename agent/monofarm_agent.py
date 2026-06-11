@@ -22,6 +22,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import collections
+import html as _htmlmod
 import json
 import os
 import socket
@@ -29,9 +31,10 @@ import ssl
 import logging
 import sys
 import threading
+import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.5.1"
+AGENT_VERSION = "0.6.1"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -52,6 +55,31 @@ except ImportError:
 
 log = logging.getLogger("monofarm-agent")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
+
+# Ring buffer with recent log lines — served by the local web UI and the
+# AGENT_LOGS tunnel method (our equivalent of SimplyPrint's telemetry: the
+# farm operator and the SaaS can both read agent logs without SSH).
+_LOG_BUFFER: "collections.deque[str]" = collections.deque(maxlen=500)
+
+
+class _LogBufferHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            _LOG_BUFFER.append(self.format(record))
+        except Exception:
+            pass
+
+
+_log_buffer_handler = _LogBufferHandler()
+_log_buffer_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+logging.getLogger().addHandler(_log_buffer_handler)
+
+# Runtime state surfaced in the web UI
+_cloud_connected = False
+_current_server = ""
+_main_loop: "asyncio.AbstractEventLoop | None" = None
+
+WEB_PORT_DEFAULT = 8723  # local setup UI; set MONOFARM_WEB_PORT=0 to disable
 
 RECONNECT_DELAY = 5    # seconds between reconnect attempts
 REQUEST_TIMEOUT = 10   # seconds per regular proxied request
@@ -175,6 +203,75 @@ _MOONRAKER_OBJECTS = {
 _bambu_lan_sub_tasks: dict[str, "asyncio.Task[None]"] = {}
 _bambu_lan_sub_configs: dict[str, tuple[str, str]] = {}
 _BAMBU_LAN_CONFIG_INTERVAL = 15
+# dev_id → connected paho client from the monitor loop. Commands publish through
+# this connection when alive (printers limit concurrent MQTT clients — P1/A1
+# firmware tolerates very few, so we reuse the monitor connection like SimplyPrint).
+_bambu_lan_live_clients: dict[str, object] = {}
+# Spec: P1 series must not receive pushall more often than every 5 minutes.
+_BAMBU_PUSHALL_INTERVAL = 300
+
+# Bambu Lab root CA (public, ships with Bambu Studio/SimplyPrint; valid to 2032).
+# Printer leaf certs (MQTT :8883, FTPS :990, camera :6000) chain to this CA with
+# CN = printer serial — we verify the chain but skip hostname checks (we dial IPs).
+_BAMBU_CA_PEM = """-----BEGIN CERTIFICATE-----
+MIIDZTCCAk2gAwIBAgIUV1FckwXElyek1onFnQ9kL7Bk4N8wDQYJKoZIhvcNAQEL
+BQAwQjELMAkGA1UEBhMCQ04xIjAgBgNVBAoMGUJCTCBUZWNobm9sb2dpZXMgQ28u
+LCBMdGQxDzANBgNVBAMMBkJCTCBDQTAeFw0yMjA0MDQwMzQyMTFaFw0zMjA0MDEw
+MzQyMTFaMEIxCzAJBgNVBAYTAkNOMSIwIAYDVQQKDBlCQkwgVGVjaG5vbG9naWVz
+IENvLiwgTHRkMQ8wDQYDVQQDDAZCQkwgQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IB
+DwAwggEKAoIBAQDL3pnDdxGOk5Z6vugiT4dpM0ju+3Xatxz09UY7mbj4tkIdby4H
+oeEdiYSZjc5LJngJuCHwtEbBJt1BriRdSVrF6M9D2UaBDyamEo0dxwSaVxZiDVWC
+eeCPdELpFZdEhSNTaT4O7zgvcnFsfHMa/0vMAkvE7i0qp3mjEzYLfz60axcDoJLk
+p7n6xKXI+cJbA4IlToFjpSldPmC+ynOo7YAOsXt7AYKY6Glz0BwUVzSJxU+/+VFy
+/QrmYGNwlrQtdREHeRi0SNK32x1+bOndfJP0sojuIrDjKsdCLye5CSZIvqnbowwW
+1jRwZgTBR29Zp2nzCoxJYcU9TSQp/4KZuWNVAgMBAAGjUzBRMB0GA1UdDgQWBBSP
+NEJo3GdOj8QinsV8SeWr3US+HjAfBgNVHSMEGDAWgBSPNEJo3GdOj8QinsV8SeWr
+3US+HjAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQABlBIT5ZeG
+fgcK1LOh1CN9sTzxMCLbtTPFF1NGGA13mApu6j1h5YELbSKcUqfXzMnVeAb06Htu
+3CoCoe+wj7LONTFO++vBm2/if6Jt/DUw1CAEcNyqeh6ES0NX8LJRVSe0qdTxPJuA
+BdOoo96iX89rRPoxeed1cpq5hZwbeka3+CJGV76itWp35Up5rmmUqrlyQOr/Wax6
+itosIzG0MfhgUzU51A2P/hSnD3NDMXv+wUY/AvqgIL7u7fbDKnku1GzEKIkfH8hm
+Rs6d8SCU89xyrwzQ0PR853irHas3WrHVqab3P+qNwR0YirL0Qk7Xt/q3O1griNg2
+Blbjg3obpHo9
+-----END CERTIFICATE-----
+"""
+
+# Targets where BBL-CA verification failed — fall back to unverified TLS
+# (matches pre-0.6.0 behaviour, so no printer can regress to "offline").
+_bambu_tls_insecure: set[str] = set()
+# ip → consecutive verified-connect timeouts; ≥2 flips the target to insecure
+# (paho's async loop hides handshake errors, a timeout is all we observe).
+_bambu_tls_timeouts: dict[str, int] = {}
+
+
+def _bambu_ssl_context(ip: str) -> ssl.SSLContext:
+    """TLS context for Bambu LAN services: pinned BBL CA, hostname checks off."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    if ip in _bambu_tls_insecure:
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.load_verify_locations(cadata=_BAMBU_CA_PEM)
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        # Python 3.13+: printer leaf certs predate the strict X.509 rules
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
+
+
+def _bambu_mark_tls_failure(ip: str, exc: Exception) -> None:
+    """Demote a target to unverified TLS after an SSL error or repeated timeouts."""
+    if ip in _bambu_tls_insecure:
+        return
+    if isinstance(exc, ssl.SSLError) or "SSL" in str(exc) or "certificate" in str(exc).lower():
+        log.warning("Bambu TLS verify failed for %s — falling back to unverified", ip)
+        _bambu_tls_insecure.add(ip)
+        return
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError, RuntimeError)):
+        _bambu_tls_timeouts[ip] = _bambu_tls_timeouts.get(ip, 0) + 1
+        if _bambu_tls_timeouts[ip] >= 2:
+            log.info("Bambu connect kept timing out for %s — retrying with unverified TLS", ip)
+            _bambu_tls_insecure.add(ip)
 
 
 async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
@@ -307,12 +404,45 @@ def ensure_bambu_mqtt_dependency() -> None:
         log.debug("paho-mqtt install skipped: %s", exc)
 
 
+def _mqtt_connect_hint(rc: int) -> str:
+    """Map a paho connect rc to an actionable message for the farm operator."""
+    if rc in (4, 5):  # bad credentials / not authorized
+        return (
+            f"connect rc={rc}: принтер відхилив доступ — перевір LAN Access Code; "
+            "на прошивці X1/P1 ≥01.07 або A1 ≥01.03 увімкни LAN Only Mode + Developer Mode на принтері"
+        )
+    return f"connect rc={rc}"
+
+
+def _bambu_publish_via_live_client(dev_id: str, payload: dict) -> bool:
+    """Publish through the persistent monitor connection if it is alive (QoS 1)."""
+    client = _bambu_lan_live_clients.get(dev_id)
+    if client is None or not getattr(client, "is_connected", lambda: False)():
+        return False
+    info = client.publish(
+        f"device/{dev_id}/request",
+        json.dumps(payload, separators=(",", ":")),
+        qos=1,
+    )
+    info.wait_for_publish(timeout=10)
+    if not info.is_published():
+        raise RuntimeError("publish timeout (live client)")
+    return True
+
+
 def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload: dict) -> None:
-    """Publish one Bambu LAN MQTT command from a worker thread."""
+    """Publish one Bambu LAN MQTT command from a worker thread.
+
+    Prefers the persistent monitor connection (printers limit concurrent MQTT
+    clients); falls back to a one-shot connection when no monitor is running.
+    """
     try:
         import paho.mqtt.client as mqtt
     except ImportError as exc:
         raise RuntimeError("paho-mqtt is required for Bambu LAN MQTT") from exc
+
+    if _bambu_publish_via_live_client(dev_id, payload):
+        return
 
     connected = threading.Event()
     errors: list[str] = []
@@ -320,7 +450,7 @@ def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload
     def _on_connect(client, userdata, flags, reason_code, properties=None):
         rc = _mqtt_rc_value(reason_code)
         if rc != 0:
-            errors.append(f"connect rc={rc}")
+            errors.append(_mqtt_connect_hint(rc))
         connected.set()
 
     client = mqtt.Client(
@@ -329,12 +459,16 @@ def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload
         client_id=f"monofarm-agent-cmd-{dev_id}",
     )
     client.username_pw_set("bblp", access_code)
-    client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
-    client.tls_insecure_set(True)
+    client.tls_set_context(_bambu_ssl_context(ip))
     client.on_connect = _on_connect
 
     try:
-        client.connect(ip, 8883, 60)
+        try:
+            client.connect(ip, 8883, 60)
+        except ssl.SSLError as exc:
+            _bambu_mark_tls_failure(ip, exc)
+            client.tls_set_context(_bambu_ssl_context(ip))
+            client.connect(ip, 8883, 60)
         client.loop_start()
         if not connected.wait(10):
             raise RuntimeError("connect timeout")
@@ -343,6 +477,7 @@ def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload
         info = client.publish(
             f"device/{dev_id}/request",
             json.dumps(payload, separators=(",", ":")),
+            qos=1,
         )
         info.wait_for_publish(timeout=10)
         if not info.is_published():
@@ -358,9 +493,9 @@ def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload
 async def handle_bambu_mqtt(ws, req: dict) -> None:
     """Publish a Bambu LAN MQTT command on behalf of the cloud backend."""
     req_id = req.get("id")
-    dev_id = req.get("dev_id", "")
-    ip = req.get("ip", "")
-    access_code = req.get("access_code", "")
+    dev_id = (req.get("dev_id") or "").strip()
+    ip = (req.get("ip") or "").strip()
+    access_code = (req.get("access_code") or "").strip()
     payload = req.get("payload") or {}
     try:
         if not dev_id or not ip or not access_code or not isinstance(payload, dict):
@@ -381,12 +516,17 @@ async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
         log.warning("Bambu LAN monitor disabled: install paho-mqtt")
         return
 
-    dev_id = printer.get("dev_id", "")
-    ip = printer.get("ip", "")
-    access_code = printer.get("access_code", "")
+    dev_id = (printer.get("dev_id") or "").strip()
+    ip = (printer.get("ip") or "").strip()
+    access_code = (printer.get("access_code") or "").strip()
     name = printer.get("name") or dev_id
     if not dev_id or not ip or not access_code:
         return
+
+    pushall_msg = json.dumps(
+        {"pushing": {"command": "pushall", "sequence_id": "0", "version": 1, "push_target": 1}},
+        separators=(",", ":"),
+    )
 
     while True:
         connected = asyncio.Event()
@@ -398,8 +538,7 @@ async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
             client_id=f"monofarm-agent-lan-{dev_id}",
         )
         client.username_pw_set("bblp", access_code)
-        client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
-        client.tls_insecure_set(True)
+        client.tls_set_context(_bambu_ssl_context(ip))
 
         def _on_connect(client, userdata, flags, reason_code, properties=None):
             rc = _mqtt_rc_value(reason_code)
@@ -410,11 +549,8 @@ async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
                 return
             log.info("BAMBU_LAN_SUB connected %s (%s)", name, ip)
             client.subscribe(f"device/{dev_id}/report")
-            client.publish(
-                f"device/{dev_id}/request",
-                json.dumps({"pushing": {"command": "pushall", "sequence_id": "0", "version": 1, "push_target": 1}},
-                           separators=(",", ":")),
-            )
+            client.publish(f"device/{dev_id}/request", pushall_msg)
+            _bambu_lan_live_clients[dev_id] = client
             loop.call_soon_threadsafe(connected.set)
 
         def _on_disconnect(client, userdata, disconnect_flags, reason_code, properties=None):
@@ -446,15 +582,21 @@ async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
             await asyncio.wait_for(connected.wait(), timeout=12)
             if connect_errors:
                 raise RuntimeError(connect_errors[-1])
+            _bambu_tls_timeouts.pop(ip, None)
             while True:
-                await asyncio.sleep(3600)
+                # P1/A1 send delta reports only — a throttled pushall keeps the
+                # merged server-side state from drifting (spec: max 1 per 5 min).
+                await asyncio.sleep(_BAMBU_PUSHALL_INTERVAL)
+                if client.is_connected():
+                    client.publish(f"device/{dev_id}/request", pushall_msg)
         except asyncio.CancelledError:
-            client.loop_stop()
-            client.disconnect()
             raise
         except Exception as exc:
+            _bambu_mark_tls_failure(ip, exc)
             log.warning("BAMBU_LAN_SUB error %s (%s): %s — retrying", name, ip, exc)
         finally:
+            if _bambu_lan_live_clients.get(dev_id) is client:
+                _bambu_lan_live_clients.pop(dev_id, None)
             try:
                 client.loop_stop()
                 client.disconnect()
@@ -529,13 +671,228 @@ def _load_config() -> dict[str, str]:
 
 def _save_config(server: str, token: str) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = _load_config()
+    cfg["MONOFARM_SERVER"] = server
+    cfg["MONOFARM_TOKEN"] = token
     CONFIG_FILE.write_text(
-        f"MONOFARM_SERVER={server}\nMONOFARM_TOKEN={token}\n", encoding="utf-8"
+        "".join(f"{k}={v}\n" for k, v in cfg.items() if v != ""),
+        encoding="utf-8",
     )
     try:
         CONFIG_FILE.chmod(0o600)
     except Exception:
         pass
+
+
+# ── Local web UI (stdlib only — no Flask, works on a headless Pi) ────────────
+#
+# Same role as the SimplyPrint client's local web interface: open
+# http://<agent-host>:8723 from any machine on the farm LAN to check status,
+# scan for printers, pair with the cloud and read logs. Trusted-LAN model,
+# like SimplyPrint's: the UI never displays the saved token.
+
+
+def _schedule_restart(delay: float = 0.7) -> None:
+    """Restart the agent process shortly after the HTTP response is sent."""
+    def _do() -> None:
+        log.info("Restarting agent (web UI request)…")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    loop = _main_loop
+    if loop is not None:
+        loop.call_soon_threadsafe(lambda: loop.call_later(delay, _do))
+    else:
+        threading.Timer(delay, _do).start()
+
+
+def _web_state() -> dict:
+    bambu = []
+    for dev_id, task in _bambu_lan_sub_tasks.items():
+        client = _bambu_lan_live_clients.get(dev_id)
+        connected = bool(client is not None and getattr(client, "is_connected", lambda: False)())
+        ip = _bambu_lan_sub_configs.get(dev_id, ("", ""))[0]
+        bambu.append({"dev_id": dev_id, "ip": ip, "connected": connected, "alive": not task.done()})
+    moonraker = [{"url": url, "alive": not task.done()} for url, task in _moonraker_sub_tasks.items()]
+    return {
+        "version": AGENT_VERSION,
+        "server": _current_server or _load_config().get("MONOFARM_SERVER", ""),
+        "cloud_connected": _cloud_connected,
+        "has_token": bool(_load_config().get("MONOFARM_TOKEN")),
+        "tg_running": _tg_app is not None,
+        "bambu": bambu,
+        "moonraker": moonraker,
+    }
+
+
+def _h(value: object) -> str:
+    return _htmlmod.escape(str(value), quote=True)
+
+
+_WEB_CSS = """
+body{background:#101216;color:#e6e8eb;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;
+     margin:0;padding:24px;max-width:760px;margin-inline:auto}
+h1{font-size:18px;margin:0 0 4px} h2{font-size:14px;margin:20px 0 8px;color:#9aa1ab}
+a{color:#7ab8ff} .muted{color:#9aa1ab}
+.card{background:#171a20;border:1px solid #262b33;border-radius:10px;padding:14px 16px;margin:10px 0}
+.chip{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.ok{background:#11331f;color:#5fd38a} .bad{background:#3a1a1a;color:#ff8c8c} .idle{background:#252a33;color:#9aa1ab}
+table{width:100%;border-collapse:collapse} td,th{text-align:left;padding:4px 8px;border-bottom:1px solid #20252d;font-size:13px}
+input{background:#0d0f13;color:#e6e8eb;border:1px solid #2a3039;border-radius:8px;padding:7px 10px;width:100%;box-sizing:border-box}
+button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:7px 14px;font-weight:600;cursor:pointer}
+button.ghost{background:#252a33} form.inline{display:inline}
+pre{background:#0d0f13;border:1px solid #20252d;border-radius:8px;padding:10px;font-size:12px;
+    overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-height:480px;overflow-y:auto}
+label{display:block;margin:8px 0 3px;font-size:12px;color:#9aa1ab}
+"""
+
+
+def _web_page(title: str, body: str, refresh: int | None = None) -> bytes:
+    meta = f'<meta http-equiv="refresh" content="{refresh}">' if refresh else ""
+    return (
+        f"<!doctype html><html><head><meta charset='utf-8'>{meta}"
+        f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{_h(title)}</title><style>{_WEB_CSS}</style></head>"
+        f"<body><h1>monofarm-agent <span class='muted'>v{_h(AGENT_VERSION)}</span></h1>"
+        f"{body}</body></html>"
+    ).encode("utf-8")
+
+
+def _render_dashboard() -> bytes:
+    st = _web_state()
+    cloud_chip = (
+        "<span class='chip ok'>підключено</span>" if st["cloud_connected"]
+        else "<span class='chip bad'>немає зв'язку</span>"
+    )
+    tg_chip = "<span class='chip ok'>працює</span>" if st["tg_running"] else "<span class='chip idle'>вимкнено</span>"
+    token_chip = "<span class='chip ok'>збережено</span>" if st["has_token"] else "<span class='chip bad'>немає</span>"
+
+    bambu_rows = "".join(
+        f"<tr><td>{_h(p['dev_id'])}</td><td>{_h(p['ip'])}</td>"
+        f"<td>{'<span class=chip ok>online</span>' if p['connected'] else '<span class=chip idle>reconnect…</span>'}</td></tr>"
+        for p in st["bambu"]
+    ) or "<tr><td colspan=3 class=muted>немає LAN-принтерів (додаються в monofarm Settings)</td></tr>"
+
+    mr_rows = "".join(
+        f"<tr><td>{_h(m['url'])}</td>"
+        f"<td>{'<span class=chip ok>підписка</span>' if m['alive'] else '<span class=chip idle>reconnect…</span>'}</td></tr>"
+        for m in st["moonraker"]
+    ) or "<tr><td colspan=2 class=muted>немає Moonraker-принтерів</td></tr>"
+
+    logs_tail = "\n".join(list(_LOG_BUFFER)[-25:])
+
+    body = f"""
+<div class='card'>
+  <table>
+    <tr><td>Хмара ({_h(st['server'])})</td><td>{cloud_chip}</td></tr>
+    <tr><td>Токен</td><td>{token_chip}</td></tr>
+    <tr><td>Telegram-бот</td><td>{tg_chip}</td></tr>
+  </table>
+  <div style='margin-top:10px'>
+    <form class='inline' method='post' action='/update'><button class='ghost'>Перевірити оновлення</button></form>
+    <form class='inline' method='post' action='/restart'><button class='ghost'>Перезапустити</button></form>
+  </div>
+</div>
+<h2>Bambu LAN принтери</h2>
+<div class='card'><table><tr><th>Серійник</th><th>IP</th><th>MQTT</th></tr>{bambu_rows}</table>
+  <form method='post' action='/scan' style='margin-top:10px'><button>Сканувати мережу (SSDP)</button></form>
+</div>
+<h2>Moonraker принтери</h2>
+<div class='card'><table>{mr_rows}</table></div>
+<h2>Підключення до monofarm</h2>
+<div class='card'>
+  <form method='post' action='/pair'>
+    <label>Server URL</label><input name='server' value='{_h(st['server'])}'>
+    <label>Token (JWT — лиши порожнім, щоб не змінювати)</label><input name='token' type='password' autocomplete='off'>
+    <div style='margin-top:10px'><button>Зберегти й перезапустити</button></div>
+  </form>
+</div>
+<h2>Журнал <a href='/logs' style='font-weight:400;font-size:12px'>повний →</a></h2>
+<pre>{_h(logs_tail)}</pre>
+"""
+    return _web_page("monofarm-agent", body, refresh=5)
+
+
+def _render_scan() -> bytes:
+    try:
+        devices = _bambu_ssdp_scan(4.0)
+    except Exception as e:
+        return _web_page("Сканування", f"<div class='card'>Помилка сканування: {_h(e)}</div><a href='/'>← назад</a>")
+    rows = "".join(
+        f"<tr><td>{_h(d['dev_id'])}</td><td>{_h(d['ip'])}</td><td>{_h(d['name'])}</td><td>{_h(d['model'])}</td></tr>"
+        for d in devices
+    ) or "<tr><td colspan=4 class=muted>нічого не знайдено — переконайся, що принтери в LAN-режимі й у цій же мережі</td></tr>"
+    body = (
+        f"<h2>Знайдені принтери</h2><div class='card'><table>"
+        f"<tr><th>Серійник</th><th>IP</th><th>Назва</th><th>Модель</th></tr>{rows}</table></div>"
+        f"<p class='muted'>Додай принтер у monofarm → Settings, вказавши IP та Access Code з екрана принтера.</p>"
+        f"<a href='/'>← назад</a>"
+    )
+    return _web_page("Сканування", body)
+
+
+def _start_web_ui(port: int) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class _Handler(BaseHTTPRequestHandler):
+        def _send(self, payload: bytes, code: int = 200, ctype: str = "text/html; charset=utf-8") -> None:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def _redirect(self, location: str = "/") -> None:
+            self.send_response(303)
+            self.send_header("Location", location)
+            self.end_headers()
+
+        def _form(self) -> dict[str, str]:
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length).decode("utf-8", errors="ignore") if length else ""
+            return {k: v[0] for k, v in _urlparse_mod.parse_qs(raw).items()}
+
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path == "/" or self.path.startswith("/?"):
+                self._send(_render_dashboard())
+            elif self.path == "/logs":
+                body = f"<a href='/'>← назад</a><pre>{_h(chr(10).join(_LOG_BUFFER))}</pre>"
+                self._send(_web_page("Журнал", body, refresh=3))
+            elif self.path == "/healthz":
+                self._send(json.dumps(_web_state()).encode(), ctype="application/json")
+            else:
+                self._send(b"not found", code=404, ctype="text/plain")
+
+        def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/scan":
+                self._send(_render_scan())
+            elif self.path == "/pair":
+                form = self._form()
+                cfg = _load_config()
+                server = (form.get("server") or cfg.get("MONOFARM_SERVER") or "").strip().rstrip("/")
+                token = (form.get("token") or "").strip() or cfg.get("MONOFARM_TOKEN", "")
+                _save_config(server, token)
+                self._send(_web_page("Збережено", "<div class='card'>Налаштування збережено — агент перезапускається…</div><a href='/'>← на головну</a>"))
+                _schedule_restart()
+            elif self.path == "/update":
+                loop = _main_loop
+                if loop is not None and _current_server:
+                    asyncio.run_coroutine_threadsafe(check_for_update(_current_server), loop)
+                self._redirect("/")
+            elif self.path == "/restart":
+                self._send(_web_page("Перезапуск", "<div class='card'>Агент перезапускається…</div><a href='/'>← на головну</a>"))
+                _schedule_restart()
+            else:
+                self._send(b"not found", code=404, ctype="text/plain")
+
+        def log_message(self, *_args) -> None:
+            pass  # keep the agent log clean of HTTP access noise
+
+    try:
+        httpd = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
+    except OSError as e:
+        log.warning("Web UI not started on :%s (%s)", port, e)
+        return
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    log.info("Web UI: http://localhost:%s (доступний у локальній мережі)", port)
 
 
 async def check_for_update(server: str) -> None:
@@ -611,54 +968,116 @@ async def handle_request(ws, req: dict) -> None:
     await ws.send(json.dumps(result))
 
 
-async def handle_discover_bambu(ws, req: dict) -> None:
-    """Run Bambu UDP discovery on the agent machine (local farm network)."""
-    import json as _json
-    import socket
+def _parse_bambu_ssdp(data: bytes, sender_ip: str) -> dict | None:
+    """Parse one Bambu SSDP NOTIFY/M-SEARCH response into a device dict."""
+    try:
+        text = data.decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    if "bambulab" not in text.lower() and "USN" not in text:
+        return None
+    headers: dict[str, str] = {}
+    for line in text.split("\r\n")[1:]:
+        if ":" in line:
+            key, _, value = line.partition(":")
+            headers[key.strip().lower()] = value.strip()
+    serial = headers.get("usn", "")
+    if not serial:
+        return None
+    ip = headers.get("location", "") or sender_ip
+    # Location can be a bare IP or a URL — normalize to the host part
+    if "//" in ip:
+        ip = ip.split("//", 1)[1].split("/", 1)[0].split(":", 1)[0]
+    return {
+        "dev_id": serial,
+        "ip": ip or sender_ip,
+        "name": headers.get("devname.bambu.com", ""),
+        "model": headers.get("devmodel.bambu.com", ""),
+    }
+
+
+def _bambu_ssdp_scan(timeout: float = 4.0) -> list[dict]:
+    """Discover Bambu printers via SSDP (what Bambu Studio and SimplyPrint use).
+
+    Passive: printers broadcast NOTIFY to UDP :2021 every few seconds in LAN mode.
+    Active: M-SEARCH to 239.255.255.250:1990 — printers unicast-reply to us.
+    """
     import time
 
-    req_id  = req.get("id")
-    port    = 2021
-    timeout = 3.0
     results: dict[str, dict] = {}
+    msearch = (
+        "M-SEARCH * HTTP/1.1\r\n"
+        "HOST: 239.255.255.250:1990\r\n"
+        'MAN: "ssdp:discover"\r\n'
+        "MX: 3\r\n"
+        "ST: urn:bambulab-com:device:3dprinter:1\r\n"
+        "\r\n"
+    ).encode()
 
+    sockets: list[socket.socket] = []
     try:
-        msg  = _json.dumps({"command": "get_version"}).encode()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("", 0))
-        sock.settimeout(0.2)
-        for target in ["255.255.255.255"]:
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        tx.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        tx.bind(("", 0))
+        tx.settimeout(0.3)
+        for target in ("239.255.255.250", "255.255.255.255"):
+            for port in (1990, 2021):
+                try:
+                    tx.sendto(msearch, (target, port))
+                except Exception:
+                    pass
+        sockets.append(tx)
+
+        try:
+            rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if hasattr(socket, "SO_REUSEPORT"):  # share :2021 with Bambu Studio
+                rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            rx.bind(("", 2021))
             try:
-                sock.sendto(msg, (target, port))
+                mreq = socket.inet_aton("239.255.255.250") + socket.inet_aton("0.0.0.0")
+                rx.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
             except Exception:
                 pass
+            rx.settimeout(0.3)
+            sockets.append(rx)
+        except Exception as e:
+            log.debug("SSDP passive listen unavailable (%s) — active scan only", e)
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            for sock in sockets:
+                try:
+                    data, addr = sock.recvfrom(8192)
+                except (socket.timeout, BlockingIOError):
+                    continue
+                except Exception:
+                    continue
+                device = _parse_bambu_ssdp(data, addr[0])
+                if device:
+                    results[device["dev_id"]] = device
+    finally:
+        for sock in sockets:
             try:
-                data, addr = sock.recvfrom(4096)
-                payload = _json.loads(data)
-                dev_id = payload.get("dev_id") or payload.get("sn") or ""
-                if dev_id:
-                    results[dev_id] = {
-                        "dev_id": dev_id,
-                        "ip": addr[0],
-                        "name": payload.get("dev_name") or payload.get("name") or "",
-                        "model": payload.get("dev_product_name") or payload.get("machine_type") or "",
-                    }
-            except socket.timeout:
-                continue
+                sock.close()
             except Exception:
-                continue
-        sock.close()
+                pass
+    return list(results.values())
+
+
+async def handle_discover_bambu(ws, req: dict) -> None:
+    """Run Bambu SSDP discovery on the agent machine (local farm network)."""
+    req_id = req.get("id")
+    try:
+        devices = await asyncio.to_thread(_bambu_ssdp_scan, 4.0)
     except Exception as e:
         log.warning("Bambu discover error: %s", e)
+        devices = []
 
-    await ws.send(_json.dumps({
+    await ws.send(json.dumps({
         "id": req_id,
         "status": 200,
-        "body": {"devices": list(results.values())},
+        "body": {"devices": devices},
         "error": None,
     }))
 
@@ -820,13 +1239,9 @@ async def handle_bambu_camera(ws, req: dict) -> None:
     """
     import struct as _struct
     req_id      = req.get("id")
-    ip          = req.get("ip", "")
-    access_code = req.get("access_code", "")
+    ip          = (req.get("ip") or "").strip()
+    access_code = (req.get("access_code") or "").strip()
     port        = 6000
-
-    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode    = ssl.CERT_NONE
 
     auth = bytearray(80)
     _struct.pack_into('<I', auth,  0, 0x40)
@@ -840,7 +1255,15 @@ async def handle_bambu_camera(ws, req: dict) -> None:
                               "content_type": "multipart/x-mixed-replace; boundary=frame"}))
     reader = writer = None
     try:
-        reader, writer = await asyncio.open_connection(ip, port, ssl=ssl_ctx, server_hostname=ip)
+        try:
+            reader, writer = await asyncio.open_connection(
+                ip, port, ssl=_bambu_ssl_context(ip), server_hostname=ip,
+            )
+        except ssl.SSLError as exc:
+            _bambu_mark_tls_failure(ip, exc)
+            reader, writer = await asyncio.open_connection(
+                ip, port, ssl=_bambu_ssl_context(ip), server_hostname=ip,
+            )
         log.info("BAMBU_CAMERA: TLS connected, sending auth")
         writer.write(bytes(auth))
         await writer.drain()
@@ -960,14 +1383,19 @@ async def handle_bambu_upload(ws, req: dict) -> None:
 
     File source: either `url` (presigned R2 — agent downloads directly, preferred
     to avoid +33% base64 overhead) or `data_b64` (fallback for local-disk backends).
+
+    Uploads into `cache/` (the directory Bambu firmware uses for black-box print
+    jobs — same as SimplyPrint); falls back to the SD root on old firmware that
+    lacks the directory. Returns the path actually used so the backend can build
+    the matching `project_file` URL.
     """
     import ftplib
     import io as _io
     import ssl as _ssl
 
     req_id      = req.get("id")
-    ip          = req.get("ip", "")
-    access_code = req.get("access_code", "")
+    ip          = (req.get("ip") or "").strip()
+    access_code = (req.get("access_code") or "").strip()
     filename    = req.get("filename", "model.3mf")
     url         = req.get("url")
     data_b64    = req.get("data_b64", "")
@@ -981,22 +1409,41 @@ async def handle_bambu_upload(ws, req: dict) -> None:
         else:
             file_bytes = base64.b64decode(data_b64)
 
-        def _ftp_upload() -> None:
-            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
-            ctx.check_hostname = False
-            ctx.verify_mode    = _ssl.CERT_NONE
-            ftp = ftplib.FTP_TLS(context=ctx)
+        def _ftp_connect() -> "ftplib.FTP_TLS":
+            ftp = ftplib.FTP_TLS(context=_bambu_ssl_context(ip))
             ftp.connect(ip, 990, timeout=15)
             ftp.login(user="bblp", passwd=access_code)
+            return ftp
+
+        def _ftp_upload() -> str:
+            try:
+                ftp = _ftp_connect()
+            except _ssl.SSLError as exc:
+                _bambu_mark_tls_failure(ip, exc)
+                ftp = _ftp_connect()
             ftp.prot_p()
+            remote_path = filename
+            try:
+                try:
+                    ftp.cwd("cache")
+                except ftplib.error_perm:
+                    ftp.mkd("cache")
+                    ftp.cwd("cache")
+                remote_path = f"cache/{filename}"
+            except ftplib.all_errors:
+                pass  # old firmware without cache dir — upload to SD root
             ftp.storbinary(f"STOR {filename}", _io.BytesIO(file_bytes))
             ftp.quit()
+            return remote_path
 
         # Run blocking FTP in a thread so asyncio event loop stays alive
         # (handles WS keepalive pings during upload)
-        await asyncio.to_thread(_ftp_upload)
+        remote_path = await asyncio.to_thread(_ftp_upload)
 
-        result = {"id": req_id, "status": 200, "body": {"filename": filename}, "error": None}
+        result = {
+            "id": req_id, "status": 200,
+            "body": {"filename": filename, "path": remote_path}, "error": None,
+        }
     except Exception as e:
         log.warning("BAMBU_UPLOAD error %s: %s", ip, e)
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
@@ -1036,6 +1483,16 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
 
     await ws.send(json.dumps(result))
+
+
+async def handle_agent_logs(ws, req: dict) -> None:
+    """Return recent agent log lines to the SaaS (remote diagnostics)."""
+    await ws.send(json.dumps({
+        "id": req.get("id"),
+        "status": 200,
+        "body": {"version": AGENT_VERSION, "lines": list(_LOG_BUFFER)[-200:]},
+        "error": None,
+    }))
 
 
 async def handle_print_zpl(ws, req: dict) -> None:
@@ -1123,9 +1580,11 @@ async def _pair_flow(server: str) -> str:
 
 
 async def run(server: str, token: str) -> None:
-    global _tg_server, _tg_jwt
+    global _tg_server, _tg_jwt, _main_loop, _current_server, _cloud_connected
     _tg_server = server
     _tg_jwt    = token
+    _main_loop = asyncio.get_running_loop()
+    _current_server = server
 
     ws_url = (
         server.replace("https://", "wss://").replace("http://", "ws://")
@@ -1146,6 +1605,7 @@ async def run(server: str, token: str) -> None:
                 max_size=None,  # allow large messages (base64 chunks)
             ) as ws:
                 log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
+                _cloud_connected = True
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 
                 # Fetch TG config on every connect (token may have changed while disconnected)
@@ -1208,12 +1668,15 @@ async def run(server: str, token: str) -> None:
                             asyncio.create_task(handle_moonraker_upload(ws, req))
                         elif method == "PRINT_ZPL":
                             asyncio.create_task(handle_print_zpl(ws, req))
+                        elif method == "AGENT_LOGS":
+                            asyncio.create_task(handle_agent_logs(ws, req))
                         elif method == "STREAM":
                             asyncio.create_task(handle_stream(ws, req))
                         else:
                             asyncio.create_task(handle_request(ws, req))
                 finally:
                     # Cloud WS dropped — cancel all Moonraker WS subscriptions
+                    _cloud_connected = False
                     _cancel_all_subscriptions()
                     _cancel_all_bambu_lan_subscriptions()
                     bambu_lan_task.cancel()
@@ -1254,6 +1717,14 @@ Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
     cfg    = _load_config()
     server = args.server or cfg["MONOFARM_SERVER"]
     token  = args.token  or cfg["MONOFARM_TOKEN"]
+
+    # Local setup/status UI (SimplyPrint-style). MONOFARM_WEB_PORT=0 disables.
+    try:
+        web_port = int(os.environ.get("MONOFARM_WEB_PORT") or cfg.get("MONOFARM_WEB_PORT") or WEB_PORT_DEFAULT)
+    except ValueError:
+        web_port = WEB_PORT_DEFAULT
+    if web_port > 0:
+        _start_web_ui(web_port)
 
     async def _run() -> None:
         nonlocal token

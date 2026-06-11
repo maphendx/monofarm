@@ -32,6 +32,9 @@ class BambuErrorCode(str, enum.Enum):
     MOONRAKER_UPLOAD_FAILED = "MOONRAKER_UPLOAD_FAILED"
     FILE_INVALID = "FILE_INVALID"
     PRINTER_NOT_CONFIGURED = "PRINTER_NOT_CONFIGURED"
+    AGENT_NOT_CONNECTED = "AGENT_NOT_CONNECTED"
+    LAN_UPLOAD_FAILED = "LAN_UPLOAD_FAILED"
+    LAN_MQTT_FAILED = "LAN_MQTT_FAILED"
 
 
 _RETRYABLE = {
@@ -43,6 +46,9 @@ _RETRYABLE = {
     BambuErrorCode.DISPATCH_FAILED,
     BambuErrorCode.WORKER_DISPATCH_FAILED,
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED,
+    BambuErrorCode.AGENT_NOT_CONNECTED,
+    BambuErrorCode.LAN_UPLOAD_FAILED,
+    BambuErrorCode.LAN_MQTT_FAILED,
 }
 
 _USER_MESSAGES: dict[BambuErrorCode, str] = {
@@ -67,6 +73,9 @@ _USER_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload failed.",
     BambuErrorCode.FILE_INVALID: "The selected file is missing or invalid.",
     BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer connection is not configured.",
+    BambuErrorCode.AGENT_NOT_CONNECTED: "Farm agent is not connected.",
+    BambuErrorCode.LAN_UPLOAD_FAILED: "LAN file upload to the printer failed.",
+    BambuErrorCode.LAN_MQTT_FAILED: "Printer did not accept the LAN print command.",
 }
 
 _TECHNICAL_MESSAGES: dict[BambuErrorCode, str] = {
@@ -91,6 +100,9 @@ _TECHNICAL_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload/start stage failed.",
     BambuErrorCode.FILE_INVALID: "File validation failed before dispatch.",
     BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer row is missing required connection fields.",
+    BambuErrorCode.AGENT_NOT_CONNECTED: "No agent tunnel was available for a LAN dispatch.",
+    BambuErrorCode.LAN_UPLOAD_FAILED: "FTPS upload to the printer failed (agent or direct).",
+    BambuErrorCode.LAN_MQTT_FAILED: "LAN MQTT project_file publish failed (check Developer Mode on new firmware).",
 }
 
 

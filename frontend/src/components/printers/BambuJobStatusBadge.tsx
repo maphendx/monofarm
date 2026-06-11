@@ -1,12 +1,15 @@
 import type { BambuCloudJobStatus } from "@/lib/types";
 
+// Product-language labels: transport states (queued/uploading/task_creating…)
+// stay technical in the API for diagnostics/retry, but the user sees calm
+// progress wording — a send never looks like it's parked in a foreign queue.
 const STATUS_LABEL: Record<BambuCloudJobStatus, string> = {
-  queued: "У черзі",
-  validating: "Перевірка",
-  creating_project: "Створення проєкту",
-  uploading: "Завантаження",
-  task_creating: "Створення завдання",
-  task_created: "Завдання створено",
+  queued: "Відправляється",
+  validating: "Перевірка файлу",
+  creating_project: "Підготовка проєкту",
+  uploading: "Завантаження на принтер",
+  task_creating: "Запуск друку",
+  task_created: "Очікує принтер",
   acknowledged: "Прийнято принтером",
   printing: "Друкується",
   paused: "Пауза",

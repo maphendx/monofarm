@@ -241,7 +241,7 @@ export function SendModal({
       );
       if (res.job_id != null) {
         setQueuedJob(res as BambuQueuedResult);
-        setResult({ ok: true, message: `Друк поставлено в чергу на «${res.printer_name}»` });
+        setResult({ ok: true, message: `Відправляється на «${res.printer_name}» — друк запуститься автоматично` });
       } else {
         setResult({ ok: res.ok, message: res.message });
       }

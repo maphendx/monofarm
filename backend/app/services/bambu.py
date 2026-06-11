@@ -931,20 +931,21 @@ def get_ams_filaments(dev_id: str) -> list[dict]:
 # ── MQTT commands ─────────────────────────────────────────────────────────────
 
 
-def _publish(dev_id: str, payload: dict) -> None:
+def _publish(dev_id: str, payload: dict, qos: int = 0) -> None:
     # LAN client takes priority (per-device, older firmware)
     lan_client = _lan_mqtt_clients.get(dev_id)
     if lan_client is not None:
         lan_client.publish(
             f"device/{dev_id}/request",
             json.dumps(payload, separators=(",", ":")),
+            qos=qos,
         )
         return
     # Cloud MQTT client (per-org)
     org_id = _dev_to_org.get(dev_id)
     client = _mqtt_clients.get(org_id) if org_id is not None else None
     if client is not None:
-        client.publish(f"device/{dev_id}/request", json.dumps(payload))
+        client.publish(f"device/{dev_id}/request", json.dumps(payload), qos=qos)
         return
     # No local MQTT client (web process with INLINE_WORKERS=false) — relay via Redis
     from app.services.cache import _r
@@ -953,6 +954,7 @@ def _publish(dev_id: str, payload: dict) -> None:
         r.publish("bambu:cmd", json.dumps({
             "topic": f"device/{dev_id}/request",
             "payload": json.dumps(payload),
+            "qos": qos,
         }))
         return
     raise BambuError("Bambu MQTT не підключений (no local client, no Redis)")
@@ -980,16 +982,19 @@ def set_speed_profile(dev_id: str, profile: int) -> None:
     })
 
 
+# Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.
+
+
 def pause_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "pause", "sequence_id": _next_seq()}})
+    _publish(dev_id, {"print": {"command": "pause", "param": "", "sequence_id": _next_seq()}}, qos=1)
 
 
 def resume_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "resume", "sequence_id": _next_seq()}})
+    _publish(dev_id, {"print": {"command": "resume", "param": "", "sequence_id": _next_seq()}}, qos=1)
 
 
 def stop_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "stop", "sequence_id": _next_seq()}})
+    _publish(dev_id, {"print": {"command": "stop", "param": "", "sequence_id": _next_seq()}}, qos=1)
 
 
 def build_start_print_payload(
@@ -999,30 +1004,46 @@ def build_start_print_payload(
     use_ams: bool = True,
     http_url: str | None = None,
     ftp_filename: str | None = None,
+    task_id: str | None = None,
+    plate_index: int = 1,
 ) -> dict[str, Any]:
-    """Build a Bambu MQTT project_file command.
+    """Build a Bambu MQTT project_file command (OpenBambuAPI spec, §6.7).
 
     Prefers http_url (printer downloads from R2 — no LAN FTPS needed).
-    Falls back to ftp://ftp_filename for local-disk setups.
+    `ftp_filename` is the path returned by the FTPS upload — `cache/x.3mf`
+    maps to `ftp:///cache/x.3mf` (firmware print-job dir, SimplyPrint flow),
+    a bare name maps to `file:///sdcard/x.3mf` (old-firmware SD-root upload).
     A1 fw 1.03+ requires task_id / profile_id / project_id / bed_type.
+    `task_id` is echoed back in push_status — pass a known value to correlate
+    the print with a BambuCloudJob deterministically.
     """
     import uuid as _uuid
-    url = http_url if http_url else f"file:///sdcard/{ftp_filename}"
+    if http_url:
+        url = http_url
+    elif ftp_filename and ftp_filename.startswith("cache/"):
+        url = f"ftp:///{ftp_filename}"
+    else:
+        url = f"file:///sdcard/{ftp_filename}"
     cmd: dict[str, Any] = {
         "print": {
             "command": "project_file",
             "sequence_id": _next_seq(),
-            "task_id": str(_uuid.uuid4()),
+            "task_id": task_id or str(_uuid.uuid4()),
             "profile_id": "0",
             "project_id": "0",
             "subtask_id": "0",
-            "param": "Metadata/plate_1.gcode",
+            "param": f"Metadata/plate_{plate_index}.gcode",
             "subtask_name": subtask_name,
             "url": url,
+            "file": "",
+            "md5": "",
             "bed_type": "auto",
             "use_ams": use_ams,
             "timelapse": False,
+            # Firmware generations disagree on the spelling — send both, unknown
+            # keys are ignored (old fw: bed_leveling, OpenBambuAPI: bed_levelling).
             "bed_leveling": True,
+            "bed_levelling": True,
             "flow_cali": False,
             "vibration_cali": True,
             "layer_inspect": False,
@@ -1040,6 +1061,7 @@ def start_print(
     use_ams: bool = True,
     http_url: str | None = None,
     ftp_filename: str | None = None,
+    task_id: str | None = None,
 ) -> None:
     """Send MQTT project_file command to start printing."""
     cmd = build_start_print_payload(
@@ -1049,8 +1071,9 @@ def start_print(
         use_ams=use_ams,
         http_url=http_url,
         ftp_filename=ftp_filename,
+        task_id=task_id,
     )
-    _publish(dev_id, cmd)
+    _publish(dev_id, cmd, qos=1)
 
 
 # ── Cloud upload + print (no LAN required) ───────────────────────────────────
@@ -1161,9 +1184,12 @@ def cloud_upload_and_print(
 
 
 def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) -> str:
-    """Upload a .3mf to the printer via FTPS (LAN).
+    """Upload a .3mf to the printer via FTPS (LAN, implicit TLS :990).
 
-    Returns the filename on the printer (for the MQTT start command).
+    Uploads into `cache/` (firmware print-job dir, same as SimplyPrint) and
+    falls back to the SD root on old firmware without that directory.
+    Returns the remote path on the printer (`cache/x.3mf` or `x.3mf`) for
+    `build_start_print_payload`.
     """
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
@@ -1172,8 +1198,19 @@ def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) ->
     try:
         ftp = ftplib.FTP_TLS(context=ctx)
         ftp.connect(dev_ip, 990, timeout=FTPS_TIMEOUT)
-        ftp.login(user="bblp", passwd=access_code)
+        ftp.login(user="bblp", passwd=access_code.strip())
         ftp.prot_p()
+
+        remote_path = filename
+        try:
+            try:
+                ftp.cwd("cache")
+            except ftplib.error_perm:
+                ftp.mkd("cache")
+                ftp.cwd("cache")
+            remote_path = f"cache/{filename}"
+        except ftplib.all_errors:
+            pass  # old firmware without cache dir — upload to SD root
 
         with file_path.open("rb") as f:
             ftp.storbinary(f"STOR {filename}", f)
@@ -1181,7 +1218,7 @@ def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) ->
     except Exception as e:
         raise BambuError(f"FTPS upload to {dev_ip} failed: {e}") from e
 
-    return filename
+    return remote_path
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────

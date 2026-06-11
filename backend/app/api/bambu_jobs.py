@@ -146,6 +146,9 @@ def retry_bambu_job(
     if job.dispatch_mode == "moonraker":
         from app.services.moonraker_dispatch import dispatch_moonraker_job
         background_tasks.add_task(dispatch_moonraker_job, job.id)
+    elif job.dispatch_mode == "lan":
+        from app.services.bambu_lan_dispatch import dispatch_lan_job
+        background_tasks.add_task(dispatch_lan_job, job.id)
     else:
         from app.workers.bambu_jobs import run_bambu_cloud_job
         background_tasks.add_task(run_bambu_cloud_job, job.id)

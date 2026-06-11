@@ -386,7 +386,8 @@ async def send_bambu_upload(
     File source: either `presigned_url` (R2 — agent downloads directly, preferred)
     or `file_bytes` (fallback). Exactly one must be provided.
 
-    Returns the filename on the printer.  Raises RuntimeError on failure.
+    Returns the remote path on the printer (`cache/x.3mf` from v0.6.0 agents,
+    bare filename from older ones). Raises RuntimeError on failure.
     """
     ws = _tunnels.get(org_id)
     if not ws:
@@ -423,7 +424,8 @@ async def send_bambu_upload(
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_UPLOAD failed: {resp.get('error')}")
-    return filename
+    body = resp.get("body") or {}
+    return body.get("path") or filename
 
 
 async def send_bambu_mqtt(
