@@ -59,12 +59,13 @@ function ProductSearch({
   const ref  = useRef<HTMLDivElement>(null);
   const selected = products.find((p) => String(p.id) === value);
 
-  const q       = search.toLowerCase().trim();
-  const filtered = q.length < 1
+  const tokens = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const filtered = tokens.length === 0
     ? products.slice(0, 50)
-    : products.filter((p) =>
-        p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)
-      ).slice(0, 50);
+    : products.filter((p) => {
+        const hay = `${p.name} ${p.sku}`.toLowerCase();
+        return tokens.every((t) => hay.includes(t));
+      }).slice(0, 50);
 
   useEffect(() => {
     if (!open) return;
@@ -267,7 +268,7 @@ export function CreateMovementModal({
     <Modal
       open={open}
       onClose={onClose}
-      size="3xl"
+      size="2xl"
       title="Рух товару"
       footer={
         <>
