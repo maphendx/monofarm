@@ -560,6 +560,16 @@ function QueuePageInner() {
     } finally { setCalendarLoading(false); }
   }, [weekStart]);
 
+  // Silent refresh — updates calendar data without showing the loading skeleton.
+  // Used after drag-drop so the grid doesn't flicker.
+  const loadCalendarSilent = useCallback(async () => {
+    try {
+      const weekDates = getWeekDates(weekStart);
+      const lanes = await getPlanCalendar(isoDateStr(weekDates[0]), isoDateStr(weekDates[6]));
+      setCalendarLanes(lanes);
+    } catch { /* ignore */ }
+  }, [weekStart]);
+
   useEffect(() => {
     if (view === "calendar") loadCalendar();
   }, [view, loadCalendar]);
@@ -659,7 +669,7 @@ function QueuePageInner() {
   if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
 
   return (
-    <div className="-mx-6 -mt-6 flex flex-col">
+    <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-full">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
@@ -730,7 +740,7 @@ function QueuePageInner() {
                 setWeekStart(d);
               }}
               onOpenModal={setScheduleModal}
-              onRefresh={() => { loadCalendar(); load(); }}
+              onRefresh={loadCalendarSilent}
             />
           </div>
           <div className="w-72 shrink-0 border-l border-[var(--border)] overflow-y-auto">
@@ -868,7 +878,7 @@ function QueuePageInner() {
       )}
 
       {/* ── Modals ── */}
-      <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => { setTasks(prev => [t, ...prev]); if (view === "calendar") loadCalendar(); }} />
+      <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => { setTasks(prev => [t, ...prev]); if (view === "calendar") loadCalendarSilent(); }} />
 
       {sendTask && sendTask.gcode_file_id && (
         <SendModal file={taskToGcodeFile(sendTask)} printers={printers} defaultPrinterId={sendTask.assigned_printer_id ?? undefined}
@@ -883,7 +893,7 @@ function QueuePageInner() {
           mode={scheduleModal}
           printers={printers}
           onClose={() => setScheduleModal(null)}
-          onSaved={async () => { setScheduleModal(null); await Promise.all([load(), loadCalendar()]); }}
+          onSaved={async () => { setScheduleModal(null); await Promise.all([load(), loadCalendarSilent()]); }}
         />
       )}
     </div>
