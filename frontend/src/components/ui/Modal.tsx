@@ -86,21 +86,21 @@ export function Modal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`modal-panel p-0 w-full ${SIZE_CLS[size] ?? "max-w-md"}`}
+        className={`modal-panel p-0 w-full flex flex-col max-h-[90vh] ${SIZE_CLS[size] ?? "max-w-md"}`}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3 ">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-3">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hi)] "
+            className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--border)] px-5 py-3">
             {footer}
           </div>
         )}
