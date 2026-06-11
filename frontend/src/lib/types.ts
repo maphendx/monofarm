@@ -331,12 +331,6 @@ export interface BambuCloudJob {
   error_message: string | null;
 }
 
-export interface BambuJobListOut {
-  items: BambuCloudJob[];
-  total: number;
-  limit: number;
-  offset: number;
-}
 
 export interface BambuRetryResult {
   ok: boolean;

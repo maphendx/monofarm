@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { usePageTitle } from "@/lib/usePageTitle";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -358,7 +359,8 @@ export default function AssemblyPage() {
     setStats(st); setSessions(se);
   }, [dateFrom, dateTo]);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
   useEffect(() => {
     if (isManager && (tab === "stats" || tab === "history")) loadStats();
   }, [isManager, tab, loadStats]);

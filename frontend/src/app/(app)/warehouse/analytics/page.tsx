@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -72,7 +73,8 @@ export default function AnalyticsPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(period); }, [load, period]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(period); }, [load, period, version]);
 
   const fmt = (v: string) => parseFloat(v).toLocaleString("uk-UA", { maximumFractionDigits: 0 });
 

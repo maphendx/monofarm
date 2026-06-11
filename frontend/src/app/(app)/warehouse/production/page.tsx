@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { Archive, GripVertical, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -579,12 +580,14 @@ export default function ProductionPage() {
   const [draggingBatch, setDraggingBatch] = useState<Batch | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
 
+  const { version } = useWarehouseStream();
+
   const load = useCallback(async () => {
     try { setBatches(await api<Batch[]>("/api/warehouse/batches")); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, version]);
 
   async function patchBatch(
     id: number,

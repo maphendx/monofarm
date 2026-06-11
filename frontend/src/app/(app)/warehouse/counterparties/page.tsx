@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -309,7 +310,8 @@ export default function CounterpartiesPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
 
   function handleSaved(cp: Counterparty) {
     setCounterparties((prev) => {

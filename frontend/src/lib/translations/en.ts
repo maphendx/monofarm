@@ -449,5 +449,4 @@ const en = {
   },
 } as const;
 
-export type TranslationKey = typeof en;
 export default en;

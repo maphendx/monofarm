@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { api } from "@/lib/api";
 import { CreateMovementModal, Movement, MovementType, TYPE_META } from "@/components/warehouse/MovementModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
@@ -91,11 +92,13 @@ export default function MovementsPage() {
     } finally { inFlight.current = false; setLoading(false); }
   }
 
-  // reset on filter change
+  const { version } = useWarehouseStream();
+
+  // reset on filter change or WS event
   useEffect(() => {
     setItems([]); setNextCursor(null); setHasMore(false); setTotal(null);
     loadFirst(filter);
-  }, [filter, loadFirst]);
+  }, [filter, loadFirst, version]);
 
   const displayed = search
     ? items.filter((m) => m.product_name.toLowerCase().includes(search.toLowerCase()))

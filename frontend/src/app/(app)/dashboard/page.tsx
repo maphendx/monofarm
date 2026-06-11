@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
@@ -396,12 +397,9 @@ export default function DashboardPage() {
     { id: "state",   label: t("dashboard.byState") },
   ];
 
-  const [printers, setPrinters] = useState<Printer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { printers, connected, loading, reload } = usePrinterStream();
   const [filter, setFilter] = useState<Filter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
-  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
@@ -419,41 +417,15 @@ export default function DashboardPage() {
   const slicerPrinterId = parsedSlicerPrinterId && !Number.isNaN(parsedSlicerPrinterId) ? parsedSlicerPrinterId : undefined;
   const slicerAskMode = searchParams.get("slicerAction") === "choose";
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const data = await api<Printer[]>("/api/printers");
-      setPrinters(data);
-      setRefreshedAt(new Date());
-      try { localStorage.setItem("printers_cache", JSON.stringify(data)); } catch {}
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-      else setError(t("errors.loadFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Show cached printers instantly on first render while fresh data loads
+  // One-time Bambu LAN discovery to populate missing IPs.
   useEffect(() => {
-    try {
-      const cached = localStorage.getItem("printers_cache");
-      if (cached) { setPrinters(JSON.parse(cached)); setLoading(false); }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    load();
-    // One-time background Bambu LAN discovery to populate missing IPs.
     api<unknown>("/api/printers/bambu-discover")
       .then((r) => {
         const devices = Array.isArray(r) ? r : (r as { devices?: unknown[] }).devices;
-        if (devices?.length) load();
+        if (devices?.length) reload();
       })
       .catch(() => {});
-    const id = setInterval(() => { if (!document.hidden) load(); }, 30_000);
-    return () => clearInterval(id);
-  }, [load]);
+  }, [reload]);
 
   useEffect(() => {
     if (!slicerFileId || Number.isNaN(slicerFileId)) return;
@@ -520,15 +492,7 @@ export default function DashboardPage() {
     return c;
   }, [printers]);
 
-  function upsertPrinter(p: Printer) {
-    setPrinters((prev) => {
-      const idx = prev.findIndex((x) => x.id === p.id);
-      if (idx === -1) return [...prev, p];
-      const copy = [...prev];
-      copy[idx] = p;
-      return copy;
-    });
-  }
+  function upsertPrinter(_p: Printer) { /* WS pushes full state within 3 s */ }
 
   const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
   const isGrouped = groupBy !== "none";
@@ -590,11 +554,12 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-          {refreshedAt && (
-            <span className="text-xs">{refreshedAt.toLocaleTimeString("uk-UA")}</span>
-          )}
+          <span
+            className={`inline-block size-2 rounded-full transition-colors ${connected ? "bg-[var(--state-ok)]" : "animate-pulse bg-[var(--text-faint)]"}`}
+            title={connected ? "Live" : "Reconnecting…"}
+          />
           <button
-            onClick={load}
+            onClick={reload}
             className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs transition hover:bg-[var(--surface-hi)]  "
           >
             ↻ {t("common.update")}
@@ -643,12 +608,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {error && (
-        <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">
-          {error}
-        </div>
-      )}
 
       {slicerError && (
         <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">
@@ -712,14 +671,14 @@ export default function DashboardPage() {
       <PrinterGroupsModal
         open={groupsOpen}
         onClose={() => setGroupsOpen(false)}
-        onChange={load}
+        onChange={reload}
       />
 
       <PrinterDetailModal
         printer={selected}
         onClose={() => setSelected(null)}
-        onUpdated={(p) => { upsertPrinter(p); load(); }}
-        onDeleted={(id) => setPrinters((prev) => prev.filter((p) => p.id !== id))}
+        onUpdated={() => { /* WS refreshes within 3 s */ }}
+        onDeleted={() => reload()}
       />
 
       {!loading && printers.length > 0 && <div className="hidden dark:block"><DashboardPet printers={printers} /></div>}

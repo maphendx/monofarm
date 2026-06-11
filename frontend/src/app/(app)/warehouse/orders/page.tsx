@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -903,12 +904,14 @@ export default function OrdersPage() {
   const colVis = useColumnVisibility("orders", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
+  const { version } = useWarehouseStream();
+
   const load = useCallback(async () => {
     try { setOrders(await api<Order[]>("/api/warehouse/orders")); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, version]);
 
   function updateOrder(updated: Order) {
     setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o));

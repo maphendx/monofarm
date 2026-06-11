@@ -12,7 +12,8 @@ import unicodedata
 import uuid
 
 import openpyxl
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile, status
+from app.api.ws import broadcast_warehouse
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -1397,6 +1398,7 @@ def list_unassigned(
 def putaway_to_cell(
     cell_id: int,
     payload: PutawayRequest,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -1419,6 +1421,7 @@ def putaway_to_cell(
         )
     _putaway(cell, payload.product_id, payload.quantity, org.id, db, created_by_id=user.id)
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "stock")
 
     cs = db.query(CellStock).filter_by(cell_id=cell_id, product_id=payload.product_id).first()
     return CellStockOut(
@@ -1431,6 +1434,7 @@ def putaway_to_cell(
 @_full.post("/cells/relocate", status_code=status.HTTP_204_NO_CONTENT)
 def relocate_between_cells(
     payload: RelocateRequest,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -1463,11 +1467,13 @@ def relocate_between_cells(
                    kind=CellMoveKind.relocate, cell_from_id=src.id, cell_to_id=dst.id,
                    created_by_id=user.id)
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "stock")
 
 
 @_full.post("/scan-action", response_model=ScanActionResult)
 def scan_action(
     payload: ScanActionRequest,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -1559,6 +1565,7 @@ def scan_action(
                            kind=CellMoveKind.relocate, cell_from_id=cell.id, cell_to_id=dst.id,
                            created_by_id=user.id)
             db.commit()
+            bg.add_task(broadcast_warehouse, org.id, "stock")
             return ScanActionResult(message=f"Переміщено {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
 
         # Cross-warehouse → real TRANSFER ledger movement (decrements src wh, adds dst wh).
@@ -1578,37 +1585,44 @@ def scan_action(
         _putaway(dst, payload.product_id, min(payload.quantity, avail), org.id, db,
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Переміщено між складами {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
 
     # ── Списання (WRITE_OFF) ───────────────────────────────────────────────────
     if payload.action == ScanAction.write_off:
         _outbound(MovementType.WRITE_OFF, f"Списання (скан) з {cell.code}")
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Списано {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Відвантаження (SALE_OUT); unit_price optional → revenue ────────────────
     if payload.action == ScanAction.sale_out:
         _outbound(MovementType.SALE_OUT, f"Відвантаження (скан) з {cell.code}",
                   unit_price=payload.unit_price, replenish=True)
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Відвантажено {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Брак (DEFECT) ──────────────────────────────────────────────────────────
     if payload.action == ScanAction.defect:
         _outbound(MovementType.DEFECT, f"Брак (скан) з {cell.code}", replenish=True)
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Брак {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Видача у виробництво (PRODUCTION_OUT) ──────────────────────────────────
     if payload.action == ScanAction.production_out:
         _outbound(MovementType.PRODUCTION_OUT, f"Видача у виробництво (скан) з {cell.code}", replenish=True)
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Видано у виробництво {payload.quantity} {product.unit} з {cell.code}")
 
     # ── Прийом (PURCHASE_IN); unit_cost optional → AVCO ────────────────────────
     if payload.action == ScanAction.receive:
         _inbound(MovementType.PURCHASE_IN, f"Прийом (скан) у {cell.code}", unit_cost=payload.unit_cost)
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Прийнято {payload.quantity} {product.unit} у {cell.code}")
 
     # ── Оприбуткування з виробництва (PRODUCTION_IN) ───────────────────────────
     if payload.action == ScanAction.production_in:
         _inbound(MovementType.PRODUCTION_IN, f"Оприбуткування з виробництва (скан) у {cell.code}")
+        bg.add_task(broadcast_warehouse, org.id, "stock")
         return ScanActionResult(message=f"Оприбутковано {payload.quantity} {product.unit} у {cell.code}")
 
     # ── Інвентаризація: set cell to counted qty, correct warehouse total ───────
@@ -1646,6 +1660,7 @@ def scan_action(
                         movement_id=m.id, created_by_id=user.id)
         _apply_movement(m, db)   # total -= short
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "stock")
     return ScanActionResult(message=f"Інвентаризація {cell.code}: {current} → {payload.quantity} {product.unit}")
 
 
@@ -3528,6 +3543,7 @@ def list_movements(
 @_full.post("/movements", response_model=MovementOut, status_code=status.HTTP_201_CREATED)
 def create_movement(
     payload: MovementCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -3623,6 +3639,8 @@ def create_movement(
 
     db.commit()
     db.refresh(m)
+    bg.add_task(broadcast_warehouse, org.id, "movements")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
     return MovementOut(
         id=m.id, type=m.type,
         direction=_MOVEMENT_DIRECTION.get(m.type, "in"),
@@ -3805,6 +3823,7 @@ def list_batches(
 @_full.post("/batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
 def create_batch(
     payload: BatchCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -3828,6 +3847,7 @@ def create_batch(
             order.status = OrderStatus.in_production
     db.commit()
     db.refresh(b)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _batch_to_out(b, db)
 
 
@@ -3847,6 +3867,7 @@ def get_batch(
 def update_batch(
     batch_id: int,
     payload:  BatchUpdate,
+    bg:  BackgroundTasks,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -3858,12 +3879,14 @@ def update_batch(
         setattr(b, k, v)
     db.commit()
     db.refresh(b)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _batch_to_out(b, db)
 
 
 @_full.delete("/batches/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_batch(
     batch_id: int,
+    bg:  BackgroundTasks,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _:   User         = Depends(require_roles(UserRole.admin)),
@@ -3878,11 +3901,13 @@ def delete_batch(
         )
     db.delete(b)
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "production")
 
 
 @_full.patch("/batches/{batch_id}/progress", response_model=BatchOut)
 def update_progress(
     batch_id:   int,
+    bg:   BackgroundTasks,
     printed_qty: int = Query(..., ge=0),
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
@@ -3898,6 +3923,7 @@ def update_progress(
     b.printed_qty = printed_qty
     db.commit()
     db.refresh(b)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _batch_to_out(b, db)
 
 
@@ -3905,6 +3931,7 @@ def update_progress(
 def close_batch(
     batch_id: int,
     payload:  BatchClose,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4025,6 +4052,9 @@ def close_batch(
 
     db.commit()
     db.refresh(b)
+    bg.add_task(broadcast_warehouse, org.id, "production")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
+    bg.add_task(broadcast_warehouse, org.id, "movements")
     return _batch_to_out(b, db)
 
 
@@ -4079,6 +4109,7 @@ def assign_batch(
 @_full.post("/batches/{batch_id}/sessions", response_model=AssemblySessionOut, status_code=201)
 def start_session(
     batch_id: int,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4108,6 +4139,7 @@ def start_session(
     db.add(s)
     db.commit()
     db.refresh(s)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _session_to_out(s, db)
 
 
@@ -4116,6 +4148,7 @@ def update_session(
     batch_id:   int,
     session_id: int,
     payload:    AssemblySessionUpdate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4139,6 +4172,7 @@ def update_session(
         s.notes = payload.notes
     db.commit()
     db.refresh(s)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _session_to_out(s, db)
 
 
@@ -4147,6 +4181,7 @@ def close_session(
     batch_id:   int,
     session_id: int,
     payload:    AssemblySessionUpdate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4177,6 +4212,7 @@ def close_session(
         b.printed_qty += s.units_good + s.units_defective
     db.commit()
     db.refresh(s)
+    bg.add_task(broadcast_warehouse, org.id, "production")
     return _session_to_out(s, db)
 
 
@@ -4323,6 +4359,7 @@ def list_orders(
 @_full.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 def create_order(
     payload: OrderCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4363,6 +4400,7 @@ def create_order(
 
     db.commit()
     db.refresh(o)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
     return _order_to_out(o, db)
 
 
@@ -4382,6 +4420,7 @@ def get_order(
 def update_order(
     order_id: int,
     payload:  OrderUpdate,
+    bg:  BackgroundTasks,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4395,6 +4434,7 @@ def update_order(
         setattr(o, k, v)
     db.commit()
     db.refresh(o)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
     return _order_to_out(o, db)
 
 
@@ -4402,6 +4442,7 @@ def update_order(
 def reserve_order(
     order_id: int,
     payload:  ReserveRequest,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4469,12 +4510,15 @@ def reserve_order(
     o.status = OrderStatus.confirmed
     db.commit()
     db.refresh(o)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
     return _order_to_out(o, db)
 
 
 @_full.post("/orders/{order_id}/ship", response_model=OrderOut)
 def ship_order(
     order_id: int,
+    bg:   BackgroundTasks,
     payload: ShipRequest | None = None,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
@@ -4573,12 +4617,16 @@ def ship_order(
     o.status = OrderStatus.shipped
     db.commit()
     db.refresh(o)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
+    bg.add_task(broadcast_warehouse, org.id, "movements")
     return _order_to_out(o, db)
 
 
 @_full.post("/orders/{order_id}/cancel", response_model=OrderOut)
 def cancel_order(
     order_id: int,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4613,6 +4661,8 @@ def cancel_order(
     o.status = OrderStatus.cancelled
     db.commit()
     db.refresh(o)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
     return _order_to_out(o, db)
 
 
@@ -4807,6 +4857,7 @@ def list_cashflow(
 @_full.post("/cashflow", response_model=CashTxOut, status_code=status.HTTP_201_CREATED)
 def create_cash_tx(
     payload: CashTxCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4826,12 +4877,14 @@ def create_cash_tx(
     db.add(tx)
     db.commit()
     db.refresh(tx)
+    bg.add_task(broadcast_warehouse, org.id, "cashflow")
     return _tx_to_out(tx, db)
 
 
 @_full.delete("/cashflow/{tx_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cash_tx(
     tx_id: int,
+    bg:  BackgroundTasks,
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _:   User         = Depends(require_roles(UserRole.admin)),
@@ -4841,6 +4894,7 @@ def delete_cash_tx(
         raise HTTPException(status_code=404, detail="Transaction not found")
     db.delete(tx)
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "cashflow")
 
 
 @_full.get("/cashflow/summary", response_model=CashFlowSummary)

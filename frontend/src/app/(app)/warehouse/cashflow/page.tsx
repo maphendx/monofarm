@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
@@ -233,7 +234,8 @@ export default function CashFlowPage() {
     }
   }, [dateFrom, dateTo, typeFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
 
   async function deleteTx(id: number) {
     if (!await confirm({ message: "Видалити транзакцію?", variant: "danger" })) return;

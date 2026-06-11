@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePrinterStream } from "@/hooks/usePrinterStream";
 
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
@@ -2174,32 +2175,10 @@ export default function PrinterPage() {
   const router = useRouter();
   const printerId = Number(params.id);
 
-  const [printer, setPrinter] = useState<Printer | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { printers, loading, reload } = usePrinterStream();
+  const printer = printers.find((p) => p.id === printerId) ?? null;
+  const error = !loading && !printer ? "Принтер не знайдено" : null;
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await api<Printer>(`/api/printers/${printerId}`);
-      setPrinter(data);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Помилка завантаження");
-    } finally {
-      setLoading(false);
-    }
-  }, [printerId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    intervalRef.current = setInterval(() => { if (!document.hidden) void load(); }, 10_000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [load]);
 
   if (loading) {
     return (
@@ -2260,7 +2239,7 @@ export default function PrinterPage() {
                 {printer.state === "printing" && formatEta(printer.eta_minutes) ? ` · ще ${formatEta(printer.eta_minutes)}` : ""}
               </span>
             </div>
-            <button onClick={() => void load()}
+            <button onClick={() => void reload()}
               className="flex size-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]"
               title="Оновити">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -2282,12 +2261,12 @@ export default function PrinterPage() {
 
         {/* Col 1 — job, filaments, movement */}
         <div className="min-w-0 space-y-4">
-          <JobHeroCard printer={printer} onUpdated={load} />
+          <JobHeroCard printer={printer} onUpdated={reload} />
           {printer.current_filament_meta && <FilamentCard printer={printer} />}
           {printer.kind === "snapmaker_u1" ? (
-            <U1SlotsCard printer={printer} onUpdated={load} />
+            <U1SlotsCard printer={printer} onUpdated={reload} />
           ) : (
-            <LoadedFilamentsCard printer={printer} onUpdated={load} />
+            <LoadedFilamentsCard printer={printer} onUpdated={reload} />
           )}
           <JogCard printer={printer} />
         </div>
@@ -2329,7 +2308,7 @@ export default function PrinterPage() {
             <div className="p-6">
               <SettingsCard
                 printer={printer}
-                onUpdated={() => { load(); setSettingsOpen(false); }}
+                onUpdated={() => { reload(); setSettingsOpen(false); }}
                 onDeleted={() => router.push("/printers")}
               />
             </div>

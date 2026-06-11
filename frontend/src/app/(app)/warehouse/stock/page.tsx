@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
 import Link from "next/link";
@@ -632,13 +633,14 @@ export default function StockPage() {
   const [productSettings,   setProductSettings]   = useState<ProductSettings | null>(null);
 
   const colVis = useColumnVisibility("stock", COLS);
+  const { version } = useWarehouseStream();
 
   const load = useCallback(async () => {
     try { setStock(await api<StockEntry[]>("/api/warehouse/stock")); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, version]);
 
   function updateThreshold(pid: number, field: string, val: number | null) {
     setStock((prev) => prev.map((e) => e.product_id === pid ? { ...e, [field]: val } : e));

@@ -45,16 +45,6 @@ export const CONNECTION_LABELS: Record<ConnectionType, string> = {
   manual:          "Ручне відстеження",
 };
 
-export const CONNECTION_CATEGORY: Record<ConnectionType, string> = {
-  cloud:           "Хмарні принтери",
-  klipper:         "Smart Klipper принтери",
-  "klipper-custom":"Locked принтери",
-  "klipper-pad":   "Klipper Pad",
-  octoprint:       "Традиційні принтери",
-  prusalink:       "Хмарні принтери",
-  makerbase:       "Smart Klipper принтери",
-  manual:          "Без API",
-};
 
 // ── setup guides ───────────────────────────────────────────────────────────────
 

@@ -5,6 +5,7 @@ import type { CalendarEntry, PrintTask, Printer, ScheduleMode } from "@/lib/type
 import { Modal } from "@/components/ui/Modal";
 import { createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
 import { ApiError } from "@/lib/api";
+import { useConfirm } from "@/hooks/useConfirm";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -58,6 +59,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
   const [saving,  setSaving]  = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   // Pre-fill when editing
   useEffect(() => {
@@ -130,7 +132,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
 
   async function handleRemove() {
     if (!entry) return;
-    if (!confirm(`Зняти «${task?.title ?? "завдання"}» з плану (залишиться в черзі)?`)) return;
+    if (!await confirm({ message: `Зняти «${task?.title ?? "завдання"}» з плану (залишиться в черзі)?`, variant: "warn" })) return;
     setDeleting(true);
     setError(null);
     try {
@@ -146,7 +148,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
 
   async function handleDeleteTask() {
     if (!task) return;
-    if (!confirm(`Видалити задачу «${task.title ?? "завдання"}» повністю з системи (включаючи файл)?`)) return;
+    if (!await confirm({ message: `Видалити задачу «${task.title ?? "завдання"}» повністю з системи (включаючи файл)?`, variant: "danger" })) return;
     setDeleting(true);
     setError(null);
     try {
@@ -164,6 +166,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
   const title = isEdit ? "Змінити розклад" : "Запланувати друк";
 
   return (
+    <>
     <Modal
       open={isOpen}
       onClose={onClose}
@@ -308,5 +311,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
         )}
       </div>
     </Modal>
+    {dialog}
+    </>
   );
 }

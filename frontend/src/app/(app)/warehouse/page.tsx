@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -106,7 +107,8 @@ export default function WarehouseDashboard() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
 
   const activeBatches = batches.filter((b) => b.status === "active");
   const totalUnits    = parseFloat(summary?.total_units ?? "0");

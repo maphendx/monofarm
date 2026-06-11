@@ -67,7 +67,6 @@ export function useColumnVisibility(storageKey: string, cols: ColDef[]) {
   return { isVisible, hidden, setVisibility, setOrder, reset, cols, orderedCols, visibleCount };
 }
 
-export type ColVisibility = ReturnType<typeof useColumnVisibility>;
 
 // ── Modal ──────────────────────────────────────────────────────────────────────
 

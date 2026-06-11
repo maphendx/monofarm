@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -339,7 +340,8 @@ export default function ProductDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
 
   // Lazy load stock only when tab is opened
   const stockLoaded = useRef(false);

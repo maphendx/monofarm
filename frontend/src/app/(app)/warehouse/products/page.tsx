@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { useConfirm } from "@/hooks/useConfirm";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
 import { AuthImage } from "@/components/ui/AuthImage";
@@ -1347,24 +1348,10 @@ export default function ProductsPage() {
     } catch { /* silent */ }
   }, []);
 
+  const { version } = useWarehouseStream();
   useEffect(() => { load(showArchive); }, [load, showArchive]);
-
-  // Refresh stock when tab becomes visible again (user switches back from another page)
-  useEffect(() => {
-    function onVisible() {
-      if (document.visibilityState === "visible") refreshStock();
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [refreshStock]);
-
-  // Poll stock every 30s while tab is active
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") refreshStock();
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [refreshStock]);
+  // Refresh stock on any warehouse mutation event
+  useEffect(() => { refreshStock(); }, [refreshStock, version]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<number, number>();

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -1019,12 +1020,13 @@ export default function WarehouseDetailPage() {
     }
   }, [whId, loadZones, loadUnassigned]);
 
-  useEffect(() => { load(); }, [load]);
+  const { version } = useWarehouseStream();
+  useEffect(() => { load(); }, [load, version]);
 
   // After any cell change, refresh cell quantities and the unassigned pool.
   const refresh = useCallback(() => { loadZones(); loadUnassigned(); }, [loadZones, loadUnassigned]);
 
-  // Listen for scanner updates from other tabs.
+  // Listen for scanner updates from other tabs (BroadcastChannel) and cross-user WS (version).
   useEffect(() => {
     const ch = new BroadcastChannel("wh_cell_updated");
     ch.onmessage = () => refresh();
