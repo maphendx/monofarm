@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEntry, CalendarLane } from "@/lib/types";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
@@ -180,6 +180,45 @@ export function ScheduleCalendar({
   // Refs
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // Current time
+  const [nowMins, setNowMins] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date();
+      setNowMins(d.getHours() * 60 + d.getMinutes());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-follow toggle
+  const [autoFollow, setAutoFollow] = useState(false);
+
+  // Auto-scroll effect
+  useEffect(() => {
+    if (!autoFollow) return;
+    const el = gridRef.current;
+    if (!el) return;
+
+    const todayIdx = weekDates.findIndex(d => isoDateStr(d) === todayStr);
+    if (todayIdx === -1) return; // not showing current week
+
+    let colW: number;
+    if (zoom === 1) {
+      const headerEl = el.querySelector<HTMLElement>(`[data-day-col="${todayIdx}"]`);
+      if (!headerEl) return;
+      const targetX = headerEl.offsetLeft + (headerEl.offsetWidth * (nowMins / 1440));
+      el.scrollTo({ left: targetX - el.clientWidth / 2, behavior: "smooth" });
+      return;
+    } else {
+      colW = ZOOM_COL_PX[zoom];
+    }
+    const targetX = 152 + todayIdx * colW + colW * (nowMins / 1440);
+    el.scrollTo({ left: targetX - el.clientWidth / 2, behavior: "smooth" });
+  }, [autoFollow, nowMins, zoom, weekDates, todayStr]);
+
   // DnD state
   const [dropCell, setDropCell]       = useState<string | null>(null);  // `${printerId}-${di}`
   const [dropRelX,  setDropRelX]      = useState<number>(0);
@@ -323,6 +362,19 @@ export function ScheduleCalendar({
         <div className="flex items-center gap-4">
           {/* Legend */}
           <div className="hidden items-center gap-3 text-[10px] text-[var(--text-faint)] sm:flex">
+            <label className="flex items-center gap-1.5 cursor-pointer hover:text-[var(--text)] transition-colors">
+              <input
+                type="checkbox"
+                className="hidden"
+                checked={autoFollow}
+                onChange={e => setAutoFollow(e.target.checked)}
+              />
+              <div className={`flex h-4 w-7 items-center rounded-full p-0.5 transition-colors ${autoFollow ? 'bg-[var(--accent)]' : 'bg-[var(--surface-hi)] border border-[var(--border-strong)]'}`}>
+                <div className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${autoFollow ? 'translate-x-3' : 'translate-x-0'}`} />
+              </div>
+              <span className={autoFollow ? "text-[var(--text)]" : ""}>слідкувати</span>
+            </label>
+            <span className="h-3 w-px bg-[var(--border-strong)]" />
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-4 rounded-sm border-t-2 border-t-[var(--accent)] bg-[var(--accent-soft)]" />
               заплановано
@@ -408,6 +460,16 @@ export function ScheduleCalendar({
                     )}
                   </div>
                   <HourRuler step={step} />
+                  
+                  {/* Current time header indicator */}
+                  {isToday && (
+                    <div
+                      className="pointer-events-none absolute bottom-0 top-1.5 z-30 w-[1.5px] bg-[var(--state-error)]"
+                      style={{ left: `${(nowMins / 1440) * 100}%` }}
+                    >
+                      <div className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-[var(--state-error)] shadow-sm" />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -514,6 +576,14 @@ export function ScheduleCalendar({
 
                         {/* Drop position indicator */}
                         {isDropTarget && <DropOverlay relX={dropRelX} />}
+
+                        {/* Current time line */}
+                        {isToday && (
+                          <div
+                            className="pointer-events-none absolute bottom-0 top-0 z-20 w-[1.5px] bg-[var(--state-error)] opacity-70"
+                            style={{ left: `${(nowMins / 1440) * 100}%` }}
+                          />
+                        )}
                       </div>
                     );
                   })}
