@@ -366,7 +366,7 @@ export function ScheduleCalendar({
       )}
 
       {/* ── Grid ── */}
-      <div ref={gridRef} className="cal-scroll-grid flex-1 overflow-auto">
+      <div ref={gridRef} className="cal-scroll-grid flex-1">
         {loading ? (
           <div className="p-4">
             <CalendarSkeleton rows={Math.max(3, lanes.length)} zoom={zoom} />
