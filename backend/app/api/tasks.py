@@ -37,14 +37,17 @@ def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:
         u = db.get(User, task.created_by_id)
         created_by_name = u.name if u else None
 
+    from app.services import storage as storage_svc
+
     # gcode_file_id / has_thumbnail
     gcode_file_id = task.gcode_file_id
     has_thumbnail = False
     if gcode_file_id:
         gf = db.query(GcodeFile).filter(GcodeFile.id == gcode_file_id, GcodeFile.organization_id == org_id).first()
         if gf:
-            thumb_path = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes" / (gf.stored_name + ".thumb.png")
-            has_thumbnail = thumb_path.exists()
+            has_thumbnail = bool((gf.filament_meta or {}).get("has_thumbnail"))
+            if not has_thumbnail:
+                has_thumbnail = storage_svc.exists(gf.stored_name + ".thumb.png", org_id)
     elif task.file_name:
         # fallback: find GcodeFile by original_name
         gf = db.query(GcodeFile).filter(
@@ -53,8 +56,9 @@ def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:
         ).order_by(GcodeFile.id.desc()).first()
         if gf:
             gcode_file_id = gf.id
-            thumb_path = Path(__file__).resolve().parent.parent.parent / "data" / "gcodes" / (gf.stored_name + ".thumb.png")
-            has_thumbnail = thumb_path.exists()
+            has_thumbnail = bool((gf.filament_meta or {}).get("has_thumbnail"))
+            if not has_thumbnail:
+                has_thumbnail = storage_svc.exists(gf.stored_name + ".thumb.png", org_id)
 
     # printed_count — tasks with the same file_name + done in this org
     printed_count = 0
