@@ -1164,9 +1164,9 @@ def cloud_upload_and_print(
         "vibrationCali": True,
         "layerInspect": False,
         "timelapse": False,
+        # Bambu Cloud rejects /task without the key: {"code":-1,"error":"field \"cover\" is not set"}
+        "cover": cover_url or "",
     }
-    if cover_url:
-        task_body["cover"] = cover_url
     if ams_mapping is not None:
         task_body["amsMapping"] = ams_mapping
 
