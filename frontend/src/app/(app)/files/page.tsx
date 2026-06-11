@@ -88,7 +88,7 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
 }
 
 // ── Compat helpers ─────────────────────────────────────────────────────────────
-function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup): "ok" | "warn" | "error" | "unknown" {
+function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup, groupPrinters: Printer[]): "ok" | "warn" | "error" | "unknown" {
   const hasSpecs = g.nozzle_diameter || g.build_x || g.supported_materials?.length;
   if (!hasSpecs) return "unknown";
   const TOL = 2;
@@ -99,6 +99,11 @@ function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup): "ok" | "warn"
   if (g.supported_materials?.length && meta?.types?.length) {
     const sup = g.supported_materials.map(m => m.toLowerCase());
     if (meta.types.some(t => t && !sup.includes(t.toLowerCase()))) return "warn";
+  }
+  // If every printer in the group is a model mismatch, the group is incompatible.
+  if (meta && groupPrinters.length > 0) {
+    const models = groupPrinters.map(p => modelCheck(meta, p));
+    if (models.every(r => r === "mismatch")) return "warn";
   }
   return "ok";
 }
@@ -113,7 +118,8 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
     return (
       <div className="flex flex-wrap items-center gap-1">
         {groupsWithSpecs.map(g => {
-          const compat = groupCompat(file.filament_meta, g);
+          const gPrinters = printers.filter(p => p.group_id === g.id);
+          const compat = groupCompat(file.filament_meta, g, gPrinters);
           const dot = g.color ? { background: g.color } : undefined;
           let cls: string;
           let indicator: string;
