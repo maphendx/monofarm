@@ -15,17 +15,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("printer_groups", sa.Column("color", sa.String(16), nullable=True))
-    op.add_column("printer_groups", sa.Column("nozzle_diameter", sa.Float(), nullable=True))
-    op.add_column("printer_groups", sa.Column("build_x", sa.Integer(), nullable=True))
-    op.add_column("printer_groups", sa.Column("build_y", sa.Integer(), nullable=True))
-    op.add_column("printer_groups", sa.Column("build_z", sa.Integer(), nullable=True))
-    op.add_column("printer_groups", sa.Column(
-        "supported_materials",
-        postgresql.JSONB(),
-        nullable=True,
-        server_default="[]",
-    ))
+    # Use IF NOT EXISTS so the migration is safe to re-run after partial failures.
+    conn = op.get_bind()
+    conn.execute(sa.text("""
+        ALTER TABLE printer_groups
+            ADD COLUMN IF NOT EXISTS color VARCHAR(16),
+            ADD COLUMN IF NOT EXISTS nozzle_diameter FLOAT,
+            ADD COLUMN IF NOT EXISTS build_x INTEGER,
+            ADD COLUMN IF NOT EXISTS build_y INTEGER,
+            ADD COLUMN IF NOT EXISTS build_z INTEGER,
+            ADD COLUMN IF NOT EXISTS supported_materials JSONB DEFAULT '[]'
+    """))
 
 
 def downgrade() -> None:
