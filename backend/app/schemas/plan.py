@@ -85,4 +85,5 @@ class CalendarLaneOut(BaseModel):
     printer_kind: str  # "bambu" | "snapmaker_u1" | "other" — for UI dispatch hints
     group_id: int | None = None
     group_name: str | None = None
+    group_color: str | None = None
     days: list[CalendarDayOut]

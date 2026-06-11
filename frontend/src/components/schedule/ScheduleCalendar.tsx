@@ -189,12 +189,12 @@ export function ScheduleCalendar({
 
   // Group lanes by group_id, preserving server sort order
   const grouped = useMemo(() => {
-    const groups: { groupId: number | null; groupName: string | null; lanes: CalendarLane[] }[] = [];
+    const groups: { groupId: number | null; groupName: string | null; groupColor: string | null; lanes: CalendarLane[] }[] = [];
     const seen = new Map<number | null, typeof groups[0]>();
     for (const lane of lanes) {
       const key = lane.group_id ?? null;
       if (!seen.has(key)) {
-        const g = { groupId: key, groupName: lane.group_name ?? null, lanes: [] as CalendarLane[] };
+        const g = { groupId: key, groupName: lane.group_name ?? null, groupColor: lane.group_color ?? null, lanes: [] as CalendarLane[] };
         groups.push(g);
         seen.set(key, g);
       }
@@ -345,7 +345,7 @@ export function ScheduleCalendar({
       )}
 
       {/* ── Grid ── */}
-      <div className="cal-scroll flex-1 overflow-auto">
+      <div className="cal-scroll-grid flex-1 overflow-auto">
         {loading ? (
           <div className="p-4">
             <CalendarSkeleton rows={Math.max(3, lanes.length)} zoom={zoom} />
@@ -396,18 +396,27 @@ export function ScheduleCalendar({
                 Принтерів не знайдено. Додайте принтери в Налаштуваннях.
               </div>
             ) : (
-              grouped.map(({ groupId, groupName, lanes: groupLanes }) => (
+              grouped.map(({ groupId, groupName, groupColor, lanes: groupLanes }) => (
                 <Fragment key={groupId ?? "__ungrouped"}>
                   {/* Group header row */}
                   {groupName && (
                     <div
-                      className="sticky left-0 z-10 flex items-center gap-2 border-b border-t border-[var(--border)] bg-[var(--surface-hi)] px-3 py-1"
-                      style={{ gridColumn: "1 / -1" }}
+                      className="sticky left-0 z-10 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-hi)] px-3 py-1.5"
+                      style={{
+                        gridColumn: "1 / -1",
+                        borderLeft: groupColor ? `3px solid ${groupColor}` : undefined,
+                      }}
                     >
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                      {groupColor && (
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ background: groupColor }}
+                        />
+                      )}
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
                         {groupName}
                       </span>
-                      <span className="text-[9px] text-[var(--text-faint)]">
+                      <span className="text-[10px] text-[var(--text-faint)]">
                         {groupLanes.length} принт.
                       </span>
                     </div>
@@ -417,7 +426,10 @@ export function ScheduleCalendar({
                   {/* Label cell */}
                   <div
                     className="sticky left-0 z-10 flex flex-col justify-center border-b border-r border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
-                    style={{ minHeight: rowH }}
+                    style={{
+                      minHeight: rowH,
+                      borderLeft: groupColor ? `3px solid ${groupColor}` : undefined,
+                    }}
                   >
                     <span className="text-xs font-medium text-[var(--text)]">{lane.printer_name}</span>
                     <span className="mt-0.5 text-[10px] text-[var(--text-faint)] capitalize">

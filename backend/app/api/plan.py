@@ -121,10 +121,11 @@ def get_calendar(
         )
 
     # Load all printers sorted by group order then printer order
-    group_names: dict[int, str] = {
-        g.id: g.name
-        for g in db.query(PrinterGroup).filter_by(organization_id=org.id).all()
-    }
+    group_names: dict[int, str] = {}
+    group_colors: dict[int, str | None] = {}
+    for g in db.query(PrinterGroup).filter_by(organization_id=org.id).all():
+        group_names[g.id] = g.name
+        group_colors[g.id] = g.color
     printers = (
         db.query(Printer)
         .filter(Printer.organization_id == org.id)
@@ -168,6 +169,7 @@ def get_calendar(
                 printer_kind=printer.kind.value,
                 group_id=printer.group_id,
                 group_name=group_names.get(printer.group_id) if printer.group_id else None,
+                group_color=group_colors.get(printer.group_id) if printer.group_id else None,
                 days=days,
             )
         )

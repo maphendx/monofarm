@@ -270,6 +270,7 @@ export interface CalendarLane {
   printer_kind: string;          // "bambu" | "snapmaker_u1" | "other"
   group_id: number | null;
   group_name: string | null;
+  group_color: string | null;
   days: CalendarDay[];
 }
 

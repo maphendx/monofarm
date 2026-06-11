@@ -102,7 +102,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+          <div className="cal-scroll flex-1 min-h-0 overflow-y-auto px-6 py-6">
             {children}
           </div>
         </main>
