@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
@@ -408,6 +408,8 @@ export default function DashboardPage() {
   const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
   const [slicerFile, setSlicerFile] = useState<GcodeFile | null>(null);
   const [slicerError, setSlicerError] = useState<string | null>(null);
+  const dismissedSlicerFileIdRef = useRef<number | null>(null);
+  const slicerRequestSeqRef = useRef(0);
 
   const slicerFileParam = searchParams.get("slicerFile");
   const slicerPrinterParam = searchParams.get("printer");
@@ -455,16 +457,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!slicerFileId || Number.isNaN(slicerFileId)) return;
+    if (dismissedSlicerFileIdRef.current === slicerFileId) return;
     let cancelled = false;
+    const requestSeq = ++slicerRequestSeqRef.current;
     api<GcodeFile>(`/api/files/${slicerFileId}`)
       .then((file) => {
-        if (!cancelled) {
+        if (
+          !cancelled
+          && slicerRequestSeqRef.current === requestSeq
+          && dismissedSlicerFileIdRef.current !== slicerFileId
+        ) {
           setSlicerError(null);
           setSlicerFile(file);
         }
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (
+          !cancelled
+          && slicerRequestSeqRef.current === requestSeq
+          && dismissedSlicerFileIdRef.current !== slicerFileId
+        ) {
           setSlicerError(err instanceof ApiError ? err.message : "Не вдалося відкрити файл з OrcaSlicer");
         }
       });
@@ -729,8 +741,11 @@ export default function DashboardPage() {
           askMode={slicerAskMode}
           deleteOnCancel={slicerAskMode}
           onClose={() => {
+            if (slicerFileId) dismissedSlicerFileIdRef.current = slicerFileId;
+            slicerRequestSeqRef.current += 1;
             setSlicerFile(null);
-            router.replace("/dashboard");
+            setSlicerError(null);
+            router.replace("/dashboard", { scroll: false });
           }}
         />
       )}

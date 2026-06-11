@@ -195,6 +195,8 @@ export function SendModal({
   const [choosing, setChoosing] = useState(askMode);
   const keepFileRef = useRef(!deleteOnCancel);
   const cleanupStartedRef = useRef(false);
+  const closeModalRef = useRef<(keep?: boolean) => void>(() => {});
+  const resultOkRef = useRef(false);
 
   // print-now state
   const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
@@ -246,6 +248,19 @@ export function SendModal({
     onClose();
     void cleanupPendingFile();
   }
+
+  useEffect(() => {
+    closeModalRef.current = closeModal;
+    resultOkRef.current = Boolean(result?.ok);
+  });
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeModalRef.current(resultOkRef.current);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     keepFileRef.current = !deleteOnCancel;
@@ -617,6 +632,12 @@ export function SendModal({
                 <Link href={`/printers/${queuedJob.printer_id}`} onClick={() => closeModal(true)}
                   className="mt-1 block text-sm font-medium underline hover:no-underline">
                   Переглянути завдання →
+                </Link>
+              )}
+              {result.ok && mode === "queue" && (
+                <Link href="/queue" onClick={() => closeModal(true)}
+                  className="mt-1 block text-sm font-medium underline hover:no-underline">
+                  Перейти до черги →
                 </Link>
               )}
             </div>
