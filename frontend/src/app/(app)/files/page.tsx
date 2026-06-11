@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, api, getToken } from "@/lib/api";
-import { SendModal, checkSlots, compatBadge, fitCheck, nozzleCheck } from "@/components/files/SendModal";
+import { SendModal, checkSlots, compatBadge, fitCheck, modelCheck, nozzleCheck } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer, PrinterGroup } from "@/lib/types";
@@ -155,6 +155,7 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
       {visible.map(p => {
         const fit = fitCheck(file.filament_meta, p);
         const nozzle = nozzleCheck(file.filament_meta, p);
+        const model = modelCheck(file.filament_meta, p);
         const slots = checkSlots(file.filament_meta, p);
         const hasMissing = slots.some(s => s.match === "missing");
         const hasMismatch = slots.some(s => s.match === "type_mismatch");
@@ -163,6 +164,12 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
         if (fit === "oversize") {
           cls = "bg-[rgba(239,68,68,.10)] text-[var(--state-error)] border border-[rgba(239,68,68,.2)]";
           tip = `${p.name}: не влазить`;
+        } else if (model === "mismatch") {
+          cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
+          tip = `${p.name}: нарізано для іншої моделі`;
+        } else if (model === "ok") {
+          cls = "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
+          tip = `${p.name}: модель збігається`;
         } else if (nozzle === "mismatch" || hasMissing) {
           cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
           tip = `${p.name}: часткова сумісність`;
@@ -413,6 +420,9 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
           {file.filament_meta.nozzle_diameter ? ` · ∅${file.filament_meta.nozzle_diameter}` : ""}
           {(file.filament_meta.print_size_x || file.filament_meta.print_size_y || file.filament_meta.print_size_z) ?
             ` · ${[file.filament_meta.print_size_x, file.filament_meta.print_size_y, file.filament_meta.print_size_z].map(v => v != null ? v : "?").join("×")}мм` : ""}
+          {file.filament_meta.printer_model && (
+            <span className="text-[var(--accent)]"> · {file.filament_meta.printer_model.replace(/^Bambu\s*Lab\s*/i, "")}</span>
+          )}
         </p>
       )}
 
@@ -487,6 +497,7 @@ export default function FilesPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState<"uploading" | "parsing">("uploading");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
   const [defaultPrinterOverride, setDefaultPrinterOverride] = useState<number | null>(null);
@@ -559,12 +570,15 @@ export default function FilesPage() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     e.target.value = "";
-    setUploading(true); setUploadProgress(0); setUploadError(null);
+    setUploading(true); setUploadProgress(0); setUploadError(null); setUploadPhase("uploading");
     try {
       const form = new FormData();
       form.append("file", file);
       const path = currentFolderId ? `/api/files/upload?folder_id=${currentFolderId}` : "/api/files/upload";
-      const saved = await uploadWithProgress<GcodeFile>(path, form, pct => setUploadProgress(pct));
+      const saved = await uploadWithProgress<GcodeFile>(path, form, pct => {
+        setUploadProgress(pct);
+        if (pct >= 99) setUploadPhase("parsing");
+      });
       setFiles(prev => [saved, ...prev]);
       const updatedFolders = await api<GcodeFolder[]>("/api/folders");
       setFolders(updatedFolders);
@@ -734,13 +748,15 @@ export default function FilesPage() {
               className="relative flex min-w-40 items-center justify-center gap-2 overflow-hidden rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent/90 disabled:cursor-default disabled:opacity-70"
             >
               {uploading && (
-                <span className="pointer-events-none absolute inset-y-0 left-0 bg-[var(--bg-elevated)]/20 transition-[width] duration-150" style={{ width: `${uploadProgress}%` }} />
+                <span
+                  className={["pointer-events-none absolute inset-y-0 left-0 bg-[var(--bg-elevated)]/20 transition-[width] duration-300", uploadPhase === "parsing" ? "animate-pulse" : ""].join(" ")}
+                  style={{ width: uploadPhase === "parsing" ? "100%" : `${uploadProgress}%` }}
+                />
               )}
               <span className="relative flex items-center gap-2">
-                {uploading
-                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  : <span>↑</span>}
-                {uploading ? `${uploadProgress}%` : "Завантажити"}
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" style={{ display: uploading ? undefined : "none" }} />
+                {!uploading && <span>↑</span>}
+                {uploading ? (uploadPhase === "parsing" ? "Обробка…" : `${uploadProgress}%`) : "Завантажити"}
               </span>
             </button>
             <input ref={fileInputRef} type="file" accept=".gcode,.gco,.g,.3mf,.bgcode" className="hidden" onChange={handleUpload} />

@@ -60,6 +60,7 @@ class FilamentMeta(BaseModel):
     print_size_x: float | None = None
     print_size_y: float | None = None
     print_size_z: float | None = None
+    printer_model: str | None = None
 
 
 class GcodeFileOut(BaseModel):

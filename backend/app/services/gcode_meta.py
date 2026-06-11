@@ -39,6 +39,7 @@ PATTERNS = {
     "nozzle_diameter": re.compile(
         r"^;\s*nozzle_diameter\s*=\s*(.+)$", re.IGNORECASE
     ),
+    "printer_model": re.compile(r"^;\s*printer_model\s*=\s*(.+)$", re.IGNORECASE),
     # Bounding box — PrusaSlicer / Snaporca / OrcaSlicer
     "min_x": re.compile(r"^;(?:MINX|min_x)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
     "max_x": re.compile(r"^;(?:MAXX|max_x)\s*[:=]\s*([\d.]+)", re.IGNORECASE),
@@ -183,6 +184,10 @@ def _parse_text(text: str) -> dict:
             out["nozzle_diameter"] = round(float(first), 2)
         except ValueError:
             pass
+    if "printer_model" in raw:
+        val = raw["printer_model"].strip()
+        if val:
+            out["printer_model"] = val
 
     # Print dimensions — prefer explicit model size, fall back to MINX/MAXX bbox
     try:

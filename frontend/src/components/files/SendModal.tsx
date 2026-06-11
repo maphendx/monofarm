@@ -127,6 +127,23 @@ export function nozzleCheck(meta: GcodeFileMeta | null, printer: PrinterType): "
   return Math.abs(fn - pn) < 0.05 ? "ok" : "mismatch";
 }
 
+export function modelCheck(meta: GcodeFileMeta | null, printer: PrinterType): "ok" | "mismatch" | "unknown" {
+  const fm = meta?.printer_model;
+  if (!fm) return "unknown";
+  function norm(s: string) {
+    return s.toLowerCase().replace(/bambu\s*lab\s*/g, "").replace(/\s+/g, "");
+  }
+  const fn = norm(fm);
+  if (printer.kind === "bambu" && printer.bambu_model) {
+    const pn = norm(printer.bambu_model);
+    return fn.includes(pn) || pn.includes(fn) ? "ok" : "mismatch";
+  }
+  if (printer.kind === "snapmaker_u1") {
+    return fn.includes("j1") || fn.includes("u1") || fn.includes("snapmaker") ? "ok" : "mismatch";
+  }
+  return "unknown";
+}
+
 function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
   const indices = usedSlotIndices(meta);
   if (indices.length === 0) return null;
@@ -409,6 +426,9 @@ export function SendModal({
                     .map((v) => (v != null ? `${v}` : "?")).join("×")} мм
                 </span>
               )}
+              {file.filament_meta.printer_model && (
+                <span className="ml-1 text-[var(--accent)]">· {file.filament_meta.printer_model}</span>
+              )}
             </p>
           </div>
         )}
@@ -482,6 +502,7 @@ export function SendModal({
                     const compat = compatBadge(slots);
                     const fit = fitCheck(file.filament_meta, p);
                     const nozzle = nozzleCheck(file.filament_meta, p);
+                    const model = modelCheck(file.filament_meta, p);
                     return (
                       <label key={p.id} className={[
                         "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
@@ -508,6 +529,12 @@ export function SendModal({
                           )}
                           {nozzle === "mismatch" && (
                             <span className="badge badge-warn shrink-0 text-[10px]" title={`Файл: ∅${file.filament_meta?.nozzle_diameter} мм, принтер: ∅${p.nozzle_diameter} мм`}>∅ мм ≠</span>
+                          )}
+                          {model === "ok" && (
+                            <span className="badge badge-ok shrink-0 text-[10px]" title={`Нарізано для цієї моделі: ${file.filament_meta?.printer_model}`}>✓ модель</span>
+                          )}
+                          {model === "mismatch" && (
+                            <span className="badge badge-warn shrink-0 text-[10px]" title={`Файл нарізано для: ${file.filament_meta?.printer_model}`}>⚠ модель</span>
                           )}
                           <span className={[
                             "shrink-0 rounded px-1.5 py-0.5 text-xs",

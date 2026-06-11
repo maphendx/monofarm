@@ -207,6 +207,7 @@ export interface GcodeFileMeta {
   print_size_x?: number;
   print_size_y?: number;
   print_size_z?: number;
+  printer_model?: string;
 }
 
 export interface GcodeFile {
