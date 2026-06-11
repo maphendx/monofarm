@@ -425,6 +425,8 @@ def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     _delete_task_file(task)
+    # manually delete calendar entries to avoid foreign key violation
+    db.query(PlanEntry).filter(PlanEntry.task_id == task_id).delete()
     db.delete(task)
     db.commit()
 

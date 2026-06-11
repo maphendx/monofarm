@@ -12,6 +12,13 @@ from app.models.print_history import PrintHistory
 from app.models.printer_slot import PrinterSlot, SlotEvent, SlotState, SlotEventType
 from app.models.api_key import ApiKey
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
+from app.models.warehouse import (
+    ProductCategory, Warehouse, Counterparty, Product, ProductImage,
+    Specification, SpecComponent, SpecOperation, StockEntry,
+    WarehouseMovement, ProductionBatch, AssemblySession, Order, OrderItem,
+    OrderPayment, HoroshopSyncEvent, WarehouseZone, WarehouseCell,
+    CellStock, CellMovement, CashTransaction, LabelTemplate,
+)
 
 __all__ = [
     "Organization",
