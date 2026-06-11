@@ -77,37 +77,38 @@ function ProductSearch({
 
   return (
     <div ref={ref} className="relative">
-      <input
-        type="text"
-        value={selected ? selected.name : search}
-        placeholder="Назва або SKU…"
-        autoComplete="off"
-        className="input w-full pr-6"
-        onFocus={() => setOpen(true)}
-        onChange={(e) => {
-          onSelect(null, e.target.value);
-          setOpen(true);
-        }}
-      />
-      {selected && (
-        <button
-          type="button"
-          onClick={() => { onSelect(null, ""); setOpen(true); }}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text)]"
-        >×</button>
+      {selected ? (
+        <div className="flex min-h-[38px] items-start gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-hi)] px-3 py-2">
+          <span className="flex-1 text-sm font-medium leading-snug">{selected.name}</span>
+          <button
+            type="button"
+            onClick={() => { onSelect(null, ""); setOpen(true); }}
+            className="mt-0.5 shrink-0 text-base leading-none text-[var(--text-faint)] hover:text-[var(--text)]"
+          >×</button>
+        </div>
+      ) : (
+        <input
+          type="text"
+          value={search}
+          placeholder="Назва або SKU…"
+          autoComplete="off"
+          className="input w-full"
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { onSelect(null, e.target.value); setOpen(true); }}
+        />
       )}
       {open && !selected && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-52 w-full min-w-[260px] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
           {filtered.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
           ) : filtered.map((p) => (
             <button
               key={p.id}
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
+              className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
               onMouseDown={(e) => { e.preventDefault(); onSelect(p, p.name); setOpen(false); }}
             >
-              <span className="flex-1 truncate font-medium">{p.name}</span>
+              <span className="flex-1 font-medium leading-snug">{p.name}</span>
               <span className="shrink-0 font-mono text-xs text-[var(--text-faint)]">{p.sku}</span>
             </button>
           ))}
@@ -270,7 +271,7 @@ export function CreateMovementModal({
     <Modal
       open={open}
       onClose={onClose}
-      size="2xl"
+      size="3xl"
       title="Рух товару"
       footer={
         <>

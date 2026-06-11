@@ -45,10 +45,11 @@ export function useBodyScrollLock(active: boolean) {
 }
 
 const SIZE_CLS: Record<string, string> = {
-  md:  "max-w-md",
-  lg:  "max-w-lg",
-  xl:  "max-w-xl",
+  md:    "max-w-md",
+  lg:    "max-w-lg",
+  xl:    "max-w-xl",
   "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
 };
 
 export function Modal({
@@ -64,7 +65,7 @@ export function Modal({
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "md" | "lg" | "xl" | "2xl";
+  size?: "md" | "lg" | "xl" | "2xl" | "3xl";
 }) {
   useBodyScrollLock(open);
 
