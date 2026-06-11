@@ -16,7 +16,10 @@ http.server.HTTPServer(('', int(os.environ.get('PORT', 8000))), H).serve_forever
 " &
     exec python -m app.workers.main
 else
+    echo "=== checking python import ==="
+    python -c "from app.main import app; print('import OK')" || { echo "IMPORT FAILED"; exit 1; }
+    echo "=== running migrations ==="
     alembic upgrade head
-    echo "=== starting uvicorn on ${PORT:-8000} ==="
+    echo "=== migrations done, starting uvicorn on ${PORT:-8000} ==="
     exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
 fi

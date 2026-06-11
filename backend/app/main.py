@@ -56,8 +56,11 @@ log = logging.getLogger("monofarm")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    with SessionLocal() as db:
-        seed_admin(db)
+    try:
+        with SessionLocal() as db:
+            seed_admin(db)
+    except Exception:
+        log.exception("seed_admin failed — continuing startup")
 
     if settings.INLINE_WORKERS:
         import os
