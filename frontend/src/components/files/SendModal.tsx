@@ -127,13 +127,24 @@ export function nozzleCheck(meta: GcodeFileMeta | null, printer: PrinterType): "
   return Math.abs(fn - pn) < 0.05 ? "ok" : "mismatch";
 }
 
-export function modelCheck(meta: GcodeFileMeta | null, printer: PrinterType): "ok" | "mismatch" | "unknown" {
+export function modelCheck(meta: GcodeFileMeta | null, printer: PrinterType, filename?: string): "ok" | "mismatch" | "unknown" {
   const fm = meta?.printer_model;
-  if (!fm) return "unknown";
+  // .gcode.3mf / .3mf are Bambu-specific formats — use as fallback when slicer
+  // comment is absent (files uploaded before printer_model parsing was added).
+  const isBambuFormat = !fm && !!filename &&
+    (filename.toLowerCase().endsWith(".gcode.3mf") || filename.toLowerCase().endsWith(".3mf"));
+
+  if (!fm && !isBambuFormat) return "unknown";
+
+  if (isBambuFormat) {
+    if (printer.kind === "snapmaker_u1") return "mismatch";
+    return "unknown"; // bambu model unknown — could be right or wrong Bambu
+  }
+
   function norm(s: string) {
     return s.toLowerCase().replace(/bambu\s*lab\s*/g, "").replace(/\s+/g, "");
   }
-  const fn = norm(fm);
+  const fn = norm(fm!);
   if (printer.kind === "bambu" && printer.bambu_model) {
     const pn = norm(printer.bambu_model);
     return fn.includes(pn) || pn.includes(fn) ? "ok" : "mismatch";

@@ -88,7 +88,12 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
 }
 
 // ── Compat helpers ─────────────────────────────────────────────────────────────
-function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup, groupPrinters: Printer[]): "ok" | "warn" | "error" | "unknown" {
+function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup, groupPrinters: Printer[], filename?: string): "ok" | "warn" | "error" | "unknown" {
+  // If every printer in the group is a model mismatch, hide the badge entirely.
+  if (groupPrinters.length > 0) {
+    const models = groupPrinters.map(p => modelCheck(meta, p, filename));
+    if (models.every(r => r === "mismatch")) return "unknown";
+  }
   const hasSpecs = g.nozzle_diameter || g.build_x || g.supported_materials?.length;
   if (!hasSpecs) return "unknown";
   const TOL = 2;
@@ -99,11 +104,6 @@ function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup, groupPrinters:
   if (g.supported_materials?.length && meta?.types?.length) {
     const sup = g.supported_materials.map(m => m.toLowerCase());
     if (meta.types.some(t => t && !sup.includes(t.toLowerCase()))) return "warn";
-  }
-  // If every printer in the group is a model mismatch, the group is incompatible.
-  if (meta && groupPrinters.length > 0) {
-    const models = groupPrinters.map(p => modelCheck(meta, p));
-    if (models.every(r => r === "mismatch")) return "warn";
   }
   return "ok";
 }
@@ -119,7 +119,7 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
       <div className="flex flex-wrap items-center gap-1">
         {groupsWithSpecs.map(g => {
           const gPrinters = printers.filter(p => p.group_id === g.id);
-          const compat = groupCompat(file.filament_meta, g, gPrinters);
+          const compat = groupCompat(file.filament_meta, g, gPrinters, file.original_name);
           const dot = g.color ? { background: g.color } : undefined;
           let cls: string;
           let indicator: string;
@@ -161,7 +161,7 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
       {visible.map(p => {
         const fit = fitCheck(file.filament_meta, p);
         const nozzle = nozzleCheck(file.filament_meta, p);
-        const model = modelCheck(file.filament_meta, p);
+        const model = modelCheck(file.filament_meta, p, file.original_name);
         const slots = checkSlots(file.filament_meta, p);
         const hasMissing = slots.some(s => s.match === "missing");
         const hasMismatch = slots.some(s => s.match === "type_mismatch");
