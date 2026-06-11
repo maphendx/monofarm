@@ -130,7 +130,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
 
   async function handleRemove() {
     if (!entry) return;
-    if (!confirm(`Прибрати «${task?.title ?? "завдання"}» з плану?`)) return;
+    if (!confirm(`Зняти «${task?.title ?? "завдання"}» з плану (залишиться в черзі)?`)) return;
     setDeleting(true);
     setError(null);
     try {
@@ -139,6 +139,23 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Помилка видалення");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleDeleteTask() {
+    if (!task) return;
+    if (!confirm(`Видалити задачу «${task.title ?? "завдання"}» повністю з системи (включаючи файл)?`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const { api } = await import("@/lib/api");
+      await api(`/api/queue/${task.id}`, { method: "DELETE" });
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка видалення задачі");
     } finally {
       setDeleting(false);
     }
@@ -163,6 +180,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
                   onClick={handleUnschedule}
                   disabled={saving || deleting}
                   className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50"
+                  title="Скинути точний час"
                 >
                   Скинути час
                 </button>
@@ -171,9 +189,19 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
                 type="button"
                 onClick={handleRemove}
                 disabled={saving || deleting}
-                className="rounded border border-[rgba(239,68,68,.3)] bg-[rgba(239,68,68,.07)] px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.12)] disabled:opacity-50"
+                className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] disabled:opacity-50"
+                title="Зняти з розкладу (повернеться в чергу)"
               >
-                {deleting ? "Видалення…" : "Видалити з плану"}
+                {deleting ? "Обробка…" : "Зняти з плану"}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTask}
+                disabled={saving || deleting}
+                className="rounded border border-[rgba(239,68,68,.3)] bg-[rgba(239,68,68,.07)] px-3 py-1.5 text-xs text-[var(--state-error)] hover:bg-[rgba(239,68,68,.12)] disabled:opacity-50"
+                title="Видалити повністю з черги"
+              >
+                {deleting ? "Видалення…" : "Видалити задачу"}
               </button>
             </>
           )}
