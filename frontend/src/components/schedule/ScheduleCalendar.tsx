@@ -187,6 +187,22 @@ export function ScheduleCalendar({
   const blockMap   = useMemo(() => buildCalendarBlocks(lanes, weekDates), [lanes, weekDates]);
   const untimedMap = useMemo(() => buildUntimedMap(lanes, weekDates), [lanes, weekDates]);
 
+  // Group lanes by group_id, preserving server sort order
+  const grouped = useMemo(() => {
+    const groups: { groupId: number | null; groupName: string | null; lanes: CalendarLane[] }[] = [];
+    const seen = new Map<number | null, typeof groups[0]>();
+    for (const lane of lanes) {
+      const key = lane.group_id ?? null;
+      if (!seen.has(key)) {
+        const g = { groupId: key, groupName: lane.group_name ?? null, lanes: [] as CalendarLane[] };
+        groups.push(g);
+        seen.set(key, g);
+      }
+      seen.get(key)!.lanes.push(lane);
+    }
+    return groups;
+  }, [lanes]);
+
   function handleEntryClick(entry: CalendarEntry) {
     onOpenModal({ type: "edit", entry });
   }
@@ -380,7 +396,23 @@ export function ScheduleCalendar({
                 Принтерів не знайдено. Додайте принтери в Налаштуваннях.
               </div>
             ) : (
-                      lanes.map(lane => (
+              grouped.map(({ groupId, groupName, lanes: groupLanes }) => (
+                <Fragment key={groupId ?? "__ungrouped"}>
+                  {/* Group header row */}
+                  {groupName && (
+                    <div
+                      className="sticky left-0 z-10 flex items-center gap-2 border-b border-t border-[var(--border)] bg-[var(--surface-hi)] px-3 py-1"
+                      style={{ gridColumn: "1 / -1" }}
+                    >
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">
+                        {groupName}
+                      </span>
+                      <span className="text-[9px] text-[var(--text-faint)]">
+                        {groupLanes.length} принт.
+                      </span>
+                    </div>
+                  )}
+                  {groupLanes.map(lane => (
                 <Fragment key={lane.printer_id}>
                   {/* Label cell */}
                   <div
@@ -451,6 +483,8 @@ export function ScheduleCalendar({
                       </div>
                     );
                   })}
+                </Fragment>
+                  ))}
                 </Fragment>
               ))
             )}

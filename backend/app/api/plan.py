@@ -11,6 +11,7 @@ from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.printer import Printer
+from app.models.printer_group import PrinterGroup
 from app.models.task import PrintTask
 from app.models.user import UserRole
 from app.schemas.plan import (
@@ -119,11 +120,20 @@ def get_calendar(
             detail=f"Date range must be 1–{_CALENDAR_MAX_DAYS} days.",
         )
 
-    # Load all printers so empty lanes are still returned
+    # Load all printers sorted by group order then printer order
+    group_names: dict[int, str] = {
+        g.id: g.name
+        for g in db.query(PrinterGroup).filter_by(organization_id=org.id).all()
+    }
     printers = (
         db.query(Printer)
         .filter(Printer.organization_id == org.id)
-        .order_by(Printer.id)
+        .outerjoin(PrinterGroup, Printer.group_id == PrinterGroup.id)
+        .order_by(
+            PrinterGroup.sort_order.nulls_last(),
+            Printer.sort_order,
+            Printer.id,
+        )
         .all()
     )
 
@@ -156,6 +166,8 @@ def get_calendar(
                 printer_id=printer.id,
                 printer_name=printer.name,
                 printer_kind=printer.kind.value,
+                group_id=printer.group_id,
+                group_name=group_names.get(printer.group_id) if printer.group_id else None,
                 days=days,
             )
         )
