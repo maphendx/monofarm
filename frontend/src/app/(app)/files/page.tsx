@@ -6,7 +6,7 @@ import { ApiError, api, getToken } from "@/lib/api";
 import { SendModal, checkSlots, compatBadge, fitCheck, nozzleCheck } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
-import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer } from "@/lib/types";
+import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer, PrinterGroup } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -87,14 +87,69 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
   );
 }
 
-// ── Printer compat dots ───────────────────────────────────────────────────────
-function PrinterCompatDots({ file, printers, onSend }: { file: GcodeFile; printers: Printer[]; onSend: (p: Printer) => void }) {
+// ── Compat helpers ─────────────────────────────────────────────────────────────
+function groupCompat(meta: GcodeFileMeta | null, g: PrinterGroup): "ok" | "warn" | "error" | "unknown" {
+  const hasSpecs = g.nozzle_diameter || g.build_x || g.supported_materials?.length;
+  if (!hasSpecs) return "unknown";
+  const TOL = 2;
+  if (meta?.print_size_x && g.build_x && meta.print_size_x > g.build_x + TOL) return "error";
+  if (meta?.print_size_y && g.build_y && meta.print_size_y > g.build_y + TOL) return "error";
+  if (meta?.print_size_z && g.build_z && meta.print_size_z > g.build_z + TOL) return "error";
+  if (meta?.nozzle_diameter && g.nozzle_diameter && Math.abs(meta.nozzle_diameter - g.nozzle_diameter) > 0.05) return "warn";
+  if (g.supported_materials?.length && meta?.types?.length) {
+    const sup = g.supported_materials.map(m => m.toLowerCase());
+    if (meta.types.some(t => t && !sup.includes(t.toLowerCase()))) return "warn";
+  }
+  return "ok";
+}
+
+// ── Group compat badges (primary) ─────────────────────────────────────────────
+function GroupCompatBadges({ file, groups, printers, onSend }: {
+  file: GcodeFile; groups: PrinterGroup[]; printers: Printer[]; onSend: (p: Printer | null, groupId?: number) => void;
+}) {
+  const groupsWithSpecs = groups.filter(g => g.nozzle_diameter || g.build_x || g.supported_materials?.length);
+
+  if (groupsWithSpecs.length > 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {groupsWithSpecs.map(g => {
+          const compat = groupCompat(file.filament_meta, g);
+          const dot = g.color ? { background: g.color } : undefined;
+          let cls: string;
+          let indicator: string;
+          let tip: string;
+          if (compat === "error") {
+            cls = "bg-[rgba(239,68,68,.10)] text-[var(--state-error)] border border-[rgba(239,68,68,.2)]";
+            indicator = "✕";
+            tip = `${g.name}: не влазить у стіл`;
+          } else if (compat === "warn") {
+            cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
+            indicator = "~";
+            tip = `${g.name}: часткова сумісність`;
+          } else if (compat === "ok") {
+            cls = "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
+            indicator = "✓";
+            tip = `${g.name}: сумісна група`;
+          } else {
+            return null;
+          }
+          return (
+            <button key={g.id} type="button" title={tip}
+              onClick={e => { e.stopPropagation(); onSend(null, g.id); }}
+              className={`flex max-w-[84px] items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition hover:opacity-80 ${cls}`}>
+              {dot && <span className="h-2 w-2 shrink-0 rounded-full" style={dot} />}
+              <span className="truncate">{indicator} {g.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // fallback: individual printer dots when no groups have specs
   const sendable = printers.filter(p => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)));
   if (!sendable.length) return null;
-
-  const visible = sendable.slice(0, 7);
-  const overflow = sendable.length - visible.length;
-
+  const visible = sendable.slice(0, 6);
   return (
     <div className="flex flex-wrap items-center gap-1">
       {visible.map(p => {
@@ -103,44 +158,33 @@ function PrinterCompatDots({ file, printers, onSend }: { file: GcodeFile; printe
         const slots = checkSlots(file.filament_meta, p);
         const hasMissing = slots.some(s => s.match === "missing");
         const hasMismatch = slots.some(s => s.match === "type_mismatch");
-
         let cls: string;
         let tip: string;
         if (fit === "oversize") {
-          cls = "bg-[rgba(239,68,68,.12)] text-[var(--state-error)] border border-[rgba(239,68,68,.2)]";
-          tip = `${p.name}: не влазить (${p.build_x}×${p.build_y}×${p.build_z} мм)`;
-        } else if (nozzle === "mismatch") {
-          cls = "bg-[rgba(234,179,8,.12)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
-          tip = `${p.name}: різне сопло (∅${p.nozzle_diameter} мм)`;
-        } else if (hasMissing) {
-          cls = "bg-[rgba(239,68,68,.10)] text-[var(--state-error)] border border-[rgba(239,68,68,.15)]";
-          tip = `${p.name}: відсутні слоти`;
+          cls = "bg-[rgba(239,68,68,.10)] text-[var(--state-error)] border border-[rgba(239,68,68,.2)]";
+          tip = `${p.name}: не влазить`;
+        } else if (nozzle === "mismatch" || hasMissing) {
+          cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
+          tip = `${p.name}: часткова сумісність`;
         } else if (hasMismatch) {
-          cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.15)]";
-          tip = `${p.name}: тип не збігається`;
+          cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
+          tip = `${p.name}: тип матеріалу`;
         } else if (fit === "fits" || slots.some(s => s.match === "ok")) {
-          cls = "bg-[rgba(34,197,94,.12)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
+          cls = "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
           tip = `${p.name}: сумісний`;
         } else {
           cls = "bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)]";
-          tip = `${p.name}`;
+          tip = p.name;
         }
-
         return (
-          <button
-            key={p.id}
-            type="button"
-            title={tip}
+          <button key={p.id} type="button" title={tip}
             onClick={e => { e.stopPropagation(); onSend(p); }}
-            className={`flex max-w-[72px] items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition hover:opacity-80 ${cls}`}
-          >
+            className={`flex max-w-[72px] items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition hover:opacity-80 ${cls}`}>
             <span className="truncate">{p.name}</span>
           </button>
         );
       })}
-      {overflow > 0 && (
-        <span className="text-[10px] text-[var(--text-faint)]">+{overflow}</span>
-      )}
+      {sendable.length > 6 && <span className="text-[10px] text-[var(--text-faint)]">+{sendable.length - 6}</span>}
     </div>
   );
 }
@@ -279,9 +323,9 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
-function FileCard({ file, printers, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onDragStart, onDragEnd }: {
-  file: GcodeFile; printers: Printer[]; canEdit: boolean; highlighted: boolean; isDragging: boolean;
-  onSend: () => void; onSendTo: (p: Printer) => void; onDelete: () => void;
+function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onDragStart, onDragEnd }: {
+  file: GcodeFile; printers: Printer[]; groups: PrinterGroup[]; canEdit: boolean; highlighted: boolean; isDragging: boolean;
+  onSend: () => void; onSendTo: (p: Printer | null, groupId?: number) => void; onDelete: () => void;
   onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
   const [confirmDel, setConfirmDel] = useState(false);
@@ -372,8 +416,8 @@ function FileCard({ file, printers, canEdit, highlighted, isDragging, onSend, on
         </p>
       )}
 
-      {/* printer compat */}
-      <PrinterCompatDots file={file} printers={printers} onSend={onSendTo} />
+      {/* group / printer compat badges */}
+      <GroupCompatBadges file={file} groups={groups} printers={printers} onSend={onSendTo} />
 
       {/* actions */}
       <div className="mt-auto flex gap-1.5 pt-1">
@@ -439,6 +483,7 @@ export default function FilesPage() {
   const [files, setFiles] = useState<GcodeFile[]>([]);
   const [folders, setFolders] = useState<GcodeFolder[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
+  const [printerGroups, setPrinterGroups] = useState<PrinterGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -468,12 +513,13 @@ export default function FilesPage() {
   // ── Load ──
   const load = useCallback(async () => {
     try {
-      const [f, p, fols] = await Promise.all([
+      const [f, p, fols, grps] = await Promise.all([
         api<GcodeFile[]>("/api/files"),
         api<Printer[]>("/api/printers"),
         api<GcodeFolder[]>("/api/folders"),
+        api<PrinterGroup[]>("/api/printer-groups"),
       ]);
-      setFiles(f); setPrinters(p); setFolders(fols);
+      setFiles(f); setPrinters(p); setFolders(fols); setPrinterGroups(grps);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);
@@ -806,11 +852,22 @@ export default function FilesPage() {
               key={f.id}
               file={f}
               printers={printers}
+              groups={printerGroups}
               canEdit={canEdit}
               highlighted={f.id === highlightId}
               isDragging={draggedFile?.id === f.id}
               onSend={() => { setSendAskMode(false); setSendFile(f); }}
-              onSendTo={p => { setSendAskMode(false); setSendFile(f); setDefaultPrinterOverride(p.id); }}
+              onSendTo={(p, groupId) => {
+                setSendAskMode(false);
+                setSendFile(f);
+                if (p) {
+                  setDefaultPrinterOverride(p.id);
+                } else if (groupId) {
+                  // pre-select first compatible active printer in the group
+                  const first = printers.find(pr => pr.is_active && pr.group_id === groupId && (pr.moonraker_url || (pr.kind === "bambu" && pr.bambu_dev_id)));
+                  setDefaultPrinterOverride(first?.id ?? null);
+                }
+              }}
               onDelete={() => handleDelete(f)}
               onDragStart={e => onFileDragStart(e, f)}
               onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}

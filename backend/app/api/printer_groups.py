@@ -31,6 +31,12 @@ def _to_dto(group: PrinterGroup, db: Session, org_id: int) -> PrinterGroupOut:
         name=group.name,
         sort_order=group.sort_order,
         printer_count=count,
+        color=group.color,
+        nozzle_diameter=group.nozzle_diameter,
+        build_x=group.build_x,
+        build_y=group.build_y,
+        build_z=group.build_z,
+        supported_materials=group.supported_materials or [],
     )
 
 
@@ -61,7 +67,17 @@ def create_group(
         .scalar()
         or 0
     )
-    group = PrinterGroup(organization_id=org.id, name=payload.name.strip(), sort_order=max_order + 1)
+    group = PrinterGroup(
+        organization_id=org.id,
+        name=payload.name.strip(),
+        sort_order=max_order + 1,
+        color=payload.color,
+        nozzle_diameter=payload.nozzle_diameter,
+        build_x=payload.build_x,
+        build_y=payload.build_y,
+        build_z=payload.build_z,
+        supported_materials=payload.supported_materials,
+    )
     db.add(group)
     db.commit()
     db.refresh(group)
@@ -81,6 +97,18 @@ def update_group(
         raise HTTPException(status_code=404, detail="Group not found")
     if payload.name is not None:
         group.name = payload.name.strip()
+    if payload.color is not None:
+        group.color = payload.color or None
+    if payload.nozzle_diameter is not None:
+        group.nozzle_diameter = payload.nozzle_diameter
+    if payload.build_x is not None:
+        group.build_x = payload.build_x
+    if payload.build_y is not None:
+        group.build_y = payload.build_y
+    if payload.build_z is not None:
+        group.build_z = payload.build_z
+    if payload.supported_materials is not None:
+        group.supported_materials = payload.supported_materials
     db.commit()
     db.refresh(group)
     return _to_dto(group, db, org.id)

@@ -50,6 +50,12 @@ export interface PrinterGroup {
   name: string;
   sort_order: number;
   printer_count: number;
+  color: string | null;
+  nozzle_diameter: number | null;
+  build_x: number | null;
+  build_y: number | null;
+  build_z: number | null;
+  supported_materials: string[];
 }
 
 export interface FilamentSlot {
