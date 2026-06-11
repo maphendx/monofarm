@@ -131,6 +131,19 @@ def create_project(base: str, headers: dict[str, str], filename: str) -> request
     )
 
 
+def get_project_detail(base: str, headers: dict[str, str], project_id: str) -> requests.Response:
+    """`GET /v1/iot-service/api/user/project/{id}` — profiles + plate thumbnails.
+
+    Bambu's backend parses the uploaded .3mf asynchronously and attaches a
+    profile to the project; `/my/task` requires that profile's id.
+    """
+    return requests.get(
+        f"{base}/v1/iot-service/api/user/project/{project_id}",
+        headers=headers,
+        timeout=CLOUD_TIMEOUT,
+    )
+
+
 def upload_to_oss(upload_url: str, file_bytes: bytes) -> requests.Response:
     """`PUT <presigned OSS url>` — no bearer token, long timeout for big .3mf files."""
     return requests.put(upload_url, data=file_bytes, headers={}, timeout=OSS_UPLOAD_TIMEOUT)

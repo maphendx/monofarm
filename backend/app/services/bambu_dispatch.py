@@ -495,6 +495,59 @@ def upload_project_with_retry(org_id: int, upload_url: str, file_bytes: bytes) -
     metrics.timing("bambu.cloud.upload.latency.ms", (time.monotonic() - start) * 1000, tags=event_tags(org_id=org_id))
 
 
+_PROFILE_POLL_ATTEMPTS = 6
+_PROFILE_POLL_DELAY_SECONDS = 1.5
+
+
+def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
+    """Poll `GET /project/{id}` until Bambu finishes parsing the uploaded .3mf.
+
+    Bambu attaches a profile (slice metadata + plate thumbnails) to the project
+    asynchronously after the OSS upload; `/my/task` rejects requests without
+    `profileId` (and `cover`). Returns
+    `{"profile_id": str|None, "cover": str, "plate_index": int}` — callers fall
+    back to safe defaults when parsing is still pending after the poll window.
+    """
+    from app.services import bambu_provider
+    from app.services.bambu_auth import _load_org
+
+    org = _load_org(org_id)
+    base = _region_api_base(org.bambu_region)
+
+    for attempt in range(_PROFILE_POLL_ATTEMPTS):
+        if attempt:
+            time.sleep(_PROFILE_POLL_DELAY_SECONDS)
+        try:
+            resp = _execute_with_retry(
+                org_id, "project.detail",
+                lambda token: bambu_provider.get_project_detail(base, _bearer_headers(token), project_id),
+                max_attempts=2,
+            )
+            data = resp.json()
+        except (BambuDispatchError, BambuValidationError, ValueError):
+            continue
+        profiles = [p for p in (data.get("profiles") or []) if isinstance(p, dict)]
+        if not profiles:
+            continue
+        prof = profiles[0]
+        profile_id = str(prof.get("profile_id") or prof.get("id") or "") or None
+        cover = ""
+        plate_index = 1
+        context = prof.get("context") or {}
+        for plate in context.get("plates") or []:
+            if not isinstance(plate, dict):
+                continue
+            thumb_url = (plate.get("thumbnail") or {}).get("url") or ""
+            if thumb_url:
+                cover = thumb_url
+                plate_index = int(plate.get("index") or 1)
+                break
+        return {"profile_id": profile_id, "cover": cover, "plate_index": plate_index}
+
+    log.warning("bambu.cloud.project.profile_pending org_id=%s project_id=%s — dispatching with defaults", org_id, project_id)
+    return {"profile_id": None, "cover": "", "plate_index": 1}
+
+
 def create_task_with_retry(org_id: int, task_body: dict[str, Any]) -> dict[str, Any]:
     """`POST /task` — returns the parsed response (or a status-only stub if non-JSON)."""
     from app.services import bambu
@@ -594,20 +647,26 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         ams_mapping: list[int] | None = stored.get("ams_mapping")
         use_ams: bool = stored.get("use_ams", True)
 
+        # Bambu parses the uploaded .3mf server-side into a profile — /my/task
+        # validates `profileId` and `cover` are set, so fetch the real values.
+        profile_info = fetch_project_profile(org_id, project_id)
+
         task_body: dict[str, Any] = {
             "modelId": model_id,
             "projectId": project_id,
+            "profileId": profile_info["profile_id"] or "0",
             "title": filename,
             "deviceId": job.printer_bambu_dev_id,
-            "plateIndex": 1,
+            "plateIndex": profile_info["plate_index"],
             "useAms": use_ams,
             "bedLeveling": True,
             "flowCali": False,
             "vibrationCali": True,
             "layerInspect": False,
             "timelapse": False,
-            # Bambu Cloud rejects /task without the key: {"code":-1,"error":"field \"cover\" is not set"}
-            "cover": cover_url or "",
+            "designId": 0,
+            "mode": "cloud_file",
+            "cover": profile_info["cover"] or cover_url or "",
         }
         if ams_mapping is not None:
             task_body["amsMapping"] = ams_mapping

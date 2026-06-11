@@ -1155,6 +1155,7 @@ def cloud_upload_and_print(
     task_body: dict[str, Any] = {
         "modelId": model_id,
         "projectId": project_id,
+        "profileId": "0",
         "title": filename,
         "deviceId": dev_id,
         "plateIndex": 1,
@@ -1164,7 +1165,9 @@ def cloud_upload_and_print(
         "vibrationCali": True,
         "layerInspect": False,
         "timelapse": False,
-        # Bambu Cloud rejects /task without the key: {"code":-1,"error":"field \"cover\" is not set"}
+        "designId": 0,
+        "mode": "cloud_file",
+        # Bambu Cloud rejects /task without cover/profileId set
         "cover": cover_url or "",
     }
     if ams_mapping is not None:
