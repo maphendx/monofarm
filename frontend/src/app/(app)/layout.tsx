@@ -77,7 +77,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider user={user}>
       <DynamicFavicon />
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex min-h-screen">
         <Sidebar
           user={user}
           pinned={pinned}
@@ -85,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           onSearch={() => setSearchOpen(true)}
         />
         <main className={[
-          "flex flex-col flex-1 min-w-0 overflow-hidden transition-[padding-left] duration-200 ease-out",
+          "flex flex-col flex-1 min-w-0 transition-[padding-left] duration-200 ease-out",
           pinned ? "pl-[220px]" : "pl-14",
         ].join(" ")}>
           {user && !user.email_verified_at && !verifyDismissed && (
@@ -102,7 +102,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
-          <div className="cal-scroll flex-1 min-h-0 overflow-y-auto px-6 py-6">
+          <div className="flex-1 px-6 py-6">
             {children}
           </div>
         </main>

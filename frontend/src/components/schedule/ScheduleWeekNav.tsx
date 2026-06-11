@@ -9,10 +9,12 @@ export function ScheduleWeekNav({
   weekStart,
   onPrev,
   onNext,
+  onDayClick,
 }: {
   weekStart: Date;
   onPrev: () => void;
   onNext: () => void;
+  onDayClick?: (dayIndex: number) => void;
 }) {
   const dates  = getWeekDates(weekStart);
   const today  = isoDateStr(new Date());
@@ -46,22 +48,24 @@ export function ScheduleWeekNav({
         ›
       </button>
 
-      {/* Day pills — shown on wide screens */}
+      {/* Day pills — clickable to scroll to that day column */}
       <div className="ml-4 hidden items-center gap-1 lg:flex">
         {dates.map((d, i) => {
           const isToday = isoDateStr(d) === today;
           return (
-            <span
+            <button
               key={i}
+              type="button"
+              onClick={() => onDayClick?.(i)}
               className={[
-                "rounded px-2 py-0.5 text-xs tabular-nums",
+                "rounded px-2 py-0.5 text-xs tabular-nums transition-colors",
                 isToday
-                  ? "bg-[var(--accent)] font-semibold text-white"
-                  : "text-[var(--text-muted)]",
+                  ? "bg-[var(--accent)] font-semibold text-white hover:bg-[var(--accent-hi)]"
+                  : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]",
               ].join(" ")}
             >
               {UA_DAY[i]} {d.getDate()}
-            </span>
+            </button>
           );
         })}
       </div>

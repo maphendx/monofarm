@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import type { CalendarEntry, CalendarLane } from "@/lib/types";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
@@ -177,12 +177,37 @@ export function ScheduleCalendar({
       ? `${ROW_LABEL_W} repeat(7, minmax(160px, 1fr))`
       : `${ROW_LABEL_W} repeat(7, ${ZOOM_COL_PX[zoom]}px)`;
 
+  // Refs
+  const gridRef = useRef<HTMLDivElement>(null);
+
   // DnD state
   const [dropCell, setDropCell]       = useState<string | null>(null);  // `${printerId}-${di}`
   const [dropRelX,  setDropRelX]      = useState<number>(0);
   const [dropping, setDropping]       = useState(false);
   const [dropError, setDropError]     = useState<string | null>(null);
   const dropPreviewRef = useRef<{ cell: string | null; mins: number | null }>({ cell: null, mins: null });
+
+  // Scroll to a specific day column
+  const scrollToDay = useCallback((dayIndex: number) => {
+    const el = gridRef.current;
+    if (!el) return;
+    // The printer label column (152px) is sticky, so we just need to scroll
+    // to position the target day column right after it.
+    let colW: number;
+    if (zoom === 1) {
+      // flex mode — measure from the DOM
+      const headerEl = el.querySelector<HTMLElement>(`[data-day-col="${dayIndex}"]`);
+      if (headerEl) {
+        // scrollLeft = offsetLeft of the header minus the sticky label width
+        el.scrollTo({ left: headerEl.offsetLeft - 152, behavior: "smooth" });
+        return;
+      }
+      colW = 200; // fallback
+    } else {
+      colW = ZOOM_COL_PX[zoom];
+    }
+    el.scrollTo({ left: dayIndex * colW, behavior: "smooth" });
+  }, [zoom]);
 
   const blockMap   = useMemo(() => buildCalendarBlocks(lanes, weekDates), [lanes, weekDates]);
   const untimedMap = useMemo(() => buildUntimedMap(lanes, weekDates), [lanes, weekDates]);
@@ -293,7 +318,7 @@ export function ScheduleCalendar({
 
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2">
-        <ScheduleWeekNav weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} />
+        <ScheduleWeekNav weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} onDayClick={scrollToDay} />
 
         <div className="flex items-center gap-4">
           {/* Legend */}
@@ -305,10 +330,6 @@ export function ScheduleCalendar({
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-4 rounded-sm border-t-2 border-t-[var(--state-warn)] bg-[rgba(217,119,6,.18)]" />
               конфлікт
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-2 w-4 rounded-sm border border-dashed border-[var(--accent)] bg-[var(--accent-soft)]" />
-              продовження
             </span>
           </div>
 
@@ -345,7 +366,7 @@ export function ScheduleCalendar({
       )}
 
       {/* ── Grid ── */}
-      <div className="cal-scroll-grid flex-1 overflow-auto">
+      <div ref={gridRef} className="cal-scroll-grid flex-1 overflow-auto">
         {loading ? (
           <div className="p-4">
             <CalendarSkeleton rows={Math.max(3, lanes.length)} zoom={zoom} />
@@ -367,6 +388,7 @@ export function ScheduleCalendar({
               return (
                 <div
                   key={di}
+                  data-day-col={di}
                   className={[
                     "sticky top-0 z-20 border-b border-r border-[var(--border)] bg-[var(--bg-elevated)] px-2 pb-0 pt-1.5",
                     isToday ? "bg-[var(--accent-soft)]" : "",
@@ -454,7 +476,7 @@ export function ScheduleCalendar({
                       <div
                         key={`cell-${lane.printer_id}-${di}`}
                         className={[
-                          "relative border-b border-r border-[var(--border)] transition-colors",
+                          "relative overflow-visible border-b border-r border-[var(--border)] transition-colors",
                           isToday ? "bg-[rgba(34,211,238,.03)]" : "bg-[var(--bg-elevated)]",
                           isDropTarget ? "bg-[rgba(34,211,238,.10)] ring-1 ring-inset ring-[var(--accent)]" : "",
                           dropping ? "cursor-wait" : "",

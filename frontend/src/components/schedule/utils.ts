@@ -93,8 +93,8 @@ export interface CalendarBlock {
   printerId: number;
   dayIndex: number;         // 0–6 within the displayed week
   startMins: number;        // minutes from 00:00 within this day
-  endMins: number;          // capped at 1440 for this day's column
-  isContinuation: boolean;  // true = overflow fragment from previous day
+  endMins: number;          // may exceed 1440 for cross-midnight blocks
+  isContinuation: boolean;  // always false now (kept for type compat)
   totalDurationMins: number;
 }
 
@@ -103,10 +103,9 @@ type BlockMapKey = `${number}-${number}`; // `${printerId}-${dayIndex}`
 /**
  * Pre-process lanes into positioned blocks for the calendar grid.
  *
- * Cross-midnight entries produce two blocks:
- *   Block A in day N (startMins → 1440)
- *   Block B in day N+1 (0 → overflow, isContinuation=true)
- * If N+1 is outside the visible week, Block B is omitted.
+ * Cross-midnight entries produce a SINGLE block whose endMins exceeds 1440.
+ * The cell uses `overflow: visible` so the block visually spills into the
+ * next day column — no splitting, no duplicate continuation blocks.
  */
 export function buildCalendarBlocks(
   lanes: CalendarLane[],
@@ -134,31 +133,13 @@ export function buildCalendarBlocks(
         const startMins = parseTimeMins(entry.start_time);
         const totalEndMins = startMins + duration;
 
-        if (totalEndMins <= 1440) {
-          push(lane.printer_id, dayIdx, {
-            entry, printerId: lane.printer_id,
-            dayIndex: dayIdx,
-            startMins, endMins: totalEndMins,
-            isContinuation: false, totalDurationMins: duration,
-          });
-        } else {
-          // Block A: fills to end of day N
-          push(lane.printer_id, dayIdx, {
-            entry, printerId: lane.printer_id,
-            dayIndex: dayIdx,
-            startMins, endMins: 1440,
-            isContinuation: false, totalDurationMins: duration,
-          });
-          // Block B: overflow into day N+1 (if within visible week)
-          if (dayIdx + 1 < 7) {
-            push(lane.printer_id, dayIdx + 1, {
-              entry, printerId: lane.printer_id,
-              dayIndex: dayIdx + 1,
-              startMins: 0, endMins: totalEndMins - 1440,
-              isContinuation: true, totalDurationMins: duration,
-            });
-          }
-        }
+        // Single block — even if totalEndMins > 1440 the block overflows
+        push(lane.printer_id, dayIdx, {
+          entry, printerId: lane.printer_id,
+          dayIndex: dayIdx,
+          startMins, endMins: totalEndMins,
+          isContinuation: false, totalDurationMins: duration,
+        });
       }
     }
   }

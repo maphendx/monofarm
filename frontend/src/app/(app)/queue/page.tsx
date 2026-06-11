@@ -669,7 +669,7 @@ function QueuePageInner() {
   if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
 
   return (
-    <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-full">
+    <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">

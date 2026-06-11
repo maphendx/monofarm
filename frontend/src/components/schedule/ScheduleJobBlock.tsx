@@ -28,15 +28,17 @@ export function ScheduleJobBlock({
   const leftPct   = (startMins / 1440) * 100;
   const widthPct  = ((endMins - startMins) / 1440) * 100;
   const minWidthPx = 36;
+  // Cross-midnight blocks overflow past the cell — need higher z-index
+  const isOverflow = endMins > 1440;
 
   const isCompact = widthPct < 8;
 
   const startLabel = fmtTimeMins(startMins);
-  const endLabel   = fmtTimeMins(endMins < 1440 ? endMins : 0); // 1440 = 00:00 next day
+  const endLabel   = fmtTimeMins(endMins % 1440);
   const timeLabel  = isContinuation
     ? `до ${endLabel}`
     : endMins > startMins
-    ? `${startLabel}–${endMins >= 1440 ? "00:00↗" : endLabel}`
+    ? `${startLabel}–${endLabel}${isOverflow ? "↗" : ""}`
     : startLabel;
   const durationLabel = fmtDuration(totalDurationMins);
   const fileLabel  = entry.task.file_name ?? entry.task.title;
@@ -76,7 +78,7 @@ export function ScheduleJobBlock({
       onDragStart={onDragStart}
       onClick={onClick}
       title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}`}
-      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)` }}
+      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, zIndex: isOverflow ? 5 : undefined }}
       className={`${base} ${colorCls} ${topBorder}`}
     >
       <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
