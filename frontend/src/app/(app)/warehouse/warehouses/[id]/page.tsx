@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
+import { matchTokens } from "@/lib/search";
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -556,8 +557,7 @@ function CellModal({
                 <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
                   {allProducts
                     .filter((p) => {
-                      const q = assignSearch.toLowerCase();
-                      return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+                      return matchTokens(`${p.name} ${p.sku}`, assignSearch);
                     })
                     .slice(0, 20)
                     .map((p) => (
@@ -695,13 +695,11 @@ function ZoneAccordion({
   const [labelItems,  setLabelItems] = useState<WarehouseLabelItem[] | null>(null);
 
   const cells = zone.cells;
-  const q = search.trim().toLowerCase();
+  const q = search.trim();
 
   function cellMatches(cell: Cell) {
     if (!q) return false;
-    return cell.stock.some(
-      (s) => s.product_name.toLowerCase().includes(q) || s.product_sku.toLowerCase().includes(q)
-    );
+    return cell.stock.some((s) => matchTokens(`${s.product_name} ${s.product_sku}`, q));
   }
 
   const hasSearch  = q.length > 0;

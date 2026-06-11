@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
+import { matchTokens } from "@/lib/search";
 
 export type MovementType = "PRODUCTION_IN" | "PRODUCTION_OUT" | "SALE_OUT" | "PURCHASE_IN" | "DEFECT" | "ADJUSTMENT" | "TRANSFER" | "RETURN_IN" | "WRITE_OFF";
 
@@ -59,13 +60,9 @@ function ProductSearch({
   const ref  = useRef<HTMLDivElement>(null);
   const selected = products.find((p) => String(p.id) === value);
 
-  const tokens = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  const filtered = tokens.length === 0
-    ? products.slice(0, 50)
-    : products.filter((p) => {
-        const hay = `${p.name} ${p.sku}`.toLowerCase();
-        return tokens.every((t) => hay.includes(t));
-      }).slice(0, 50);
+  const filtered = search.trim()
+    ? products.filter((p) => matchTokens(`${p.name} ${p.sku}`, search)).slice(0, 50)
+    : products.slice(0, 50);
 
   useEffect(() => {
     if (!open) return;

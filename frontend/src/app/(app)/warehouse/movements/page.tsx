@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { api } from "@/lib/api";
+import { matchTokens } from "@/lib/search";
 import { CreateMovementModal, Movement, MovementType, TYPE_META } from "@/components/warehouse/MovementModal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import {
@@ -100,8 +101,8 @@ export default function MovementsPage() {
     loadFirst(filter);
   }, [filter, loadFirst, version]);
 
-  const displayed = search
-    ? items.filter((m) => m.product_name.toLowerCase().includes(search.toLowerCase()))
+  const displayed = search.trim()
+    ? items.filter((m) => matchTokens(m.product_name, search))
     : items;
 
   const colSpan = COLS.filter(c => colVis.isVisible(c.key)).length;

@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
+import { matchTokens } from "@/lib/search";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
 import Link from "next/link";
@@ -710,12 +711,7 @@ export default function StockPage() {
     if (mode === "out"        && st !== "out") return false;
     if (mode === "low"        && (st !== "low" && st !== "out")) return false;
     if (mode === "production" && st !== "production") return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!e.product_name.toLowerCase().includes(q) &&
-          !e.product_sku.toLowerCase().includes(q) &&
-          !(e.product_barcode || "").toLowerCase().includes(q)) return false;
-    }
+    if (search.trim() && !matchTokens(`${e.product_name} ${e.product_sku} ${e.product_barcode ?? ""}`, search)) return false;
     return true;
   });
 

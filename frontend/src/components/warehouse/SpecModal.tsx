@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { matchTokens } from "@/lib/search";
 
 // ── local types ───────────────────────────────────────────────────────────────
 
@@ -191,8 +192,7 @@ export function SpecModal({
 
   const catalogHits = cDropOpen && cSearch.trim().length > 0
     ? (() => {
-        const q = cSearch.toLowerCase();
-        return catalog.filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q)).slice(0, 8);
+        return catalog.filter((c) => matchTokens(`${c.name} ${c.sku}`, cSearch)).slice(0, 8);
       })()
     : [];
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { matchTokens } from "@/lib/search";
 
 export type CellOption = { id: number; label: string; zone?: string };
 
@@ -22,13 +23,10 @@ export function CellCombobox({
   const ref = useRef<HTMLDivElement>(null);
 
   const selected = cells.find((c) => String(c.id) === value);
-  const q = search.toLowerCase().trim();
+  const q = search.trim();
 
   const filtered: CellOption[] = q
-    ? cells.filter((c) =>
-        c.label.toLowerCase().includes(q) ||
-        (c.zone ?? "").toLowerCase().includes(q)
-      )
+    ? cells.filter((c) => matchTokens(`${c.label} ${c.zone ?? ""}`, q))
     : cells;
 
   useEffect(() => {

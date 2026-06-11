@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { matchTokens } from "@/lib/search";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { useConfirm } from "@/hooks/useConfirm";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -677,8 +678,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
   const totalCost = cost ? parseFloat(cost.total) : null;
   const catalogHits = cDropOpen && cSearch.trim().length > 0
     ? (() => {
-        const q = cSearch.toLowerCase();
-        return catalog.filter((c) => c.name.toLowerCase().includes(q) || c.sku.toLowerCase().includes(q)).slice(0, 8);
+        return catalog.filter((c) => matchTokens(`${c.name} ${c.sku}`, cSearch)).slice(0, 8);
       })()
     : [];
 
@@ -1374,12 +1374,11 @@ export default function ProductsPage() {
   }, [cats]);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
     return products.filter((p) => {
       if (selectedCats.length > 0 && !selectedCats.every((c) => p.categories.includes(c))) return false;
       if (barcodeFilter === "has"  && !p.barcode) return false;
       if (barcodeFilter === "none" &&  p.barcode) return false;
-      if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q)) return false;
+      if (search.trim() && !matchTokens(`${p.name} ${p.sku}`, search)) return false;
       return true;
     });
   }, [products, search, selectedCats, barcodeFilter]);

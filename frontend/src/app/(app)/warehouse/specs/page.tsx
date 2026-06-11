@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, api, getToken } from "@/lib/api";
+import { matchTokens } from "@/lib/search";
 import { AuthImage } from "@/components/ui/AuthImage";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import { SpecModal, type SpecModalProduct } from "@/components/warehouse/SpecModal";
@@ -188,12 +189,12 @@ export default function SpecsPage() {
   }
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.trim();
     return products.filter((p) => {
       const hasSpec = !!specByProduct[p.id];
       if (filter === "has"  && !hasSpec) return false;
       if (filter === "none" &&  hasSpec) return false;
-      if (q && !p.name.toLowerCase().includes(q) && !p.sku.toLowerCase().includes(q) && !(p.description || "").toLowerCase().includes(q)) return false;
+      if (q && !matchTokens(`${p.name} ${p.sku} ${p.description ?? ""}`, q)) return false;
       return true;
     });
   }, [products, search, filter, specByProduct]);

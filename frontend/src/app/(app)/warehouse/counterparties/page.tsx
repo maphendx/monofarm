@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
+import { matchTokens } from "@/lib/search";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -323,10 +324,7 @@ export default function CounterpartiesPage() {
 
   const filtered = counterparties.filter((c) => {
     if (typeFilter !== "Всі" && c.type !== typeFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      if (!c.name.toLowerCase().includes(q) && !(c.email ?? "").toLowerCase().includes(q)) return false;
-    }
+    if (search.trim() && !matchTokens(`${c.name} ${c.email ?? ""}`, search)) return false;
     return true;
   });
 
