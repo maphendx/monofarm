@@ -495,8 +495,8 @@ def upload_project_with_retry(org_id: int, upload_url: str, file_bytes: bytes) -
     metrics.timing("bambu.cloud.upload.latency.ms", (time.monotonic() - start) * 1000, tags=event_tags(org_id=org_id))
 
 
-_PROFILE_POLL_ATTEMPTS = 6
-_PROFILE_POLL_DELAY_SECONDS = 1.5
+_PROFILE_POLL_ATTEMPTS = 10
+_PROFILE_POLL_DELAY_SECONDS = 2.0
 
 
 def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
@@ -649,12 +649,21 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
 
         # Bambu parses the uploaded .3mf server-side into a profile — /my/task
         # validates `profileId` and `cover` are set, so fetch the real values.
+        # A zero/placeholder profileId is treated as unset by Bambu, so when the
+        # profile is still pending after the poll window, fail retryable instead
+        # of sending a doomed request.
         profile_info = fetch_project_profile(org_id, project_id)
+        if not profile_info["profile_id"]:
+            return fail_job(
+                job_id, BambuErrorCode.TASK_CREATE_FAILED,
+                "Bambu Cloud ще не обробив завантажений файл (profile відсутній). Натисни Retry за хвилину.",
+                retryable=True,
+            )
 
         task_body: dict[str, Any] = {
             "modelId": model_id,
             "projectId": project_id,
-            "profileId": profile_info["profile_id"] or "0",
+            "profileId": profile_info["profile_id"],
             "title": filename,
             "deviceId": job.printer_bambu_dev_id,
             "plateIndex": profile_info["plate_index"],

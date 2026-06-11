@@ -24,8 +24,14 @@ AGENT_VERSION = "0.6.1"
 
 @router.get("/api/agent/version")
 def agent_version() -> dict:
-    """Current agent version — checked by the agent at startup for auto-update."""
-    return {"version": AGENT_VERSION}
+    """Current agent version — checked by the agent at startup for auto-update.
+
+    `build` exposes the deployed git SHA (Railway env) so "is my fix live yet?"
+    is answerable with one curl; agents ignore the extra key.
+    """
+    import os
+    build = (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "")[:7]
+    return {"version": AGENT_VERSION, "build": build or None}
 
 
 @router.get("/api/agent/status")
