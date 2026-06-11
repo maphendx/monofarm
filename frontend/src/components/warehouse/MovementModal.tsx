@@ -97,7 +97,7 @@ function ProductSearch({
         >×</button>
       )}
       {open && !selected && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-52 w-full min-w-[260px] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
           {filtered.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
           ) : filtered.map((p) => (
@@ -270,6 +270,7 @@ export function CreateMovementModal({
     <Modal
       open={open}
       onClose={onClose}
+      size="xl"
       title="Рух товару"
       footer={
         <>
@@ -353,7 +354,7 @@ export function CreateMovementModal({
         {/* Product lines */}
         <div className="space-y-2">
           <div className="grid items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]"
-            style={{ gridTemplateColumns: "1fr 72px 72px 80px 24px" }}>
+            style={{ gridTemplateColumns: "1fr 72px 56px 80px 24px" }}>
             <span>Товар</span>
             <span className="text-right">К-сть</span>
             <span className="text-center">Од.</span>
@@ -365,7 +366,7 @@ export function CreateMovementModal({
 
           {lines.map((line) => (
             <div key={line._key} className="grid items-center gap-2"
-              style={{ gridTemplateColumns: "1fr 72px 72px 80px 24px" }}>
+              style={{ gridTemplateColumns: "1fr 72px 56px 80px 24px" }}>
               <ProductSearch
                 products={products}
                 value={line.productId}
