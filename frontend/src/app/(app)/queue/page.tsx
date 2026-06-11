@@ -672,7 +672,7 @@ function QueuePageInner() {
     <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
+      <div className="relative z-10 shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
         <div className="flex items-center gap-4">
           <h1 className="text-base font-semibold">Черга друку</h1>
           {view === "list" && (activeTab === "queued" || activeTab === "in_progress") && stats.jobs > 0 && (
@@ -723,7 +723,7 @@ function QueuePageInner() {
 
       {/* ── Calendar view ── */}
       {view === "calendar" && (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative z-0">
           <div className="flex-1 overflow-hidden">
             <ScheduleCalendar
               lanes={calendarLanes}
@@ -754,9 +754,9 @@ function QueuePageInner() {
 
       {/* ── List view ── */}
       {view === "list" && (
-        <>
+        <div className="flex flex-col flex-1 overflow-y-auto bg-[var(--bg)] relative z-0">
           {/* Tab bar */}
-          <div className="flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4">
+          <div className="sticky top-0 z-10 flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4">
             {TABS.map(tab => (
               <button key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setSelected(new Set()); setSearch(""); }}
@@ -874,7 +874,7 @@ function QueuePageInner() {
               )
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* ── Modals ── */}
