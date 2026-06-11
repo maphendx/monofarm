@@ -1,8 +1,8 @@
 "use client";
 
-import { FolderDown, ListPlus, Printer as PrinterIcon } from "lucide-react";
+import { FolderDown, ListPlus, Printer as PrinterIcon, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
 import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, Printer as PrinterType } from "@/lib/types";
@@ -180,6 +180,7 @@ export function SendModal({
   onClose,
   defaultPrinterId,
   askMode = false,
+  deleteOnCancel = false,
 }: {
   file: GcodeFile;
   printers: PrinterType[];
@@ -187,9 +188,13 @@ export function SendModal({
   defaultPrinterId?: number;
   /** Show a save / print / queue chooser first (slicer auto-open flow). */
   askMode?: boolean;
+  /** For slicer uploads: remove the temporary library file unless the user chooses an action. */
+  deleteOnCancel?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("print");
   const [choosing, setChoosing] = useState(askMode);
+  const keepFileRef = useRef(!deleteOnCancel);
+  const cleanupStartedRef = useRef(false);
 
   // print-now state
   const [selectedId, setSelectedId] = useState<number | "">(defaultPrinterId ?? "");
@@ -221,6 +226,39 @@ export function SendModal({
   const selectedPrinter = compatiblePrinters.find((p) => p.id === selectedId) ?? null;
   const usedSlots = useMemo(() => usedSlotIndices(file.filament_meta), [file.filament_meta]);
   const isMoonraker = !!selectedPrinter?.moonraker_url;
+
+  function keepFile() {
+    keepFileRef.current = true;
+  }
+
+  async function cleanupPendingFile() {
+    if (!deleteOnCancel || keepFileRef.current || cleanupStartedRef.current) return;
+    cleanupStartedRef.current = true;
+    try {
+      await api(`/api/files/${file.id}`, { method: "DELETE" });
+    } catch {
+      /* Best effort: if cleanup fails, don't trap the user in the modal. */
+    }
+  }
+
+  function closeModal(keep = false) {
+    if (keep) keepFile();
+    onClose();
+    void cleanupPendingFile();
+  }
+
+  useEffect(() => {
+    keepFileRef.current = !deleteOnCancel;
+    cleanupStartedRef.current = false;
+  }, [deleteOnCancel, file.id]);
+
+  useEffect(() => {
+    return () => {
+      if (!deleteOnCancel || keepFileRef.current || cleanupStartedRef.current) return;
+      cleanupStartedRef.current = true;
+      void api(`/api/files/${file.id}`, { method: "DELETE" }).catch(() => {});
+    };
+  }, [deleteOnCancel, file.id]);
 
   useEffect(() => {
     if (!selectedPrinter) return;
@@ -262,9 +300,11 @@ export function SendModal({
         { method: "POST", body: JSON.stringify(body) },
       );
       if (res.job_id != null) {
+        keepFile();
         setQueuedJob(res as BambuQueuedResult);
         setResult({ ok: true, message: `Відправляється на «${res.printer_name}» — друк запуститься автоматично` });
       } else {
+        if (res.ok) keepFile();
         setResult({ ok: res.ok, message: res.message });
       }
     } catch (e) {
@@ -282,6 +322,7 @@ export function SendModal({
         method: "POST",
         body: JSON.stringify({ gcode_file_id: file.id, quantity }),
       });
+      keepFile();
       setResult({ ok: true, message: `Додано в чергу (${quantity} шт.)` });
     } catch (e) {
       setResult({ ok: false, message: e instanceof ApiError ? e.message : "Помилка" });
@@ -291,17 +332,29 @@ export function SendModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+      onClick={() => closeModal(Boolean(result?.ok))}
+    >
       <div className={[
         "w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl",
         choosing ? "max-w-3xl" : "max-w-sm",
-      ].join(" ")}>
+      ].join(" ")}
+        onClick={(e) => e.stopPropagation()}>
         {/* header */}
-        <div className="border-b border-[var(--border)] px-5 py-4 text-center ">
+        <div className="relative border-b border-[var(--border)] px-12 py-4 text-center ">
           <h2 className={choosing ? "text-xl font-semibold" : "font-semibold"}>
             {choosing ? "Що зробити з файлом?" : "Файл завантажено"}
           </h2>
           <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{file.original_name}</p>
+          <button
+            type="button"
+            onClick={() => closeModal(Boolean(result?.ok))}
+            className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
+            title="Закрити"
+          >
+            <X size={16} strokeWidth={1.8} />
+          </button>
         </div>
 
         {/* mode tabs */}
@@ -362,7 +415,9 @@ export function SendModal({
           {/* ── save mode ── */}
           {!choosing && mode === "save" && (
             <p className="text-sm text-[var(--text-muted)] ">
-              Файл вже збережено в бібліотеці. Ви можете надіслати його на принтер пізніше.
+              {deleteOnCancel
+                ? "Натисни «Готово», щоб залишити файл у бібліотеці. Якщо скасувати, файл буде видалено."
+                : "Файл вже збережено в бібліотеці. Ви можете надіслати його на принтер пізніше."}
             </p>
           )}
 
@@ -559,7 +614,7 @@ export function SendModal({
             ].join(" ")}>
               {result.ok ? "✓ " : "✕ "}{result.message}
               {queuedJob && queuedJob.printer_id != null && (
-                <Link href={`/printers/${queuedJob.printer_id}`} onClick={onClose}
+                <Link href={`/printers/${queuedJob.printer_id}`} onClick={() => closeModal(true)}
                   className="mt-1 block text-sm font-medium underline hover:no-underline">
                   Переглянути завдання →
                 </Link>
@@ -570,7 +625,7 @@ export function SendModal({
 
         {/* footer */}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
-          <button onClick={onClose} className="btn btn-ghost">
+          <button onClick={() => closeModal(Boolean(result?.ok))} className="btn btn-ghost">
             {result?.ok ? "Закрити" : "Скасувати"}
           </button>
           {!choosing && !result?.ok && mode === "print" && (
@@ -580,7 +635,7 @@ export function SendModal({
             </button>
           )}
           {!choosing && !result?.ok && mode === "save" && (
-            <button onClick={onClose} className="btn btn-primary">
+            <button onClick={() => closeModal(true)} className="btn btn-primary">
               Готово
             </button>
           )}

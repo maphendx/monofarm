@@ -720,13 +720,18 @@ export default function DashboardPage() {
         />
       )}
 
-      {slicerFile && (
+      {slicerFile && slicerFile.id === slicerFileId && (
         <SendModal
+          key={slicerFile.id}
           file={slicerFile}
           printers={printers}
           defaultPrinterId={slicerPrinterId}
           askMode={slicerAskMode}
-          onClose={() => setSlicerFile(null)}
+          deleteOnCancel={slicerAskMode}
+          onClose={() => {
+            setSlicerFile(null);
+            router.replace("/dashboard");
+          }}
         />
       )}
     </div>

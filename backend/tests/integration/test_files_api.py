@@ -125,6 +125,7 @@ def test_moonraker_upload_shim_stores_file_with_bearer_token(client, auth_header
     assert "/auth/webview" in redirect.headers["location"]
     assert "%2Fdashboard%3FslicerFile%3D" in redirect.headers["location"]
     assert "slicerAction%3Dchoose" in redirect.headers["location"]
+    assert "printer%3D" not in redirect.headers["location"]
 
     files = client.get("/api/files", headers=auth_headers).json()
     assert any(f["original_name"] == "orca_part.gcode" for f in files)
