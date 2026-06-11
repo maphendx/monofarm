@@ -20,7 +20,14 @@ function BacklogItem({
     : null;
 
   function handleDragStart(e: React.DragEvent<HTMLButtonElement>) {
-    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "backlog", taskId: task.id }));
+    const duration = task.estimated_minutes ?? task.filament_meta?.estimated_minutes ?? 60;
+    e.dataTransfer.setData("text/plain", JSON.stringify({
+      type: "backlog",
+      taskId: task.id,
+      fileName: task.file_name ?? task.title ?? "",
+      quantity: Math.max(1, task.quantity),
+      durationMins: duration > 0 ? duration : 60,
+    }));
     e.dataTransfer.effectAllowed = "move";
   }
 

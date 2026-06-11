@@ -304,7 +304,7 @@ export function ScheduleCalendar({
     setDropCell(null);
     dropPreviewRef.current = { cell: null, mins: null };
 
-    let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number };
+    let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number; fileName?: string; quantity?: number; durationMins?: number };
     try {
       data = JSON.parse(e.dataTransfer.getData("text/plain"));
     } catch {
@@ -313,6 +313,30 @@ export function ScheduleCalendar({
 
     const startMins = getDropMins(e);
     const startTime = minsToStartTime(startMins);
+
+    // --- Validation ---
+    const fileName = data.type === "block" 
+       ? (findEntry(data.entryId)?.task.file_name || "") 
+       : (data.fileName || "");
+       
+    if (fileName) {
+       const is3mf = fileName.toLowerCase().endsWith(".3mf");
+       const isGcode = fileName.toLowerCase().match(/\.(gcode|gco|g|bgcode)$/);
+       const lane = lanes.find(l => l.printer_id === printerId);
+       
+       if (lane) {
+         if (is3mf && lane.printer_kind !== "bambu") {
+           setDropError("Файли .3mf можна призначати тільки на принтери Bambu");
+           setTimeout(() => setDropError(null), 3500);
+           return;
+         }
+         if (isGcode && lane.printer_kind === "bambu") {
+           setDropError("Файли .gcode не можна призначати на принтери Bambu");
+           setTimeout(() => setDropError(null), 3500);
+           return;
+         }
+       }
+    }
 
     setDropping(true);
     try {
@@ -334,13 +358,31 @@ export function ScheduleCalendar({
           printer_id: printerId,
         });
       } else {
-        await createPlanEntry({
-          printer_id: printerId,
-          plan_date: planDate,
-          task_id: data.taskId,
-          start_time: startTime,
-          schedule_mode: "exact_time",
-        });
+        const qty = data.quantity || 1;
+        const dur = data.durationMins || 60;
+        
+        let currMins = startMins;
+        let [y, m, d] = planDate.split("-").map(Number);
+        let currDate = new Date(y, (m || 1) - 1, d || 1);
+        
+        for (let i = 0; i < qty; i++) {
+          const t = minsToStartTime(currMins % 1440);
+          const pDateStr = isoDateStr(currDate);
+          
+          await createPlanEntry({
+            printer_id: printerId,
+            plan_date: pDateStr,
+            task_id: data.taskId,
+            start_time: t,
+            schedule_mode: "exact_time",
+          });
+          
+          currMins += dur;
+          while (currMins >= 1440) {
+            currMins -= 1440;
+            currDate.setDate(currDate.getDate() + 1);
+          }
+        }
       }
       onRefresh();
     } catch (err) {
