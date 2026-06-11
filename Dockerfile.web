@@ -6,8 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libffi-dev && \
     rm -rf /var/lib/apt/lists/*
 
+# Railway builders intermittently time out reaching PyPI — be patient and retry
+ENV PIP_DEFAULT_TIMEOUT=60
+
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 10 -r requirements.txt
 
 COPY backend/ .
 COPY agent/ ./agent/
