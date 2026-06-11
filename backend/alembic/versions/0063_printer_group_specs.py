@@ -22,7 +22,7 @@ def upgrade() -> None:
     op.add_column("printer_groups", sa.Column("build_z", sa.Integer(), nullable=True))
     op.add_column("printer_groups", sa.Column(
         "supported_materials",
-        postgresql.JSONB(astext_type=sa.Text()),
+        postgresql.JSONB(),
         nullable=True,
         server_default="[]",
     ))
