@@ -77,25 +77,21 @@ function ProductSearch({
 
   return (
     <div ref={ref} className="relative">
-      {selected ? (
-        <div className="flex min-h-[38px] items-start gap-1.5 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-hi)] px-3 py-2">
-          <span className="flex-1 text-sm font-medium leading-snug">{selected.name}</span>
-          <button
-            type="button"
-            onClick={() => { onSelect(null, ""); setOpen(true); }}
-            className="mt-0.5 shrink-0 text-base leading-none text-[var(--text-faint)] hover:text-[var(--text)]"
-          >×</button>
-        </div>
-      ) : (
-        <input
-          type="text"
-          value={search}
-          placeholder="Назва або SKU…"
-          autoComplete="off"
-          className="input w-full"
-          onFocus={() => setOpen(true)}
-          onChange={(e) => { onSelect(null, e.target.value); setOpen(true); }}
-        />
+      <input
+        type="text"
+        value={selected ? selected.name : search}
+        placeholder="Назва або SKU…"
+        autoComplete="off"
+        className="input w-full pr-6"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { onSelect(null, e.target.value); setOpen(true); }}
+      />
+      {selected && (
+        <button
+          type="button"
+          onClick={() => { onSelect(null, ""); setOpen(true); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text)]"
+        >×</button>
       )}
       {open && !selected && (
         <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
