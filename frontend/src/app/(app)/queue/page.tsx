@@ -706,12 +706,7 @@ function QueuePageInner() {
               </button>
             ))}
           </div>
-          {canEdit && view === "list" && activeTab === "queued" && (
-            <button onClick={handle1Click}
-              className="flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)]">
-              ≡ 1-CLICK PRINT
-            </button>
-          )}
+
           {canEdit && (
             <button onClick={() => setCreateOpen(true)}
               className="flex h-8 items-center gap-1.5 rounded-md bg-[var(--accent)] px-3 text-sm font-semibold text-white hover:opacity-90">
