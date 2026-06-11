@@ -39,7 +39,14 @@ class SendResult(BaseModel):
 router = APIRouter(prefix="/plan", tags=["plan"])
 
 
-def _to_out(entry: PlanEntry, conflict_ids: set[int] | None = None) -> PlanEntryOut:
+from app.api.tasks import _to_out as task_to_out
+
+def _to_out(
+    entry: PlanEntry,
+    db: Session,
+    org_id: int,
+    conflict_ids: set[int] | None = None,
+) -> PlanEntryOut:
     conflict = entry.id in (conflict_ids or set())
     printer = entry.printer
     return PlanEntryOut(
@@ -48,7 +55,7 @@ def _to_out(entry: PlanEntry, conflict_ids: set[int] | None = None) -> PlanEntry
         printer_id=entry.printer_id,
         printer_name=printer.name if printer else str(entry.printer_id),
         task_id=entry.task_id,
-        task=entry.task,
+        task=task_to_out(entry.task, db, org_id),
         sequence=entry.sequence,
         note=entry.note,
         done=entry.done,
@@ -156,7 +163,7 @@ def get_calendar(
                 printer_name=printer.name,
                 plan_date=d,
                 entries=[
-                    CalendarEntryOut(**_to_out(e, conflict_ids).model_dump())
+                    CalendarEntryOut(**_to_out(e, db, org.id, conflict_ids).model_dump())
                     for e in day_entries
                 ],
             )
@@ -185,7 +192,7 @@ def get_plan(
     target = plan_date or date.today()
     entries = _load_entries(db, org.id, target, target)
     conflict_ids = _conflict_ids_for(entries)
-    return [_to_out(e, conflict_ids) for e in entries]
+    return [_to_out(e, db, org.id, conflict_ids) for e in entries]
 
 
 @router.post("", response_model=PlanEntryOut, status_code=status.HTTP_201_CREATED)
@@ -233,7 +240,7 @@ def create_entry(
         .filter(PlanEntry.id == entry.id)
         .one()
     )
-    return _to_out(entry)
+    return _to_out(entry, db, org.id)
 
 
 @router.patch("/{entry_id}", response_model=PlanEntryOut)
@@ -269,7 +276,7 @@ def update_entry(
 
     db.commit()
     db.refresh(entry)
-    return _to_out(entry)
+    return _to_out(entry, db, org.id)
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
