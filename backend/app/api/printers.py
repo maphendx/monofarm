@@ -69,6 +69,22 @@ def _bambu_build_volume(model: str | None) -> tuple[int, int, int] | None:
     return None
 
 
+def _default_nozzle(kind: "PrinterKind", model: str | None) -> float | None:
+    """Return the factory nozzle diameter for known printer models.
+
+    All standard Bambu Lab and Snapmaker U1 printers ship with a 0.4 mm nozzle.
+    Returns None for unknown/generic printers so we don't silently override a
+    custom nozzle the user may have installed.
+    """
+    if kind == PrinterKind.snapmaker_u1:
+        return 0.4
+    if kind == PrinterKind.bambu and model:
+        m = model.lower()
+        if any(key.lower() in m for key, _ in _BAMBU_VOLUMES):
+            return 0.4
+    return None
+
+
 def _natural_key(s: str) -> list:
     """Split a string into text/number chunks so A11 sorts after A10, not after A1."""
     return [int(chunk) if chunk.isdigit() else chunk.lower() for chunk in re.split(r"(\d+)", s)]
@@ -107,6 +123,11 @@ def _sync_bambu_rows(db: Session, devices: list[dict], org_id: int) -> dict[str,
         if model and row.bambu_model != model:
             row.bambu_model = model
             dirty = True
+        if row.nozzle_diameter is None:
+            nd = _default_nozzle(PrinterKind.bambu, row.bambu_model)
+            if nd is not None:
+                row.nozzle_diameter = nd
+                dirty = True
     if dirty:
         db.commit()
     return existing
@@ -768,6 +789,7 @@ async def claim_bambu_printer(
         build_x=bvol[0] if bvol else None,
         build_y=bvol[1] if bvol else None,
         build_z=bvol[2] if bvol else None,
+        nozzle_diameter=_default_nozzle(PrinterKind.bambu, bmodel),
     )
     db.add(row)
     db.commit()
@@ -901,6 +923,7 @@ async def claim_moonraker_printer(
         kind=kind,
         moonraker_url=url,
         firmware_version=fw,
+        nozzle_diameter=_default_nozzle(kind, None),
     )
     db.add(row)
     db.commit()
@@ -924,6 +947,7 @@ def create_printer(
             detail=f"Printer limit reached ({limit}). Buy extra slots or upgrade your plan.",
         )
     bvol = _bambu_build_volume(payload.bambu_model) if payload.kind == PrinterKind.bambu else None
+    auto_nozzle = _default_nozzle(payload.kind, payload.bambu_model)
     row = Printer(
         organization_id=org.id,
         name=payload.name,
@@ -937,6 +961,7 @@ def create_printer(
         build_x=payload.build_x if payload.build_x is not None else (bvol[0] if bvol else None),
         build_y=payload.build_y if payload.build_y is not None else (bvol[1] if bvol else None),
         build_z=payload.build_z if payload.build_z is not None else (bvol[2] if bvol else None),
+        nozzle_diameter=payload.nozzle_diameter if payload.nozzle_diameter is not None else auto_nozzle,
     )
     db.add(row)
     db.commit()
