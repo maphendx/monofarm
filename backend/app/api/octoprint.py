@@ -44,7 +44,7 @@ from app.models.user import User
 from app.services import moonraker as mr
 from app.services import storage as storage_svc
 from app.services import tunnel as _tunnel
-from app.services.gcode_meta import parse_gcode
+from app.services.gcode_meta import extract_thumbnail, parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR
 
 ALLOWED_EXTS = {".gcode", ".gco", ".g", ".3mf", ".bgcode"}
@@ -179,6 +179,12 @@ async def _store_file(file: UploadFile, org_id: int, db: Session, uploaded_by_id
         filament_meta = parsed if parsed else None
     except Exception:
         pass
+    # Slicer uploads (OrcaSlicer shim) get the same preview as browser uploads
+    thumb = extract_thumbnail(contents, ext)
+    if thumb:
+        storage_svc.put(stored_name + ".thumb.png", thumb, org_id)
+        filament_meta = filament_meta or {}
+        filament_meta["has_thumbnail"] = True
     if storage_svc.is_s3():
         try:
             storage_svc.put(stored_name, contents, org_id)

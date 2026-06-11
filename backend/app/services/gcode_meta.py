@@ -13,6 +13,8 @@ Multi-extruder/AMS values are joined with ';'. We split them into lists.
 .3mf / .gcode.3mf: ZIP archive — we extract the embedded gcode and parse it.
 OrcaSlicer places gcode at Metadata/plate_N.gcode inside the ZIP.
 """
+import base64
+import io
 import logging
 import re
 import zipfile
@@ -194,6 +196,87 @@ def _parse_text(text: str) -> dict:
         pass
 
     return out
+
+
+# ── Thumbnail extraction ─────────────────────────────────────────────────────
+
+# PrusaSlicer / OrcaSlicer / Klipper convention: base64 PNG between comment markers
+#   ; thumbnail begin 300x300 12345
+#   ; iVBORw0KGgo…
+#   ; thumbnail end
+_THUMB_BLOCK_RE = re.compile(
+    rb";\s*thumbnail(?:_PNG)?\s+begin\s+(\d+)[x ](\d+)\s+\d+\s*\r?\n(.*?);\s*thumbnail(?:_PNG)?\s+end",
+    re.DOTALL | re.IGNORECASE,
+)
+# How much of a .gcode file to scan for thumbnail blocks (they sit in the header;
+# scan a tail slice too for slicers that append them).
+_THUMB_SCAN_HEAD = 4 * 1024 * 1024
+_THUMB_SCAN_TAIL = 1 * 1024 * 1024
+
+# Bed/plate render first ("обкладинка столу"), generic slicer previews as fallback.
+_3MF_FIXED_THUMBS = [
+    "Metadata/thumbnail/thumbnail_400x400.png",
+    "Metadata/thumbnail/thumbnail_300x300.png",
+    "Metadata/thumbnail/thumbnail_600x600.png",
+    "Metadata/thumbnail.png",
+    "thumbnail.png",
+    "Auxiliaries/.thumbnails/thumbnail_3mf.png",
+    "Auxiliaries/.thumbnails/thumbnail_middle.png",
+    "Auxiliaries/.thumbnails/thumbnail_small.png",
+]
+
+
+def _3mf_thumbnail(data: bytes) -> bytes | None:
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        names = zf.namelist()
+        plates = sorted(
+            (n for n in names if re.match(r"Metadata/plate_\d+\.png$", n, re.IGNORECASE)),
+            key=lambda n: int(re.search(r"\d+", n.rsplit("/", 1)[-1]).group()),
+        )
+        for candidate in plates + _3MF_FIXED_THUMBS:
+            if candidate in names:
+                img = zf.read(candidate)
+                if img:
+                    return img
+    return None
+
+
+def _gcode_thumbnail(data: bytes) -> bytes | None:
+    chunks = [data[:_THUMB_SCAN_HEAD]]
+    if len(data) > _THUMB_SCAN_HEAD + _THUMB_SCAN_TAIL:
+        chunks.append(data[-_THUMB_SCAN_TAIL:])
+    best: tuple[int, bytes] | None = None
+    for chunk in chunks:
+        for m in _THUMB_BLOCK_RE.finditer(chunk):
+            width, height = int(m.group(1)), int(m.group(2))
+            raw = b"".join(
+                line.strip().lstrip(b";").strip()
+                for line in m.group(3).splitlines()
+            )
+            try:
+                img = base64.b64decode(raw)
+            except Exception:
+                continue
+            if not img.startswith(b"\x89PNG"):
+                continue
+            if best is None or width * height > best[0]:
+                best = (width * height, img)
+    return best[1] if best else None
+
+
+def extract_thumbnail(contents: bytes, ext: str) -> bytes | None:
+    """Best preview PNG for a sliced file, or None.
+
+    .3mf → plate render (`Metadata/plate_1.png` — the bed picture), then slicer
+    preview thumbnails. .gcode → largest embedded `; thumbnail begin` block.
+    """
+    try:
+        if ".3mf" in ext.lower():
+            return _3mf_thumbnail(contents)
+        return _gcode_thumbnail(contents)
+    except Exception:
+        log.debug("Thumbnail extraction failed for ext=%s", ext, exc_info=True)
+        return None
 
 
 def parse_gcode(path: Path) -> dict:
