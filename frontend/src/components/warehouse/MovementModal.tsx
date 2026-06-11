@@ -101,10 +101,10 @@ function ProductSearch({
             <button
               key={p.id}
               type="button"
-              className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--surface-hi)]"
               onMouseDown={(e) => { e.preventDefault(); onSelect(p, p.name); setOpen(false); }}
             >
-              <span className="flex-1 font-medium leading-snug">{p.name}</span>
+              <span className="flex-1 truncate font-medium">{p.name}</span>
               <span className="shrink-0 font-mono text-xs text-[var(--text-faint)]">{p.sku}</span>
             </button>
           ))}
