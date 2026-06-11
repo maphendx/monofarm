@@ -15,8 +15,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Use IF NOT EXISTS so the migration is safe to re-run after partial failures.
     conn = op.get_bind()
+    # During rolling deploy the old container stays alive and can hold open
+    # transactions on this table, causing ALTER TABLE to wait indefinitely.
+    # Terminate idle-in-transaction connections from the same DB user to unblock.
+    conn.execute(sa.text("""
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND usename = current_user
+          AND state IN ('idle in transaction', 'idle in transaction (aborted)')
+    """))
     conn.execute(sa.text("""
         ALTER TABLE printer_groups
             ADD COLUMN IF NOT EXISTS color VARCHAR(16),
