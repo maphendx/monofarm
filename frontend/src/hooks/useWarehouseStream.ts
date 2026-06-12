@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { API_URL, getToken } from "@/lib/api";
+import { getActiveImpersonationOrgId } from "@/lib/impersonation-store";
 
 const WS_URL = API_URL.replace(/^http/, "ws");
 
@@ -30,7 +31,11 @@ export function useWarehouseStream(): { version: number; entity: string | null }
       const token = getToken();
       if (!token) return;
 
-      const ws = new WebSocket(`${WS_URL}/ws/org?token=${token}`);
+      const params = new URLSearchParams({ token });
+      const impersonatedOrgId = getActiveImpersonationOrgId();
+      if (impersonatedOrgId) params.set("impersonated_org_id", impersonatedOrgId);
+
+      const ws = new WebSocket(`${WS_URL}/ws/org?${params.toString()}`);
       wsRef.current = ws;
 
       ws.onopen = () => {

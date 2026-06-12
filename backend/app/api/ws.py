@@ -22,9 +22,11 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.core.db import SessionLocal
 from app.core.security import decode_token
-from app.models.printer import Printer, PrinterKind
+from app.models.organization import Organization
+from app.models.printer import Printer
 from app.models.printer_group import PrinterGroup
-from app.services import bambu, moonraker
+from app.models.user import is_platform_admin
+from app.services import moonraker
 from app.services.ws_manager import manager
 
 log = logging.getLogger(__name__)
@@ -91,25 +93,13 @@ def _build_snapshot(org_id: int) -> list[dict]:
 async def printer_stream(
     websocket: WebSocket,
     token: str | None = Query(default=None),
+    impersonated_org_id: int | None = Query(default=None),
 ) -> None:
     # ── Auth ──────────────────────────────────────────────────────────────
-    payload = decode_token(token or "")
-    if not payload:
+    org_id = _auth_org(token, impersonated_org_id)
+    if org_id is None:
         await websocket.close(code=1008)
         return
-
-    user_id_raw = payload.get("sub")
-    if not user_id_raw:
-        await websocket.close(code=1008)
-        return
-
-    with SessionLocal() as db:
-        from app.models.user import User
-        user = db.get(User, int(user_id_raw))
-        if not user or not user.is_active or user.organization_id is None:
-            await websocket.close(code=1008)
-            return
-        org_id = user.organization_id
 
     # ── Connect ───────────────────────────────────────────────────────────
     await manager.connect(websocket, org_id)
@@ -144,7 +134,7 @@ async def printer_stream(
         await manager.disconnect(websocket, org_id)
 
 
-def _auth_org(token: str | None) -> int | None:
+def _auth_org(token: str | None, impersonated_org_id: int | None = None) -> int | None:
     """Decode token → org_id, or None if invalid."""
     payload = decode_token(token or "")
     if not payload:
@@ -155,7 +145,14 @@ def _auth_org(token: str | None) -> int | None:
     with SessionLocal() as db:
         from app.models.user import User
         user = db.get(User, int(user_id_raw))
-        if not user or not user.is_active or user.organization_id is None:
+        if not user or not user.is_active:
+            return None
+        if impersonated_org_id is not None:
+            if not is_platform_admin(user):
+                return None
+            org = db.get(Organization, impersonated_org_id)
+            return org.id if org else None
+        if user.organization_id is None:
             return None
         return user.organization_id
 
@@ -164,9 +161,10 @@ def _auth_org(token: str | None) -> int | None:
 async def org_event_stream(
     websocket: WebSocket,
     token: str | None = Query(default=None),
+    impersonated_org_id: int | None = Query(default=None),
 ) -> None:
     """Lightweight org event bus — no state polling, only push on mutations."""
-    org_id = _auth_org(token)
+    org_id = _auth_org(token, impersonated_org_id)
     if org_id is None:
         await websocket.close(code=1008)
         return

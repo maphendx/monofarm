@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, getToken } from "@/lib/api";
+import { getActiveImpersonationOrgId } from "@/lib/impersonation-store";
 import type { Printer } from "@/lib/types";
 
 const WS_URL = API_URL.replace(/^http/, "ws");
@@ -43,7 +44,11 @@ export function usePrinterStream(): StreamState & { reload: () => void } {
       const token = getToken();
       if (!token) return;
 
-      const ws = new WebSocket(`${WS_URL}/ws/printers?token=${token}`);
+      const params = new URLSearchParams({ token });
+      const impersonatedOrgId = getActiveImpersonationOrgId();
+      if (impersonatedOrgId) params.set("impersonated_org_id", impersonatedOrgId);
+
+      const ws = new WebSocket(`${WS_URL}/ws/printers?${params.toString()}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
