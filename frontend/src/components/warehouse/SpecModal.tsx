@@ -106,7 +106,7 @@ export function SpecModal({
 
   useEffect(() => {
     if (addComp && catalog.length === 0) {
-      api<CatalogItem[]>("/api/warehouse/products").then(setCatalog).catch(() => {});
+      api<CatalogItem[]>("/api/warehouse/products/options").then(setCatalog).catch(() => {});
     }
     if (!addComp) { setCSearch(""); setCDropOpen(false); }
   }, [addComp]); // eslint-disable-line react-hooks/exhaustive-deps

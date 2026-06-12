@@ -60,7 +60,7 @@ export function CreateBatchModal({
   const selectedProductId = useRef(productId);
 
   useEffect(() => {
-    api<Product[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+    api<Product[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
     api<FarmTask[]>("/api/queue").then(setFarmTasks).catch(() => {});
     if (initialProductId) {
       api<Spec[]>(`/api/warehouse/products/${initialProductId}/specs`)

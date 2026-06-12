@@ -155,7 +155,7 @@ export function CreateMovementModal({
 
   useEffect(() => {
     Promise.all([
-      api<Product[]>("/api/warehouse/products"),
+      api<Product[]>("/api/warehouse/products/options"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
       api<Counterparty[]>("/api/warehouse/counterparties"),
     ]).then(([p, w, c]) => {

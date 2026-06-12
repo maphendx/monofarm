@@ -33,7 +33,7 @@ export function CreateTaskModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) api<ProductOption[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+    if (open) api<ProductOption[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
   }, [open]);
 
   function reset() {

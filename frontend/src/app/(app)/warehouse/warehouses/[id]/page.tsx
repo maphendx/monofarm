@@ -337,7 +337,7 @@ function CellModal({
     setAssignOpen(true);
     setAssignSearch(""); setAssignPid(null); setAssignQty("1");
     if (allProducts.length === 0)
-      api<AllProduct[]>("/api/warehouse/products").then(setAllProducts).catch(() => {});
+      api<AllProduct[]>("/api/warehouse/products/options").then(setAllProducts).catch(() => {});
   }
 
   async function submitAssign() {

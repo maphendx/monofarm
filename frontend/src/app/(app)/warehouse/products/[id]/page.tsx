@@ -95,7 +95,7 @@ function AddComponentForm({
 
   function handleOpen() {
     setOpen(true);
-    api<WProduct[]>("/api/warehouse/products").then(setProducts).catch(() => {});
+    api<WProduct[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
   }
 
   function handleProductChange(id: string) {

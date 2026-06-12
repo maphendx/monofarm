@@ -44,11 +44,11 @@ from app.schemas.warehouse import (
     MovementCreate, MovementListOut, MovementOut, _MOVEMENT_DIRECTION,
     OrderCreate, OrderItemOut, OrderOut, OrderPaymentCreate, OrderPaymentOut, OrderUpdate,
     ProductCategoryCreate, ProductCategoryOut, ProductCategoryUpdate,
-    ProductCreate, ProductImageOut, ProductOut, ProductUpdate,
+    ProductCreate, ProductImageOut, ProductOptionOut, ProductOut, ProductUpdate,
     ProductCellLocationOut, ProductLocationsOut, ProductWarehouseLocationOut,
     PutawayRequest, RelocateRequest, ReserveRequest,
     ShipPick, ShipRequest,
-    SpecComponentCreate, SpecCreate, SpecOperationCreate, SpecOut,
+    SpecComponentCreate, SpecCreate, SpecDefaultSummaryOut, SpecOperationCreate, SpecOut,
     StockEntryOut, StockSummaryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneOverviewOut, ZoneUpdate, ZoneWithCellsOut,
 )
@@ -1855,6 +1855,24 @@ def list_products(
     return [_make_product_out(r, org.id) for r in rows]
 
 
+@router.get("/products/options", response_model=list[ProductOptionOut])
+def list_product_options(
+    search:   str | None = Query(None),
+    archived: bool = Query(False),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[ProductOptionOut]:
+    """Compact product catalog for selects and comboboxes."""
+    q = db.query(Product).filter(
+        Product.organization_id == org.id,
+        Product.is_active.is_(not archived),
+    )
+    if search:
+        q = q.filter(Product.name.ilike(f"%{search}%") | Product.sku.ilike(f"%{search}%"))
+    rows = q.order_by(Product.name).all()
+    return [ProductOptionOut.model_validate(r) for r in rows]
+
+
 def _check_product_limit(org: Organization, db: Session) -> None:
     from app.models.organization import WAREHOUSE_PRODUCT_LIMIT
     limit = WAREHOUSE_PRODUCT_LIMIT[org.plan]
@@ -2669,6 +2687,67 @@ def list_default_specs(
         .all()
     )
     return _specs_to_out(specs, db, org.id)
+
+
+@_full.get("/specs/defaults/summary", response_model=list[SpecDefaultSummaryOut])
+def list_default_specs_summary(
+    db:    Session      = Depends(get_db),
+    org:   Organization = Depends(get_current_org),
+    _user: User         = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> list[SpecDefaultSummaryOut]:
+    """Lightweight default-spec data for the specifications table."""
+    specs = (
+        db.query(Specification)
+        .join(Product, Product.id == Specification.product_id)
+        .filter(
+            Product.organization_id == org.id,
+            Product.is_active.is_(True),
+            Specification.is_default.is_(True),
+        )
+        .order_by(Product.name)
+        .all()
+    )
+    spec_ids = [s.id for s in specs]
+    if not spec_ids:
+        return []
+
+    components_by_spec: dict[int, list[str]] = {sid: [] for sid in spec_ids}
+    operations_by_spec: dict[int, list[SpecOperation]] = {sid: [] for sid in spec_ids}
+
+    components = (
+        db.query(SpecComponent)
+        .filter(SpecComponent.specification_id.in_(spec_ids))
+        .order_by(SpecComponent.specification_id, SpecComponent.sort_order)
+        .all()
+    )
+    for component in components:
+        components_by_spec.setdefault(component.specification_id, []).append(
+            f"{component.name} {component.quantity} {component.unit}"
+        )
+
+    operations = (
+        db.query(SpecOperation)
+        .filter(SpecOperation.specification_id.in_(spec_ids))
+        .order_by(SpecOperation.specification_id, SpecOperation.sort_order)
+        .all()
+    )
+    for operation in operations:
+        operations_by_spec.setdefault(operation.specification_id, []).append(operation)
+
+    rows: list[SpecDefaultSummaryOut] = []
+    for spec in specs:
+        operations = operations_by_spec.get(spec.id, [])
+        rows.append(SpecDefaultSummaryOut(
+            product_id=spec.product_id,
+            material_labels=components_by_spec.get(spec.id, []),
+            work_labels=[op.name for op in operations],
+            extra_labels=[
+                f"{op.name}: {op.explicit_cost}"
+                for op in operations
+                if op.explicit_cost is not None and op.explicit_cost > 0
+            ],
+        ))
+    return rows
 
 
 def _parse_spec_rows(rows: list[list[str]]) -> list[dict]:

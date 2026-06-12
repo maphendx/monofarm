@@ -186,7 +186,7 @@ function CreateOrderModal({ open, onClose, onCreated }: {
     setLines([{ product_id: "", quantity: "1", unit_price: "" }]);
     setError(null);
     Promise.all([
-      api<Product[]>("/api/warehouse/products"),
+      api<Product[]>("/api/warehouse/products/options"),
       api<Counterparty[]>("/api/warehouse/counterparties"),
     ]).then(([p, c]) => { setProducts(p); setCounterparties(c); }).catch(() => {});
   }, [open]);

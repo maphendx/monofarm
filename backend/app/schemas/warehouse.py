@@ -165,6 +165,19 @@ class ProductOut(BaseModel):
         from_attributes = True
 
 
+class ProductOptionOut(BaseModel):
+    id:            int
+    name:          str
+    sku:           str
+    unit:          str
+    sale_price:    Decimal | None
+    cost_price:    Decimal | None
+    desired_stock: int | None
+
+    class Config:
+        from_attributes = True
+
+
 class ProductImageOut(BaseModel):
     id:         int
     image_url:  str
@@ -263,6 +276,13 @@ class SpecOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SpecDefaultSummaryOut(BaseModel):
+    product_id:      int
+    material_labels: list[str]
+    work_labels:     list[str]
+    extra_labels:    list[str]
 
 
 # ── Cost breakdown ────────────────────────────────────────────────────────────

@@ -25,21 +25,11 @@ type Product = {
   min_stock: number | null; desired_stock: number | null; cell_limit: number | null;
 };
 
-type SpecComponent = {
-  id: number; name: string; quantity: string; unit: string;
-  unit_price: string | null; waste_pct: string; sort_order: number;
-};
-
-type SpecOperation = {
-  id: number; type: string; name: string; sort_order: number;
-  print_time_min: string | null; power_watts: number | null;
-  labor_minutes: string | null; labor_rate_per_hour: string | null;
-  explicit_cost: string | null; notes: string | null;
-};
-
-type Spec = {
-  id: number; product_id: number; version: number; name: string; is_default: boolean;
-  notes: string | null; components: SpecComponent[]; operations: SpecOperation[];
+type SpecSummary = {
+  product_id: number;
+  material_labels: string[];
+  work_labels: string[];
+  extra_labels: string[];
 };
 
 type SpecImportResult = {
@@ -106,16 +96,11 @@ function firstItems(items: string[], limit = 2) {
   return items.length > limit ? `${visible} +${items.length - limit}` : visible;
 }
 
-function fmtQty(v: string) {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n.toLocaleString("uk-UA", { maximumFractionDigits: 3 }) : v;
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SpecsPage() {
   const [products,     setProducts]     = useState<Product[]>([]);
-  const [specByProduct, setSpecByProduct] = useState<Record<number, Spec>>({});
+  const [specByProduct, setSpecByProduct] = useState<Record<number, SpecSummary>>({});
   const [loading,      setLoading]      = useState(true);
   const [search,       setSearch]       = useState("");
   const [sortKey,      setSortKey]      = useState<SortKey>("name");
@@ -134,7 +119,7 @@ export default function SpecsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const specsPromise = api<Spec[]>("/api/warehouse/specs/defaults").catch(() => [] as Spec[]);
+      const specsPromise = api<SpecSummary[]>("/api/warehouse/specs/defaults/summary").catch(() => [] as SpecSummary[]);
       const prods = await api<Product[]>("/api/warehouse/products");
       setProducts(prods);
       setSpecByProduct({});
@@ -381,15 +366,9 @@ export default function SpecsPage() {
                   const margin  = calcMargin(p.sale_price, p.full_cost);
                   const spec = specByProduct[p.id] ?? null;
                   const hasSpec = !!spec;
-                  const materials = firstItems(
-                    spec?.components.map((c) => `${c.name} ${fmtQty(c.quantity)} ${c.unit}`) ?? []
-                  );
-                  const works = firstItems(spec?.operations.map((op) => op.name) ?? []);
-                  const extras = firstItems(
-                    spec?.operations
-                      .filter((op) => op.explicit_cost && parseFloat(op.explicit_cost) > 0)
-                      .map((op) => `${op.name}: ${fmt2(op.explicit_cost)}`) ?? []
-                  );
+                  const materials = firstItems(spec?.material_labels ?? []);
+                  const works = firstItems(spec?.work_labels ?? []);
+                  const extras = firstItems(spec?.extra_labels ?? []);
                   return (
                     <tr key={p.id} className="group hover:bg-[var(--surface-hi)]">
                       {colVis.orderedCols.map((col) => {
