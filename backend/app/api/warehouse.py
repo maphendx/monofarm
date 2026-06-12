@@ -1141,6 +1141,32 @@ def _cell_stock_out(cs: CellStock, org_id: int) -> CellStockOut:
     )
 
 
+def _cells_out_for_zones(zone_ids: list[int], org_id: int, db: Session) -> dict[int, list[CellOut]]:
+    """Cells + stock for many zones in two queries (avoids per-cell N+1)."""
+    if not zone_ids:
+        return {}
+    # Order by id = generation (row-major) order, so the CSS grid lays cells out
+    # correctly regardless of code string sorting (e.g. A10 vs A2).
+    cells = (db.query(WarehouseCell)
+               .filter(WarehouseCell.zone_id.in_(zone_ids))
+               .order_by(WarehouseCell.id)
+               .all())
+    stock_by_cell: dict[int, list[CellStock]] = {}
+    if cells:
+        stock_rows = (db.query(CellStock)
+                        .filter(CellStock.cell_id.in_([c.id for c in cells]))
+                        .all())
+        for cs in stock_rows:
+            stock_by_cell.setdefault(cs.cell_id, []).append(cs)
+    out: dict[int, list[CellOut]] = {zid: [] for zid in zone_ids}
+    for cell in cells:
+        out[cell.zone_id].append(CellOut(
+            id=cell.id, code=cell.code, notes=cell.notes,
+            stock=[_cell_stock_out(cs, org_id) for cs in stock_by_cell.get(cell.id, [])],
+        ))
+    return out
+
+
 @_full.get("/zones/{zone_id}/cells", response_model=ZoneWithCellsOut)
 def get_zone_cells(
     zone_id: int,
@@ -1152,23 +1178,10 @@ def get_zone_cells(
     ).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zone not found")
-    # Order by id = generation (row-major) order, so the CSS grid lays cells out
-    # correctly regardless of code string sorting (e.g. A10 vs A2).
-    cells = (db.query(WarehouseCell)
-               .filter(WarehouseCell.zone_id == zone_id)
-               .order_by(WarehouseCell.id)
-               .all())
-    cells_out = []
-    for cell in cells:
-        stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
-        cells_out.append(CellOut(
-            id=cell.id, code=cell.code, notes=cell.notes,
-            stock=[_cell_stock_out(cs, org.id) for cs in stock_rows],
-        ))
-    count = len(cells)
+    cells_out = _cells_out_for_zones([zone_id], org.id, db)[zone_id]
     return ZoneWithCellsOut(
         id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
-        sort_order=zone.sort_order, cell_count=count, created_at=zone.created_at,
+        sort_order=zone.sort_order, cell_count=len(cells_out), created_at=zone.created_at,
         cells=cells_out,
     )
 
@@ -1179,31 +1192,21 @@ def list_zones_with_cells(
     db:  Session      = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[ZoneWithCellsOut]:
-    """Return all zones + their cells for a warehouse in one call (for label printing)."""
+    """Return all zones + their cells for a warehouse in one call."""
     _get_warehouse(wh_id, org, db)
     zones = (db.query(WarehouseZone)
                .filter(WarehouseZone.warehouse_id == wh_id, WarehouseZone.organization_id == org.id)
                .order_by(WarehouseZone.sort_order, WarehouseZone.id)
                .all())
-    result = []
-    for zone in zones:
-        cells = (db.query(WarehouseCell)
-                   .filter(WarehouseCell.zone_id == zone.id)
-                   .order_by(WarehouseCell.id)
-                   .all())
-        cells_out = []
-        for cell in cells:
-            stock_rows = db.query(CellStock).filter(CellStock.cell_id == cell.id).all()
-            cells_out.append(CellOut(
-                id=cell.id, code=cell.code, notes=cell.notes,
-                stock=[_cell_stock_out(cs, org.id) for cs in stock_rows],
-            ))
-        result.append(ZoneWithCellsOut(
+    cells_by_zone = _cells_out_for_zones([z.id for z in zones], org.id, db)
+    return [
+        ZoneWithCellsOut(
             id=zone.id, name=zone.name, rows=zone.rows, cols=zone.cols,
-            sort_order=zone.sort_order, cell_count=len(cells), created_at=zone.created_at,
-            cells=cells_out,
-        ))
-    return result
+            sort_order=zone.sort_order, cell_count=len(cells_by_zone[zone.id]),
+            created_at=zone.created_at, cells=cells_by_zone[zone.id],
+        )
+        for zone in zones
+    ]
 
 
 @_full.put("/cells/{cell_id}/stock", response_model=CellStockOut)

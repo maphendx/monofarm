@@ -995,11 +995,7 @@ export default function WarehouseDetailPage() {
   const [putaway,    setPutaway]    = useState<Unassigned | null>(null);
 
   const loadZones = useCallback(async () => {
-    const zs = await api<Zone[]>(`/api/warehouse/warehouses/${whId}/zones`);
-    const full = await Promise.all(
-      zs.map((z) => api<ZoneWithCells>(`/api/warehouse/zones/${z.id}/cells`))
-    );
-    setZones(full);
+    setZones(await api<ZoneWithCells[]>(`/api/warehouse/warehouses/${whId}/zones-with-cells`));
   }, [whId]);
 
   const loadUnassigned = useCallback(async () => {
