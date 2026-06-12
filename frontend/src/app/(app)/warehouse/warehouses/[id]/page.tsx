@@ -359,6 +359,7 @@ function CellModal({
 
   const usedIds = new Set(stock.map((s) => s.product_id));
   const addable = unassigned.filter((u) => num(u.unassigned) > 0 && !usedIds.has(u.product_id));
+  const assignMatches = allProducts.filter((p) => matchTokens(`${p.name} ${p.sku}`, assignSearch));
   const selectedAdd = addPid ? unassigned.find((u) => u.product_id === parseInt(addPid)) : undefined;
   const selectedAssign = assignPid ? allProducts.find((p) => p.id === assignPid) : undefined;
   const addCap  = selectedAdd ? num(selectedAdd.unassigned) : 0;
@@ -424,7 +425,7 @@ function CellModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+      <div className="relative flex max-h-[85vh] w-full max-w-xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
 
         {/* Header */}
         <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4 gap-3">
@@ -436,7 +437,12 @@ function CellModal({
               <p className="mt-0.5 text-center font-mono text-[9px] text-[var(--text-faint)]">🏷 мітка</p>
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="font-semibold">Комірка {cell.code}</h2>
+              <h2 className="font-semibold">
+                Комірка {cell.code}
+                {stock.length > 0 && (
+                  <span className="ml-2 text-xs font-normal text-[var(--text-faint)]">{stock.length} поз.</span>
+                )}
+              </h2>
               <input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -451,7 +457,7 @@ function CellModal({
         </div>
 
         {/* Current stock */}
-        <div className="px-5 py-4 space-y-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-2">
           {stock.length === 0 ? (
             <p className="text-sm text-[var(--text-faint)]">Комірка порожня</p>
           ) : (
@@ -555,12 +561,7 @@ function CellModal({
               />
               {assignSearch.trim().length >= 1 && (
                 <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]">
-                  {allProducts
-                    .filter((p) => {
-                      return matchTokens(`${p.name} ${p.sku}`, assignSearch);
-                    })
-                    .slice(0, 20)
-                    .map((p) => (
+                  {assignMatches.slice(0, 20).map((p) => (
                       <button
                         key={p.id}
                         type="button"
@@ -574,10 +575,7 @@ function CellModal({
                         <span className="truncate">{p.name}</span>
                       </button>
                     ))}
-                  {allProducts.filter((p) => {
-                    const q = assignSearch.toLowerCase();
-                    return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-                  }).length === 0 && (
+                  {assignMatches.length === 0 && (
                     <p className="px-3 py-2 text-xs text-[var(--text-faint)]">Нічого не знайдено</p>
                   )}
                 </div>
