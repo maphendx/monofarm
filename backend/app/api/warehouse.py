@@ -2673,7 +2673,6 @@ def export_ordage_specs(
 def list_default_specs(
     db:    Session      = Depends(get_db),
     org:   Organization = Depends(get_current_org),
-    _user: User         = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> list[SpecOut]:
     specs = (
         db.query(Specification)
@@ -2693,7 +2692,6 @@ def list_default_specs(
 def list_default_specs_summary(
     db:    Session      = Depends(get_db),
     org:   Organization = Depends(get_current_org),
-    _user: User         = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> list[SpecDefaultSummaryOut]:
     """Lightweight default-spec data for the specifications table."""
     specs = (
