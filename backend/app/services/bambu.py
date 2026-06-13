@@ -49,6 +49,7 @@ DEVICE_LIST_CACHE_TTL = 60
 REDIS_STATE_WRITE_INTERVAL = 5.0
 REDIS_AMS_WRITE_INTERVAL = 60.0
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
+BED_CLEARED_TTL_SECONDS = 12 * 3600
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
     "us": {"api": "https://api.bambulab.com", "mqtt": "us.mqtt.bambulab.com"},
@@ -442,6 +443,23 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
     progress_pct = print_data.get("mc_percent")
     remaining_min = print_data.get("mc_remaining_time")
     eta_minutes = int(remaining_min) if isinstance(remaining_min, (int, float)) and remaining_min > 0 else None
+    filename = print_data.get("subtask_name") or print_data.get("gcode_file") or prev.get("filename")
+
+    from app.services.cache import cache_delete, cache_get, cache_set
+    bed_cleared_key = f"bambu:bed_cleared:{dev_id}"
+    if raw_state in ("RUNNING", "PREPARE", "SLICING"):
+        cache_delete(bed_cleared_key)
+        bed_cleared = None
+    else:
+        bed_cleared = cache_get(bed_cleared_key)
+
+    state = _GCODE_STATE_MAP.get(raw_state, prev.get("state", "unknown")) if raw_state else prev.get("state", "unknown")
+    cleared_finish = raw_state == "FINISH" and bool(bed_cleared)
+    if cleared_finish:
+        state = "idle"
+        progress_pct = None
+        eta_minutes = None
+        filename = None
 
     # Parse HMS error codes (Bambu health monitoring system)
     hms_list = print_data.get("hms")
@@ -458,11 +476,11 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
     updated = {
         "ts": time.monotonic(),
         "last_message_at": received_at.isoformat(),
-        "state": _GCODE_STATE_MAP.get(raw_state, prev.get("state", "unknown")) if raw_state else prev.get("state", "unknown"),
+        "state": state,
         "raw_state": raw_state or prev.get("raw_state", ""),
-        "progress_pct": int(progress_pct) if progress_pct is not None else prev.get("progress_pct"),
-        "eta_minutes": eta_minutes if eta_minutes is not None else prev.get("eta_minutes"),
-        "filename": print_data.get("subtask_name") or print_data.get("gcode_file") or prev.get("filename"),
+        "progress_pct": None if cleared_finish else (int(progress_pct) if progress_pct is not None else prev.get("progress_pct")),
+        "eta_minutes": None if cleared_finish else (eta_minutes if eta_minutes is not None else prev.get("eta_minutes")),
+        "filename": filename,
         "nozzle_temp": print_data.get("nozzle_temper") if print_data.get("nozzle_temper") is not None else prev.get("nozzle_temp"),
         "nozzle_target": print_data.get("nozzle_target_temper") if print_data.get("nozzle_target_temper") is not None else prev.get("nozzle_target"),
         "bed_temp": print_data.get("bed_temper") if print_data.get("bed_temper") is not None else prev.get("bed_temp"),
@@ -503,7 +521,6 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
 
     # Persist to Redis on meaningful change, else at most every few seconds —
     # reports stream ~1/s per printing device and the payload rarely differs.
-    from app.services.cache import cache_set
     now_mono = time.monotonic()
     if (
         state_changed
@@ -514,6 +531,17 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
         _last_state_redis_write[dev_id] = now_mono
     _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
+
+
+def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]:
+    """Persist operator confirmation so FINISH reports do not re-open the bed prompt."""
+    from app.services.cache import cache_set
+    marker = {"cleared_at": datetime.now(timezone.utc).isoformat(), "filename": filename}
+    cache_set(f"bambu:bed_cleared:{dev_id}", marker, BED_CLEARED_TTL_SECONDS)
+    idle = {"ts": time.monotonic(), "state": "idle", "filename": None, "progress_pct": None, "eta_minutes": None}
+    _state_cache[dev_id] = idle
+    cache_set(f"bambu:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
+    return idle
 
 
 def _safe_int(value: Any) -> int | None:

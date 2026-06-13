@@ -227,18 +227,24 @@ function PrinterPhotoCard({
   printer,
   onClick,
   onUpdated,
+  onPrint,
 }: {
   printer: Printer;
   onClick: () => void;
   onUpdated: (p: Printer) => void;
+  onPrint?: (p: Printer) => void;
 }) {
   const cover      = printerCover(printer);
   const tone       = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
   const isError    = printer.state === "error";
+  const needsClearBed = printer.state === "awaiting_bed_clear" ||
+    (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
+  const canStartPrint = (printer.state === "idle" || printer.state === "operational") && !needsClearBed;
   const pct        = printer.progress_pct ?? 0;
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmClearBed, setConfirmClearBed] = useState(false);
 
   const TOP: Record<string, string> = {
     printing: "var(--state-print)", ok: "var(--state-ok)", warn: "var(--state-warn)", bad: "var(--state-error)",
@@ -252,6 +258,7 @@ function PrinterPhotoCard({
   async function act(e: React.MouseEvent, action: string) {
     e.stopPropagation();
     if (busy) return;
+    setConfirmClearBed(false);
     setBusy(action);
     try {
       await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
@@ -332,6 +339,51 @@ function PrinterPhotoCard({
       )}
 
       {/* ── action buttons ── */}
+      {canStartPrint && onPrint && (
+        <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onPrint(printer); }}
+            className="flex w-full items-center justify-center rounded-lg border border-[var(--state-ok)] bg-[rgba(34,197,94,.08)] py-1.5 text-xs font-semibold text-[var(--state-ok)] transition hover:bg-[rgba(34,197,94,.15)]"
+          >
+            ▶ Друк
+          </button>
+        </div>
+      )}
+
+      {needsClearBed && (
+        <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+          {confirmClearBed ? (
+            <>
+              <button
+                onClick={(e) => act(e, "clear-bed")}
+                disabled={!!busy}
+                className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+                style={{ borderColor: "var(--state-ok)", color: "var(--state-ok)" }}
+              >
+                {busy === "clear-bed" ? "…" : "Так"}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirmClearBed(false); }}
+                disabled={!!busy}
+                className="flex flex-1 items-center justify-center rounded-lg border border-[var(--border)] py-1.5 text-xs font-semibold text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40"
+              >
+                Ні
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmClearBed(true); }}
+              disabled={!!busy}
+              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+              style={{ borderColor: "var(--state-ok)", color: "var(--state-ok)" }}
+            >
+              Стіл очищено
+            </button>
+          )}
+        </div>
+      )}
+
       {(isPrinting || isPaused || isError) && (
         <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
           {isError ? (
@@ -648,7 +700,7 @@ export default function DashboardPage() {
       ) : view === "photos" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filtered.map((p) => (
-            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} onUpdated={upsertPrinter} />
+            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
           ))}
         </div>
       ) : !isGrouped ? (

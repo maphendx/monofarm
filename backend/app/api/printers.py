@@ -1342,11 +1342,8 @@ async def print_clear_bed(
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
-        from app.services.cache import cache_delete
-        import time as _time
-        idle = {"ts": _time.monotonic(), "state": "idle"}
-        bambu._state_cache[row.bambu_dev_id] = idle
-        cache_delete(f"bambu:state:{row.bambu_dev_id}")
+        live = bambu.get_cached_state(row.bambu_dev_id)
+        bambu.mark_bed_cleared(row.bambu_dev_id, live.get("filename"))
 
     elif row.moonraker_url:
         # Home the printer — typical Klipper post-print sequence

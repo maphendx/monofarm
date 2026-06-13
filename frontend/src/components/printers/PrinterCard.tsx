@@ -53,10 +53,12 @@ export function PrinterCard({
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
   const isIdle = printer.state === "idle";
-  const isOperational = printer.state === "operational" || printer.state === "awaiting_bed_clear";
+  const needsClearBed = printer.state === "awaiting_bed_clear" ||
+    (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
+  const canStartPrint = (isIdle || printer.state === "operational") && !needsClearBed;
   const hasMoonraker = !!printer.moonraker_url;
   const canEdit = user.role === "admin" || user.role === "operator";
-  const isActionable = (isPrinting || isPaused || isOperational || isIdle) && canEdit;
+  const isActionable = (isPrinting || isPaused || needsClearBed || canStartPrint) && canEdit;
   const showProgress = isPrinting && printer.progress_pct != null;
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -220,7 +222,7 @@ export function PrinterCard({
       {isActionable && (
         <div className="border-t border-[var(--border)] pt-1.5">
           <div className="pc-actions flex-wrap">
-            {isIdle && onPrint && (
+            {canStartPrint && onPrint && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onPrint(printer); }}
@@ -229,7 +231,7 @@ export function PrinterCard({
                 ▶ Друк
               </button>
             )}
-            {isOperational && (
+            {needsClearBed && (
               confirmClearBed ? (
                 <>
                   <button
