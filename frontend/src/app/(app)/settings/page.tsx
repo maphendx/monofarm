@@ -700,7 +700,6 @@ function AgentSection() {
 
   const cmds = {
     linux:   `curl -sSL ${API_BASE}/agent/install.sh | sudo bash -s -- --server ${API_BASE}`,
-    windows: `irm ${API_BASE}/agent/install.ps1 | iex`,
     docker:  `docker run --network host --restart unless-stopped \\\n  monofarm/agent \\\n  --server ${API_BASE}`,
   };
 
@@ -797,10 +796,44 @@ function AgentSection() {
       {/* ── Setup cards grid ── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
-        {/* Linux / Pi */}
-        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
+        {/* Windows — download button, no commands */}
+        <div className="relative flex flex-col rounded-2xl border border-[var(--accent)]/30 bg-gradient-to-b from-[var(--bg-elevated)] to-[var(--bg)] p-5">
+          <span className="absolute -top-2.5 right-4 rounded-full bg-[var(--accent)] px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+            Рекомендовано
+          </span>
           <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--accent)]/10">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--accent)]">
+                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.801"/>
+              </svg>
+            </span>
+            <div>
+              <p className="text-sm font-semibold">Windows</p>
+              <p className="text-[11px] text-[var(--text-faint)]">Автозапуск з трею</p>
+            </div>
+          </div>
+          <p className="mb-4 text-xs text-[var(--text-muted)]">
+            Скачай, запусти — агент з&apos;явиться в треї. Далі підключення через браузер, без команд.
+          </p>
+          <a
+            href={`${API_BASE}/agent/monofarm-agent.exe`}
+            download
+            className="mt-auto flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Завантажити .exe
+          </a>
+          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
+            Windows 10+ · Не потребує Python · ~20 MB
+          </p>
+        </div>
+
+        {/* Linux / Pi */}
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)]">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
               </svg>
@@ -810,41 +843,19 @@ function AgentSection() {
               <p className="text-[11px] text-[var(--text-faint)]">systemd автозапуск</p>
             </div>
           </div>
-          <p className="mb-1 text-xs text-[var(--text-muted)] ">
+          <p className="mb-1 text-xs text-[var(--text-muted)]">
             Одна команда — встановлює залежності, агент і systemd-сервіс.
           </p>
           <CmdBlock cmd={cmds.linux} id="linux" copied={copied} onCopy={copy} />
           <p className="mt-3 text-[11px] text-[var(--text-faint)]">
-            Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5 ">journalctl --user -u monofarm-agent -f</code>
-          </p>
-        </div>
-
-        {/* Windows */}
-        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
-          <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-13.051-1.801"/>
-              </svg>
-            </span>
-            <div>
-              <p className="text-sm font-semibold">Windows</p>
-              <p className="text-[11px] text-[var(--text-faint)]">Task Scheduler автозапуск</p>
-            </div>
-          </div>
-          <p className="mb-1 text-xs text-[var(--text-muted)] ">
-            PowerShell (не CMD). Встановлює Python якщо потрібно, реєструє завдання при вході.
-          </p>
-          <CmdBlock cmd={cmds.windows} id="windows" copied={copied} onCopy={copy} />
-          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
-            Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5 ">Get-Content ~\.monofarm-agent\agent.log -Wait</code>
+            Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5">journalctl --user -u monofarm-agent -f</code>
           </p>
         </div>
 
         {/* Docker */}
-        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5  ">
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
           <div className="mb-3 flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)] ">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)]">
               <svg width="18" height="14" viewBox="0 0 24 19" fill="currentColor">
                 <path d="M13 7h2V5h-2v2zm-3 0h2V5h-2v2zM7 7h2V5H7v2zm3-3h2V2h-2v2zM7 4h2V2H7v2zM2.6 19C1.2 19 0 17.9 0 16.6c0-.2 0-.4.1-.6L1.5 9h21l1.4 6c0 .2.1.4.1.6 0 1.3-1.2 2.4-2.6 2.4H2.6zM22 7H4c-.6 0-1 .4-1 1v.5L1.5 9h21L21 8.5V8c0-.6-.4-1-1-1z"/>
               </svg>
@@ -854,7 +865,7 @@ function AgentSection() {
               <p className="text-[11px] text-[var(--text-faint)]">--network host потрібен</p>
             </div>
           </div>
-          <p className="mb-1 text-xs text-[var(--text-muted)] ">
+          <p className="mb-1 text-xs text-[var(--text-muted)]">
             Якщо на Pi вже є Docker — найпростіший варіант.
           </p>
           <CmdBlock cmd={cmds.docker} id="docker" copied={copied} onCopy={copy} />
