@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 const API_BASE =
-  typeof window !== "undefined"
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined"
     ? window.location.origin.replace(":3000", ":8000")
-    : "https://api.monofarm.app";
+    : "https://api.monofarm.app");
 
 const INSTALL_CMD = `curl -sSL ${typeof window !== "undefined" ? window.location.origin.replace(":3000", ":8000") : "https://api.monofarm.app"}/agent/install.sh | bash`;
 
@@ -66,7 +67,7 @@ export default function OnboardingPage() {
 
   function installCmd(platform: "windows" | "linux") {
     return platform === "windows"
-      ? `irm https://monofarm.app/agent/install.ps1 | iex`
+      ? `irm ${API_BASE}/agent/install.ps1 | iex`
       : `curl -sSL ${API_BASE}/agent/install.sh | bash`;
   }
 
