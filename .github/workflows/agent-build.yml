@@ -1,9 +1,11 @@
 name: Build agent exe
 
-# Builds monofarm-agent.exe on a Windows runner (cannot be built on Linux/macOS)
-# and uploads it to Cloudflare R2 at agent/monofarm-agent.exe. The backend serves
-# it via GET /agent/monofarm-agent.exe; the installer and frozen self-update pull
-# from there. Bump AGENT_VERSION (3 files) and tag agent-vX.Y.Z to publish.
+# Builds monofarm-agent.exe on a Windows runner and uploads it as a
+# GitHub Actions artifact.  When R2 secrets are configured it also
+# publishes the binary to Cloudflare R2 so the backend can serve it at
+# GET /agent/monofarm-agent.exe.
+#
+# Trigger: push a tag like  agent-v0.8.0  or use workflow_dispatch.
 
 on:
   workflow_dispatch:
@@ -14,6 +16,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
@@ -39,13 +44,15 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to R2
-        if: ${{ secrets.R2_ENDPOINT != '' }}
+        if: env.R2_ENDPOINT != ''
         env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
           AWS_DEFAULT_REGION: auto
-        run: >
-          aws s3 cp agent/dist/monofarm-agent.exe
-          s3://${{ secrets.R2_BUCKET }}/agent/monofarm-agent.exe
-          --endpoint-url ${{ secrets.R2_ENDPOINT }}
-          --content-type application/vnd.microsoft.portable-executable
+        shell: bash
+        run: |
+          aws s3 cp agent/dist/monofarm-agent.exe \
+            "s3://${{ secrets.R2_BUCKET }}/agent/monofarm-agent.exe" \
+            --endpoint-url "${{ secrets.R2_ENDPOINT }}" \
+            --content-type application/vnd.microsoft.portable-executable
