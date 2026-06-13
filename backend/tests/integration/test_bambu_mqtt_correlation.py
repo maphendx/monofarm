@@ -139,6 +139,50 @@ def test_mqtt_ambiguous_report_does_not_update_jobs(db_session, test_org, monkey
     assert job_b.last_mqtt_at is None
 
 
+def test_bed_cleared_failed_report_stays_idle_and_does_not_fail_job(db_session, test_org, monkeypatch):
+    monkeypatch.setattr(bambu, "SessionLocal", lambda: _SessionContext(db_session))
+    printer = _make_printer(db_session, test_org.id, dev_id="DEV-CLEARED")
+    job = _make_job(
+        db_session,
+        org_id=test_org.id,
+        printer_id=printer.id,
+        dev_id="DEV-CLEARED",
+        file_name="bad-sd.3mf",
+        task_id="task-cleared",
+        status=BambuCloudJobStatus.printing,
+    )
+
+    bambu.mark_bed_cleared("DEV-CLEARED", "bad-sd.3mf")
+    bambu._on_message(
+        None,
+        None,
+        _Msg(
+            "DEV-CLEARED",
+            {
+                "print": {
+                    "gcode_state": "FAILED",
+                    "task_id": "task-cleared",
+                    "subtask_name": "bad-sd.3mf",
+                    "mc_percent": 0,
+                    "mc_remaining_time": 26,
+                    "print_error": 83935248,
+                }
+            },
+        ),
+    )
+
+    live = bambu.get_cached_state("DEV-CLEARED")
+    db_session.refresh(job)
+    assert live["state"] == "idle"
+    assert live["raw_state"] == "IDLE"
+    assert live["filename"] is None
+    assert live["progress_pct"] is None
+    assert live["eta_minutes"] is None
+    assert live["error_msg"] is None
+    assert job.status == BambuCloudJobStatus.printing
+    assert job.error_msg is None
+
+
 def test_lost_detection_marks_unacknowledged_task_created_job(db_session, test_org):
     printer = _make_printer(db_session, test_org.id, dev_id="DEV-LOST")
     job = _make_job(

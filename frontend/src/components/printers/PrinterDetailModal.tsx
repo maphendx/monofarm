@@ -83,7 +83,7 @@ function PrintControls({
             disabled={busy !== null}
             className="rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)] disabled:opacity-50"
           >
-            {busy === "clear-error" ? "…" : "Збити помилку"}
+            {busy === "clear-error" ? "…" : "Скинути помилку"}
           </button>
         )}
         <button

@@ -289,7 +289,7 @@ export function PrinterCard({
                 disabled={busy !== null}
                 className="btn btn-warn btn-sm flex-1 disabled:opacity-40"
               >
-                {busy === "clear-error" ? "…" : "Збити"}
+                {busy === "clear-error" ? "…" : "Скинути"}
               </button>
             )}
             {(isPrinting || isPaused || isError) && (

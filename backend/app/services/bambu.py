@@ -472,12 +472,14 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         err_code = print_data["print_error"]
         if err_code != 0:
             error_msg = f"Помилка друку: {err_code:#010x}"
+    if cleared_terminal:
+        error_msg = None
 
     updated = {
         "ts": time.monotonic(),
         "last_message_at": received_at.isoformat(),
         "state": state,
-        "raw_state": raw_state or prev.get("raw_state", ""),
+        "raw_state": "IDLE" if cleared_terminal else (raw_state or prev.get("raw_state", "")),
         "progress_pct": None if cleared_terminal else (int(progress_pct) if progress_pct is not None else prev.get("progress_pct")),
         "eta_minutes": None if cleared_terminal else (eta_minutes if eta_minutes is not None else prev.get("eta_minutes")),
         "filename": filename,
@@ -485,8 +487,12 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         "nozzle_target": print_data.get("nozzle_target_temper") if print_data.get("nozzle_target_temper") is not None else prev.get("nozzle_target"),
         "bed_temp": print_data.get("bed_temper") if print_data.get("bed_temper") is not None else prev.get("bed_temp"),
         "bed_target": print_data.get("bed_target_temper") if print_data.get("bed_target_temper") is not None else prev.get("bed_target"),
-        "layer_num": print_data.get("layer_num") if print_data.get("layer_num") is not None else prev.get("layer_num"),
-        "total_layers": print_data.get("total_layer_num") if print_data.get("total_layer_num") is not None else prev.get("total_layers"),
+        "layer_num": None if cleared_terminal else (
+            print_data.get("layer_num") if print_data.get("layer_num") is not None else prev.get("layer_num")
+        ),
+        "total_layers": None if cleared_terminal else (
+            print_data.get("total_layer_num") if print_data.get("total_layer_num") is not None else prev.get("total_layers")
+        ),
         # Clear error_msg when printer recovers to normal state
         "error_msg": error_msg if error_msg is not None else (
             None if raw_state in ("IDLE", "RUNNING", "FINISH") or cleared_terminal else prev.get("error_msg")
@@ -530,6 +536,8 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
     ):
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
         _last_state_redis_write[dev_id] = now_mono
+    if cleared_terminal:
+        return
     _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
 
 
@@ -538,7 +546,18 @@ def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]
     from app.services.cache import cache_set
     marker = {"cleared_at": datetime.now(timezone.utc).isoformat(), "filename": filename}
     cache_set(f"bambu:bed_cleared:{dev_id}", marker, BED_CLEARED_TTL_SECONDS)
-    idle = {"ts": time.monotonic(), "state": "idle", "filename": None, "progress_pct": None, "eta_minutes": None}
+    idle = {
+        "ts": time.monotonic(),
+        "last_message_at": marker["cleared_at"],
+        "state": "idle",
+        "raw_state": "IDLE",
+        "filename": None,
+        "progress_pct": None,
+        "eta_minutes": None,
+        "error_msg": None,
+        "layer_num": None,
+        "total_layers": None,
+    }
     _state_cache[dev_id] = idle
     cache_set(f"bambu:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
     return idle

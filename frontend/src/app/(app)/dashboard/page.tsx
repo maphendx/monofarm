@@ -392,7 +392,7 @@ function PrinterPhotoCard({
               disabled={!!busy}
               className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
               style={{ borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
-              title="Збити помилку"
+              title="Скинути помилку"
             >
               {busy === "clear-error" ? "…" : "↺"}
             </button>
