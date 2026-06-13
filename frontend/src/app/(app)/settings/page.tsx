@@ -1715,6 +1715,10 @@ function OrgSection({
                 ? <>Бот <strong>@{settings.tg_bot_username}</strong> підключено</>
                 : <span className="text-[var(--text-muted)]">Бот запускається… зачекай кілька секунд</span>}
             </div>
+            <p className="text-sm text-[var(--text-muted)]">
+              Щоб отримувати алерти про збої і зупинки принтерів — додай бота у груповий чат і напиши там{" "}
+              <code className="rounded bg-[var(--surface-hi)] px-1 text-[var(--text)]">/тривоги_тут</code>.
+            </p>
             <div className="flex gap-3">
               <button
                 onClick={() => { setTgShowInput(true); setTgToken(""); setTgError(null); }}
@@ -1733,13 +1737,23 @@ function OrgSection({
           </div>
         ) : (
           <form onSubmit={saveTgToken} className="space-y-3">
-            <p className="text-sm text-[var(--text-muted)] ">
-              Створи бота у{" "}
-              <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">
-                @BotFather
-              </a>
-              , скопіюй HTTP API token, встав сюди.
-            </p>
+            <ol className="list-decimal space-y-1.5 pl-5 text-sm text-[var(--text-muted)]">
+              <li>
+                Відкрий{" "}
+                <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">
+                  @BotFather
+                </a>{" "}
+                у Telegram.
+              </li>
+              <li>Надішли <code className="rounded bg-[var(--surface-hi)] px-1 text-[var(--text)]">/newbot</code> і дай боту назву.</li>
+              <li>Скопіюй <strong>HTTP API token</strong> і встав його нижче.</li>
+              <li>Додай бота у груповий чат операторів.</li>
+              <li>
+                Напиши в тому чаті{" "}
+                <code className="rounded bg-[var(--surface-hi)] px-1 text-[var(--text)]">/тривоги_тут</code>{" "}
+                — туди надходитимуть алерти про збої і зупинки (текст помилки, код і фото з камери).
+              </li>
+            </ol>
             <label className="block">
               <span className="mb-1 block text-sm">Bot token</span>
               <input

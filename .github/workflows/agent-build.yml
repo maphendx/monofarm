@@ -1,0 +1,51 @@
+name: Build agent exe
+
+# Builds monofarm-agent.exe on a Windows runner (cannot be built on Linux/macOS)
+# and uploads it to Cloudflare R2 at agent/monofarm-agent.exe. The backend serves
+# it via GET /agent/monofarm-agent.exe; the installer and frozen self-update pull
+# from there. Bump AGENT_VERSION (3 files) and tag agent-vX.Y.Z to publish.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'agent-v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build deps
+        working-directory: agent
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build exe
+        working-directory: agent
+        run: pyinstaller --noconfirm monofarm-agent.spec
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: monofarm-agent-exe
+          path: agent/dist/monofarm-agent.exe
+          if-no-files-found: error
+
+      - name: Publish to R2
+        if: ${{ secrets.R2_ENDPOINT != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: >
+          aws s3 cp agent/dist/monofarm-agent.exe
+          s3://${{ secrets.R2_BUCKET }}/agent/monofarm-agent.exe
+          --endpoint-url ${{ secrets.R2_ENDPOINT }}
+          --content-type application/vnd.microsoft.portable-executable

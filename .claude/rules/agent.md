@@ -56,4 +56,18 @@ The agent runs a local `python-telegram-bot` instance using the per-org token. D
 
 ## Config storage
 
-Agent stores config in `~/.monofarm-agent/.env`. Never hardcode paths — always use `CONFIG_DIR / CONFIG_FILE`. On Windows the tray app (`monofarm_tray.py`) uses the same config dir.
+Agent stores config in `~/.monofarm-agent/.env`. Never hardcode paths — always use `CONFIG_DIR / CONFIG_FILE`. On Windows the tray app (`monofarm_tray.py`) uses the same config dir. Writes go through the atomic `_write_config` / `save_config` (temp + `os.replace`) and **merge** existing keys — never overwrite the file with a subset (that once wiped `ALERT_CHAT_IDS`).
+
+## One canonical loop — tray is a thin host
+
+`monofarm_agent.run(server, token, *, on_state=None, run_updates=True)` is the **single** WebSocket relay + dispatch loop (TG bot, `MOONRAKER_SUBSCRIBE`, Bambu LAN, alerts, updates). The tray (`monofarm_tray.py`) must **host** `run()` and only add GUI (tray icon, local browser UI, autostart, printer discovery). Do **not** re-add a parallel dispatch loop to the tray — the old duplicate silently dropped the Telegram bot and Moonraker live state on Windows. New server→agent methods go in `run()`'s dispatch only.
+
+## Relay purity — nothing processed on our server
+
+The agent is the smart edge: it receives commands and relays them to local printers, and receives printer state and relays it to the cloud. The server is **relay + cache only** — do not move printer/alert/photo processing onto the server. Failure-alert detection, camera snapshots and Telegram sending all happen on the agent (see [[project_printer_alerts]]).
+
+## Distribution — exe-first on Windows
+
+- Windows: a frozen PyInstaller **.exe** (`monofarm-agent.spec`, entry `monofarm_tray.py`). Built on a Windows CI runner (`.github/workflows/agent-build.yml`) — **cannot build on Linux/macOS** — and uploaded to R2 at `agent/monofarm-agent.exe`. Served by `GET /agent/monofarm-agent.exe` (302 → presigned). `install.ps1` is exe-first (no Python).
+- Linux/Pi/dev: Python source via `install.sh` / `requirements.txt`.
+- Auto-update (`check_for_update`) is **frozen-aware**: `.exe` self-swaps (`*.old.exe` cleaned next launch); source path rewrites `.py` + re-execs. Still bump `AGENT_VERSION` in all three files together; tag `agent-v*` to publish a new exe.

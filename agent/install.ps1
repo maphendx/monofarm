@@ -1,8 +1,9 @@
-# monofarm-agent Windows installer
-# Usage: irm https://monofarm.app/agent/install.ps1 | iex
+# monofarm-agent Windows installer (exe-first — no Python required)
+# Usage: irm https://api.monofarm.app/agent/install.ps1 | iex
 #
-# Installs the tray app to %USERPROFILE%\.monofarm-agent and adds a Startup
-# folder shortcut so it launches automatically at login (no admin needed).
+# Downloads monofarm-agent.exe to %LOCALAPPDATA%\Programs\monofarm-agent,
+# writes the token to %USERPROFILE%\.monofarm-agent\.env, and adds a Startup
+# shortcut so the tray app launches at login (no admin needed).
 
 param(
     [string]$Token    = $env:MONOFARM_TOKEN,
@@ -14,110 +15,85 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$InstallDir  = Join-Path $env:USERPROFILE ".monofarm-agent"
-$TrayScript  = Join-Path $InstallDir "monofarm_tray.py"
-$AgentScript = Join-Path $InstallDir "monofarm_agent.py"
-$VenvPython  = Join-Path $InstallDir "venv\Scripts\python.exe"
-$VenvPythonW = Join-Path $InstallDir "venv\Scripts\pythonw.exe"
+$InstallDir = Join-Path $env:LOCALAPPDATA "Programs\monofarm-agent"
+$ExePath    = Join-Path $InstallDir "monofarm-agent.exe"
+$ConfigDir  = Join-Path $env:USERPROFILE ".monofarm-agent"
 
 Write-Host ""
-Write-Host "  monofarm agent installer (Windows)"
+Write-Host "  monofarm agent installer (Windows, exe)"
 Write-Host "  Server:      $Server"
 Write-Host "  Install dir: $InstallDir"
 Write-Host ""
 
-# ── Auto-login: exchange email+password for token ─────────────────────────────
+# ── Auto-login: exchange email+password for a token ───────────────────────────
 
 if (-not $Token -and $Email -and $Password) {
-    Write-Host "Logging in as $Email …"
+    Write-Host "Logging in as $Email ..."
     try {
         $body = @{email=$Email; password=$Password} | ConvertTo-Json
         $resp = Invoke-RestMethod -Uri "$Server/api/auth/login" -Method POST `
                     -Body $body -ContentType "application/json" -ErrorAction Stop
         $Token = $resp.access_token
-        Write-Host "  [OK] Logged in — token acquired"
+        Write-Host "  [OK] Logged in - token acquired"
     } catch {
         Write-Host "  [!!] Login failed: $_"
-        Write-Host "  You can set the token manually in $InstallDir\.env after install."
+        Write-Host "  You can paste the token later in the tray app's setup page."
     }
 }
 
-# ── Python check ─────────────────────────────────────────────────────────────
+# ── Stop any running instance, then download the exe ──────────────────────────
 
-$PythonExe = $null
-foreach ($candidate in @("python", "python3", "py")) {
-    try {
-        $ver = & $candidate --version 2>&1
-        if ($ver -match "Python 3") {
-            $PythonExe = (Get-Command $candidate).Source
-            Write-Host "Python: $PythonExe ($ver)"
-            break
-        }
-    } catch { }
-}
-
-if (-not $PythonExe) {
-    Write-Host "Python 3 not found. Installing via winget…"
-    winget install --id Python.Python.3.11 --source winget --silent
-    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("PATH", "User")
-    $PythonExe = (Get-Command python).Source
-}
-
-# ── Install dir ───────────────────────────────────────────────────────────────
+Get-Process -Name "monofarm-agent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ConfigDir  | Out-Null
 
-# ── venv + deps ───────────────────────────────────────────────────────────────
+Write-Host "Downloading agent from $Server ..."
+Invoke-WebRequest -Uri "$Server/agent/monofarm-agent.exe" -OutFile $ExePath
 
-Write-Host "Creating virtual environment…"
-& $PythonExe -m venv "$InstallDir\venv"
+# ── Write config (preserve existing keys like ALERT_CHAT_IDS) ─────────────────
 
-Write-Host "Installing dependencies…"
-& "$InstallDir\venv\Scripts\pip" install --quiet --upgrade pip
-& "$InstallDir\venv\Scripts\pip" install --quiet websockets httpx paho-mqtt pystray Pillow
-
-# ── Download agent files ──────────────────────────────────────────────────────
-
-Write-Host "Downloading agent from $Server …"
-Invoke-WebRequest -Uri "$Server/agent/monofarm_agent.py" -OutFile $AgentScript
-Invoke-WebRequest -Uri "$Server/agent/monofarm_tray.py"  -OutFile $TrayScript
-
-# ── Write config ──────────────────────────────────────────────────────────────
-
-$EnvFile = Join-Path $InstallDir ".env"
-Set-Content -Path $EnvFile -Value "MONOFARM_SERVER=$Server`nMONOFARM_FRONTEND=$Frontend`nMONOFARM_TOKEN=$Token"
+$EnvFile = Join-Path $ConfigDir ".env"
+$cfg = [ordered]@{
+    MONOFARM_SERVER   = $Server
+    MONOFARM_FRONTEND = $Frontend
+    MONOFARM_TOKEN    = $Token
+}
+if (Test-Path $EnvFile) {
+    foreach ($line in Get-Content $EnvFile) {
+        if ($line -match '^\s*([^#=]+)=(.*)$') {
+            $k = $matches[1].Trim()
+            if (-not $cfg.Contains($k)) { $cfg[$k] = $matches[2].Trim() }
+        }
+    }
+}
+($cfg.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { "$($_.Key)=$($_.Value)" }) `
+    -join "`n" | Set-Content -Path $EnvFile -Encoding UTF8
 Write-Host "Config written to $EnvFile"
 
-# ── Startup folder shortcut (runs at login, no admin needed) ──────────────────
+# ── Startup folder shortcut (launches at login, no admin) ─────────────────────
 
-Write-Host "Adding to Startup folder…"
+Write-Host "Adding to Startup folder..."
 $StartupDir = [Environment]::GetFolderPath("Startup")
 $BatFile    = Join-Path $StartupDir "monofarm-agent.bat"
-Set-Content -Path $BatFile -Value "@echo off`r`nstart `"`" `"$VenvPythonW`" `"$TrayScript`"`r`n"
+Set-Content -Path $BatFile -Value "@echo off`r`nstart `"`" `"$ExePath`"`r`n"
 
-# ── Kill any old agent instance, then start tray ─────────────────────────────
-
-Write-Host "Starting tray app…"
-# Stop old headless agent Task Scheduler entry if it was set up previously
+# Remove any legacy Python-based startup / scheduled task from older installs.
 Unregister-ScheduledTask -TaskName "MonofarmAgent" -Confirm:$false -ErrorAction SilentlyContinue
-# Kill any running monofarm python process
-Get-Process | Where-Object { $_.MainModule.FileName -like "*monofarm*\venv\*python*" } `
-    -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-Start-Process -FilePath $VenvPythonW `
-    -ArgumentList "`"$TrayScript`"" `
-    -WorkingDirectory $InstallDir
+# ── Launch ────────────────────────────────────────────────────────────────────
 
-Start-Sleep -Seconds 3
+Write-Host "Starting monofarm-agent ..."
+Start-Process -FilePath $ExePath -WorkingDirectory $InstallDir
 
+Start-Sleep -Seconds 2
 Write-Host ""
-Write-Host "  [OK] monofarm tray app launched — look for the icon in the system tray"
-Write-Host "       (bottom-right corner of the taskbar, may be in the ^ overflow menu)"
+Write-Host "  [OK] monofarm agent launched - look for the icon in the system tray."
 Write-Host ""
-Write-Host "  Logs:    Get-Content `"$InstallDir\agent.log`" -Wait"
-Write-Host "  Restart: & `"$VenvPythonW`" `"$TrayScript`""
-Write-Host "  Remove:  Remove-Item `"$BatFile`""
+Write-Host "  Note: Windows SmartScreen may warn about an unknown publisher."
+Write-Host "        Click 'More info' then 'Run anyway' (the exe is not yet code-signed)."
 Write-Host ""
-Write-Host "  Done! Open the tray icon to pair with your monofarm account."
+Write-Host "  Logs:    Get-Content `"$ConfigDir\agent.log`" -Wait -Tail 50"
+Write-Host "  Remove:  Remove-Item `"$BatFile`"; Remove-Item -Recurse `"$InstallDir`""
 Write-Host ""

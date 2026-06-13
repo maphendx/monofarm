@@ -153,6 +153,22 @@ _AGENT_DIR = Path(__file__).parent.parent / "agent"
 _AGENT_FILES = {"monofarm_agent.py", "monofarm_tray.py", "install.sh", "install.ps1", "Dockerfile", "requirements.txt", "bambu_camera_test.py"}
 
 
+@app.get("/agent/monofarm-agent.exe")
+async def serve_agent_exe() -> RedirectResponse:
+    """Redirect to the latest agent .exe in object storage (uploaded by CI).
+
+    The binary lives in R2 — never committed to the repo or baked into the Docker
+    image. Frozen agents (self-update) and the Windows installer pull from this
+    stable URL, which 302-redirects to a short-lived presigned download.
+    Declared before /agent/{filename} so it takes routing priority.
+    """
+    from app.services import storage
+    url = storage.presigned_url_raw("agent/monofarm-agent.exe")
+    if not url:
+        raise HTTPException(status_code=404)
+    return RedirectResponse(url, status_code=302)
+
+
 @app.get("/agent/{filename}")
 async def serve_agent_file(filename: str) -> FileResponse:
     if filename not in _AGENT_FILES:

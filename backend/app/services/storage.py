@@ -114,6 +114,26 @@ def presigned_url(stored_name: str, org_id: int, prefix: str = "gcodes", expires
     )
 
 
+def presigned_url_raw(key: str, expires: int = 3600) -> str | None:
+    """Presigned GET URL for a NON org-scoped bucket key (e.g. the agent .exe).
+
+    For global release artifacts uploaded by CI. Returns None on the local backend
+    or when the object does not exist yet (so callers can 404 cleanly).
+    """
+    if not is_s3():
+        return None
+    from app.core.config import settings
+    try:
+        _client().head_object(Bucket=settings.S3_BUCKET, Key=key)
+    except Exception:
+        return None
+    return _client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.S3_BUCKET, "Key": key},
+        ExpiresIn=expires,
+    )
+
+
 @contextmanager
 def local_path_for(stored_name: str, org_id: int, prefix: str = "gcodes") -> Generator[Path, None, None]:
     """Yield a local Path to the file.

@@ -107,6 +107,7 @@ async def _subscribe_org_printers(org_id: int) -> None:
                 "id": str(uuid.uuid4()),
                 "method": "MOONRAKER_SUBSCRIBE",
                 "url": p.moonraker_url,
+                "name": p.name,
             }))
             log.debug("Sent MOONRAKER_SUBSCRIBE for %s (org %s)", p.moonraker_url, org_id)
         except Exception as e:

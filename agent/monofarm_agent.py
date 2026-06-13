@@ -23,9 +23,12 @@ import argparse
 import asyncio
 import base64
 import collections
+import hashlib
 import html as _htmlmod
+import io
 import json
 import os
+import random
 import socket
 import ssl
 import logging
@@ -34,7 +37,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.6.2"
+AGENT_VERSION = "0.8.0"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -78,10 +81,12 @@ logging.getLogger().addHandler(_log_buffer_handler)
 _cloud_connected = False
 _current_server = ""
 _main_loop: "asyncio.AbstractEventLoop | None" = None
+_update_task: "asyncio.Task | None" = None  # single auto-update loop, owned by run()
 
 WEB_PORT_DEFAULT = 8723  # local setup UI; set MONOFARM_WEB_PORT=0 to disable
 
-RECONNECT_DELAY = 5    # seconds between reconnect attempts
+RECONNECT_DELAY = 5    # initial seconds between reconnect attempts
+_RECONNECT_MAX  = 60   # cap for exponential reconnect backoff
 REQUEST_TIMEOUT = 10   # seconds per regular proxied request
 STREAM_CHUNK    = 32768  # bytes per chunk for streaming
 
@@ -133,6 +138,12 @@ async def _tg_start(token: str) -> None:
         log.warning("python-telegram-bot not installed — Telegram bot disabled")
         return
     app = Application.builder().token(token).build()
+    # Local-only commands (register a chat for failure alerts) — handled on the
+    # agent, never forwarded to the SaaS.
+    app.add_handler(CommandHandler("alerts_here", _tg_alerts_here))
+    app.add_handler(CommandHandler("alerts_off", _tg_alerts_off))
+    app.add_handler(MessageHandler(tg_filters.Regex(r"^/тривоги_тут(@\w+)?(\s|$)"), _tg_alerts_here))
+    app.add_handler(MessageHandler(tg_filters.Regex(r"^/тривоги_вимкнути(@\w+)?(\s|$)"), _tg_alerts_off))
     app.add_handler(CommandHandler("start", _tg_cmd_handler))
     app.add_handler(MessageHandler(tg_filters.Regex(r"^/план(@\w+)?(\s|$)"), _tg_cmd_handler))
     app.add_handler(MessageHandler(tg_filters.Regex(r"^/статус(@\w+)?(\s|$)"), _tg_cmd_handler))
@@ -183,6 +194,335 @@ async def _tg_reconfigure(new_token: str | None) -> None:
                 await _tg_start(new_token)
             except Exception as exc:
                 log.error("Failed to start Telegram bot: %s", exc)
+
+
+# ── Printer failure/stop alerts (detected + sent fully on the agent) ──────────
+#
+# The server never sees alert content. Detection taps the same state the agent
+# already forwards (Moonraker full_state / Bambu reports); the photo is grabbed
+# locally from the printer camera; recipients are group chats configured LOCALLY
+# (via /тривоги_тут in the chat, or the agent web UI).
+
+# Alert recipients (Telegram chat IDs). Loaded from config at startup.
+_alert_chat_ids: list[int] = []
+# printer_key -> last alerted (state, error_code). Cleared when the printer recovers.
+_alert_last: dict[str, tuple[str, str]] = {}
+# printer_keys we've seen at least once — suppresses alerts for a printer's
+# pre-existing bad state right after the agent (re)starts.
+_alert_seen: set[str] = set()
+# Guards the alert state above — mutated from both the event loop (Moonraker)
+# and paho MQTT callback threads (Bambu).
+_alert_lock = threading.Lock()
+# Bambu LAN reports are deltas — merge per device before classifying.
+_bambu_print_state: dict[str, dict] = {}
+# moonraker_url -> friendly printer name (from MOONRAKER_SUBSCRIBE).
+_moonraker_names: dict[str, str] = {}
+
+_HEALTHY_STATES = {"idle", "printing", "operational", "unknown", "prepare", "slicing"}
+_BAD_STATES = {"error", "paused", "cancelled"}
+_STATE_LABELS = {
+    "error": "збій",
+    "paused": "зупинка / пауза",
+    "cancelled": "друк скасовано",
+}
+
+# Bambu HMS module + curated message tables (mirror of backend bambu.py). The
+# big 4998-entry English DB is intentionally NOT bundled — the curated Ukrainian
+# table covers the common cases; rarer codes fall back to "module + code".
+_HMS_MODULES: dict[int, str] = {
+    0x0100: "Тулхед", 0x0200: "Екструдер", 0x0300: "Стіл", 0x0500: "Рух/мотори",
+    0x0600: "Привід осі", 0x0700: "AMS", 0x0800: "Зовнішня котушка",
+    0x0900: "Датчик філаменту", 0x0A00: "Буфер", 0x0C00: "Сопло/хотенд",
+    0x0D00: "Камера", 0x0F00: "Плата MC", 0x1000: "Живлення", 0x1100: "Вентилятор",
+    0x1200: "XCam/Огляд шарів", 0x1400: "Гіроскоп", 0x2000: "Мережа", 0x3000: "AP Board",
+}
+_HMS_MESSAGES: dict[str, str] = {
+    "0C00_0100_0001_0001": "Температура сопла нижча за норму",
+    "0C00_0100_0002_0001": "Перегрів сопла",
+    "0C00_0200_0001_0001": "Помилка датчика температури сопла",
+    "0C00_0200_0002_0001": "Датчик температури сопла відключено",
+    "0C00_0300_0001_0001": "Заминка філаменту в хотенді",
+    "0C00_0300_0002_0001": "Філамент не подається в хотенд",
+    "0C00_0400_0001_0001": "Збій вентилятора хотенду",
+    "0C00_0400_0002_0001": "Збій вентилятора обдуву деталі",
+    "0300_0100_0001_0001": "Помилка датчика температури столу",
+    "0300_0100_0001_0002": "NTC температура столу аномальна",
+    "0300_0100_0002_0001": "Стіл нагрівається занадто повільно",
+    "0300_0100_0002_0002": "Стіл не досягає цільової температури",
+    "0300_0200_0001_0001": "Перегрів столу",
+    "0500_0100_0001_0001": "Збій мотора осі X (stall)",
+    "0500_0100_0002_0001": "Збій мотора осі Y (stall)",
+    "0500_0100_0003_0001": "Збій мотора осі Z (stall)",
+    "0500_0100_0004_0001": "Збій мотора подачі філаменту",
+    "0500_0200_0001_0001": "Зіткнення по осі X",
+    "0500_0200_0002_0001": "Зіткнення по осі Y",
+    "0500_0300_0001_0001": "Помилка калібрування осі Z",
+    "0500_0300_0002_0001": "Помилка mesh калібрування столу",
+    "0700_0300_0001_0001": "AMS: помилка подачі філаменту",
+    "0700_0300_0002_0001": "AMS: заминка/застрявання філаменту",
+    "0700_0400_0001_0001": "AMS: помилка намотки",
+    "0700_0500_0001_0001": "AMS: помилка температури",
+    "0700_0600_0001_0001": "AMS: немає філаменту",
+    "0700_7000_0002_0001": "AMS: не вдалося подати філамент в тулхед",
+    "0700_7000_0002_0002": "AMS: не вдалося подати філамент в тулхед (можлива заминка)",
+    "0700_7000_0003_0001": "AMS: не вдалося втягнути філамент назад",
+    "0700_1700_0001_0003": "AMS слот 1: немає філаменту",
+    "0700_1700_0002_0003": "AMS слот 2: немає філаменту",
+    "0700_1700_0003_0003": "AMS слот 3: немає філаменту",
+    "0700_1700_0004_0003": "AMS слот 4: немає філаменту",
+    "1000_0100_0001_0001": "Проблема з живленням",
+    "1000_0200_0001_0001": "Напруга виходу за межі норми",
+    "2000_0100_0001_0001": "Проблема з мережею",
+    "2000_0100_0002_0001": "Втрата підключення до хмари",
+}
+
+
+def _hms_code_key(h: dict) -> str:
+    attr = h.get("attr", 0) or 0
+    code = h.get("code", 0) or 0
+    return (
+        f"{attr >> 16 & 0xFFFF:04X}_{attr & 0xFFFF:04X}"
+        f"_{code >> 16 & 0xFFFF:04X}_{code & 0xFFFF:04X}"
+    )
+
+
+def _hms_describe_local(h: dict) -> str:
+    if h.get("msg"):
+        return str(h["msg"])
+    key = _hms_code_key(h)
+    if key in _HMS_MESSAGES:
+        return _HMS_MESSAGES[key]
+    attr = h.get("attr", 0) or 0
+    module = _HMS_MODULES.get(attr >> 16 & 0xFFFF)
+    return f"{module}: HMS {key}" if module else f"HMS {key}"
+
+
+def _classify_moonraker(print_stats: dict) -> tuple[str, str, str]:
+    """(state, error_text, error_code) from a Moonraker print_stats object.
+
+    Klipper has no numeric error code, so the "code" is a short stable hash of
+    the message — enough to identify and dedup the incident.
+    """
+    raw = (print_stats.get("state") or "").lower()
+    state = {
+        "standby": "idle", "ready": "idle", "printing": "printing",
+        "pausing": "pausing", "paused": "paused", "resuming": "resuming",
+        "cancelling": "cancelling", "canceling": "cancelling",
+        "complete": "idle", "completed": "idle",
+        "cancelled": "cancelled", "canceled": "cancelled", "error": "error",
+    }.get(raw, raw or "unknown")
+    msg = (print_stats.get("message") or "").strip()
+    error_text = msg[:300]
+    error_code = hashlib.sha1(msg.encode("utf-8")).hexdigest()[:8] if msg else ""
+    return state, error_text, error_code
+
+
+def _classify_bambu(print_data: dict) -> tuple[str, str, str]:
+    """(state, error_text, error_code) from a merged Bambu print report."""
+    raw = (print_data.get("gcode_state") or "").upper()
+    state = {
+        "IDLE": "idle", "PREPARE": "printing", "SLICING": "printing",
+        "RUNNING": "printing", "PAUSE": "paused", "FINISH": "idle",
+        "FAILED": "error",
+    }.get(raw, "unknown")
+
+    texts: list[str] = []
+    codes: list[str] = []
+    hms_list = print_data.get("hms")
+    if isinstance(hms_list, list):
+        for h in hms_list:
+            if isinstance(h, dict):
+                texts.append(_hms_describe_local(h))
+                codes.append(_hms_code_key(h))
+    error_text = " | ".join(t for t in texts if t)
+
+    print_error = print_data.get("print_error")
+    if isinstance(print_error, int) and print_error != 0:
+        codes.append(f"{print_error:#010x}")
+        if not error_text:
+            error_text = f"Помилка друку: {print_error:#010x}"
+
+    return state, error_text, " ".join(codes)
+
+
+def _alert_should_fire(printer_key: str, state: str, error_code: str) -> bool:
+    """Decide whether this state change is a new incident worth alerting.
+
+    Fast, synchronous, called on every status message — only the rare True
+    return triggers the async snapshot + send.
+    """
+    with _alert_lock:
+        bad = state in _BAD_STATES or bool(error_code)
+        first_seen = printer_key not in _alert_seen
+        _alert_seen.add(printer_key)
+
+        if state in _HEALTHY_STATES and not error_code:
+            _alert_last.pop(printer_key, None)  # recovered → re-arm
+            return False
+        if not bad:
+            return False  # transient (pausing/resuming/cancelling) — wait for terminal
+
+        sig = (state, error_code)
+        if _alert_last.get(printer_key) == sig:
+            return False  # already alerted this exact incident
+        _alert_last[printer_key] = sig
+        return not first_seen  # suppress a printer's pre-existing state at startup
+
+
+def _build_alert_caption(name: str, state: str, error_text: str, error_code: str) -> str:
+    label = _STATE_LABELS.get(state)
+    if not label:
+        label = "збій" if (error_code or error_text) else state
+    lines = [f"⚠️ <b>{_htmlmod.escape(name)}</b> — {label}"]
+    if error_text:
+        lines.append(_htmlmod.escape(error_text[:300]))
+    if error_code:
+        lines.append(f"<code>{_htmlmod.escape(error_code)}</code>")
+    return "\n".join(lines)
+
+
+async def _bambu_grab_frame(ip: str, access_code: str, timeout: float = 12.0) -> bytes | None:
+    """Grab a single JPEG frame from a Bambu camera (binary TLS protocol, :6000)."""
+    import struct as _struct
+
+    auth = bytearray(80)
+    _struct.pack_into("<I", auth, 0, 0x40)
+    _struct.pack_into("<I", auth, 4, 0x3000)
+    auth[16:20] = b"bblp"
+    pw = access_code.encode()
+    auth[48:48 + len(pw)] = pw
+
+    writer = None
+    try:
+        async def _open():
+            return await asyncio.open_connection(
+                ip, 6000, ssl=_bambu_ssl_context(ip), server_hostname=ip,
+            )
+        try:
+            reader, writer = await asyncio.wait_for(_open(), timeout=timeout)
+        except ssl.SSLError as exc:
+            _bambu_mark_tls_failure(ip, exc)
+            reader, writer = await asyncio.wait_for(_open(), timeout=timeout)
+        writer.write(bytes(auth))
+        await writer.drain()
+
+        async def read_exact(n: int) -> bytes:
+            buf = b""
+            while len(buf) < n:
+                chunk = await asyncio.wait_for(reader.read(n - len(buf)), timeout=timeout)
+                if not chunk:
+                    raise ConnectionError("stream closed")
+                buf += chunk
+            return buf
+
+        header = await read_exact(16)
+        size = _struct.unpack("<I", header[0:4])[0]
+        if size == 0 or size > 10_000_000:
+            return None
+        return await read_exact(size)
+    except Exception as exc:
+        log.debug("bambu frame grab failed %s: %s", ip, exc)
+        return None
+    finally:
+        if writer:
+            try:
+                writer.close()
+            except Exception:
+                pass
+
+
+async def _moonraker_grab_snapshot(moonraker_url: str, timeout: float = 8.0) -> bytes | None:
+    """Grab a still JPEG from a Moonraker printer's webcam (best-effort)."""
+    parsed = _urlparse_mod.urlparse(moonraker_url)
+    host = parsed.hostname or "localhost"
+    base = f"{parsed.scheme or 'http'}://{host}:{parsed.port or 7125}"
+
+    candidates: list[str] = []
+    try:
+        async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501
+            r = await client.get(f"{base}/server/webcams/list")
+            if r.status_code == 200:
+                for cam in ((r.json().get("result") or {}).get("webcams") or []):
+                    snap = (cam.get("snapshot_url") or "").strip()
+                    if not snap:
+                        continue
+                    if snap.startswith("http"):
+                        candidates.append(snap)
+                    else:
+                        candidates.append(f"http://{host}{snap if snap.startswith('/') else '/' + snap}")
+    except Exception:
+        pass
+    candidates += [f"http://{host}/webcam/?action=snapshot", f"http://{host}:8080/?action=snapshot"]
+
+    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501
+        for url in candidates:
+            try:
+                r = await client.get(url)
+            except Exception:
+                continue
+            if r.status_code == 200 and r.content and r.headers.get("content-type", "").startswith("image"):
+                return r.content
+    return None
+
+
+async def _send_alert(caption: str, jpeg: bytes | None) -> None:
+    if not _tg_app or not _alert_chat_ids:
+        return
+    for chat_id in list(_alert_chat_ids):
+        try:
+            if jpeg:
+                await _tg_app.bot.send_photo(
+                    chat_id=chat_id, photo=io.BytesIO(jpeg), caption=caption, parse_mode="HTML",
+                )
+            else:
+                await _tg_app.bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML")
+        except Exception as exc:
+            log.warning("alert send to %s failed: %s", chat_id, exc)
+
+
+async def _dispatch_alert(
+    name: str, state: str, error_text: str, error_code: str,
+    snapshot_kind: str, snapshot_args: dict,
+) -> None:
+    """Grab a camera snapshot and push the alert. Photo is optional (graceful)."""
+    if not _tg_app or not _alert_chat_ids:
+        return
+    jpeg: bytes | None = None
+    try:
+        if snapshot_kind == "bambu":
+            jpeg = await _bambu_grab_frame(**snapshot_args)
+        else:
+            jpeg = await _moonraker_grab_snapshot(**snapshot_args)
+    except Exception as exc:
+        log.debug("alert snapshot failed: %s", exc)
+    await _send_alert(_build_alert_caption(name, state, error_text, error_code), jpeg)
+
+
+# ── Local Telegram alert-chat registration (handled on the agent, never the SaaS) ──
+
+async def _tg_alerts_here(update: "Update", _ctx: "ContextTypes.DEFAULT_TYPE") -> None:
+    if not update.message or not update.effective_chat:
+        return
+    chat_id = update.effective_chat.id
+    if chat_id not in _alert_chat_ids:
+        _alert_chat_ids.append(chat_id)
+        _save_alert_chat_ids(_alert_chat_ids)
+        log.info("Alert chat registered: %s", chat_id)
+    await update.message.reply_text(
+        "✅ Цей чат отримуватиме алерти про збої і зупинки принтерів "
+        "(текст помилки, код і фото з камери).\nВимкнути: /тривоги_вимкнути"
+    )
+
+
+async def _tg_alerts_off(update: "Update", _ctx: "ContextTypes.DEFAULT_TYPE") -> None:
+    if not update.message or not update.effective_chat:
+        return
+    chat_id = update.effective_chat.id
+    if chat_id in _alert_chat_ids:
+        _alert_chat_ids.remove(chat_id)
+        _save_alert_chat_ids(_alert_chat_ids)
+        log.info("Alert chat removed: %s", chat_id)
+    await update.message.reply_text("🔕 Цей чат більше не отримуватиме алерти.")
 
 
 # ── Moonraker WebSocket subscriptions ────────────────────────────────────────
@@ -338,6 +678,15 @@ async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
                         log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
                         return  # cloud WS gone — task will be cancelled on reconnect
 
+                    # Local failure/stop detection (off the forwarding path).
+                    _state, _etext, _ecode = _classify_moonraker(full_state.get("print_stats") or {})
+                    if _alert_should_fire(f"mr:{moonraker_url}", _state, _ecode):
+                        asyncio.create_task(_dispatch_alert(
+                            _moonraker_names.get(moonraker_url) or host or moonraker_url,
+                            _state, _etext, _ecode, "moonraker",
+                            {"moonraker_url": moonraker_url},
+                        ))
+
         except asyncio.CancelledError:
             log.debug("MOONRAKER_SUBSCRIBE: task cancelled for %s", moonraker_url)
             return
@@ -358,6 +707,10 @@ async def handle_moonraker_subscribe(cloud_ws, req: dict) -> None:
             "id": req_id, "status": 400, "body": None, "error": "missing url",
         }))
         return
+
+    name = (req.get("name") or "").strip()
+    if name:
+        _moonraker_names[url] = name
 
     existing = _moonraker_sub_tasks.pop(url, None)
     if existing and not existing.done():
@@ -571,6 +924,20 @@ async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
                 })),
                 loop,
             )
+            # Local failure/stop detection. Reports are deltas — merge first.
+            pd = payload.get("print")
+            if isinstance(pd, dict):
+                merged = {**_bambu_print_state.get(dev_id, {}), **pd}
+                _bambu_print_state[dev_id] = merged
+                _state, _etext, _ecode = _classify_bambu(merged)
+                if _alert_should_fire(f"bambu:{dev_id}", _state, _ecode):
+                    asyncio.run_coroutine_threadsafe(
+                        _dispatch_alert(
+                            name, _state, _etext, _ecode, "bambu",
+                            {"ip": ip, "access_code": access_code},
+                        ),
+                        loop,
+                    )
 
         client.on_connect = _on_connect
         client.on_disconnect = _on_disconnect
@@ -669,19 +1036,43 @@ def _load_config() -> dict[str, str]:
     return cfg
 
 
-def _save_config(server: str, token: str) -> None:
+def _write_config(cfg: dict[str, str]) -> None:
+    """Atomically persist config (temp + os.replace) so a crash can't truncate it."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    data = "".join(f"{k}={v}\n" for k, v in cfg.items() if v != "")
+    tmp = CONFIG_DIR / ".env.tmp"
+    tmp.write_text(data, encoding="utf-8")
+    try:
+        tmp.chmod(0o600)
+    except Exception:
+        pass
+    os.replace(tmp, CONFIG_FILE)
+
+
+def _save_config(server: str, token: str) -> None:
     cfg = _load_config()
     cfg["MONOFARM_SERVER"] = server
     cfg["MONOFARM_TOKEN"] = token
-    CONFIG_FILE.write_text(
-        "".join(f"{k}={v}\n" for k, v in cfg.items() if v != ""),
-        encoding="utf-8",
-    )
-    try:
-        CONFIG_FILE.chmod(0o600)
-    except Exception:
-        pass
+    _write_config(cfg)
+
+
+def _load_alert_chat_ids() -> list[int]:
+    out: list[int] = []
+    for part in (_load_config().get("ALERT_CHAT_IDS", "") or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(int(part))
+        except ValueError:
+            pass
+    return out
+
+
+def _save_alert_chat_ids(ids: list[int]) -> None:
+    cfg = _load_config()
+    cfg["ALERT_CHAT_IDS"] = ",".join(str(i) for i in ids)
+    _write_config(cfg)
 
 
 # ── Local web UI (stdlib only — no Flask, works on a headless Pi) ────────────
@@ -720,6 +1111,7 @@ def _web_state() -> dict:
         "tg_running": _tg_app is not None,
         "bambu": bambu,
         "moonraker": moonraker,
+        "alert_chat_ids": list(_alert_chat_ids),
     }
 
 
@@ -797,6 +1189,16 @@ def _render_dashboard() -> bytes:
 </div>
 <h2>Moonraker принтери</h2>
 <div class='card'><table>{mr_rows}</table></div>
+<h2>Алерти про збої (Telegram)</h2>
+<div class='card'>
+  <p class='muted'>Додай бота у груповий чат і напиши там <code>/тривоги_тут</code> —
+  цей чат отримуватиме фото + текст + код помилки при збоях і зупинках. Або вкажи chat_id вручну:</p>
+  <form method='post' action='/alerts'>
+    <label>Chat IDs (через кому)</label>
+    <input name='chat_ids' value='{_h(",".join(str(i) for i in st["alert_chat_ids"]))}'>
+    <div style='margin-top:10px'><button>Зберегти</button></div>
+  </form>
+</div>
 <h2>Підключення до monofarm</h2>
 <div class='card'>
   <form method='post' action='/pair'>
@@ -880,6 +1282,21 @@ def _start_web_ui(port: int) -> None:
             elif self.path == "/restart":
                 self._send(_web_page("Перезапуск", "<div class='card'>Агент перезапускається…</div><a href='/'>← на головну</a>"))
                 _schedule_restart()
+            elif self.path == "/alerts":
+                global _alert_chat_ids
+                form = self._form()
+                ids: list[int] = []
+                for part in (form.get("chat_ids") or "").split(","):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    try:
+                        ids.append(int(part))
+                    except ValueError:
+                        pass
+                _alert_chat_ids = ids
+                _save_alert_chat_ids(ids)
+                self._redirect("/")
             else:
                 self._send(b"not found", code=404, ctype="text/plain")
 
@@ -896,9 +1313,13 @@ def _start_web_ui(port: int) -> None:
 
 
 async def check_for_update(server: str) -> None:
-    """Download and apply a new agent version, then restart via os.execv."""
+    """Download and apply a new agent version, then restart.
+
+    Frozen (PyInstaller .exe): download and hot-swap the running .exe on Windows.
+    Source (venv / dev): rewrite the .py files and re-exec the interpreter.
+    """
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             resp = await client.get(f"{server}/api/agent/version")
             if resp.status_code != 200:
                 return
@@ -906,23 +1327,69 @@ async def check_for_update(server: str) -> None:
             if not remote or remote == AGENT_VERSION:
                 return
             log.info("Update available: %s → %s. Downloading…", AGENT_VERSION, remote)
-            src_resp = await client.get(f"{server}/agent/monofarm_agent.py")
-            src_resp.raise_for_status()
-            script = Path(__file__).resolve()
-            script.write_bytes(src_resp.content)
-            try:
-                import subprocess
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
-                    check=False,
-                    timeout=60,
-                )
-            except Exception as dep_exc:
-                log.debug("Dependency refresh skipped: %s", dep_exc)
-            log.info("Updated to %s. Restarting…", remote)
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            if getattr(sys, "frozen", False):
+                await _apply_frozen_update(client, server, remote)
+            else:
+                await _apply_source_update(client, server, remote)
     except Exception as e:
         log.debug("Update check skipped: %s", e)
+
+
+async def _apply_source_update(client: "httpx.AsyncClient", server: str, remote: str) -> None:
+    """venv/dev path: rewrite .py files beside us and re-exec the interpreter."""
+    here = Path(__file__).resolve().parent
+    for fname in ("monofarm_agent.py", "monofarm_tray.py"):
+        target = here / fname
+        if fname == "monofarm_agent.py" or target.exists():
+            r = await client.get(f"{server}/agent/{fname}")
+            if r.status_code == 200:
+                target.write_bytes(r.content)
+    try:
+        import subprocess
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
+            check=False, timeout=60,
+        )
+    except Exception as dep_exc:
+        log.debug("Dependency refresh skipped: %s", dep_exc)
+    log.info("Updated to %s. Restarting…", remote)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+async def _apply_frozen_update(client: "httpx.AsyncClient", server: str, remote: str) -> None:
+    """Windows .exe self-update: download the new exe, hot-swap it, relaunch.
+
+    Windows allows renaming a running .exe, so we move the live exe aside, drop
+    the new one in its place, spawn it, and exit. The stale *.old.exe is removed
+    on the next launch by _cleanup_old_exe().
+    """
+    exe = Path(sys.executable).resolve()
+    new = exe.parent / (exe.stem + ".new.exe")
+    old = exe.parent / (exe.stem + ".old.exe")
+    r = await client.get(f"{server}/agent/monofarm-agent.exe")
+    r.raise_for_status()
+    new.write_bytes(r.content)
+    try:
+        old.unlink(missing_ok=True)
+    except Exception:
+        pass
+    os.replace(exe, old)   # move the running exe aside (allowed on Windows)
+    os.replace(new, exe)   # put the new exe in place
+    log.info("Updated to %s. Relaunching…", remote)
+    import subprocess
+    subprocess.Popen([str(exe)], close_fds=True)
+    os._exit(0)
+
+
+def _cleanup_old_exe() -> None:
+    """Delete the leftover *.old.exe from a previous frozen self-update."""
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        exe = Path(sys.executable).resolve()
+        (exe.parent / (exe.stem + ".old.exe")).unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 async def _update_loop(server: str) -> None:
@@ -1613,12 +2080,26 @@ async def _pair_flow(server: str) -> str:
     return token
 
 
-async def run(server: str, token: str) -> None:
-    global _tg_server, _tg_jwt, _main_loop, _current_server, _cloud_connected
+async def run(server: str, token: str, *, on_state=None, run_updates: bool = True) -> None:
+    """Single canonical relay loop — shared by the CLI agent and the tray host.
+
+    on_state(state) fires with "connecting" | "connected" | "disconnected" so a
+    GUI host (the tray) can reflect connection status. run_updates=False lets a
+    host disable the built-in auto-updater if it manages updates itself.
+    """
+    global _tg_server, _tg_jwt, _main_loop, _current_server, _cloud_connected, _alert_chat_ids, _update_task
     _tg_server = server
     _tg_jwt    = token
     _main_loop = asyncio.get_running_loop()
     _current_server = server
+    _alert_chat_ids = _load_alert_chat_ids()
+
+    def _emit(state: str) -> None:
+        if on_state:
+            try:
+                on_state(state)
+            except Exception:
+                pass
 
     ws_url = (
         server.replace("https://", "wss://").replace("http://", "ws://")
@@ -1626,11 +2107,17 @@ async def run(server: str, token: str) -> None:
     )
     log.info("monofarm-agent v%s connecting to %s …", AGENT_VERSION, server)
     ensure_bambu_mqtt_dependency()
-    await check_for_update(server)
-    asyncio.create_task(_update_loop(server))
+    if _update_task and not _update_task.done():
+        _update_task.cancel()  # avoid a duplicate updater if run() is re-invoked
+        _update_task = None
+    if run_updates:
+        await check_for_update(server)
+        _update_task = asyncio.create_task(_update_loop(server))
 
+    backoff = RECONNECT_DELAY
     while True:
         try:
+            _emit("connecting")
             async with websockets.connect(
                 ws_url,
                 ping_interval=20,
@@ -1640,6 +2127,8 @@ async def run(server: str, token: str) -> None:
             ) as ws:
                 log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
                 _cloud_connected = True
+                backoff = RECONNECT_DELAY  # reset backoff on a successful connect
+                _emit("connected")
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 
                 # Fetch TG config on every connect (token may have changed while disconnected)
@@ -1715,17 +2204,71 @@ async def run(server: str, token: str) -> None:
                     _cancel_all_bambu_lan_subscriptions()
                     bambu_lan_task.cancel()
 
+        except asyncio.CancelledError:
+            _emit("disconnected")
+            raise
         except websockets.exceptions.InvalidStatusCode as e:
             if e.status_code in (4001, 4002):
-                log.error("Authentication failed (code %s). Check your --token.", e.status_code)
-                sys.exit(1)
-            log.warning("Server rejected connection (%s). Retrying in %ss…", e.status_code, RECONNECT_DELAY)
+                log.error("Authentication failed (code %s). Check your token.", e.status_code)
+                _emit("disconnected")
+                return  # stop the loop without killing a GUI host process
+            log.warning("Server rejected connection (%s). Retrying in %ss…", e.status_code, backoff)
         except (OSError, websockets.exceptions.WebSocketException) as e:
-            log.warning("Disconnected: %s. Retrying in %ss…", e, RECONNECT_DELAY)
+            log.warning("Disconnected: %s. Retrying in %ss…", e, backoff)
         except Exception as e:
             log.exception("Unexpected error: %s", e)
 
-        await asyncio.sleep(RECONNECT_DELAY)
+        _emit("disconnected")
+        await asyncio.sleep(backoff + random.uniform(0, backoff * 0.3))
+        backoff = min(backoff * 2, _RECONNECT_MAX)
+
+
+_instance_lock_handle = None  # kept alive for the process lifetime to hold the lock
+
+
+def acquire_single_instance() -> bool:
+    """Return True if we got the lock; False if another agent is already running.
+
+    Prevents two agents fighting over the same printers' MQTT/Telegram connections.
+    """
+    global _instance_lock_handle
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fh = open(CONFIG_DIR / "agent.lock", "w")  # noqa: SIM115
+        if os.name == "nt":
+            import msvcrt
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                fh.close()
+                return False
+        else:
+            import fcntl
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                fh.close()
+                return False
+        fh.write(str(os.getpid()))
+        fh.flush()
+        _instance_lock_handle = fh
+        return True
+    except Exception:
+        return True  # never block startup on a lock-file error
+
+
+def setup_file_logging() -> None:
+    """Add a rotating file log at ~/.monofarm-agent/agent.log (bounded size)."""
+    try:
+        from logging.handlers import RotatingFileHandler
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(
+            CONFIG_DIR / "agent.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8",
+        )
+        fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+        logging.getLogger().addHandler(fh)
+    except Exception:
+        pass
 
 
 def main() -> None:
@@ -1747,6 +2290,12 @@ Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
     parser.add_argument("--token", default=None,
                         help="JWT token — omit to use saved config or pair via browser")
     args = parser.parse_args()
+
+    _cleanup_old_exe()
+    setup_file_logging()
+    if not acquire_single_instance():
+        log.error("Another monofarm-agent is already running — exiting.")
+        sys.exit(0)
 
     cfg    = _load_config()
     server = args.server or cfg["MONOFARM_SERVER"]

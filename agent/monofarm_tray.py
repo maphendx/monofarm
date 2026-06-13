@@ -38,14 +38,13 @@ except ImportError:
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-AGENT_VERSION      = "0.6.2"
+AGENT_VERSION      = "0.8.0"
 UI_HTTP_PORT       = 4747   # browser navigates here for the HTML page
 UI_WS_PORT         = 4748   # browser WebSocket connects here for live updates
 CONFIG_DIR         = pathlib.Path.home() / ".monofarm-agent"
 CONFIG_FILE        = CONFIG_DIR / ".env"
 _DEFAULT_API_PORT  = "8000"
 _DEFAULT_FE_PORT   = "3000"
-RECONNECT_DELAY    = 5
 
 log = logging.getLogger("monofarm")
 
@@ -62,14 +61,23 @@ def load_config() -> dict[str, str]:
 
 
 def save_config(server: str, token: str) -> None:
+    """Persist server+token, preserving other keys (FRONTEND, ALERT_CHAT_IDS).
+
+    Atomic (temp + os.replace) so a crash can't truncate the config. Merging is
+    essential — a naive overwrite would wipe ALERT_CHAT_IDS set via the bot.
+    """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CONFIG_FILE.write_text(
-        f"MONOFARM_SERVER={server}\nMONOFARM_TOKEN={token}\n", encoding="utf-8"
-    )
+    cfg = load_config()
+    cfg["MONOFARM_SERVER"] = server
+    cfg["MONOFARM_TOKEN"]  = token
+    data = "".join(f"{k}={v}\n" for k, v in cfg.items() if v != "")
+    tmp = CONFIG_DIR / ".env.tmp"
+    tmp.write_text(data, encoding="utf-8")
     try:
-        CONFIG_FILE.chmod(0o600)
+        tmp.chmod(0o600)
     except Exception:
         pass
+    os.replace(tmp, CONFIG_FILE)
 
 
 def dashboard_url(server: str) -> str:
@@ -108,10 +116,14 @@ def _set_autostart(enabled: bool) -> None:
             p.unlink()
         return
     exe    = sys.executable
-    script = pathlib.Path(__file__).resolve()
+    frozen = getattr(sys, "frozen", False)
+    # Frozen .exe: launch the exe directly. Source: launch the interpreter + script.
+    script = "" if frozen else str(pathlib.Path(__file__).resolve())
     if platform.system() == "Windows":
-        p.write_text(f'@echo off\nstart "" "{exe}" "{script}"\n', encoding="utf-8")
+        arg = "" if frozen else f' "{script}"'
+        p.write_text(f'@echo off\nstart "" "{exe}"{arg}\n', encoding="utf-8")
     elif platform.system() == "Darwin":
+        prog_args = f'<string>{exe}</string>' if frozen else f'<string>{exe}</string><string>{script}</string>'
         plist = (
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"'
@@ -119,7 +131,7 @@ def _set_autostart(enabled: bool) -> None:
             '<plist version="1.0"><dict>\n'
             '  <key>Label</key><string>app.monofarm.agent</string>\n'
             '  <key>ProgramArguments</key>\n'
-            f'  <array><string>{exe}</string><string>{script}</string></array>\n'
+            f'  <array>{prog_args}</array>\n'
             '  <key>RunAtLoad</key><true/>\n'
             '  <key>KeepAlive</key><true/>\n'
             '</dict></plist>\n'
@@ -263,9 +275,7 @@ class App:
 
         cfg = load_config()
         if cfg["MONOFARM_TOKEN"]:
-            _ensure_bambu_mqtt_dependency()
             await self._do_start(cfg["MONOFARM_SERVER"], cfg["MONOFARM_TOKEN"])
-            asyncio.create_task(self._update_loop(cfg["MONOFARM_SERVER"]))
 
         if server:
             async with server:
@@ -273,18 +283,14 @@ class App:
         else:
             await asyncio.Future()
 
-    async def _update_loop(self, server: str) -> None:
-        while True:
-            await _check_for_update(server)
-            await asyncio.sleep(6 * 3600)
-
     async def _run_update_check(self, websocket) -> None:
-        """Triggered by the browser's Update button."""
+        """Triggered by the browser's Update button — delegates to the agent."""
         cfg = load_config()
         await self._broadcast({"type": "update_status", "checking": True})
         try:
-            await _check_for_update(cfg["MONOFARM_SERVER"])
-            # If we reach here, no update was found (execv would have fired otherwise)
+            if monofarm_agent:
+                await monofarm_agent.check_for_update(cfg["MONOFARM_SERVER"])
+            # If we reach here, no update was found (a restart would have fired otherwise)
             await self._broadcast({"type": "update_status", "checking": False,
                                    "message": f"Already up to date (v{AGENT_VERSION})"})
         except Exception as e:
@@ -364,9 +370,19 @@ class App:
 
     async def _do_start(self, server: str, token: str) -> None:
         self._do_stop()
-        _ensure_bambu_mqtt_dependency()
-        self._agent_task   = asyncio.create_task(self._agent_loop(server, token))
+        if monofarm_agent is None:
+            log.error("Cannot start: monofarm_agent module not loaded")
+            self._set_state("disconnected")
+            return
+        # Host the agent's canonical relay loop; on_state drives the tray icon + UI.
+        self._agent_task   = asyncio.create_task(
+            monofarm_agent.run(server, token, on_state=self._on_agent_state)
+        )
         self._printer_task = asyncio.create_task(self._printer_loop(server, token))
+
+    def _on_agent_state(self, state: str) -> None:
+        """Reflect the agent's connection state on the tray icon + local UI."""
+        self._set_state(state)
 
     def _do_stop(self) -> None:
         if self._agent_task and not self._agent_task.done():
@@ -532,110 +548,6 @@ class App:
         except Exception as e:
             await websocket.send(json.dumps({"type": "login_err", "error": str(e)}))
 
-    # ── Agent tunnel ──────────────────────────────────────────────────────────
-
-    async def _agent_loop(self, server: str, token: str) -> None:
-        ws_url = (
-            server.replace("https://", "wss://").replace("http://", "ws://")
-            + f"/api/agent/connect?token={token}"
-        )
-        while True:
-            try:
-                self._set_state("connecting")
-                async with websockets.connect(
-                    ws_url,
-                    ping_interval=20,
-                    ping_timeout=10,
-                    open_timeout=15,
-                    max_size=None,
-                ) as ws:
-                    self._set_state("connected")
-                    log.info("Connected to monofarm cloud ✓  (waiting for requests…)")
-                    bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
-                    try:
-                        async for message in ws:
-                            try:
-                                req = json.loads(message)
-                            except Exception:
-                                continue
-                            method = req.get("method", "GET").upper()
-                            if method == "BAMBU_CAMERA":
-                                asyncio.create_task(_handle_bambu_camera(ws, req))
-                            elif method == "FFMPEG_STREAM":
-                                asyncio.create_task(_handle_ffmpeg_stream(ws, req))
-                            elif method == "DISCOVER_BAMBU":
-                                asyncio.create_task(_handle_discover_bambu(ws, req))
-                            elif method == "DISCOVER_MOONRAKER":
-                                asyncio.create_task(_handle_discover_moonraker(ws, req))
-                            elif method == "BAMBU_UPLOAD":
-                                asyncio.create_task(_handle_bambu_upload(ws, req))
-                            elif method == "BAMBU_MQTT":
-                                asyncio.create_task(_handle_bambu_mqtt(ws, req))
-                            elif method == "MOONRAKER_UPLOAD":
-                                asyncio.create_task(_handle_moonraker_upload(ws, req))
-                            elif method == "PRINT_ZPL":
-                                asyncio.create_task(_handle_print_zpl(ws, req))
-                            elif method == "STREAM":
-                                asyncio.create_task(_handle_stream(ws, req))
-                            else:
-                                asyncio.create_task(_handle_request(ws, req))
-                    finally:
-                        _cancel_all_bambu_lan_subscriptions()
-                        bambu_lan_task.cancel()
-
-            except asyncio.CancelledError:
-                return
-            except websockets.exceptions.InvalidStatusCode as e:
-                if e.status_code in (4001, 4002):
-                    log.error("Authentication failed — check your token in the UI")
-                    self._set_state("disconnected")
-                    return
-                log.warning("Server rejected connection (%s). Retrying in %ss…",
-                            e.status_code, RECONNECT_DELAY)
-                self._set_state("disconnected")
-            except (OSError, websockets.exceptions.WebSocketException) as e:
-                log.warning("Disconnected: %s. Retrying in %ss…", e, RECONNECT_DELAY)
-                self._set_state("disconnected")
-            except Exception as e:
-                log.exception("Unexpected error: %s", e)
-                self._set_state("disconnected")
-
-            await asyncio.sleep(RECONNECT_DELAY)
-
-
-# ── Auto-update ───────────────────────────────────────────────────────────────
-
-async def _check_for_update(server: str) -> None:
-    """Download monofarm_agent.py + monofarm_tray.py if a newer version is available, then restart."""
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{server}/api/agent/version")
-            if resp.status_code != 200:
-                return
-            remote = resp.json().get("version", "")
-            if not remote or remote == AGENT_VERSION:
-                return
-            log.info("Update available: %s → %s. Downloading…", AGENT_VERSION, remote)
-            script_dir = pathlib.Path(__file__).parent
-            for fname in ("monofarm_agent.py", "monofarm_tray.py"):
-                r = await client.get(f"{server}/agent/{fname}")
-                r.raise_for_status()
-                (script_dir / fname).write_bytes(r.content)
-            try:
-                import subprocess
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
-                    check=False,
-                    timeout=60,
-                )
-            except Exception as dep_exc:
-                log.debug("Dependency refresh skipped: %s", dep_exc)
-            log.info("Updated to %s — restarting…", remote)
-            os.execv(sys.executable, [sys.executable] + sys.argv)
-    except Exception as e:
-        log.debug("Update check skipped: %s", e)
-
-
 # ── HTTP server — serves the browser UI page ──────────────────────────────────
 
 def _start_http_server() -> None:
@@ -658,48 +570,18 @@ def _start_http_server() -> None:
     log.info("Agent UI at http://127.0.0.1:%s", UI_HTTP_PORT)
 
 
-# ── Request handlers (imported from core agent) ───────────────────────────────
+# ── Core agent (single source of truth for the relay loop) ────────────────────
 
-# Add the agent directory to path so we can import handlers without duplication.
+# Host the agent's canonical run() loop instead of duplicating WebSocket dispatch
+# (the old duplicate drifted and silently dropped the Telegram bot, Moonraker
+# live state and failure alerts on Windows). The tray now only adds the GUI.
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 try:
-    from monofarm_agent import (  # type: ignore
-        handle_request        as _handle_request,
-        handle_stream         as _handle_stream,
-        handle_bambu_camera   as _handle_bambu_camera,
-        handle_ffmpeg_stream  as _handle_ffmpeg_stream,
-        handle_discover_bambu as _handle_discover_bambu,
-        handle_discover_moonraker as _handle_discover_moonraker,
-        handle_bambu_upload   as _handle_bambu_upload,
-        handle_bambu_mqtt     as _handle_bambu_mqtt,
-        handle_moonraker_upload as _handle_moonraker_upload,
-        handle_print_zpl      as _handle_print_zpl,
-        _bambu_lan_config_loop,
-        _cancel_all_bambu_lan_subscriptions,
-        ensure_bambu_mqtt_dependency as _ensure_bambu_mqtt_dependency,
-    )
-except ImportError:
-    log.warning("monofarm_agent.py not found — proxy handlers unavailable")
-
-    async def _stub(ws, req):  # type: ignore
-        await ws.send(json.dumps({"id": req.get("id"), "status": 503,
-                                  "body": None, "error": "agent not loaded"}))
-
-    _handle_request = _handle_stream = _handle_bambu_camera = _stub
-    _handle_ffmpeg_stream = _handle_discover_bambu = _stub
-    _handle_discover_moonraker = _stub
-    _handle_bambu_upload = _handle_bambu_mqtt = _handle_moonraker_upload = _stub
-    _handle_print_zpl = _stub
-
-    async def _bambu_lan_config_loop(*_args, **_kwargs):  # type: ignore
-        return None
-
-    def _cancel_all_bambu_lan_subscriptions() -> None:  # type: ignore
-        return None
-
-    def _ensure_bambu_mqtt_dependency() -> None:  # type: ignore
-        return None
+    import monofarm_agent  # type: ignore
+except Exception as exc:  # pragma: no cover
+    monofarm_agent = None  # type: ignore
+    log.warning("monofarm_agent.py not importable: %s", exc)
 
 
 # ── Browser UI HTML ───────────────────────────────────────────────────────────
@@ -1259,11 +1141,20 @@ def main() -> None:
     root_log.addHandler(stream_h)
 
     try:
-        file_h = logging.FileHandler(CONFIG_DIR / "agent.log", encoding="utf-8")
+        from logging.handlers import RotatingFileHandler
+        file_h = RotatingFileHandler(
+            CONFIG_DIR / "agent.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8",
+        )
         file_h.setFormatter(fmt)
         root_log.addHandler(file_h)
     except Exception:
         pass
+
+    if monofarm_agent is not None:
+        monofarm_agent._cleanup_old_exe()
+        if not monofarm_agent.acquire_single_instance():
+            log.error("Another monofarm-agent is already running — exiting.")
+            sys.exit(0)
 
     _start_http_server()
     app.start_loop()
