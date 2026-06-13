@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles
-from app.core.db import SessionLocal, get_db
+from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
@@ -1221,7 +1221,12 @@ def _require_printer(printer_id: int, db: Session, org_id: int) -> Printer:
 # pause/resume/stop for LAN-mode printers go through the agent's LAN MQTT:
 # post-Jan-2025 firmware ignores unsigned print.* commands over cloud MQTT
 # (X.509), while LAN + Developer Mode accepts them on every firmware.
-_BAMBU_LAN_COMMANDS = {"pause": "pause", "resume": "resume", "cancel": "stop"}
+_BAMBU_LAN_COMMANDS = {
+    "pause": "pause",
+    "resume": "resume",
+    "cancel": "stop",
+    "clear-error": "clean_print_error",
+}
 
 
 async def _dispatch(
@@ -1371,6 +1376,29 @@ async def print_clear_error(
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
+        payload = {"print": {
+            "command": _BAMBU_LAN_COMMANDS["clear-error"],
+            "param": "",
+            "sequence_id": bambu._next_seq(),  # noqa: SLF001
+        }}
+        try:
+            if (
+                row.bambu_lan_mode
+                and row.bambu_dev_ip
+                and row.bambu_access_code
+                and _tunnel.has_tunnel(org.id)
+            ):
+                await _tunnel.send_bambu_mqtt(
+                    org.id,
+                    row.bambu_dev_id,
+                    row.bambu_dev_ip,
+                    row.bambu_access_code.strip(),
+                    payload,
+                )
+            else:
+                await asyncio.to_thread(bambu.clear_print_error, row.bambu_dev_id)
+        except (bambu.BambuError, RuntimeError) as e:
+            raise HTTPException(status_code=502, detail=str(e))
         import time as _time
         bambu._state_cache[row.bambu_dev_id] = {"ts": _time.monotonic(), "state": "idle"}
 

@@ -1023,6 +1023,10 @@ def stop_print(dev_id: str) -> None:
     _publish(dev_id, {"print": {"command": "stop", "param": "", "sequence_id": _next_seq()}}, qos=1)
 
 
+def clear_print_error(dev_id: str) -> None:
+    _publish(dev_id, {"print": {"command": "clean_print_error", "param": "", "sequence_id": _next_seq()}}, qos=1)
+
+
 def build_start_print_payload(
     dev_id: str,
     subtask_name: str,

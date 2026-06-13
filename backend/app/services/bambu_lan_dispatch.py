@@ -25,6 +25,7 @@ from pathlib import Path
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 from app.services import bambu
 from app.services import tunnel as _tunnel
+from app.services.bambu_mapping import is_a1_series
 
 log = logging.getLogger(__name__)
 
@@ -36,8 +37,11 @@ _inflight_guard = threading.Lock()
 
 def _bambu_upload_target_dir(model: str | None) -> str:
     """A1 firmware reads project_file from SD root; P/X printers use cache."""
-    normalized = (model or "").upper().replace("-", " ")
-    return "sdcard" if "A1" in normalized else "cache"
+    return "sdcard" if is_a1_series(model) else "cache"
+
+
+def has_agent_tunnel(org_id: int) -> bool:
+    return _tunnel.has_tunnel(org_id)
 
 
 async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
@@ -74,6 +78,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             dev_ip = (printer.bambu_dev_ip or "").strip() if printer else ""
             access_code = (printer.bambu_access_code or "").strip() if printer else ""
             upload_target_dir = _bambu_upload_target_dir(printer.bambu_model if printer else None)
+            start_via = (payload.get("start_via") or "lan").strip().lower()
             stored_name = gcode.stored_name if gcode else None
 
         if not dev_id or not dev_ip or not access_code:
@@ -154,7 +159,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         )
         advance_job_status(job_id, BambuCloudJobStatus.task_creating, bambu_task_id=correlation_id)
         try:
-            if has_tunnel:
+            if start_via == "lan" and has_tunnel:
                 await _tunnel.send_bambu_mqtt(org_id, dev_id, dev_ip, access_code, start_payload)
             else:
                 await asyncio.to_thread(bambu._publish, dev_id, start_payload, 1)
@@ -169,7 +174,11 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         return advance_job_status(
             job_id,
             BambuCloudJobStatus.task_created,
-            reason="project_file надіслано через LAN — очікуємо підтвердження від принтера",
+            reason=(
+                "project_file надіслано через Bambu Cloud — очікуємо підтвердження від принтера"
+                if start_via == "cloud"
+                else "project_file надіслано через LAN — очікуємо підтвердження від принтера"
+            ),
         )
     except Exception as e:
         # BackgroundTasks swallow exceptions — convert anything unexpected into a failed job.

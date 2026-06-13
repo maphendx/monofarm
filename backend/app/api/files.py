@@ -32,6 +32,7 @@ from app.services import bambu_dispatch, bambu_lan_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
+from app.services.bambu_mapping import build_ams_mapping, is_a1_series
 from app.workers import bambu_jobs as bambu_jobs_worker
 from app.services.gcode_meta import extract_thumbnail, parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
@@ -528,30 +529,26 @@ async def send_to_printer(
         if not is_3mf:
             raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
-        # slot_map → ams_mapping list (Bambu format: [target_for_file_slot_0, ...]).
-        # -1 marks unused slots so Bambu doesn't try to load them.
-        meta = row.filament_meta or {}
-        slot_count = max(len(meta.get("colors") or []), len(meta.get("types") or []), 1)
-        used_g = meta.get("used_g") or []
-        ams_mapping: list[int] = []
-        for i in range(slot_count):
-            g = used_g[i] if i < len(used_g) else None
-            if g is not None and g <= 0:
-                ams_mapping.append(-1)
-            else:
-                ams_mapping.append(payload.slot_map.get(i, i))
-        use_ams = any(v >= 0 for v in ams_mapping)
+        ams_mapping, use_ams, mapping_details = build_ams_mapping(row.filament_meta, printer, payload.slot_map)
+        hybrid_cloud_command = (
+            not printer.bambu_lan_mode
+            and is_a1_series(printer.bambu_model)
+            and printer.bambu_dev_ip
+            and printer.bambu_access_code
+            and bambu_lan_dispatch.has_agent_tunnel(org.id)
+        )
 
-        if printer.bambu_lan_mode:
+        if printer.bambu_lan_mode or hybrid_cloud_command:
             if not printer.bambu_dev_ip or not printer.bambu_access_code:
                 raise HTTPException(
                     status_code=400,
                     detail="Для Bambu LAN потрібні IP адреса та LAN Access Code",
                 )
-            # Job-tracked LAN dispatch (SimplyPrint flow): FTPS upload + MQTT
-            # project_file run as a BackgroundTask in the web process (the
-            # agent tunnel lives here); MQTT correlation drives the job to
-            # printing/completed from the printer's own reports.
+            # SimplyPrint-style path: agent uploads to the printer SD card over
+            # FTPS, then project_file starts file:///sdcard/<file>. In LAN mode
+            # the command goes through agent MQTT; on old A1 cloud mode it goes
+            # through the existing Bambu cloud MQTT connection.
+            start_via = "lan" if printer.bambu_lan_mode else "cloud"
             job = bambu_dispatch.create_cloud_job(
                 db,
                 org_id=org.id,
@@ -563,9 +560,11 @@ async def send_to_printer(
                 dispatch_mode="lan",
                 request_payload={
                     "source": "files.send_to_printer",
-                    "ams_mapping": ams_mapping,
+                    "start_via": start_via,
+                    "ams_mapping": ams_mapping if use_ams else None,
                     "use_ams": use_ams,
                     "slot_map": {str(k): v for k, v in payload.slot_map.items()},
+                    "mapping_details": mapping_details,
                 },
             )
             if job.file_size is None:
@@ -579,8 +578,12 @@ async def send_to_printer(
                 ok=True,
                 printer_id=printer.id,
                 printer_name=printer.name,
-                dispatch_mode="lan",
-                message="Файл відправляється на принтер через agent — друк запускається",
+                dispatch_mode="lan" if printer.bambu_lan_mode else "cloud_lan_upload",
+                message=(
+                    "Файл заливається agent-ом на SD, команда старту йде через Bambu Cloud"
+                    if hybrid_cloud_command
+                    else "Файл відправляється на принтер через agent — друк запускається"
+                ),
                 job_id=job.id,
                 status=job.status,
                 correlation_id=job.correlation_id,
@@ -600,9 +603,10 @@ async def send_to_printer(
             created_by_user_id=user.id,
             request_payload={
                 "source": "files.send_to_printer",
-                "ams_mapping": ams_mapping,
+                "ams_mapping": ams_mapping if use_ams else None,
                 "use_ams": use_ams,
                 "slot_map": {str(k): v for k, v in payload.slot_map.items()},
+                "mapping_details": mapping_details,
             },
         )
         if job.file_size is None:

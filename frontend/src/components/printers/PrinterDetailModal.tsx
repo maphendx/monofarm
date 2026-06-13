@@ -22,7 +22,7 @@ const MANUAL_STATUSES = [
   { value: "error", label: "Помилка" },
 ];
 
-function MoonrakerControls({
+function PrintControls({
   printer,
   onUpdated,
 }: {
@@ -33,11 +33,11 @@ function MoonrakerControls({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function act(action: "pause" | "resume" | "cancel") {
+  async function act(action: "pause" | "resume" | "cancel" | "clear-error") {
     setBusy(action);
     setErr(null);
     try {
-      await api(`/api/printers/${printer.id}/${action}`, { method: "POST" });
+      await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
       // Refresh printer state — server's cache for this URL is invalidated
       const refreshed = await api<Printer[]>("/api/printers");
       const updated = refreshed.find((p) => p.id === printer.id);
@@ -51,6 +51,7 @@ function MoonrakerControls({
 
   const isPaused = printer.state === "paused";
   const isPrinting = printer.state === "printing";
+  const isError = printer.state === "error";
 
   return (
     <div className="space-y-1">
@@ -75,13 +76,26 @@ function MoonrakerControls({
             {busy === "resume" ? "…" : "▶ Продовжити"}
           </button>
         )}
+        {isError && (
+          <button
+            type="button"
+            onClick={() => act("clear-error")}
+            disabled={busy !== null}
+            className="rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-warn)] hover:bg-[rgba(245,158,11,.15)] disabled:opacity-50"
+          >
+            {busy === "clear-error" ? "…" : "Збити помилку"}
+          </button>
+        )}
         <button
           type="button"
           onClick={async () => {
             if (await confirmDialog({ message: "Скасувати поточний друк? Це не скасується автоматично.", variant: "warn" })) act("cancel");
           }}
           disabled={busy !== null}
-          className="col-span-2 rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)] disabled:opacity-50"
+          className={[
+            "rounded-md border border-[var(--state-error)] bg-[rgba(239,68,68,.10)] px-2 py-1.5 text-xs font-medium text-[var(--state-error)] hover:bg-[rgba(239,68,68,.15)] disabled:opacity-50",
+            isPrinting || isPaused || isError ? "col-span-2" : "col-span-3",
+          ].join(" ")}
         >
           {busy === "cancel" ? "…" : "✕ Скасувати друк"}
         </button>
@@ -317,6 +331,11 @@ export function PrinterDetailModal({
           <GroupPicker printer={printer} onUpdated={onUpdated} />
         )}
 
+        {canEdit && (printer.kind === "bambu" || printer.moonraker_url) &&
+          ["printing", "paused", "error", "pausing", "resuming", "cancelling"].includes(printer.state ?? "") && (
+            <PrintControls printer={printer} onUpdated={onUpdated} />
+          )}
+
         {printer.moonraker_url && (
           <>
             <div className="flex items-center gap-2 text-xs">
@@ -338,10 +357,6 @@ export function PrinterDetailModal({
                 ⧉ копіювати
               </button>
             </div>
-
-            {(printer.state === "printing" || printer.state === "paused") && canEdit && (
-              <MoonrakerControls printer={printer} onUpdated={onUpdated} />
-            )}
 
             {(printer.progress_pct != null ||
               printer.extruder_temp != null ||

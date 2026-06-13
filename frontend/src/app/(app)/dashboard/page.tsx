@@ -236,6 +236,7 @@ function PrinterPhotoCard({
   const tone       = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
+  const isError    = printer.state === "error";
   const pct        = printer.progress_pct ?? 0;
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -331,18 +332,31 @@ function PrinterPhotoCard({
       )}
 
       {/* ── action buttons ── */}
-      {(isPrinting || isPaused) && (
+      {(isPrinting || isPaused || isError) && (
         <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={(e) => act(e, isPaused ? "resume" : "pause")}
-            disabled={!!busy}
-            className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-            style={isPaused
-              ? { borderColor: "var(--state-ok)", color: "var(--state-ok)" }
-              : { borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
-          >
-            {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
-          </button>
+          {isError ? (
+            <button
+              onClick={(e) => act(e, "clear-error")}
+              disabled={!!busy}
+              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+              style={{ borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
+              title="Збити помилку"
+            >
+              {busy === "clear-error" ? "…" : "↺"}
+            </button>
+          ) : (
+            <button
+              onClick={(e) => act(e, isPaused ? "resume" : "pause")}
+              disabled={!!busy}
+              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
+              style={isPaused
+                ? { borderColor: "var(--state-ok)", color: "var(--state-ok)" }
+                : { borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
+              title={isPaused ? "Продовжити" : "Пауза"}
+            >
+              {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
+            </button>
+          )}
           <button
             onClick={(e) => act(e, "cancel")}
             disabled={!!busy}

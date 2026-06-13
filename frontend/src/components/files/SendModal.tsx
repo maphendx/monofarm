@@ -58,6 +58,15 @@ function printerMaterialSlots(printer: PrinterType) {
     }));
 }
 
+function normalizeMaterial(type: string | null | undefined): string | null {
+  const value = type?.trim().toLowerCase();
+  return value || null;
+}
+
+function slotLabel(slot: number) {
+  return slot === 254 ? "Зовнішня котушка" : `Слот ${slot + 1}`;
+}
+
 function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
   const targets = printerMaterialSlots(printer);
   const usedTargets = new Set<number>();
@@ -65,14 +74,17 @@ function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<
 
   for (const sourceSlot of usedSlotIndices(meta)) {
     const fileColor = normalizeSlotColor(meta?.colors?.[sourceSlot]);
-    const fileType = meta?.types?.[sourceSlot]?.toLowerCase();
-    const sameColor = fileColor
-      ? targets.filter((t) => !usedTargets.has(t.slot) && normalizeSlotColor(t.color) === fileColor)
-      : [];
-    const exact = sameColor.find((t) => !fileType || !t.type || t.type.toLowerCase() === fileType) ?? sameColor[0];
+    const fileType = normalizeMaterial(meta?.types?.[sourceSlot]);
+    const candidates = targets.filter((t) => !usedTargets.has(t.slot));
+    const exact = candidates.find((t) =>
+      fileColor &&
+      normalizeSlotColor(t.color) === fileColor &&
+      (!fileType || !normalizeMaterial(t.type) || normalizeMaterial(t.type) === fileType)
+    );
+    const sameType = candidates.find((t) => fileType && normalizeMaterial(t.type) === fileType);
     const fallback = targets.find((t) => t.slot === sourceSlot && !usedTargets.has(t.slot))
-      ?? targets.find((t) => !usedTargets.has(t.slot) && fileType && t.type?.toLowerCase() === fileType);
-    const picked = exact ?? fallback;
+      ?? candidates[0];
+    const picked = exact ?? sameType ?? fallback;
     map[sourceSlot] = picked?.slot ?? sourceSlot;
     if (picked) usedTargets.add(picked.slot);
   }
@@ -91,7 +103,7 @@ export function checkSlots(meta: GcodeFileMeta | null, printer: PrinterType) {
     const printerType = printerSlot?.type ?? null;
     let match: SlotMatch = "missing";
     if (printerSlot) {
-      const typeOk = !fileType || !printerType || fileType.toLowerCase() === printerType.toLowerCase();
+      const typeOk = !fileType || !printerType || normalizeMaterial(fileType) === normalizeMaterial(printerType);
       match = typeOk ? "ok" : "type_mismatch";
     }
     return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor, printerType };
@@ -336,7 +348,10 @@ export function SendModal({
     setQueuedJob(null);
     try {
       const apiSlotMap: Record<number, number> = {};
-      for (const i of usedSlots) apiSlotMap[i] = slotMap[i] ?? i;
+      for (const i of usedSlots) {
+        const mapped = slotMap[i] ?? i;
+        if (mapped !== i) apiSlotMap[i] = mapped;
+      }
       const body: Record<string, unknown> = { slot_map: apiSlotMap };
       if (isMoonraker) {
         if (!autoBedLeveling) body.auto_bed_leveling = false;
@@ -564,7 +579,7 @@ export function SendModal({
                                   : "badge badge-error",
                               ].join(" ")}>
                                 {s.fileColor && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: s.fileColor }} />}
-                                {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot} → {s.targetSlot}
+                                {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot} → {slotLabel(s.targetSlot - 1)}
                                 {s.match === "type_mismatch" && s.printerType && ` (є ${s.printerType})`}
                               </div>
                             ))}
@@ -589,7 +604,16 @@ export function SendModal({
 
               {selectedPrinter && usedSlots.length > 0 && (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3  ">
-                  <p className="mb-2 text-xs font-medium text-[var(--text-muted)] ">Ремаппінг слотів</p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-[var(--text-muted)] ">Котушки й кольори</p>
+                    <button
+                      type="button"
+                      onClick={() => setSlotMap(autoMapSlots(file.filament_meta, selectedPrinter))}
+                      className="rounded border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+                    >
+                      Автомаппінг
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {usedSlots.map((i) => {
                       const fileColor = file.filament_meta?.colors?.[i] ?? null;
@@ -608,7 +632,7 @@ export function SendModal({
                             {printerMaterialSlots(selectedPrinter).length > 0
                               ? printerMaterialSlots(selectedPrinter).map((lf) => (
                                   <option key={lf.slot} value={lf.slot}>
-                                    Слот {lf.slot + 1}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
+                                    {slotLabel(lf.slot)}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
                                   </option>
                                 ))
                               : Array.from({ length: 4 }).map((_, s) => (
