@@ -55,6 +55,7 @@ jobs:
       - name: Verify Alembic migrations apply cleanly
         env:
           DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
+          SECRET_KEY: ci-only-secret-not-used-at-runtime
         # Recreate the schema (pytest left state in it), then run migrations
         # end-to-end. Catches divergence between models and migrations that
         # the SQLAlchemy create_all() path in pytest doesn't exercise.
