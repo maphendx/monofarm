@@ -21,3 +21,7 @@ ignore = [
     "E501",  # line length: many slicer comment strings legitimately exceed
     "E402",  # local imports inside functions (intentional: lazy load to avoid cycles)
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Packages re-export their public API in __init__.py; unused-import is intentional.
+"__init__.py" = ["F401"]
