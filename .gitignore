@@ -51,3 +51,4 @@ bun.lock
 
 # Graphify (generated knowledge graph; rebuild with graphify extract/update)
 graphify-out/
+agent/dist/
