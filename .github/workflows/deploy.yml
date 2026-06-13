@@ -1,0 +1,29 @@
+name: Deploy
+
+# Auto-deploy to production (Hetzner + Dokploy) after CI passes on main.
+# Dokploy's panel/API (port 3000) is firewalled to the home IP, so GitHub cannot
+# webhook it directly. Instead this SSHes in with a forced-command key that can
+# ONLY run /usr/local/bin/monofarm-deploy.sh, which triggers Dokploy's own deploy
+# webhooks on localhost for web + worker + frontend. Dokploy stays private.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    # Only on a successful CI run that was triggered by a push to main.
+    if: ${{ github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dokploy deploy over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=20 \
+            root@204.168.129.1 deploy
