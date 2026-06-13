@@ -53,12 +53,13 @@ export function PrinterCard({
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
   const isIdle = printer.state === "idle";
+  const isError = printer.state === "error";
   const needsClearBed = printer.state === "awaiting_bed_clear" ||
     (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
   const canStartPrint = (isIdle || printer.state === "operational") && !needsClearBed;
   const hasMoonraker = !!printer.moonraker_url;
   const canEdit = user.role === "admin" || user.role === "operator";
-  const isActionable = (isPrinting || isPaused || needsClearBed || canStartPrint) && canEdit;
+  const isActionable = (isPrinting || isPaused || isError || needsClearBed || canStartPrint) && canEdit;
   const showProgress = isPrinting && printer.progress_pct != null;
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -231,7 +232,7 @@ export function PrinterCard({
                 ▶ Друк
               </button>
             )}
-            {needsClearBed && (
+            {(needsClearBed || isError) && (
               confirmClearBed ? (
                 <>
                   <button
@@ -281,7 +282,17 @@ export function PrinterCard({
                 {busy === "resume" ? "…" : "▶ Продовж."}
               </button>
             )}
-            {(isPrinting || isPaused) && (
+            {isError && (
+              <button
+                type="button"
+                onClick={(e) => act(e, "clear-error")}
+                disabled={busy !== null}
+                className="btn btn-warn btn-sm flex-1 disabled:opacity-40"
+              >
+                {busy === "clear-error" ? "…" : "Збити"}
+              </button>
+            )}
+            {(isPrinting || isPaused || isError) && (
               confirmCancel ? (
                 <>
                   <button

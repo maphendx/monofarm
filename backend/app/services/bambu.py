@@ -454,8 +454,8 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         bed_cleared = cache_get(bed_cleared_key)
 
     state = _GCODE_STATE_MAP.get(raw_state, prev.get("state", "unknown")) if raw_state else prev.get("state", "unknown")
-    cleared_finish = raw_state == "FINISH" and bool(bed_cleared)
-    if cleared_finish:
+    cleared_terminal = raw_state in ("FINISH", "FAILED") and bool(bed_cleared)
+    if cleared_terminal:
         state = "idle"
         progress_pct = None
         eta_minutes = None
@@ -478,8 +478,8 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         "last_message_at": received_at.isoformat(),
         "state": state,
         "raw_state": raw_state or prev.get("raw_state", ""),
-        "progress_pct": None if cleared_finish else (int(progress_pct) if progress_pct is not None else prev.get("progress_pct")),
-        "eta_minutes": None if cleared_finish else (eta_minutes if eta_minutes is not None else prev.get("eta_minutes")),
+        "progress_pct": None if cleared_terminal else (int(progress_pct) if progress_pct is not None else prev.get("progress_pct")),
+        "eta_minutes": None if cleared_terminal else (eta_minutes if eta_minutes is not None else prev.get("eta_minutes")),
         "filename": filename,
         "nozzle_temp": print_data.get("nozzle_temper") if print_data.get("nozzle_temper") is not None else prev.get("nozzle_temp"),
         "nozzle_target": print_data.get("nozzle_target_temper") if print_data.get("nozzle_target_temper") is not None else prev.get("nozzle_target"),
@@ -489,7 +489,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         "total_layers": print_data.get("total_layer_num") if print_data.get("total_layer_num") is not None else prev.get("total_layers"),
         # Clear error_msg when printer recovers to normal state
         "error_msg": error_msg if error_msg is not None else (
-            None if raw_state in ("IDLE", "RUNNING", "FINISH") else prev.get("error_msg")
+            None if raw_state in ("IDLE", "RUNNING", "FINISH") or cleared_terminal else prev.get("error_msg")
         ),
         # Carry forward — reports without AMS data must not drop the active tray
         "active_tray": prev.get("active_tray"),

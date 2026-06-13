@@ -351,7 +351,7 @@ function PrinterPhotoCard({
         </div>
       )}
 
-      {needsClearBed && (
+      {(needsClearBed || isError) && (
         <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
           {confirmClearBed ? (
             <>
