@@ -71,6 +71,32 @@ class BambuError(Exception):
     """Raised when a Bambu API/MQTT/FTP operation fails."""
 
 
+class _ImplicitFTP_TLS(ftplib.FTP_TLS):
+    """Implicit FTPS for Bambu printers on :990."""
+
+    @property
+    def sock(self):
+        return self._sock
+
+    @sock.setter
+    def sock(self, value):
+        if value is not None and not isinstance(value, ssl.SSLSocket):
+            value = self.context.wrap_socket(value)
+        self._sock = value
+
+    def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
+        self.voidcmd("TYPE I")
+        conn = self.transfercmd(cmd, rest)
+        try:
+            while buf := fp.read(blocksize):
+                conn.sendall(buf)
+                if callback:
+                    callback(buf)
+        finally:
+            conn.close()
+        return self.voidresp()
+
+
 # ── Per-org state ────────────────────────────────────────────────────────────
 
 _access_tokens: dict[int, str] = {}   # org_id → access_token
@@ -1186,11 +1212,18 @@ def cloud_upload_and_print(
 # ── FTPS upload (LAN fallback) ────────────────────────────────────────────────
 
 
-def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) -> str:
+def upload_3mf(
+    dev_ip: str,
+    access_code: str,
+    file_path: Path,
+    filename: str,
+    target_dir: str = "cache",
+) -> str:
     """Upload a .3mf to the printer via FTPS (LAN, implicit TLS :990).
 
-    Uploads into `cache/` (firmware print-job dir, same as SimplyPrint) and
-    falls back to the SD root on old firmware without that directory.
+    Uploads into `cache/` by default and falls back to the SD root on old
+    firmware without that directory. A1/A1 mini project_file jobs should pass
+    target_dir="sdcard" so the matching URL is file:///sdcard/<name>.
     Returns the remote path on the printer (`cache/x.3mf` or `x.3mf`) for
     `build_start_print_payload`.
     """
@@ -1199,21 +1232,22 @@ def upload_3mf(dev_ip: str, access_code: str, file_path: Path, filename: str) ->
     ctx.verify_mode = ssl.CERT_NONE
 
     try:
-        ftp = ftplib.FTP_TLS(context=ctx)
+        ftp = _ImplicitFTP_TLS(context=ctx)
         ftp.connect(dev_ip, 990, timeout=FTPS_TIMEOUT)
         ftp.login(user="bblp", passwd=access_code.strip())
         ftp.prot_p()
 
         remote_path = filename
-        try:
+        if target_dir != "sdcard":
             try:
-                ftp.cwd("cache")
-            except ftplib.error_perm:
-                ftp.mkd("cache")
-                ftp.cwd("cache")
-            remote_path = f"cache/{filename}"
-        except ftplib.all_errors:
-            pass  # old firmware without cache dir — upload to SD root
+                try:
+                    ftp.cwd("cache")
+                except ftplib.error_perm:
+                    ftp.mkd("cache")
+                    ftp.cwd("cache")
+                remote_path = f"cache/{filename}"
+            except ftplib.all_errors:
+                pass  # old firmware without cache dir: upload to SD root
 
         with file_path.open("rb") as f:
             ftp.storbinary(f"STOR {filename}", f)

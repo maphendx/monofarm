@@ -379,6 +379,7 @@ async def send_bambu_upload(
     filename: str,
     file_bytes: bytes | None = None,
     presigned_url: str | None = None,
+    target_dir: str = "cache",
     timeout: float = 180.0,
 ) -> str:
     """Upload a .3mf to a Bambu printer via the agent's LAN FTPS connection.
@@ -399,6 +400,7 @@ async def send_bambu_upload(
         "ip": dev_ip,
         "access_code": access_code,
         "filename": filename,
+        "target_dir": target_dir,
     }
     if presigned_url:
         payload["url"] = presigned_url

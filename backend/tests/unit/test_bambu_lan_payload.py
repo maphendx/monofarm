@@ -1,5 +1,6 @@
 """Unit tests for the LAN project_file payload builder (OpenBambuAPI §6.7)."""
 from app.services.bambu import build_start_print_payload
+from app.services.bambu_lan_dispatch import _bambu_upload_target_dir
 
 
 def test_cache_path_uses_ftp_url():
@@ -10,6 +11,16 @@ def test_cache_path_uses_ftp_url():
 def test_root_path_uses_sdcard_url():
     cmd = build_start_print_payload("DEV1", "model.3mf", ftp_filename="model.3mf")
     assert cmd["print"]["url"] == "file:///sdcard/model.3mf"
+
+
+def test_a1_uploads_to_sdcard_root():
+    assert _bambu_upload_target_dir("A1") == "sdcard"
+    assert _bambu_upload_target_dir("A1 mini") == "sdcard"
+
+
+def test_p_and_x_series_upload_to_cache():
+    assert _bambu_upload_target_dir("P1S") == "cache"
+    assert _bambu_upload_target_dir("X1 Carbon") == "cache"
 
 
 def test_http_url_takes_priority():

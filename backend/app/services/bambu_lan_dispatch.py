@@ -34,6 +34,12 @@ _inflight: set[int] = set()
 _inflight_guard = threading.Lock()
 
 
+def _bambu_upload_target_dir(model: str | None) -> str:
+    """A1 firmware reads project_file from SD root; P/X printers use cache."""
+    normalized = (model or "").upper().replace("-", " ")
+    return "sdcard" if "A1" in normalized else "cache"
+
+
 async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
     """Run the LAN dispatch flow for a queued Bambu job."""
     from app.core.db import SessionLocal
@@ -67,6 +73,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             dev_id = (printer.bambu_dev_id or "").strip() if printer else ""
             dev_ip = (printer.bambu_dev_ip or "").strip() if printer else ""
             access_code = (printer.bambu_access_code or "").strip() if printer else ""
+            upload_target_dir = _bambu_upload_target_dir(printer.bambu_model if printer else None)
             stored_name = gcode.stored_name if gcode else None
 
         if not dev_id or not dev_ip or not access_code:
@@ -113,11 +120,13 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                     lan_filename,
                     file_bytes=None if presigned else file_bytes,
                     presigned_url=presigned,
+                    target_dir=upload_target_dir,
                 )
             else:
                 with storage_svc.local_path_for(stored_name, org_id) as src:
                     remote_path = await asyncio.to_thread(
                         bambu.upload_3mf, dev_ip, access_code, src, lan_filename,
+                        upload_target_dir,
                     )
         except (RuntimeError, bambu.BambuError, OSError) as e:
             if not has_tunnel:

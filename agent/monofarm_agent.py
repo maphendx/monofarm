@@ -34,7 +34,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.6.1"
+AGENT_VERSION = "0.6.2"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -1384,19 +1384,52 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     File source: either `url` (presigned R2 — agent downloads directly, preferred
     to avoid +33% base64 overhead) or `data_b64` (fallback for local-disk backends).
 
-    Uploads into `cache/` (the directory Bambu firmware uses for black-box print
-    jobs — same as SimplyPrint); falls back to the SD root on old firmware that
-    lacks the directory. Returns the path actually used so the backend can build
-    the matching `project_file` URL.
+    Uploads into `cache/` by default. A1/A1 mini project_file jobs must be
+    uploaded to the SD root and launched as file:///sdcard/<name>, so the
+    backend can request `target_dir=sdcard`. Returns the path actually used so
+    the backend can build the matching `project_file` URL.
     """
     import ftplib
     import io as _io
     import ssl as _ssl
 
+    class _ImplicitFTP_TLS(ftplib.FTP_TLS):
+        """Bambu printers serve IMPLICIT FTPS on :990 — the socket must be TLS
+        from the first byte. Stdlib FTP_TLS does EXPLICIT AUTH-TLS (connects in
+        plaintext, waits for a "220" greeting), which hangs until timeout against
+        :990. Wrapping the socket on assignment makes the command channel
+        implicit; prot_p() still covers the data channel via the base class."""
+        @property
+        def sock(self):
+            return self._sock
+
+        @sock.setter
+        def sock(self, value):
+            if value is not None and not isinstance(value, _ssl.SSLSocket):
+                value = self.context.wrap_socket(value)
+            self._sock = value
+
+        def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
+            # Bambu firmware never sends a TLS close_notify on the data channel,
+            # so stdlib's conn.unwrap() after the transfer blocks until timeout.
+            # The 226 on the command channel (voidresp) already confirms the
+            # upload, so send the bytes and skip the unwrap.
+            self.voidcmd("TYPE I")
+            conn = self.transfercmd(cmd, rest)
+            try:
+                while buf := fp.read(blocksize):
+                    conn.sendall(buf)
+                    if callback:
+                        callback(buf)
+            finally:
+                conn.close()
+            return self.voidresp()
+
     req_id      = req.get("id")
     ip          = (req.get("ip") or "").strip()
     access_code = (req.get("access_code") or "").strip()
     filename    = req.get("filename", "model.3mf")
+    target_dir  = (req.get("target_dir") or "cache").strip().lower()
     url         = req.get("url")
     data_b64    = req.get("data_b64", "")
 
@@ -1410,7 +1443,7 @@ async def handle_bambu_upload(ws, req: dict) -> None:
             file_bytes = base64.b64decode(data_b64)
 
         def _ftp_connect() -> "ftplib.FTP_TLS":
-            ftp = ftplib.FTP_TLS(context=_bambu_ssl_context(ip))
+            ftp = _ImplicitFTP_TLS(context=_bambu_ssl_context(ip))
             ftp.connect(ip, 990, timeout=15)
             ftp.login(user="bblp", passwd=access_code)
             return ftp
@@ -1423,15 +1456,16 @@ async def handle_bambu_upload(ws, req: dict) -> None:
                 ftp = _ftp_connect()
             ftp.prot_p()
             remote_path = filename
-            try:
+            if target_dir != "sdcard":
                 try:
-                    ftp.cwd("cache")
-                except ftplib.error_perm:
-                    ftp.mkd("cache")
-                    ftp.cwd("cache")
-                remote_path = f"cache/{filename}"
-            except ftplib.all_errors:
-                pass  # old firmware without cache dir — upload to SD root
+                    try:
+                        ftp.cwd("cache")
+                    except ftplib.error_perm:
+                        ftp.mkd("cache")
+                        ftp.cwd("cache")
+                    remote_path = f"cache/{filename}"
+                except ftplib.all_errors:
+                    pass  # old firmware without cache dir: upload to SD root
             ftp.storbinary(f"STOR {filename}", _io.BytesIO(file_bytes))
             ftp.quit()
             return remote_path
