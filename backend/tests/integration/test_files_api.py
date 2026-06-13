@@ -172,8 +172,11 @@ def test_delete_file_removes_row_and_disk(client, auth_headers, cleanup_uploads,
 
 
 def test_send_file_to_moonraker_printer_calls_upload(
-    client, auth_headers, cleanup_uploads, mock_external_services
+    client, auth_headers, cleanup_uploads, mock_external_services, monkeypatch
 ):
+    # Legacy synchronous upload path — exercised when the Moonraker queue is off.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "MOONRAKER_QUEUE_ENABLED", False)
     # Create a printer with a moonraker_url
     p = client.post(
         "/api/printers",
@@ -277,8 +280,11 @@ def test_send_to_moonraker_queues_job_when_flag_enabled(
 
 
 def test_send_file_with_slot_remap_uses_temp_file(
-    client, auth_headers, cleanup_uploads, mock_external_services
+    client, auth_headers, cleanup_uploads, mock_external_services, monkeypatch
 ):
+    # Legacy synchronous upload path — exercised when the Moonraker queue is off.
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "MOONRAKER_QUEUE_ENABLED", False)
     p = client.post(
         "/api/printers",
         headers=auth_headers,
