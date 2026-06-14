@@ -159,6 +159,60 @@ def _moonraker_snapshot_bytes(moonraker_url: str, timeout: float = 8.0) -> bytes
     return None
 
 
+def _public_snapshot_bytes(db: Session, org_id: int, printer_id: int, timeout: float = 18.0) -> bytes | None:
+    """Fetch a snapshot through the public web process.
+
+    In production the worker emits alerts, but the agent WebSocket tunnel lives
+    in the web process. This bridges that process boundary through the camera
+    snapshot endpoint.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    import jwt
+    from app.core.config import settings
+    from app.core.security import ALGORITHM
+
+    base = (settings.FARM_PUBLIC_URL or "").rstrip("/")
+    if not base.startswith(("http://", "https://")):
+        return None
+
+    user = (
+        db.query(User)
+        .filter(
+            User.organization_id == org_id,
+            User.is_active.is_(True),
+        )
+        .order_by(User.id.asc())
+        .first()
+    )
+    if not user:
+        return None
+
+    try:
+        token = jwt.encode(
+            {
+                "sub": str(user.id),
+                "role": user.role.value,
+                "org_id": org_id,
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            },
+            settings.SECRET_KEY,
+            algorithm=ALGORITHM,
+        )
+        resp = requests.get(
+            f"{base}/api/printers/{printer_id}/camera/snapshot",
+            params={"token": token},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        ctype = (resp.headers.get("content-type") or "").lower()
+        if resp.content and ctype.startswith("image/"):
+            return resp.content
+    except Exception as exc:
+        log.debug("Public snapshot failed org=%s printer=%s: %s", org_id, printer_id, exc)
+    return None
+
+
 def _printer_snapshot(db: Session, org_id: int, printer_id: int) -> bytes | None:
     from app.services import tunnel as _tunnel
 
@@ -215,6 +269,11 @@ def _printer_snapshot(db: Session, org_id: int, printer_id: int) -> bytes | None
                 return snap
     except RuntimeError:
         log.debug("Snapshot capture skipped: running event loop")
+
+    if not _tunnel.has_tunnel(org_id):
+        snap = _public_snapshot_bytes(db, org_id, printer_id)
+        if snap:
+            return snap
 
     if printer.kind == PrinterKind.bambu:
         if printer.bambu_dev_ip and printer.bambu_access_code:

@@ -4,6 +4,7 @@ Strategy: DB stores persistent printer rows (name, kind, manual state).
 Bambu live state comes from MQTT cache; Moonraker from REST polling.
 """
 import asyncio
+import base64
 import logging
 from datetime import datetime, timezone
 
@@ -83,6 +84,14 @@ def _default_nozzle(kind: "PrinterKind", model: str | None) -> float | None:
         if any(key.lower() in m for key, _ in _BAMBU_VOLUMES):
             return 0.4
     return None
+
+
+def _jpeg_from_mjpeg_chunk(chunk: bytes) -> bytes | None:
+    start = chunk.find(b"\xff\xd8")
+    end = chunk.find(b"\xff\xd9", start + 2)
+    if start == -1 or end == -1:
+        return None
+    return chunk[start : end + 2]
 
 
 def _natural_key(s: str) -> list:
@@ -523,6 +532,97 @@ async def webcam_snapshot(
         media_type=resp.headers.get("content-type", "image/jpeg"),
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get("/{printer_id}/camera/snapshot")
+async def camera_snapshot(
+    printer_id: int,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Return one camera frame for Telegram/alert snapshots.
+
+    Bambu frames are captured through the farm agent tunnel. Moonraker falls
+    back to the existing webcam snapshot proxy behavior.
+    """
+    from app.core.security import decode_token
+
+    payload = decode_token(token or "")
+    if not payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = db.get(User, int(payload.get("sub", 0)))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid user")
+    row = db.query(Printer).filter(
+        Printer.id == printer_id,
+        Printer.organization_id == user.organization_id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Printer not found")
+
+    org_id = user.organization_id
+    if row.kind == PrinterKind.bambu:
+        if not row.bambu_dev_ip or not row.bambu_access_code:
+            raise HTTPException(status_code=404, detail="Camera not available")
+        if not _tunnel.has_tunnel(org_id):
+            raise HTTPException(status_code=502, detail="Agent tunnel unavailable")
+        try:
+            async for chunk in _tunnel.bambu_camera_stream(
+                org_id,
+                row.bambu_dev_ip,
+                row.bambu_access_code,
+                chunk_timeout=10.0,
+            ):
+                jpeg = _jpeg_from_mjpeg_chunk(chunk)
+                if jpeg:
+                    return Response(
+                        content=jpeg,
+                        media_type="image/jpeg",
+                        headers={"Cache-Control": "no-store"},
+                    )
+            raise HTTPException(status_code=502, detail="No camera frame")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Camera unavailable: {exc}") from exc
+
+    if row.moonraker_url:
+        base = moonraker._api_base(row.moonraker_url)  # noqa: SLF001
+        try:
+            webcams = []
+            if _tunnel.has_tunnel(org_id):
+                try:
+                    resp = await _tunnel.proxy_request(org_id, "GET", f"{base}/server/webcams/list", timeout=8.0)
+                    webcams = resp.get("body", {}).get("result", {}).get("webcams", [])
+                except Exception:
+                    webcams = []
+                snapshot_url = ""
+                if webcams:
+                    snapshot_url = webcams[0].get("snapshot_url", "") or ""
+                    if snapshot_url and not snapshot_url.startswith("http"):
+                        snapshot_url = f"{base}{snapshot_url if snapshot_url.startswith('/') else '/' + snapshot_url}"
+                if not snapshot_url:
+                    snapshot_url = f"{base}/webcam/?action=snapshot"
+                result = await _tunnel.proxy_request(org_id, "GET", snapshot_url, timeout=8.0)
+                if result.get("binary"):
+                    content = base64.b64decode(result["binary"])
+                    return Response(
+                        content=content,
+                        media_type=result.get("content_type", "image/jpeg"),
+                        headers={"Cache-Control": "no-store"},
+                    )
+
+            resp = await asyncio.to_thread(lambda: _requests.get(f"{base}/webcam/?action=snapshot", timeout=5))
+            resp.raise_for_status()
+            return Response(
+                content=resp.content,
+                media_type=resp.headers.get("content-type", "image/jpeg"),
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Webcam unavailable: {exc}") from exc
+
+    raise HTTPException(status_code=404, detail="Camera not available")
 
 
 @router.get("/{printer_id}/camera/stream")
