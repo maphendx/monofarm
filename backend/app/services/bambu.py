@@ -773,6 +773,26 @@ def _sync_cloud_job_from_report(
 
         db.commit()
         db.refresh(job)
+        if target_status in (
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.completed,
+            BambuCloudJobStatus.failed,
+        ):
+            from app.models.printer import Printer
+            from app.services.telegram_notify import send_print_event_notification
+
+            printer = db.get(Printer, job.printer_id)
+            if printer is not None:
+                event = "started" if target_status == BambuCloudJobStatus.printing else target_status.value
+                send_print_event_notification(
+                    db,
+                    job.organization_id,
+                    event=event,
+                    printer_name=printer.name,
+                    file_name=job.file_name or filename,
+                    reason=error_msg or job.error_msg,
+                    dedupe_key=f"{job.id}:{event}",
+                )
         if progress_pct is not None:
             log_event(
                 log,
