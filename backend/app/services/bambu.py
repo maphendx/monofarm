@@ -678,6 +678,8 @@ def _status_from_mqtt_report(
 ) -> tuple[BambuCloudJobStatus | None, str | None]:
     if raw_state in ("RUNNING", "PREPARE", "SLICING"):
         return BambuCloudJobStatus.printing, "Printer reports print progress"
+    if raw_state == "PAUSE" and error_msg:
+        return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
     if raw_state == "PAUSE":
         return BambuCloudJobStatus.paused, "Printer reports print paused"
     if raw_state == "FINISH" or (
@@ -789,6 +791,7 @@ def _sync_cloud_job_from_report(
                     job.organization_id,
                     event=event,
                     printer_name=printer.name,
+                    printer_id=printer.id,
                     file_name=job.file_name or filename,
                     reason=error_msg or job.error_msg,
                     dedupe_key=f"{job.id}:{event}",

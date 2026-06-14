@@ -104,22 +104,31 @@ def _check_org(db, org: Organization) -> None:
                 org.id,
                 event="started",
                 printer_name=row.name,
+                printer_id=row.id,
                 file_name=current.get("file"),
                 dedupe_key=f"{row.id}:started:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
             )
             log.info("PrintHistory: started %s on %s", current.get("file"), row.name)
 
+        error_msg = current.get("error_msg") or prev.get("error_msg")
+
+        # printing → paused without a visible error: keep the job open.
+        if prev_state in PRINTING_STATES and state == "paused" and not error_msg:
+            _prev[row.id] = current
+            continue
+
         # printing → done: close history entry
         elif prev_state in PRINTING_STATES and state not in PRINTING_STATES:
-            result = "completed" if state == "operational" else ("failed" if state == "error" else "cancelled")
+            result = "completed" if state == "operational" else ("failed" if state == "error" or error_msg else "cancelled")
             _finalize_print(db, row, now, result)
             send_print_event_notification(
                 db,
                 org.id,
                 event=result,
                 printer_name=row.name,
+                printer_id=row.id,
                 file_name=current.get("file"),
-                reason=current.get("error_msg"),
+                reason=error_msg,
                 dedupe_key=f"{row.id}:{result}:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
             )
             log.info("PrintHistory: %s on %s", result, row.name)
@@ -200,6 +209,7 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
             printer.organization_id,
             event=result,
             printer_name=printer.name,
+            printer_id=printer.id,
             file_name=current.get("file"),
             reason=current.get("error_msg"),
             dedupe_key=f"{job.id}:{result}",
@@ -214,6 +224,7 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
             printer.organization_id,
             event="started",
             printer_name=printer.name,
+            printer_id=printer.id,
             file_name=current.get("file"),
             dedupe_key=f"{job.id}:started",
         )
