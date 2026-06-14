@@ -255,6 +255,8 @@ def send_print_event_notification(
 
     if event == "started":
         title = "▶ Print started"
+    elif event == "paused":
+        title = "⏸ Print paused"
     elif event == "completed":
         title = "✅ Print completed"
     elif event == "failed":

@@ -86,5 +86,6 @@ def test_paused_without_error_stays_open(monkeypatch):
     print_tracker._check_org(db, org)
 
     assert finalized == []
-    assert notifications == []
+    assert len(notifications) == 1
+    assert notifications[0]["event"] == "paused"
     assert print_tracker._prev[printer.id]["state"] == "paused"

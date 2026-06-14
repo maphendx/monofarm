@@ -808,7 +808,17 @@ def _sync_cloud_job_from_report(
 
         printer = db.get(Printer, job.printer_id)
         if printer is not None:
-            if target_status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused) and error_msg and error_msg != prior_error_msg:
+            if target_status == BambuCloudJobStatus.paused and not error_msg:
+                send_print_event_notification(
+                    db,
+                    job.organization_id,
+                    event="paused",
+                    printer_name=printer.name,
+                    printer_id=printer.id,
+                    file_name=job.file_name or filename,
+                    dedupe_key=f"{job.id}:paused",
+                )
+            elif target_status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused) and error_msg and error_msg != prior_error_msg:
                 send_print_event_notification(
                     db,
                     job.organization_id,
@@ -819,21 +829,16 @@ def _sync_cloud_job_from_report(
                     reason=error_msg,
                     dedupe_key=f"{job.id}:error:{error_msg}",
                 )
-            if target_status in (
-                BambuCloudJobStatus.printing,
-                BambuCloudJobStatus.completed,
-                BambuCloudJobStatus.failed,
-            ):
-                event = "started" if target_status == BambuCloudJobStatus.printing else target_status.value
+            if target_status == BambuCloudJobStatus.failed:
                 send_print_event_notification(
                     db,
                     job.organization_id,
-                    event=event,
+                    event="failed",
                     printer_name=printer.name,
                     printer_id=printer.id,
                     file_name=job.file_name or filename,
                     reason=error_msg or job.error_msg,
-                    dedupe_key=f"{job.id}:{event}",
+                    dedupe_key=f"{job.id}:failed",
                 )
         if progress_pct is not None:
             log_event(

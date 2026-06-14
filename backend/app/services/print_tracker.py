@@ -99,21 +99,21 @@ def _check_org(db, org: Organization) -> None:
             )
             db.add(entry)
             db.commit()
-            send_print_event_notification(
-                db,
-                org.id,
-                event="started",
-                printer_name=row.name,
-                printer_id=row.id,
-                file_name=current.get("file"),
-                dedupe_key=f"{row.id}:started:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
-            )
             log.info("PrintHistory: started %s on %s", current.get("file"), row.name)
 
         error_msg = current.get("error_msg") or prev.get("error_msg")
 
         # printing → paused without a visible error: keep the job open.
         if prev_state in PRINTING_STATES and state == "paused" and not error_msg:
+            send_print_event_notification(
+                db,
+                org.id,
+                event="paused",
+                printer_name=row.name,
+                printer_id=row.id,
+                file_name=current.get("file"),
+                dedupe_key=f"{row.id}:paused:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
+            )
             _prev[row.id] = current
             continue
 
@@ -121,16 +121,17 @@ def _check_org(db, org: Organization) -> None:
         elif prev_state in PRINTING_STATES and state not in PRINTING_STATES:
             result = "completed" if state == "operational" else ("failed" if state == "error" or error_msg else "cancelled")
             _finalize_print(db, row, now, result)
-            send_print_event_notification(
-                db,
-                org.id,
-                event=result,
-                printer_name=row.name,
-                printer_id=row.id,
-                file_name=current.get("file"),
-                reason=error_msg,
-                dedupe_key=f"{row.id}:{result}:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
-            )
+            if result == "failed":
+                send_print_event_notification(
+                    db,
+                    org.id,
+                    event=result,
+                    printer_name=row.name,
+                    printer_id=row.id,
+                    file_name=current.get("file"),
+                    reason=error_msg,
+                    dedupe_key=f"{row.id}:{result}:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
+                )
             log.info("PrintHistory: %s on %s", result, row.name)
 
         _prev[row.id] = current
@@ -175,12 +176,10 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
 
     target = None
     reason = None
-    notify_started = False
     if state == "paused" and job.status != BambuCloudJobStatus.paused:
         target, reason = BambuCloudJobStatus.paused, "Printer reports print paused"
     elif state in PRINTING_STATES and job.status == BambuCloudJobStatus.paused:
         target, reason = BambuCloudJobStatus.printing, "Printer reports print progress"
-        notify_started = True
     elif state in DONE_STATES:
         result = "completed" if state == "operational" else ("failed" if state == "error" else "cancelled")
         target = {
@@ -204,30 +203,20 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
         if entry is not None:
             from app.services.print_costing import finalize_print
             finalize_print(db, entry, printer, result, now=now)
-        send_print_event_notification(
-            db,
-            printer.organization_id,
-            event=result,
-            printer_name=printer.name,
-            printer_id=printer.id,
-            file_name=current.get("file"),
-            reason=current.get("error_msg"),
-            dedupe_key=f"{job.id}:{result}",
-        )
+        if result == "failed":
+            send_print_event_notification(
+                db,
+                printer.organization_id,
+                event=result,
+                printer_name=printer.name,
+                printer_id=printer.id,
+                file_name=current.get("file"),
+                reason=current.get("error_msg"),
+                dedupe_key=f"{job.id}:{result}",
+            )
 
     transition_job(job, target or job.status, reason=reason, now=now, **updates)
     db.commit()
-
-    if notify_started:
-        send_print_event_notification(
-            db,
-            printer.organization_id,
-            event="started",
-            printer_name=printer.name,
-            printer_id=printer.id,
-            file_name=current.get("file"),
-            dedupe_key=f"{job.id}:started",
-        )
 
 
 def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
