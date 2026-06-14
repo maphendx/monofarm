@@ -271,9 +271,13 @@ def _printer_snapshot(db: Session, org_id: int, printer_id: int) -> bytes | None
         log.debug("Snapshot capture skipped: running event loop")
 
     if not _tunnel.has_tunnel(org_id):
+        from app.core.config import settings
+
         snap = _public_snapshot_bytes(db, org_id, printer_id)
         if snap:
             return snap
+        if settings.ENV == "production":
+            return None
 
     if printer.kind == PrinterKind.bambu:
         if printer.bambu_dev_ip and printer.bambu_access_code:
