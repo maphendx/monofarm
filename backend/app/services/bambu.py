@@ -500,6 +500,33 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         # Carry forward — reports without AMS data must not drop the active tray
         "active_tray": prev.get("active_tray"),
     }
+    if state in ("paused", "printing", "error") and error_msg and error_msg != prev.get("error_msg"):
+        from app.core.db import SessionLocal as _SessionLocal
+        from app.models.printer import Printer
+
+        org_id_local = _dev_to_org.get(dev_id)
+        with _SessionLocal() as db:
+            printer = (
+                db.query(Printer)
+                .filter(
+                    Printer.organization_id == org_id_local,
+                    Printer.bambu_dev_id == dev_id,
+                )
+                .first()
+            )
+            if printer is not None:
+                from app.services.telegram_notify import send_print_event_notification
+
+                send_print_event_notification(
+                    db,
+                    org_id_local or 0,
+                    event="failed",
+                    printer_name=printer.name,
+                    printer_id=printer.id,
+                    file_name=filename,
+                    reason=error_msg,
+                    dedupe_key=f"{printer.id}:failed:{error_msg}",
+                )
     state_changed = updated.get("state") != prev.get("state")
     _state_cache[dev_id] = updated
     if state_changed:
@@ -715,6 +742,7 @@ def _sync_cloud_job_from_report(
         if job is None:
             return None
 
+        prior_error_msg = job.error_msg
         task_id = _extract_mqtt_task_id(print_data)
         updates: dict[str, Any] = {"last_mqtt_at": now}
         if task_id and not job.bambu_task_id:
@@ -775,16 +803,27 @@ def _sync_cloud_job_from_report(
 
         db.commit()
         db.refresh(job)
-        if target_status in (
-            BambuCloudJobStatus.printing,
-            BambuCloudJobStatus.completed,
-            BambuCloudJobStatus.failed,
-        ):
-            from app.models.printer import Printer
-            from app.services.telegram_notify import send_print_event_notification
+        from app.models.printer import Printer
+        from app.services.telegram_notify import send_print_event_notification
 
-            printer = db.get(Printer, job.printer_id)
-            if printer is not None:
+        printer = db.get(Printer, job.printer_id)
+        if printer is not None:
+            if target_status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused) and error_msg and error_msg != prior_error_msg:
+                send_print_event_notification(
+                    db,
+                    job.organization_id,
+                    event="failed",
+                    printer_name=printer.name,
+                    printer_id=printer.id,
+                    file_name=job.file_name or filename,
+                    reason=error_msg,
+                    dedupe_key=f"{job.id}:error:{error_msg}",
+                )
+            if target_status in (
+                BambuCloudJobStatus.printing,
+                BambuCloudJobStatus.completed,
+                BambuCloudJobStatus.failed,
+            ):
                 event = "started" if target_status == BambuCloudJobStatus.printing else target_status.value
                 send_print_event_notification(
                     db,
