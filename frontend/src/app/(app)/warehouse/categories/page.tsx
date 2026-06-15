@@ -233,8 +233,8 @@ export default function CategoriesPage() {
           </button>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]  ">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+          <table className="min-w-[360px] w-full text-sm">
             <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]  ">
               <tr>
                 <th className="px-5 py-3 font-medium">Назва</th>

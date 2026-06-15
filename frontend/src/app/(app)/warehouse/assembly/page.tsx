@@ -451,8 +451,8 @@ export default function AssemblyPage() {
             Немає відкритих партій
           </div>
         ) : (
-          <div className="ds-table">
-            <table>
+          <div className="ds-table overflow-x-auto rounded-xl">
+            <table className="min-w-[720px]">
               <thead><tr>
                 <th>Виріб</th><th>Призначено</th><th className="text-right">Ціль</th>
                 <th className="text-right">Готових</th><th className="text-right">Брак</th>
@@ -507,8 +507,8 @@ export default function AssemblyPage() {
           {sessions.filter(s => s.closed_at).length === 0 ? (
             <p className="text-sm text-[var(--text-faint)] py-4">Немає завершених сесій за цей період.</p>
           ) : (
-            <div className="ds-table">
-              <table>
+            <div className="ds-table overflow-x-auto rounded-xl">
+              <table className="min-w-[700px]">
                 <thead><tr>
                   <th>Робітник</th><th>Виріб</th><th>Початок</th>
                   <th>Тривалість</th><th className="text-right">Готових</th>

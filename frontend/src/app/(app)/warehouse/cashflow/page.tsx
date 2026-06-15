@@ -254,22 +254,22 @@ export default function CashFlowPage() {
     <div className="space-y-5">
 
       {/* KPI */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Доходи</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--state-ok)]">
+          <p className="mt-1 text-base sm:text-2xl font-bold tabular-nums text-[var(--state-ok)]">
             {fmt(summary?.total_income ?? 0)} ₴
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Витрати</p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--state-error)]">
+          <p className="mt-1 text-base sm:text-2xl font-bold tabular-nums text-[var(--state-error)]">
             {fmt(summary?.total_expense ?? 0)} ₴
           </p>
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4  ">
           <p className="text-xs text-[var(--text-muted)]">Баланс</p>
-          <p className={`mt-1 text-2xl font-bold tabular-nums ${net >= 0 ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>
+          <p className={`mt-1 text-base sm:text-2xl font-bold tabular-nums ${net >= 0 ? "text-[var(--state-ok)]" : "text-[var(--state-error)]"}`}>
             {net >= 0 ? "+" : ""}{fmt(net)} ₴
           </p>
         </div>
@@ -308,12 +308,12 @@ export default function CashFlowPage() {
             )}
           </FilterDropdown>
           {/* Date range */}
-          <div className="flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-1">
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs   " />
+              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs" />
             <span className="text-[var(--text-faint)]">—</span>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs   " />
+              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-xs" />
           </div>
         </div>
         <div className="flex gap-2">
@@ -326,8 +326,8 @@ export default function CashFlowPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+        <table className="min-w-[560px] w-full text-sm">
           <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
               {colVis.isVisible("date")         && <th className="px-4 py-3 font-medium">Дата</th>}

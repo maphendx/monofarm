@@ -383,8 +383,8 @@ export default function CounterpartiesPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+        <table className="min-w-[560px] w-full text-sm">
           <thead className="bg-[var(--bg)] text-left text-xs uppercase tracking-wider text-[var(--text-muted)]">
             <tr>
               {colVis.isVisible("name")       && <th className="px-4 py-3 font-medium">Назва</th>}

@@ -762,8 +762,8 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
                 {spec.components.length === 0 && !addComp ? (
                   <p className="text-sm text-[var(--text-faint)]">Матеріалів ще немає</p>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
-                    <table className="w-full text-sm">
+                  <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+                    <table className="min-w-[440px] w-full text-sm">
                       <thead className="bg-[var(--bg)] text-xs text-[var(--text-faint)] ">
                         <tr>
                           <th className="px-4 py-2.5 text-left font-medium">Матеріал</th>
