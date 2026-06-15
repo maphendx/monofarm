@@ -85,6 +85,11 @@ class OrderSource(str, enum.Enum):
     api     = "api"
 
 
+class BankAccountStatus(str, enum.Enum):
+    open   = "open"
+    closed = "closed"
+
+
 class CashTxType(str, enum.Enum):
     income  = "income"
     expense = "expense"
@@ -443,6 +448,22 @@ class CellMovement(Base):
     created_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
+# ── Bank Accounts ─────────────────────────────────────────────────────────────
+
+class BankAccount(Base):
+    __tablename__ = "wh_bank_accounts"
+
+    id:                   Mapped[int]               = mapped_column(primary_key=True)
+    organization_id:      Mapped[int]               = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name:                 Mapped[str]               = mapped_column(String(120))
+    status:               Mapped[BankAccountStatus] = mapped_column(Enum(BankAccountStatus), default=BankAccountStatus.open, nullable=False)
+    balance:              Mapped[Decimal]            = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    initial_balance:      Mapped[Decimal]            = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    initial_balance_date: Mapped[date | None]        = mapped_column(Date, nullable=True)
+    sort_order:           Mapped[int]               = mapped_column(Integer, default=0)
+    created_at:           Mapped[datetime]          = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
 
 class CashTransaction(Base):
@@ -455,6 +476,7 @@ class CashTransaction(Base):
     amount:           Mapped[Decimal]          = mapped_column(Numeric(14, 2), nullable=False)  # always positive
     counterparty_id:  Mapped[int | None]       = mapped_column(Integer, ForeignKey("wh_counterparties.id", ondelete="SET NULL"), nullable=True, index=True)
     order_id:         Mapped[int | None]       = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="SET NULL"), nullable=True, index=True)
+    bank_account_id:  Mapped[int | None]       = mapped_column(Integer, ForeignKey("wh_bank_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     description:      Mapped[str | None]       = mapped_column(String(500), nullable=True)
     transaction_date: Mapped[date]             = mapped_column(Date, nullable=False, index=True)
     created_by_id:    Mapped[int | None]       = mapped_column(ForeignKey("users.id"), nullable=True)

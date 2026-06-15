@@ -24,6 +24,7 @@ from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     AssemblySession,
+    BankAccount, BankAccountStatus,
     BatchStatus, CashTransaction, CashTxType, CashTxCategory,
     CellMoveKind, CellMovement, CellStock, Counterparty, LabelTemplate, MovementType, Order, OrderItem, OrderPayment,
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
@@ -35,7 +36,8 @@ from app.schemas.warehouse import (
     AssemblySessionOut, AssemblySessionUpdate, BatchAssignRequest,
     WorkerStatsOut, WorkerProductStats,
     BatchClose, BatchComponentOut, BatchCreate, BatchOut, BatchUpdate,
-    CashFlowSummary, CashTxCreate, CashTxOut,
+    BankAccountCreate, BankAccountOut, BankAccountUpdate,
+    CashFlowSummary, CashRegisterReceipt, CashRegisterReceiptItem, CashRegisterSell, CashTxCreate, CashTxOut,
     CellAssign, CellDetailOut, CellMovementOut, CellNotesUpdate, CellOut, CellStockOut, CellStockSet,
     ScanAction, ScanActionRequest, ScanActionResult, ScanResult,
     CostBreakdown, CounterpartyBalanceAdjust, CounterpartyCreate,
@@ -4896,6 +4898,12 @@ def _tx_to_out(tx: CashTransaction, db: Session) -> CashTxOut:
         if o:
             order_number = o.order_number
 
+    ba_name: str | None = None
+    if tx.bank_account_id:
+        ba = db.get(BankAccount, tx.bank_account_id)
+        if ba:
+            ba_name = ba.name
+
     return CashTxOut(
         id=tx.id,
         type=tx.type,
@@ -4905,6 +4913,8 @@ def _tx_to_out(tx: CashTransaction, db: Session) -> CashTxOut:
         counterparty_name=cp_name,
         order_id=tx.order_id,
         order_number=order_number,
+        bank_account_id=tx.bank_account_id,
+        bank_account_name=ba_name,
         description=tx.description,
         transaction_date=tx.transaction_date,
         created_at=tx.created_at,
@@ -5321,6 +5331,241 @@ def delete_label_template(
         raise HTTPException(404, "Template not found")
     db.delete(tpl)
     db.commit()
+
+
+# ── Bank Accounts ─────────────────────────────────────────────────────────────
+
+@_full.get("/bank-accounts", response_model=list[BankAccountOut])
+def list_bank_accounts(
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[BankAccountOut]:
+    rows = (
+        db.query(BankAccount)
+        .filter_by(organization_id=org.id)
+        .order_by(BankAccount.sort_order, BankAccount.id)
+        .all()
+    )
+    return [BankAccountOut.model_validate(r) for r in rows]
+
+
+@_full.post("/bank-accounts", response_model=BankAccountOut, status_code=status.HTTP_201_CREATED)
+def create_bank_account(
+    payload: BankAccountCreate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BankAccountOut:
+    ba = BankAccount(
+        organization_id=org.id,
+        name=payload.name,
+        balance=payload.initial_balance,
+        initial_balance=payload.initial_balance,
+        initial_balance_date=payload.initial_balance_date,
+        sort_order=payload.sort_order,
+    )
+    db.add(ba)
+    db.commit()
+    db.refresh(ba)
+    return BankAccountOut.model_validate(ba)
+
+
+@_full.patch("/bank-accounts/{ba_id}", response_model=BankAccountOut)
+def update_bank_account(
+    ba_id:   int,
+    payload: BankAccountUpdate,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> BankAccountOut:
+    ba = db.query(BankAccount).filter_by(id=ba_id, organization_id=org.id).first()
+    if not ba:
+        raise HTTPException(status_code=404, detail="Bank account not found")
+    if payload.name is not None:
+        ba.name = payload.name
+    if payload.status is not None:
+        ba.status = BankAccountStatus(payload.status)
+    if payload.sort_order is not None:
+        ba.sort_order = payload.sort_order
+    db.commit()
+    db.refresh(ba)
+    return BankAccountOut.model_validate(ba)
+
+
+@_full.delete("/bank-accounts/{ba_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bank_account(
+    ba_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _:   User         = Depends(require_roles(UserRole.admin)),
+) -> None:
+    ba = db.query(BankAccount).filter_by(id=ba_id, organization_id=org.id).first()
+    if not ba:
+        raise HTTPException(status_code=404, detail="Bank account not found")
+    if abs(ba.balance) > Decimal("0"):
+        raise HTTPException(status_code=422, detail="Не можна видалити рахунок з ненульовим балансом")
+    db.delete(ba)
+    db.commit()
+
+
+# ── Cash Register (POS) ───────────────────────────────────────────────────────
+
+@_full.get("/cashregister/products")
+def cashregister_products(
+    q:            str | None = Query(None),
+    warehouse_id: int | None = Query(None),
+    page:         int        = Query(1, ge=1),
+    limit:        int        = Query(30, le=100),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    query = (
+        db.query(Product)
+        .filter(Product.organization_id == org.id, Product.is_active.is_(True))
+    )
+    if q:
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                Product.name.ilike(term),
+                Product.sku.ilike(term),
+                Product.barcode.ilike(term),
+            )
+        )
+    total = query.count()
+    products = query.order_by(Product.name).offset((page - 1) * limit).limit(limit).all()
+
+    # Fetch stock per product for requested warehouse (or sum across all)
+    stock_map: dict[int, Decimal] = {}
+    if warehouse_id:
+        entries = (
+            db.query(StockEntry.product_id, StockEntry.quantity)
+            .filter(
+                StockEntry.organization_id == org.id,
+                StockEntry.warehouse_id == warehouse_id,
+                StockEntry.product_id.in_([p.id for p in products]),
+            )
+            .all()
+        )
+        stock_map = {pid: qty for pid, qty in entries}
+    else:
+        from sqlalchemy import func as sqlfunc
+        entries = (
+            db.query(StockEntry.product_id, sqlfunc.sum(StockEntry.quantity))
+            .filter(
+                StockEntry.organization_id == org.id,
+                StockEntry.product_id.in_([p.id for p in products]),
+            )
+            .group_by(StockEntry.product_id)
+            .all()
+        )
+        stock_map = {pid: qty for pid, qty in entries}
+
+    items = [
+        {
+            "id":         p.id,
+            "name":       p.name,
+            "sku":        p.sku,
+            "barcode":    p.barcode,
+            "sale_price": p.sale_price,
+            "unit":       p.unit,
+            "image_url":  _product_image_url(p, org.id),
+            "stock_qty":  float(stock_map.get(p.id, Decimal("0"))),
+        }
+        for p in products
+    ]
+    return {"total": total, "items": items}
+
+
+@_full.post("/cashregister/sell", response_model=CashRegisterReceipt, status_code=status.HTTP_201_CREATED)
+def cashregister_sell(
+    payload: CashRegisterSell,
+    bg:   BackgroundTasks,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> CashRegisterReceipt:
+    if not payload.items:
+        raise HTTPException(status_code=422, detail="Кошик порожній")
+
+    wh = db.query(Warehouse).filter_by(id=payload.warehouse_id, organization_id=org.id).first()
+    if not wh:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+
+    ba: BankAccount | None = None
+    if payload.bank_account_id:
+        ba = db.query(BankAccount).filter_by(id=payload.bank_account_id, organization_id=org.id).first()
+        if not ba:
+            raise HTTPException(status_code=404, detail="Bank account not found")
+        if ba.status == BankAccountStatus.closed:
+            raise HTTPException(status_code=422, detail="Рахунок закритий")
+
+    receipt_items = []
+    total = Decimal("0")
+
+    for item in payload.items:
+        product = db.query(Product).filter_by(id=item.product_id, organization_id=org.id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+
+        line_total = (item.qty * item.unit_price).quantize(Decimal("0.01"))
+        total += line_total
+
+        movement = WarehouseMovement(
+            organization_id=org.id,
+            type=MovementType.SALE_OUT,
+            product_id=item.product_id,
+            warehouse_from_id=payload.warehouse_id,
+            quantity=item.qty,
+            unit=product.unit,
+            unit_price=item.unit_price,
+            total_revenue=line_total,
+            reason=payload.note or "Каса",
+            created_by_id=user.id,
+        )
+        db.add(movement)
+        db.flush()
+        _apply_movement(movement, db)
+        _check_and_auto_replenish(item.product_id, org.id, db)
+
+        receipt_items.append({
+            "product_id":   product.id,
+            "product_name": product.name,
+            "qty":          item.qty,
+            "unit_price":   item.unit_price,
+            "total":        line_total,
+        })
+
+    # Create cash transaction
+    tx = CashTransaction(
+        organization_id=org.id,
+        type=CashTxType.income,
+        category=CashTxCategory.order_payment,
+        amount=total,
+        bank_account_id=payload.bank_account_id,
+        description=payload.note or "Каса",
+        transaction_date=date.today(),
+        created_by_id=user.id,
+    )
+    db.add(tx)
+    db.flush()
+
+    # Update bank account balance
+    if ba is not None:
+        ba.balance += total
+
+    created_at = datetime.now()
+    db.commit()
+
+    bg.add_task(broadcast_warehouse, org.id, "cashflow")
+    bg.add_task(broadcast_warehouse, org.id, "movements")
+
+    return CashRegisterReceipt(
+        total=total,
+        items=[CashRegisterReceiptItem(**item) for item in receipt_items],
+        cash_tx_id=tx.id,
+        created_at=created_at,
+    )
 
 
 router.include_router(_full)

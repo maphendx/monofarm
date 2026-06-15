@@ -49,6 +49,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Каса",
+    href: "/warehouse/cashregister",
+    fullOnly: true,
+    items: [
+      { href: "/warehouse/cashregister",  label: "POS" },
+      { href: "/warehouse/bank-accounts", label: "Рахунки" },
+    ],
+  },
+  {
     label: "Продажі",
     href: "/warehouse/orders",
     fullOnly: true,

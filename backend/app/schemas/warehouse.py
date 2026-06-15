@@ -613,12 +613,74 @@ class ReserveRequest(BaseModel):
 
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
 
+# ── Bank Accounts ─────────────────────────────────────────────────────────────
+
+class BankAccountCreate(BaseModel):
+    name:                 str
+    initial_balance:      Decimal = Decimal("0")
+    initial_balance_date: date | None = None
+    sort_order:           int = 0
+
+
+class BankAccountUpdate(BaseModel):
+    name:       str | None = None
+    status:     str | None = None
+    sort_order: int | None = None
+
+
+class BankAccountOut(BaseModel):
+    id:                   int
+    name:                 str
+    status:               str
+    balance:              Decimal
+    initial_balance:      Decimal
+    initial_balance_date: date | None
+    sort_order:           int
+    created_at:           datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Cash Register ─────────────────────────────────────────────────────────────
+
+class CashRegisterItem(BaseModel):
+    product_id: int
+    qty:        Decimal
+    unit_price: Decimal
+
+
+class CashRegisterSell(BaseModel):
+    warehouse_id:    int
+    bank_account_id: int | None = None
+    items:           list[CashRegisterItem]
+    note:            str | None = None
+
+
+class CashRegisterReceiptItem(BaseModel):
+    product_id:   int
+    product_name: str
+    qty:          Decimal
+    unit_price:   Decimal
+    total:        Decimal
+
+
+class CashRegisterReceipt(BaseModel):
+    total:      Decimal
+    items:      list[CashRegisterReceiptItem]
+    cash_tx_id: int | None
+    created_at: datetime
+
+
+# ── Cash Flow ─────────────────────────────────────────────────────────────────
+
 class CashTxCreate(BaseModel):
     type:             CashTxType
     category:         CashTxCategory
     amount:           Decimal           # always positive
     counterparty_id:  int | None = None
     order_id:         int | None = None
+    bank_account_id:  int | None = None
     description:      str | None = None
     transaction_date: date
 
@@ -632,6 +694,8 @@ class CashTxOut(BaseModel):
     counterparty_name: str | None
     order_id:         int | None
     order_number:     str | None
+    bank_account_id:  int | None
+    bank_account_name: str | None
     description:      str | None
     transaction_date: date
     created_at:       datetime
