@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
 import { FlowView } from "@/components/dashboard/FlowView";
+import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
@@ -467,6 +468,7 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [autoDispatchOpen, setAutoDispatchOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
   const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
@@ -639,6 +641,15 @@ export default function DashboardPage() {
               {t("printers.groups")}
             </button>
           )}
+          {statusStats.idle > 0 && (user.role === "admin" || user.role === "operator") && (
+            <button
+              onClick={() => setAutoDispatchOpen(true)}
+              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              title="Авто-розподіл завдань по вільних принтерах"
+            >
+              ⚡ Розподілити
+            </button>
+          )}
           {/* view toggle */}
           <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
             <button
@@ -739,6 +750,13 @@ export default function DashboardPage() {
         onClose={() => setGroupsOpen(false)}
         onChange={reload}
       />
+
+      {autoDispatchOpen && (
+        <AutoDispatchModal
+          printers={printers}
+          onClose={() => setAutoDispatchOpen(false)}
+        />
+      )}
 
       <PrinterDetailModal
         printer={selected}
