@@ -157,8 +157,20 @@ const HR    = "border-[var(--border)] ";
 
 // ── CategoryInput ─────────────────────────────────────────────────────────────
 
-function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+function CategoryInput({
+  value, onChange, existing = [],
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  existing?: string[];
+}) {
   const [input, setInput] = useState("");
+  const [open,  setOpen]  = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const suggestions = existing.filter(
+    (c) => !value.includes(c) && (input.trim() === "" || c.toLowerCase().includes(input.toLowerCase())),
+  );
 
   function add(raw: string) {
     const tag = raw.trim();
@@ -168,23 +180,53 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
   function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(input); }
     if (e.key === "Backspace" && !input && value.length) onChange(value.slice(0, -1));
+    if (e.key === "Escape") setOpen(false);
   }
 
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-strong)]  ">
-      {value.map((t) => (
-        <span key={t} className="flex items-center gap-1 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-xs ">
-          {t}
-          <button type="button" onClick={() => onChange(value.filter((x) => x !== t))}
-            className="text-[var(--text-faint)] hover:text-[var(--text)] ">×</button>
-        </span>
-      ))}
-      <input
-        value={input} onChange={(e) => setInput(e.target.value)}
-        onKeyDown={onKey} onBlur={() => add(input)}
-        placeholder={value.length === 0 ? "Категорія, Enter щоб додати…" : ""}
-        className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
-      />
+    <div ref={wrapRef} className="relative">
+      <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 focus-within:border-[var(--border-strong)]">
+        {value.map((t) => (
+          <span key={t} className="flex items-center gap-1 rounded bg-[var(--surface-hi)] px-2 py-0.5 text-xs">
+            {t}
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== t))}
+              className="text-[var(--text-faint)] hover:text-[var(--text)]">×</button>
+          </span>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKey}
+          onBlur={() => { setTimeout(() => { add(input); setOpen(false); }, 150); }}
+          placeholder={value.length === 0 ? "Вибрати або ввести…" : ""}
+          className="flex-1 min-w-24 bg-transparent text-sm outline-none placeholder:text-[var(--text-faint)]"
+        />
+      </div>
+
+      {open && suggestions.length > 0 && (
+        <div className="absolute left-0 top-full z-30 mt-0.5 max-h-52 w-full overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] py-1 shadow-xl">
+          {suggestions.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); add(c); }}
+              className="flex w-full items-center px-3 py-1.5 text-left text-sm hover:bg-[var(--surface-hi)]"
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -192,10 +234,11 @@ function CategoryInput({ value, onChange }: { value: string[]; onChange: (v: str
 // ── ProductModal ──────────────────────────────────────────────────────────────
 
 function ProductModal({
-  product, prefill, onClose, onSaved,
+  product, prefill, existingCats = [], onClose, onSaved,
 }: {
   product: Product | null;  // null = create mode
   prefill?: Partial<Product> | null;
+  existingCats?: string[];
   onClose: () => void;
   onSaved: (p: Product) => void;
 }) {
@@ -431,7 +474,7 @@ function ProductModal({
                 className={INPUT} />
             </FormRow>
             <FormRow label="Категорії">
-              <CategoryInput value={cats} onChange={setCats} />
+              <CategoryInput value={cats} onChange={setCats} existing={existingCats} />
             </FormRow>
           </div>
 
@@ -2052,6 +2095,7 @@ export default function ProductsPage() {
         <ProductModal
           product={editProduct === "create" ? null : editProduct}
           prefill={editProduct === "create" ? copyTemplate : null}
+          existingCats={allCategories}
           onClose={() => { setEditProduct(null); setCopyTemplate(null); }}
           onSaved={handleSaved}
         />
