@@ -489,7 +489,7 @@ export function SendModal({
   const modalWidth = showFilePicker
     ? "max-w-lg"
     : choosing ? "max-w-3xl"
-    : isPrintSplit ? "max-w-5xl"
+    : isPrintSplit ? "max-w-7xl"
     : "max-w-sm";
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -767,7 +767,7 @@ export function SendModal({
                             [aiDetection,     setAiDetection,     "AI детекція"] as const,
                           ] as const).map(([checked, setter, label]) => (
                             <label key={label} className="flex cursor-pointer items-center gap-2 text-[11px]">
-                              <input type="checkbox" checked={checked} onChange={(e) => setter(e.target.checked)} className="accent-neutral-900 dark:accent-white" />
+                              <input type="checkbox" checked={checked} onChange={(e) => setter(e.target.checked)} />
                               <span className="text-[var(--text)]">{label}</span>
                             </label>
                           ))}
@@ -787,7 +787,7 @@ export function SendModal({
                                         if (n.has(i)) n.delete(i); else n.add(i);
                                         return n;
                                       })}
-                                      className="accent-neutral-900 dark:accent-white"
+                                      className=""
                                     />
                                     {fileColor && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
                                     <span className="truncate text-[var(--text)]">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
@@ -921,10 +921,10 @@ export function SendModal({
                                     )}
                                   </div>
                                   {/* Info */}
-                                  <div className={`flex flex-col gap-1.5 p-3 ${isSelected ? "bg-[var(--surface-hi)]" : "bg-[var(--bg-elevated)]"}`}>
-                                    <p className="truncate text-sm font-semibold">{p.name}</p>
+                                  <div className={`flex flex-col gap-2 p-3.5 ${isSelected ? "bg-[var(--surface-hi)]" : "bg-[var(--bg-elevated)]"}`}>
+                                    <p className="truncate text-base font-semibold">{p.name}</p>
                                     {(p.build_x || p.nozzle_diameter) && (
-                                      <p className="text-[10px] text-[var(--text-faint)]">
+                                      <p className="text-xs text-[var(--text-faint)]">
                                         {p.build_x && p.build_y ? `${p.build_x}×${p.build_y}мм` : ""}
                                         {p.nozzle_diameter ? ` · ∅${p.nozzle_diameter}мм` : ""}
                                       </p>
@@ -932,8 +932,8 @@ export function SendModal({
                                     {matSlots.length > 0 && (
                                       <div className="flex flex-wrap gap-1">
                                         {matSlots.slice(0, 4).map((s) => (
-                                          <span key={s.slot} className="flex items-center gap-0.5 rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[9px] text-[var(--text-muted)]">
-                                            {s.color && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: s.color }} />}
+                                          <span key={s.slot} className="flex items-center gap-0.5 rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+                                            {s.color && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.color }} />}
                                             {s.type ?? slotLabel(s.slot)}
                                           </span>
                                         ))}

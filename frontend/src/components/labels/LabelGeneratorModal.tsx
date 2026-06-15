@@ -322,7 +322,7 @@ export function LabelGeneratorModal({
             {FIELD_LABELS.map(({ key, label }) => (
               <label key={key} className="flex cursor-pointer items-center gap-2">
                 <input type="checkbox" checked={fields[key]} onChange={() => toggleField(key)}
-                  className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-neutral-900 dark:accent-neutral-100" />
+                  className="h-3.5 w-3.5" />
                 <span className="text-xs text-[var(--text)] ">{label}</span>
               </label>
             ))}

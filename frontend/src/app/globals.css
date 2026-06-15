@@ -236,6 +236,32 @@ body {
 }
 :root:not(.dark) .surface { background: var(--surface); }
 
+/* Checkbox */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 15px; height: 15px; flex-shrink: 0;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--dur-quick), border-color var(--dur-quick), box-shadow var(--dur-quick);
+}
+input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4l3 3 5-6' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 10px 8px;
+}
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* Form inputs */
 .input, .select-field, .textarea-field {
   height: 34px; padding: 0 12px;
