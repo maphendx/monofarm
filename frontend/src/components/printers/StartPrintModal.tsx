@@ -1,6 +1,6 @@
 "use client";
 
-import { PrintLaunchModal } from "@/components/files/PrintLaunchModal";
+import { SendModal } from "@/components/files/SendModal";
 import type { Printer } from "@/lib/types";
 
 export function StartPrintModal({
@@ -13,7 +13,7 @@ export function StartPrintModal({
   onClose: () => void;
 }) {
   return (
-    <PrintLaunchModal
+    <SendModal
       printers={printers}
       defaultPrinterId={printer.id}
       onClose={onClose}
