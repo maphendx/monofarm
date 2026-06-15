@@ -38,7 +38,7 @@ function normalizeSlotColor(color: string | null | undefined): string | null {
   return `#${raw.slice(0, 6).toLowerCase()}`;
 }
 
-function printerMaterialSlots(printer: PrinterType) {
+export function printerMaterialSlots(printer: PrinterType) {
   const slots = (printer.slots ?? [])
     .filter((s) => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
     .map((s) => ({
@@ -63,11 +63,11 @@ function normalizeMaterial(type: string | null | undefined): string | null {
   return value || null;
 }
 
-function slotLabel(slot: number) {
+export function slotLabel(slot: number) {
   return slot === 254 ? "Зовнішня котушка" : `Слот ${slot + 1}`;
 }
 
-function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
+export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
   const targets = printerMaterialSlots(printer);
   const usedTargets = new Set<number>();
   const map: Record<number, number> = {};
@@ -402,9 +402,10 @@ export function SendModal({
       onClick={() => closeModal(Boolean(result?.ok))}
     >
       <div className={[
-        "w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl",
-        choosing ? "max-w-3xl" : "max-w-sm",
+        "w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl flex flex-col",
+        choosing ? "max-w-3xl" : mode === "print" ? "max-w-2xl" : "max-w-sm",
       ].join(" ")}
+        style={{ maxHeight: "90vh" }}
         onClick={(e) => e.stopPropagation()}>
         {/* header */}
         <div className="relative border-b border-[var(--border)] px-12 py-4 text-center ">
@@ -460,6 +461,7 @@ export function SendModal({
         )}
 
         {/* body */}
+        <div className="flex-1 overflow-y-auto">
         <div className="space-y-4 px-5 py-4">
 
           {/* ── chooser (slicer auto-open): save / print / queue ── */}
@@ -522,81 +524,53 @@ export function SendModal({
                     : "Немає доступних принтерів"}
                 </p>
               ) : (
-                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {compatiblePrinters.map((p) => {
                     const slots = checkSlots(file.filament_meta, p);
                     const compat = compatBadge(slots);
                     const fit = fitCheck(file.filament_meta, p);
                     const nozzle = nozzleCheck(file.filament_meta, p);
-                    const model = modelCheck(file.filament_meta, p);
+                    const model = modelCheck(file.filament_meta, p, file.original_name);
+                    const matSlots = printerMaterialSlots(p);
+                    const stateCol = p.state === "idle" || p.state === "operational" ? "bg-[var(--state-ok)]"
+                      : p.state === "printing" ? "bg-[var(--state-warn)]"
+                      : p.state === "error" ? "bg-[var(--state-error)]"
+                      : "bg-[var(--state-offline)]";
                     return (
-                      <label key={p.id} className={[
-                        "flex cursor-pointer flex-col gap-2 rounded-lg border p-3 transition",
-                        selectedId === p.id
-                          ? "border-[var(--border-strong)] bg-[var(--bg)]  "
-                          : "border-[var(--border)] hover:border-[var(--border-strong)] ",
-                      ].join(" ")}>
-                        <div className="flex items-center gap-3">
-                          <input type="radio" name="printer" value={p.id}
-                            checked={selectedId === p.id} onChange={() => selectPrinter(p.id)}
-                            className="accent-neutral-900 dark:accent-white" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium">{p.name}</p>
-                            <p className="text-[10px] text-[var(--text-faint)]">
-                              {p.build_x && p.build_y && p.build_z ? `${p.build_x}×${p.build_y}×${p.build_z} мм` : ""}
-                              {p.nozzle_diameter ? `${p.build_x ? " · " : ""}∅${p.nozzle_diameter} мм` : ""}
-                            </p>
-                          </div>
-                          {fit === "fits" && fileHasDimensions && (
-                            <span className="badge badge-ok shrink-0 text-[10px]">✓ влазить</span>
-                          )}
-                          {fit === "oversize" && (
-                            <span className="badge badge-error shrink-0 text-[10px]">✕ не влазить</span>
-                          )}
-                          {nozzle === "mismatch" && (
-                            <span className="badge badge-warn shrink-0 text-[10px]" title={`Файл: ∅${file.filament_meta?.nozzle_diameter} мм, принтер: ∅${p.nozzle_diameter} мм`}>∅ мм ≠</span>
-                          )}
-                          {model === "ok" && (
-                            <span className="badge badge-ok shrink-0 text-[10px]" title={`Нарізано для цієї моделі: ${file.filament_meta?.printer_model}`}>✓ модель</span>
-                          )}
-                          {model === "mismatch" && (
-                            <span className="badge badge-warn shrink-0 text-[10px]" title={`Файл нарізано для: ${file.filament_meta?.printer_model}`}>⚠ модель</span>
-                          )}
-                          <span className={[
-                            "shrink-0 rounded px-1.5 py-0.5 text-xs",
-                            p.state === "printing" ? "badge badge-warn"
-                              : p.state === "idle" || p.state === "operational" ? "badge badge-ok"
-                              : "badge badge-neutral",
-                          ].join(" ")}>{p.state ?? "—"}</span>
+                      <button key={p.id} onClick={() => selectPrinter(p.id)}
+                        className={[
+                          "flex flex-col gap-2.5 rounded-xl border p-3 text-left transition hover:shadow-sm",
+                          selectedId === p.id
+                            ? "border-[var(--accent)] bg-[var(--surface-hi)]"
+                            : "border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+                        ].join(" ")}>
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${stateCol}`} />
+                          <p className="flex-1 truncate text-sm font-medium">{p.name}</p>
                         </div>
-                        {slots.length > 0 && (
-                          <div className="ml-6 flex flex-wrap gap-1">
-                            {slots.map((s) => (
-                              <div key={s.slot} className={[
-                                "flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]",
-                                s.match === "ok" ? "badge badge-ok"
-                                  : s.match === "type_mismatch" ? "badge badge-warn"
-                                  : "badge badge-error",
-                              ].join(" ")}>
-                                {s.fileColor && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: s.fileColor }} />}
-                                {s.match === "ok" ? "✓" : s.match === "type_mismatch" ? "~" : "✕"} Слот {s.slot} → {slotLabel(s.targetSlot - 1)}
-                                {s.match === "type_mismatch" && s.printerType && ` (є ${s.printerType})`}
-                              </div>
-                            ))}
-                            <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] ${compat.cls}`}>{compat.label}</span>
-                          </div>
+                        {(p.build_x || p.nozzle_diameter) && (
+                          <p className="text-[10px] text-[var(--text-faint)]">
+                            {p.build_x && p.build_y ? `${p.build_x}×${p.build_y}` : ""}
+                            {p.nozzle_diameter ? ` ∅${p.nozzle_diameter}мм` : ""}
+                          </p>
                         )}
-                        {slots.length === 0 && p.loaded_filaments.length > 0 && (
-                          <div className="ml-6 flex flex-wrap gap-1">
-                            {p.loaded_filaments.map((lf) => (
-                              <div key={lf.slot} className="flex items-center gap-1 rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] ">
-                                <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} />
-                                {lf.type}
-                              </div>
+                        {matSlots.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {matSlots.map((s) => (
+                              <span key={s.slot} className="flex items-center gap-1 rounded-full border border-[var(--border)] px-1.5 py-0.5 text-[9px] text-[var(--text-muted)]">
+                                {s.color && <span className="h-2 w-2 shrink-0 rounded-full border border-black/10" style={{ background: s.color }} />}
+                                {s.type ?? slotLabel(s.slot)}
+                              </span>
                             ))}
                           </div>
                         )}
-                      </label>
+                        <div className="flex flex-wrap gap-1 empty:hidden">
+                          {fit === "oversize" && <span className="badge badge-error text-[9px]">✕ не влазить</span>}
+                          {nozzle === "mismatch" && <span className="badge badge-warn text-[9px]">∅≠</span>}
+                          {model === "mismatch" && <span className="badge badge-warn text-[9px]">⚠ модель</span>}
+                          <span className={`${compat.cls} text-[9px]`}>{compat.label}</span>
+                        </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -614,37 +588,48 @@ export function SendModal({
                       Автомаппінг
                     </button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {usedSlots.map((i) => {
                       const fileColor = file.filament_meta?.colors?.[i] ?? null;
                       const fileType = file.filament_meta?.types?.[i] ?? null;
                       const currentPrinterSlot = slotMap[i] ?? i;
+                      const matSlots = printerMaterialSlots(selectedPrinter);
                       return (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <div key={i} className="flex items-start gap-2">
+                          <div className="flex w-24 shrink-0 items-center gap-1.5 pt-0.5">
                             {fileColor && <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
-                            <span className="truncate text-[var(--text)] ">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
+                            <span className="truncate text-xs text-[var(--text)]">Слот {i + 1}{fileType ? ` · ${fileType}` : ""}</span>
                           </div>
-                          <span className="text-[var(--text-faint)]">→</span>
-                          <select value={currentPrinterSlot}
-                            onChange={(e) => setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))}
-                            className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none focus:border-[var(--border-focus)]  ">
-                            {printerMaterialSlots(selectedPrinter).length > 0
-                              ? printerMaterialSlots(selectedPrinter).map((lf) => (
-                                  <option key={lf.slot} value={lf.slot}>
-                                    {slotLabel(lf.slot)}{lf.type ? ` · ${lf.type}` : ""}{lf.colorName ? ` · ${lf.colorName}` : ""}
-                                  </option>
-                                ))
-                              : Array.from({ length: 4 }).map((_, s) => (
-                                  <option key={s} value={s}>Слот {s + 1}</option>
-                                ))}
-                          </select>
-                          {(() => {
-                            const lf = printerMaterialSlots(selectedPrinter).find((f) => f.slot === currentPrinterSlot);
-                            return lf?.color ? (
-                              <span className="h-3 w-3 shrink-0 rounded-full border border-black/10" style={{ background: lf.color }} title={lf.colorName ?? lf.color} />
-                            ) : null;
-                          })()}
+                          <span className="shrink-0 pt-0.5 text-[var(--text-faint)]">→</span>
+                          {matSlots.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {matSlots.map((s) => {
+                                const isSel = currentPrinterSlot === s.slot;
+                                return (
+                                  <button key={s.slot} type="button"
+                                    onClick={() => setSlotMap((prev) => ({ ...prev, [i]: s.slot }))}
+                                    title={`${slotLabel(s.slot)}${s.type ? ` · ${s.type}` : ""}${s.colorName ? ` · ${s.colorName}` : ""}`}
+                                    className={[
+                                      "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] transition",
+                                      isSel
+                                        ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                                        : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
+                                    ].join(" ")}>
+                                    {s.color && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/20" style={{ background: s.color }} />}
+                                    {slotLabel(s.slot)}{s.type ? ` · ${s.type}` : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <select value={currentPrinterSlot}
+                              onChange={(e) => setSlotMap((prev) => ({ ...prev, [i]: Number(e.target.value) }))}
+                              className="rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-xs outline-none">
+                              {Array.from({ length: 4 }).map((_, s) => (
+                                <option key={s} value={s}>Слот {s + 1}</option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       );
                     })}
@@ -720,6 +705,8 @@ export function SendModal({
             </div>
           )}
         </div>
+
+        </div>{/* /overflow scroll wrapper */}
 
         {/* footer */}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] px-5 py-3 ">
