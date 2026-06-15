@@ -63,3 +63,6 @@ class Printer(Base):
     build_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     build_z: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nozzle_diameter: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Last file sent via monofarm (for reprint)
+    last_gcode_file_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

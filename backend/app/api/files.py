@@ -482,6 +482,10 @@ async def send_to_printer(
     if not storage_svc.exists(row.stored_name, org.id):
         raise HTTPException(status_code=404, detail="Файл відсутній")
 
+    # Track last sent file so reprint is available from the dashboard
+    printer.last_gcode_file_id = row.id
+    db.commit()
+
     # ── Schedule eligibility guard ──────────────────────────────────────────
     # If the send is linked to a task that has a non-asap PlanEntry for today
     # on this printer, enforce the scheduling constraint before dispatching.

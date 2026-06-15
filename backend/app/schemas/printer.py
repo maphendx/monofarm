@@ -117,5 +117,8 @@ class PrinterOut(BaseModel):
     build_z: int | None = None
     nozzle_diameter: float | None = None
 
+    # Last file sent via monofarm (for reprint)
+    last_gcode_file_id: int | None = None
+
     class Config:
         from_attributes = True

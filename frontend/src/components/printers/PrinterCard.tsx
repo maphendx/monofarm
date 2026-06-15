@@ -241,8 +241,36 @@ export function PrinterCard({
                     disabled={busy !== null}
                     className="btn btn-sm flex-1 border-[rgba(34,197,94,.20)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40"
                   >
-                    {busy === "clear-bed" ? "…" : "Підтвердити"}
+                    {busy === "clear-bed" ? "…" : "Очистити"}
                   </button>
+                  {printer.last_gcode_file_id && (
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (busy) return;
+                        setBusy("reprint");
+                        setConfirmClearBed(false);
+                        try {
+                          await api(`/api/files/${printer.last_gcode_file_id}/send/${printer.id}`, {
+                            method: "POST",
+                            body: JSON.stringify({ slot_map: {} }),
+                          });
+                          const list = await api<Printer[]>("/api/printers");
+                          const updated = list.find((p) => p.id === printer.id);
+                          if (updated) onUpdated?.(updated);
+                        } catch (err) {
+                          toast.error(err instanceof ApiError ? err.message : "Помилка");
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                      disabled={busy !== null}
+                      className="btn btn-primary btn-sm flex-1 disabled:opacity-40"
+                    >
+                      {busy === "reprint" ? "…" : "↺ Ріпрінт"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setConfirmClearBed(false); }}
@@ -258,7 +286,7 @@ export function PrinterCard({
                   disabled={busy !== null}
                   className="btn btn-sm flex-1 border-[rgba(34,197,94,.20)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40"
                 >
-                  Стіл очищено
+                  Очистити стіл
                 </button>
               )
             )}

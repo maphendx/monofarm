@@ -127,6 +127,7 @@ export interface Printer {
   build_y: number | null;
   build_z: number | null;
   nozzle_diameter: number | null;
+  last_gcode_file_id: number | null;
 }
 
 export interface FilamentMeta {
