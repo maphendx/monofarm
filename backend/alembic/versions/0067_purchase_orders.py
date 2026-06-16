@@ -14,29 +14,39 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE purchaseorderstatus AS ENUM ('draft', 'received', 'cancelled')")
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE purchaseorderstatus AS ENUM ('draft', 'received', 'cancelled');
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
 
-    op.create_table(
-        "wh_purchase_orders",
-        sa.Column("id",              sa.Integer(), primary_key=True),
-        sa.Column("organization_id", sa.Integer(), sa.ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("counterparty_id", sa.Integer(), sa.ForeignKey("wh_counterparties.id", ondelete="SET NULL"), nullable=True, index=True),
-        sa.Column("warehouse_id",    sa.Integer(), sa.ForeignKey("wh_warehouses.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("status",          sa.Enum("draft", "received", "cancelled", name="purchaseorderstatus"), nullable=False, server_default="draft"),
-        sa.Column("notes",           sa.Text(), nullable=True),
-        sa.Column("received_at",     sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_by_id",   sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("created_at",      sa.DateTime(timezone=True), server_default=sa.func.now()),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS wh_purchase_orders (
+            id              SERIAL PRIMARY KEY,
+            organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+            counterparty_id INTEGER REFERENCES wh_counterparties(id) ON DELETE SET NULL,
+            warehouse_id    INTEGER REFERENCES wh_warehouses(id) ON DELETE SET NULL,
+            status          purchaseorderstatus NOT NULL DEFAULT 'draft',
+            notes           TEXT,
+            received_at     TIMESTAMPTZ,
+            created_by_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_wh_purchase_orders_organization_id ON wh_purchase_orders(organization_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_wh_purchase_orders_counterparty_id ON wh_purchase_orders(counterparty_id)")
 
-    op.create_table(
-        "wh_purchase_order_items",
-        sa.Column("id",                sa.Integer(), primary_key=True),
-        sa.Column("purchase_order_id", sa.Integer(), sa.ForeignKey("wh_purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("product_id",        sa.Integer(), sa.ForeignKey("wh_products.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("quantity",          sa.Numeric(12, 4), nullable=False),
-        sa.Column("unit_cost",         sa.Numeric(14, 4), nullable=False),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS wh_purchase_order_items (
+            id                SERIAL PRIMARY KEY,
+            purchase_order_id INTEGER NOT NULL REFERENCES wh_purchase_orders(id) ON DELETE CASCADE,
+            product_id        INTEGER NOT NULL REFERENCES wh_products(id) ON DELETE RESTRICT,
+            quantity          NUMERIC(12,4) NOT NULL,
+            unit_cost         NUMERIC(14,4) NOT NULL
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_wh_purchase_order_items_purchase_order_id ON wh_purchase_order_items(purchase_order_id)")
 
 
 def downgrade() -> None:
