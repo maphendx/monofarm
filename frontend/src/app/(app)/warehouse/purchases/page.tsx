@@ -143,7 +143,7 @@ function CreateModal({
               {items.map((it, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <select
-                    className="input min-w-0 flex-1"
+                    className="input min-w-[8rem] flex-1"
                     value={it.product_id || ""}
                     onChange={e => setItem(i, { product_id: Number(e.target.value) })}
                   >
