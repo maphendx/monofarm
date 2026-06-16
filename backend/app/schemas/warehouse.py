@@ -867,6 +867,50 @@ class ProductLocationsOut(BaseModel):
     warehouses: list[ProductWarehouseLocationOut] = []
 
 
+# ── Purchase Orders ───────────────────────────────────────────────────────────
+
+class PurchaseOrderItemCreate(BaseModel):
+    product_id: int
+    quantity:   Decimal
+    unit_cost:  Decimal
+
+
+class PurchaseOrderCreate(BaseModel):
+    counterparty_id: int | None = None
+    warehouse_id:    int | None = None
+    notes:           str | None = None
+    items:           list[PurchaseOrderItemCreate] = []
+
+
+class PurchaseOrderItemOut(BaseModel):
+    id:           int
+    product_id:   int
+    product_name: str
+    quantity:     Decimal
+    unit_cost:    Decimal
+    total_cost:   Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class PurchaseOrderOut(BaseModel):
+    id:                int
+    counterparty_id:   int | None
+    counterparty_name: str | None
+    warehouse_id:      int | None
+    warehouse_name:    str | None
+    status:            str
+    notes:             str | None
+    total_cost:        Decimal
+    items:             list[PurchaseOrderItemOut] = []
+    received_at:       datetime | None
+    created_at:        datetime
+
+    class Config:
+        from_attributes = True
+
+
 class CellNotesUpdate(BaseModel):
     notes: str | None = None
 

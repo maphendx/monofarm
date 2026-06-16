@@ -46,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/warehouse/production", label: "Виробництво" },
       { href: "/warehouse/movements",  label: "Рухи" },
+      { href: "/warehouse/purchases",  label: "Закупівлі" },
     ],
   },
   {

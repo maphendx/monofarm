@@ -30,6 +30,7 @@ from app.models.warehouse import (
     OrderStatus, ProductCategory, ProductImage, ProductionBatch, SpecComponent, SpecOperation,
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseType, WarehouseZone, Product,
+    PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus,
 )
 from app.services.label_templates import BUILTIN_TEMPLATES
 from app.schemas.warehouse import (
@@ -53,6 +54,7 @@ from app.schemas.warehouse import (
     SpecComponentCreate, SpecCreate, SpecDefaultSummaryOut, SpecOperationCreate, SpecOut,
     StockEntryOut, StockSummaryOut, UnassignedItemOut, WarehouseCreate, WarehouseOut, WarehouseUpdate,
     ZoneCreate, ZoneOut, ZoneOverviewOut, ZoneUpdate, ZoneWithCellsOut,
+    PurchaseOrderCreate, PurchaseOrderItemOut, PurchaseOrderOut,
 )
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
@@ -5565,6 +5567,298 @@ def cashregister_sell(
         items=[CashRegisterReceiptItem(**item) for item in receipt_items],
         cash_tx_id=tx.id,
         created_at=created_at,
+    )
+
+
+# ── Purchase Orders ───────────────────────────────────────────────────────────
+
+def _po_to_out(po: PurchaseOrder, product_map: dict, cp_map: dict, wh_map: dict) -> PurchaseOrderOut:
+    from decimal import Decimal
+    items_out = []
+    total = Decimal("0")
+    for it in po.items:
+        p = product_map.get(it.product_id)
+        line_total = it.quantity * it.unit_cost
+        total += line_total
+        items_out.append(PurchaseOrderItemOut(
+            id=it.id,
+            product_id=it.product_id,
+            product_name=p.name if p else str(it.product_id),
+            quantity=it.quantity,
+            unit_cost=it.unit_cost,
+            total_cost=line_total,
+        ))
+    cp = cp_map.get(po.counterparty_id) if po.counterparty_id else None
+    wh = wh_map.get(po.warehouse_id) if po.warehouse_id else None
+    return PurchaseOrderOut(
+        id=po.id,
+        counterparty_id=po.counterparty_id,
+        counterparty_name=cp.name if cp else None,
+        warehouse_id=po.warehouse_id,
+        warehouse_name=wh.name if wh else None,
+        status=po.status.value,
+        notes=po.notes,
+        total_cost=total,
+        items=items_out,
+        received_at=po.received_at,
+        created_at=po.created_at,
+    )
+
+
+@_full.get("/purchases", response_model=list[PurchaseOrderOut])
+def list_purchases(
+    po_status: PurchaseOrderStatus | None = Query(None),
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[PurchaseOrderOut]:
+    q = db.query(PurchaseOrder).filter(PurchaseOrder.organization_id == org.id)
+    if po_status:
+        q = q.filter(PurchaseOrder.status == po_status)
+    rows = q.order_by(PurchaseOrder.created_at.desc()).all()
+
+    po_ids = [po.id for po in rows]
+    items_by_po: dict[int, list[PurchaseOrderItem]] = {}
+    if po_ids:
+        for it in db.query(PurchaseOrderItem).filter(PurchaseOrderItem.purchase_order_id.in_(po_ids)).all():
+            items_by_po.setdefault(it.purchase_order_id, []).append(it)
+        for po in rows:
+            po.items = items_by_po.get(po.id, [])
+
+    product_ids = {it.product_id for po in rows for it in po.items}
+    product_map = {p.id: p for p in db.query(Product).filter(
+        Product.organization_id == org.id, Product.id.in_(product_ids)
+    ).all()} if product_ids else {}
+
+    cp_ids = {po.counterparty_id for po in rows if po.counterparty_id}
+    cp_map = {c.id: c for c in db.query(Counterparty).filter(
+        Counterparty.organization_id == org.id, Counterparty.id.in_(cp_ids)
+    ).all()} if cp_ids else {}
+
+    wh_ids = {po.warehouse_id for po in rows if po.warehouse_id}
+    wh_map = {w.id: w for w in db.query(Warehouse).filter(
+        Warehouse.organization_id == org.id, Warehouse.id.in_(wh_ids)
+    ).all()} if wh_ids else {}
+
+    return [_po_to_out(po, product_map, cp_map, wh_map) for po in rows]
+
+
+@_full.post("/purchases", response_model=PurchaseOrderOut, status_code=status.HTTP_201_CREATED)
+def create_purchase(
+    payload: PurchaseOrderCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> PurchaseOrderOut:
+    if payload.counterparty_id:
+        cp = db.query(Counterparty).filter_by(organization_id=org.id, id=payload.counterparty_id).first()
+        if not cp:
+            raise HTTPException(status_code=404, detail="Counterparty not found")
+    if payload.warehouse_id:
+        wh = db.query(Warehouse).filter_by(organization_id=org.id, id=payload.warehouse_id).first()
+        if not wh:
+            raise HTTPException(status_code=404, detail="Warehouse not found")
+
+    po = PurchaseOrder(
+        organization_id=org.id,
+        counterparty_id=payload.counterparty_id,
+        warehouse_id=payload.warehouse_id,
+        notes=payload.notes,
+        status=PurchaseOrderStatus.draft,
+        created_by_id=user.id,
+    )
+    db.add(po)
+    db.flush()
+
+    for item in payload.items:
+        prod = db.query(Product).filter_by(organization_id=org.id, id=item.product_id).first()
+        if not prod:
+            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        db.add(PurchaseOrderItem(
+            purchase_order_id=po.id,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            unit_cost=item.unit_cost,
+        ))
+
+    db.commit()
+    db.refresh(po)
+
+    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
+    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
+    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    return _po_to_out(po, product_map, cp_map, wh_map)
+
+
+@_full.get("/purchases/{po_id}", response_model=PurchaseOrderOut)
+def get_purchase(
+    po_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> PurchaseOrderOut:
+    po = db.query(PurchaseOrder).filter_by(organization_id=org.id, id=po_id).first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
+    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
+    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    return _po_to_out(po, product_map, cp_map, wh_map)
+
+
+@_full.post("/purchases/{po_id}/receive", response_model=PurchaseOrderOut)
+def receive_purchase(
+    po_id: int,
+    bg:   BackgroundTasks,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> PurchaseOrderOut:
+    po = db.query(PurchaseOrder).filter_by(organization_id=org.id, id=po_id).first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    if po.status != PurchaseOrderStatus.draft:
+        raise HTTPException(status_code=400, detail="Only draft purchase orders can be received")
+    if not po.warehouse_id:
+        raise HTTPException(status_code=400, detail="Purchase order must have a destination warehouse")
+    if not po.items:
+        raise HTTPException(status_code=400, detail="Purchase order has no items")
+
+    from datetime import datetime as dt
+    for item in po.items:
+        mv = WarehouseMovement(
+            organization_id=org.id,
+            type=MovementType.PURCHASE_IN,
+            product_id=item.product_id,
+            quantity=item.quantity,
+            unit_cost=item.unit_cost,
+            warehouse_to_id=po.warehouse_id,
+            created_by_id=user.id,
+        )
+        db.add(mv)
+        db.flush()
+        _apply_movement(mv, db)
+
+    total_cost = sum(it.quantity * it.unit_cost for it in po.items)
+    if po.counterparty_id:
+        cp = db.query(Counterparty).filter_by(organization_id=org.id, id=po.counterparty_id).first()
+        if cp:
+            cp.balance -= total_cost
+
+    po.status = PurchaseOrderStatus.received
+    po.received_at = dt.utcnow()
+    db.commit()
+    db.refresh(po)
+
+    bg.add_task(broadcast_warehouse, org.id, "stock")
+    bg.add_task(broadcast_warehouse, org.id, "movements")
+
+    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
+    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
+    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    return _po_to_out(po, product_map, cp_map, wh_map)
+
+
+@_full.delete("/purchases/{po_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_purchase(
+    po_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _user: User        = Depends(require_roles(UserRole.admin)),
+) -> None:
+    po = db.query(PurchaseOrder).filter_by(organization_id=org.id, id=po_id).first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    if po.status == PurchaseOrderStatus.received:
+        raise HTTPException(status_code=400, detail="Cannot delete a received purchase order")
+    db.delete(po)
+    db.commit()
+
+
+# ── Order Invoice PDF ─────────────────────────────────────────────────────────
+
+@_full.post("/orders/{order_id}/invoice")
+def order_invoice(
+    order_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User       = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+):
+    from io import BytesIO
+    from fastapi.responses import Response
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.units import mm
+
+    order = db.query(Order).filter_by(organization_id=org.id, id=order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    items = db.query(OrderItem).filter_by(order_id=order.id).all()
+    product_ids = {it.product_id for it in items}
+    product_map = {p.id: p for p in db.query(Product).filter(
+        Product.organization_id == org.id, Product.id.in_(product_ids)
+    ).all()}
+    cp = db.query(Counterparty).filter_by(organization_id=org.id, id=order.counterparty_id).first() if order.counterparty_id else None
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=20*mm, rightMargin=20*mm,
+                            topMargin=20*mm, bottomMargin=20*mm)
+    styles = getSampleStyleSheet()
+    elems = []
+
+    elems.append(Paragraph(f"Рахунок-фактура №{order.id}", styles["Title"]))
+    elems.append(Spacer(1, 6*mm))
+
+    meta = [
+        ["Контрагент:", cp.name if cp else "—"],
+        ["Статус:", order.status.value],
+        ["Дата:", order.created_at.strftime("%d.%m.%Y") if order.created_at else "—"],
+    ]
+    t = Table(meta, colWidths=[50*mm, 120*mm])
+    t.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.grey),
+    ]))
+    elems.append(t)
+    elems.append(Spacer(1, 8*mm))
+
+    header = ["Товар", "Кількість", "Ціна", "Сума"]
+    rows = []
+    total = 0
+    for it in items:
+        p = product_map.get(it.product_id)
+        name = p.name if p else str(it.product_id)
+        price = float(it.unit_price or 0)
+        qty = float(it.quantity)
+        line = float(it.total_price or qty * price)
+        total += line
+        rows.append([name, f"{qty:.0f}", f"{price:.2f}", f"{line:.2f}"])
+    rows.append(["", "", "Разом:", f"{total:.2f}"])
+
+    tbl = Table([header] + rows, colWidths=[80*mm, 30*mm, 30*mm, 30*mm])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, 0), colors.HexColor("#1a1a2e")),
+        ("TEXTCOLOR",    (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE",     (0, 0), (-1, -1), 9),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#f5f5f5")]),
+        ("FONTNAME",     (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("LINEBELOW",    (0, -1), (-1, -1), 1, colors.black),
+        ("ALIGN",        (1, 0), (-1, -1), "RIGHT"),
+    ]))
+    elems.append(tbl)
+
+    doc.build(elems)
+    buf.seek(0)
+    filename = f"invoice_{order.id}.pdf"
+    return Response(
+        content=buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

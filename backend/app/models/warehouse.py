@@ -485,6 +485,44 @@ class CashTransaction(Base):
 
 # ── Label Templates ───────────────────────────────────────────────────────────
 
+# ── Purchase Orders ───────────────────────────────────────────────────────────
+
+class PurchaseOrderStatus(str, enum.Enum):
+    draft     = "draft"
+    received  = "received"
+    cancelled = "cancelled"
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "wh_purchase_orders"
+
+    id:              Mapped[int]                 = mapped_column(primary_key=True)
+    organization_id: Mapped[int]                 = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    counterparty_id: Mapped[int | None]          = mapped_column(Integer, ForeignKey("wh_counterparties.id", ondelete="SET NULL"), nullable=True, index=True)
+    warehouse_id:    Mapped[int | None]          = mapped_column(Integer, ForeignKey("wh_warehouses.id", ondelete="SET NULL"), nullable=True)
+    status:          Mapped[PurchaseOrderStatus] = mapped_column(Enum(PurchaseOrderStatus), default=PurchaseOrderStatus.draft, nullable=False, index=True)
+    notes:           Mapped[str | None]          = mapped_column(Text, nullable=True)
+    received_at:     Mapped[datetime | None]     = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_id:   Mapped[int | None]          = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at:      Mapped[datetime]            = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    items: Mapped[list["PurchaseOrderItem"]] = relationship("PurchaseOrderItem", back_populates="purchase_order", cascade="all, delete-orphan")
+
+
+class PurchaseOrderItem(Base):
+    __tablename__ = "wh_purchase_order_items"
+
+    id:                Mapped[int]     = mapped_column(primary_key=True)
+    purchase_order_id: Mapped[int]     = mapped_column(Integer, ForeignKey("wh_purchase_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id:        Mapped[int]     = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="RESTRICT"), nullable=False)
+    quantity:          Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    unit_cost:         Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+
+    purchase_order: Mapped["PurchaseOrder"] = relationship("PurchaseOrder", back_populates="items")
+
+
+# ── Label Templates ───────────────────────────────────────────────────────────
+
 class LabelTemplate(Base):
     __tablename__ = "wh_label_templates"
 

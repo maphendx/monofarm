@@ -39,6 +39,8 @@ type Movement = {
 
 type MovementListOut = { items: Movement[]; next_cursor: string | null };
 
+type OrderListItem = { id: number; status: string };
+
 const TYPE_META: Record<string, { label: string; cls: string }> = {
   PRODUCTION_IN:  { label: "Виробництво +", cls: "badge badge-ok" },
   PRODUCTION_OUT: { label: "Сировина −",    cls: "badge badge-print" },
@@ -86,22 +88,25 @@ function pluralPositions(n: number): string {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function WarehouseDashboard() {
-  const [summary,    setSummary]    = useState<DashboardSummary | null>(null);
-  const [batches,    setBatches]    = useState<Batch[]>([]);
-  const [movements,  setMovements]  = useState<Movement[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [showAllLow, setShowAllLow] = useState(false);
+  const [summary,        setSummary]        = useState<DashboardSummary | null>(null);
+  const [batches,        setBatches]        = useState<Batch[]>([]);
+  const [movements,      setMovements]      = useState<Movement[]>([]);
+  const [pendingOrders,  setPendingOrders]  = useState(0);
+  const [loading,        setLoading]        = useState(true);
+  const [showAllLow,     setShowAllLow]     = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [d, b, m] = await Promise.all([
+      const [d, b, m, orders] = await Promise.all([
         api<DashboardSummary>("/api/warehouse/dashboard"),
         api<Batch[]>("/api/warehouse/batches"),
         api<MovementListOut>("/api/warehouse/movements?limit=5"),
+        api<OrderListItem[]>("/api/warehouse/orders?order_status=new"),
       ]);
       setSummary(d);
       setBatches(b);
       setMovements(m.items);
+      setPendingOrders(orders.length);
     } finally {
       setLoading(false);
     }
@@ -110,9 +115,8 @@ export default function WarehouseDashboard() {
   const { version } = useWarehouseStream();
   useEffect(() => { load(); }, [load, version]);
 
-  const activeBatches = batches.filter((b) => b.status === "active");
+  const activeBatches = batches.filter((b) => ["draft", "active", "paused"].includes(b.status));
   const totalUnits    = parseFloat(summary?.total_units ?? "0");
-  const pendingOrders = 0; // orders endpoint — placeholder
 
   const lowStock = summary?.low_stock ?? [];
 
