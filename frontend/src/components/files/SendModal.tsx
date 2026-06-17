@@ -183,6 +183,173 @@ function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
   );
 }
 
+// ── All slots (incl. empty) for display / AMS grid ───────────────────────────
+
+type DisplaySlot = {
+  slot: number;
+  type: string | null;
+  color: string | null;
+  unit: number | null;
+  isEmpty: boolean;
+  isExternal: boolean;
+};
+
+function printerAllSlotsForDisplay(printer: PrinterType): DisplaySlot[] {
+  const fromSlots = (printer.slots ?? []).map((s) => ({
+    slot: s.slot_index,
+    type: s.material ?? null,
+    color: s.hex_color ?? s.color ?? null,
+    unit: s.unit_index,
+    isEmpty: s.state === "empty",
+    isExternal: s.is_external,
+  }));
+  if (fromSlots.length > 0) return fromSlots.sort((a, b) => a.slot - b.slot);
+  return (printer.loaded_filaments ?? [])
+    .map((s) => ({
+      slot: s.slot,
+      type: s.type ?? null,
+      color: s.color ?? null,
+      unit: s.unit_id ?? null,
+      isEmpty: !!s.empty,
+      isExternal: false,
+    }))
+    .sort((a, b) => a.slot - b.slot);
+}
+
+// ── Tag compatibility check (mirrors backend _task_matches_printer) ───────────
+
+type TagIssue = { kind: string; msg: string };
+
+function tagCompatCheck(file: GcodeFile | null, printer: PrinterType): TagIssue[] {
+  if (!file) return [];
+  const ft = file.tags ?? [];
+  const pt = printer.tags ?? [];
+  const issues: TagIssue[] = [];
+
+  const fileNozzle = ft.find((t) => t.kind === "nozzle");
+  const printerNozzle = pt.find((t) => t.kind === "nozzle");
+  if (fileNozzle) {
+    const fd = (fileNozzle.meta as Record<string, unknown>)?.diameter as number | undefined;
+    const pd = printerNozzle
+      ? ((printerNozzle.meta as Record<string, unknown>)?.diameter as number | undefined)
+      : printer.nozzle_diameter;
+    if (fd != null && pd != null && Math.abs(fd - pd) > 0.05)
+      issues.push({ kind: "nozzle", msg: `∅${fd}≠${pd}мм` });
+  }
+
+  const fileMats = ft.filter((t) => t.kind === "material");
+  const printerMats = pt.filter((t) => t.kind === "material");
+  if (fileMats.length > 0 && printerMats.length > 0) {
+    const fTypes = fileMats
+      .map((t) => ((t.meta as Record<string, unknown>)?.type as string | undefined)?.toLowerCase() ?? "")
+      .filter(Boolean);
+    const pTypes = printerMats
+      .map((t) => ((t.meta as Record<string, unknown>)?.type as string | undefined)?.toLowerCase() ?? "")
+      .filter(Boolean);
+    if (fTypes.length > 0 && !fTypes.some((t) => pTypes.includes(t)))
+      issues.push({ kind: "material", msg: fTypes.join(", ") });
+  }
+
+  const fileBed = ft.find((t) => t.kind === "bed_type");
+  const printerBed = pt.find((t) => t.kind === "bed_type");
+  if (fileBed && printerBed) {
+    const fb = (fileBed.meta as Record<string, unknown>)?.bed_type as string | undefined;
+    const pb = (printerBed.meta as Record<string, unknown>)?.bed_type as string | undefined;
+    if (fb && pb && fb !== pb) issues.push({ kind: "bed_type", msg: `стіл:${fb}≠${pb}` });
+  }
+
+  const pCustom = new Set(pt.filter((t) => t.kind === "custom" && t.label).map((t) => t.label!));
+  for (const t of ft.filter((t2) => t2.kind === "custom" && t2.label)) {
+    if (!pCustom.has(t.label!)) issues.push({ kind: "custom", msg: t.label! });
+  }
+  return issues;
+}
+
+// ── AMS / slot visual grid ────────────────────────────────────────────────────
+
+function AmsSlotPicker({
+  allSlots,
+  selectedSlot,
+  onSelect,
+}: {
+  allSlots: DisplaySlot[];
+  selectedSlot: number;
+  onSelect: (slot: number) => void;
+}) {
+  const byUnit = new Map<string, DisplaySlot[]>();
+  for (const s of allSlots) {
+    const key = s.isExternal ? "ext" : s.unit !== null ? `u${s.unit}` : "flat";
+    if (!byUnit.has(key)) byUnit.set(key, []);
+    byUnit.get(key)!.push(s);
+  }
+  if (byUnit.size === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-3 pt-0.5">
+      {[...byUnit.entries()].map(([key, unitSlots]) => {
+        const unitLabel =
+          key === "ext" ? "Зовн." : key === "flat" ? null : `AMS ${parseInt(key.slice(1)) + 1}`;
+        return (
+          <div key={key} className="flex flex-col gap-1.5">
+            {unitLabel && (
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+                {unitLabel}
+              </span>
+            )}
+            <div className="flex gap-1">
+              {unitSlots.map((s) => {
+                const isSel = selectedSlot === s.slot;
+                return (
+                  <button
+                    key={s.slot}
+                    type="button"
+                    onClick={() => onSelect(s.slot)}
+                    title={`${slotLabel(s.slot)}${s.type ? ` · ${s.type}` : ""}${s.isEmpty ? " (порожній)" : ""}`}
+                    className={[
+                      "relative flex h-9 w-9 items-end justify-center rounded-lg border-2 pb-0.5 transition",
+                      isSel
+                        ? "border-[var(--accent)] shadow-lg"
+                        : s.isEmpty
+                          ? "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
+                          : "border-transparent hover:scale-105",
+                    ].join(" ")}
+                    style={{ backgroundColor: s.isEmpty ? undefined : (s.color ?? "#888888") }}
+                  >
+                    {s.isEmpty && (
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <span className="h-5 w-5 rounded-full border-2 border-dashed border-[var(--border-strong)]" />
+                      </span>
+                    )}
+                    {isSel && (
+                      <span className="absolute inset-0 flex items-center justify-center">
+                        <Check
+                          className="h-4 w-4 drop-shadow-sm"
+                          style={{ color: s.isEmpty ? "var(--accent)" : "rgba(255,255,255,0.95)" }}
+                          strokeWidth={3}
+                        />
+                      </span>
+                    )}
+                    <span
+                      className={[
+                        "relative z-10 text-[8px] font-bold leading-none",
+                        s.isEmpty
+                          ? "text-[var(--text-faint)]"
+                          : "text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]",
+                      ].join(" ")}
+                    >
+                      {s.slot === 254 ? "EXT" : `T${s.slot + 1}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── printer cover images ──────────────────────────────────────────────────────
 
 const BAMBU_COVER: [RegExp, string][] = [
@@ -299,6 +466,8 @@ export function SendModal({
   );
   const usedSlots = useMemo(() => usedSlotIndices(file?.filament_meta ?? null), [file?.filament_meta]);
   const isMoonraker = numSelected === 1 && !!primaryPrinter?.moonraker_url;
+  const primaryPrinterAllSlots = primaryPrinter ? printerAllSlotsForDisplay(primaryPrinter) : [];
+  const primaryPrinterHasAmsUnits = primaryPrinterAllSlots.some((s) => s.unit !== null);
 
   const printerGroups = useMemo(() => {
     const groups = new Map<string, PrinterType[]>();
@@ -695,8 +864,8 @@ export function SendModal({
                     {/* Slot mapping (single printer) */}
                     {numSelected === 1 && usedSlots.length > 0 && primaryPrinter && file && (
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-                        <div className="mb-2.5 flex items-center justify-between">
-                          <p className="text-[11px] font-medium text-[var(--text-muted)]">Маппінг котушок</p>
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-[var(--text-muted)]">Маппінг котушок</p>
                           <button
                             onClick={() => setSlotMap(autoMapSlots(file.filament_meta, primaryPrinter))}
                             className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)]"
@@ -704,36 +873,51 @@ export function SendModal({
                             Авто
                           </button>
                         </div>
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                           {usedSlots.map((i) => {
                             const fileColor = file.filament_meta?.colors?.[i] ?? null;
                             const fileType  = file.filament_meta?.types?.[i] ?? null;
                             const grams     = file.filament_meta?.used_g?.[i];
-                            const matSlots  = printerMaterialSlots(primaryPrinter);
                             const currentTarget = slotMap[i] ?? i;
                             return (
-                              <div key={i}>
-                                <div className="mb-1 flex items-center gap-1.5">
-                                  {fileColor && <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: fileColor }} />}
-                                  <span className="text-[10px] text-[var(--text-muted)]">
-                                    Слот {i + 1}{fileType ? ` · ${fileType}` : ""}{grams != null ? ` · ${grams}г` : ""}
+                              <div key={i} className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="h-5 w-5 shrink-0 rounded-full border-2 border-black/10 shadow-sm"
+                                    style={{ background: fileColor ?? "#888" }}
+                                  />
+                                  <span className="text-[11px] font-medium text-[var(--text)]">
+                                    T{i + 1}{fileType ? ` · ${fileType}` : ""}
                                   </span>
+                                  {grams != null && (
+                                    <span className="ml-auto text-[10px] text-[var(--text-faint)]">{grams}г</span>
+                                  )}
                                 </div>
-                                {matSlots.length > 0 ? (
+                                {primaryPrinterHasAmsUnits ? (
+                                  <AmsSlotPicker
+                                    allSlots={primaryPrinterAllSlots}
+                                    selectedSlot={currentTarget}
+                                    onSelect={(slot) => setSlotMap((prev) => ({ ...prev, [i]: slot }))}
+                                  />
+                                ) : primaryPrinterAllSlots.length > 0 ? (
                                   <div className="flex flex-wrap gap-1">
-                                    {matSlots.map((s) => {
+                                    {primaryPrinterAllSlots.map((s) => {
                                       const isSel = currentTarget === s.slot;
                                       return (
                                         <button key={s.slot} type="button"
                                           onClick={() => setSlotMap((prev) => ({ ...prev, [i]: s.slot }))}
                                           className={[
-                                            "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] transition",
+                                            "flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] transition",
                                             isSel
                                               ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                                              : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
+                                              : s.isEmpty
+                                                ? "border-dashed border-[var(--border)] text-[var(--text-faint)] hover:border-[var(--border-strong)]"
+                                                : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
                                           ].join(" ")}
                                         >
-                                          {s.color && <span className="h-2 w-2 shrink-0 rounded-full border border-black/20" style={{ background: s.color }} />}
+                                          {!s.isEmpty && s.color && (
+                                            <span className="h-2 w-2 shrink-0 rounded-full border border-black/20" style={{ background: s.color }} />
+                                          )}
                                           {slotLabel(s.slot)}{s.type ? ` · ${s.type}` : ""}
                                         </button>
                                       );
@@ -860,6 +1044,7 @@ export function SendModal({
                               const nozzle   = nozzleCheck(file?.filament_meta ?? null, p);
                               const model    = modelCheck(file?.filament_meta ?? null, p, file?.original_name);
                               const matSlots = printerMaterialSlots(p);
+                              const tagIssues = tagCompatCheck(file, p);
                               const isSelected = selectedIds.has(p.id);
                               const cover    = printerCover(p);
                               const res      = multiSendResults?.find((r) => r.printerId === p.id);
@@ -939,10 +1124,28 @@ export function SendModal({
                                         ))}
                                       </div>
                                     )}
+                                    {(p.tags ?? []).length > 0 && (
+                                      <div className="flex flex-wrap gap-1">
+                                        {(p.tags ?? []).map((t) => {
+                                          const kindDot: Record<string, string> = {
+                                            nozzle: "#6366f1", material: "#0ea5e9", bed_type: "#f59e0b", custom: "#6b7280",
+                                          };
+                                          return (
+                                            <span key={t.id} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[9px] text-[var(--text-muted)]">
+                                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: t.color ?? kindDot[t.kind] ?? "#6b7280" }} />
+                                              {t.display || t.label}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                     <div className="flex flex-wrap gap-1 empty:hidden">
                                       {fit === "oversize"    && <span className="badge badge-error text-[9px]">✕ не влазить</span>}
                                       {nozzle === "mismatch" && <span className="badge badge-warn text-[9px]">∅≠</span>}
                                       {model === "mismatch"  && <span className="badge badge-warn text-[9px]">⚠ модель</span>}
+                                      {tagIssues.map((ti) => (
+                                        <span key={ti.msg} className="badge badge-warn text-[9px]">⚡ {ti.msg}</span>
+                                      ))}
                                       <span className={`${compat.cls} text-[9px]`}>{compat.label}</span>
                                     </div>
                                     {res && (

@@ -89,6 +89,8 @@ class Tag(Base):
         if self.kind == TagKind.material:
             m = self.meta or {}
             return f"{m.get('type', '?')} · {m.get('color_name', '')}".strip(" ·")
+        if self.kind == TagKind.bed_type:
+            return (self.meta or {}).get("bed_type", "") or self.label or ""
         return self.label or ""
 
     @property
