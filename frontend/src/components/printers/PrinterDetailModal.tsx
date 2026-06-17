@@ -4,8 +4,11 @@ import { useEffect, useState } from "react";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
 import { SlotStrip } from "@/components/printers/SlotStrip";
+import { CreateTagModal } from "@/components/ui/CreateTagModal";
 import { Modal } from "@/components/ui/Modal";
+import { TagPicker } from "@/components/ui/TagPicker";
 import { useConfirm } from "@/hooks/useConfirm";
+import { useTags } from "@/hooks/useTags";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
@@ -239,6 +242,9 @@ export function PrinterDetailModal({
   const [eta, setEta] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [printerTagIds, setPrinterTagIds] = useState<number[]>(() => printer?.tags?.map(t => t.id) ?? []);
+  const [showCreateTag, setShowCreateTag] = useState(false);
+  const { tags, reload: reloadTags, setPrinterTags } = useTags();
 
   useEffect(() => {
     if (printer) {
@@ -246,6 +252,7 @@ export function PrinterDetailModal({
       setJob(printer.job ?? "");
       setEta(printer.eta_minutes ? String(printer.eta_minutes) : "");
       setError(null);
+      setPrinterTagIds(printer.tags?.map(t => t.id) ?? []);
     }
   }, [printer]);
 
@@ -293,6 +300,13 @@ export function PrinterDetailModal({
     save({ status: newStatus });
   }
 
+  async function handleTagChange(ids: number[]) {
+    if (!printer) return;
+    setPrinterTagIds(ids);
+    await setPrinterTags(printer.id, ids);
+    onUpdated({ ...printer, tags: tags.filter(t => ids.includes(t.id)) });
+  }
+
   return (
     <>
     <Modal
@@ -329,6 +343,18 @@ export function PrinterDetailModal({
 
         {(user.role === "admin" || user.role === "operator") && (
           <GroupPicker printer={printer} onUpdated={onUpdated} />
+        )}
+
+        {canEdit && (
+          <div>
+            <span className="mb-1 block text-xs text-[var(--text-muted)]">Теги</span>
+            <TagPicker
+              available={tags}
+              selected={printerTagIds}
+              onChange={handleTagChange}
+              onCreateTag={() => setShowCreateTag(true)}
+            />
+          </div>
         )}
 
         {canEdit && (printer.kind === "bambu" || printer.moonraker_url) &&
@@ -541,6 +567,11 @@ export function PrinterDetailModal({
       </div>
     </Modal>
     {dialog}
+    <CreateTagModal
+      open={showCreateTag}
+      onClose={() => setShowCreateTag(false)}
+      onCreated={() => { reloadTags(); setShowCreateTag(false); }}
+    />
     </>
   );
 }

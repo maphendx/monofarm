@@ -4,6 +4,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
+import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import type { PrintTask } from "@/lib/types";
 
 function formatEta(min: number | null) {
@@ -80,6 +81,13 @@ export function TaskQueueItem({
       {task.filament_meta && (
         <div className="mt-1.5">
           <FilamentSwatches meta={task.filament_meta} />
+        </div>
+      )}
+      {task.tags?.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {task.tags.map(t => (
+            <TagBadge key={t.id} tag={t as TagType} />
+          ))}
         </div>
       )}
       <button

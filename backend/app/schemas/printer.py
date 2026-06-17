@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.printer import PrinterKind
+from app.schemas.tag import TagOut
 
 
 class FilamentSlot(BaseModel):
@@ -119,6 +120,9 @@ class PrinterOut(BaseModel):
 
     # Last file sent via monofarm (for reprint)
     last_gcode_file_id: int | None = None
+
+    # Tags
+    tags: list[TagOut] = Field(default_factory=list)
 
     class Config:
         from_attributes = True

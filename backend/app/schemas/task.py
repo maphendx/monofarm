@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 from app.models.task import FarmTaskStatus, PrintTaskStatus
+from app.schemas.tag import TagOut
 
 
 class PrintTaskCreate(BaseModel):
@@ -66,6 +67,7 @@ class PrintTaskOut(BaseModel):
     printed_count: int = 0
     assigned_printer_id: int | None = None
     assigned_printer_name: str | None = None
+    tags: list[TagOut] = []
 
     class Config:
         from_attributes = True

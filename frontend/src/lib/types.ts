@@ -128,6 +128,7 @@ export interface Printer {
   build_z: number | null;
   nozzle_diameter: number | null;
   last_gcode_file_id: number | null;
+  tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 
 export interface FilamentMeta {
@@ -168,6 +169,7 @@ export interface PrintTask {
   printed_count: number;
   assigned_printer_id: number | null;
   assigned_printer_name: string | null;
+  tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 
 export interface Filament {
@@ -222,6 +224,7 @@ export interface GcodeFile {
   uploaded_at: string;
   uploaded_by_name: string | null;
   folder_id: number | null;
+  tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 
 export interface GcodeFolder {

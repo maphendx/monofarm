@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { CreateTagModal } from "@/components/ui/CreateTagModal";
+import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import { PrintersManager } from "@/components/printers/PrintersManager";
 import { UsersSection } from "@/components/users/UsersSection";
 import { ApiError, api, clearToken, getToken } from "@/lib/api";
@@ -70,7 +72,7 @@ interface SlicerApiKeyCreated extends SlicerApiKey {
 type SectionId =
   | "profile" | "general"
   | "organization" | "printers" | "users" | "filament"
-  | "queue" | "notifications" | "maintenance" | "integrations" | "billing";
+  | "queue" | "notifications" | "maintenance" | "integrations" | "billing" | "tags";
 
 // ── Nav config ─────────────────────────────────────────────────────────────
 
@@ -126,6 +128,11 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[]; adminOnly?: 
   {
     id: "billing", label: "Білінг",
     d: ["M21 4H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z", "M1 10h22"],
+    adminOnly: true,
+  },
+  {
+    id: "tags", label: "Теги",
+    d: ["M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z", "M7 7h.01"],
     adminOnly: true,
   },
 ];
@@ -2115,6 +2122,98 @@ function ProfileSection() {
   );
 }
 
+// ── Tags section ─────────────────────────────────────────────────────────────
+
+interface TagSettings {
+  auto_tag_on_upload: boolean;
+  nozzle_match_strict: boolean;
+  material_match_color: boolean;
+}
+
+function TagsSection() {
+  const [tags, setTags] = useState<TagType[]>([]);
+  const [settings, setSettings] = useState<TagSettings>({ auto_tag_on_upload: true, nozzle_match_strict: true, material_match_color: false });
+  const [showCreate, setShowCreate] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    const [t, s] = await Promise.all([
+      api<TagType[]>("/api/tags"),
+      api<TagSettings>("/api/orgs/tag-settings"),
+    ]);
+    setTags(t);
+    setSettings(s);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function deleteTag(id: number) {
+    await api(`/api/tags/${id}`, { method: "DELETE" });
+    setTags(prev => prev.filter(t => t.id !== id));
+  }
+
+  async function saveSetting(key: keyof TagSettings, value: boolean) {
+    const next = { ...settings, [key]: value };
+    setSettings(next);
+    setSaving(true);
+    await api("/api/orgs/tag-settings", { method: "PATCH", body: JSON.stringify({ [key]: value }) }).catch(() => {});
+    setSaving(false);
+  }
+
+  return (
+    <SectionCard>
+      <SectionTitle>Теги</SectionTitle>
+
+      <div className="mb-6 space-y-2">
+        <h3 className="font-semibold text-sm mb-3">Налаштування</h3>
+        {([
+          ["auto_tag_on_upload", "Автоматично теги при завантаженні файлу"],
+          ["nozzle_match_strict", "Строге співпадіння діаметра сопла"],
+          ["material_match_color", "Враховувати колір матеріалу при підборі принтера"],
+        ] as [keyof TagSettings, string][]).map(([key, label]) => (
+          <label key={key} className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings[key]}
+              onChange={e => saveSetting(key, e.target.checked)}
+              className="h-4 w-4 rounded"
+            />
+            <span className="text-sm">{label}</span>
+          </label>
+        ))}
+        {saving && <p className="text-xs text-[var(--text-muted)]">Збереження…</p>}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-sm">Теги організації</h3>
+          <button onClick={() => setShowCreate(true)} className="btn btn-primary text-xs px-3 py-1">
+            + Новий тег
+          </button>
+        </div>
+        {tags.length === 0 ? (
+          <p className="text-sm text-[var(--text-muted)]">Тегів поки немає</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {tags.map(tag => (
+              <div key={tag.id} className="flex items-center gap-1">
+                <TagBadge tag={tag} />
+                <button
+                  onClick={() => deleteTag(tag.id)}
+                  className="text-[var(--text-faint)] hover:text-[var(--state-error)] text-xs"
+                  title="Видалити"
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CreateTagModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={load} />
+    </SectionCard>
+  );
+}
+
 // ── General section ────────────────────────────────────────────────────────
 
 function GeneralSection() {
@@ -2255,6 +2354,7 @@ export default function SettingsPage() {
           </div>
         )}
         {active === "billing" && <BillingSection />}
+        {active === "tags" && <TagsSection />}
         </div>
       </div>
 

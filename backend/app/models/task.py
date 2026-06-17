@@ -4,7 +4,7 @@ from datetime import date, datetime
 from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 
@@ -55,6 +55,14 @@ class PrintTask(Base):
     )
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Tags
+    tags: Mapped[list] = relationship(
+        "Tag",
+        secondary="print_task_tags",
+        back_populates="print_tasks",
+        lazy="selectin",
+    )
 
 
 class FarmTaskStatus(str, enum.Enum):

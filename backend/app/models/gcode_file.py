@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 
@@ -32,4 +32,12 @@ class GcodeFile(Base):
     )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # Tags
+    tags: Mapped[list] = relationship(
+        "Tag",
+        secondary="gcode_file_tags",
+        back_populates="gcode_files",
+        lazy="selectin",
     )

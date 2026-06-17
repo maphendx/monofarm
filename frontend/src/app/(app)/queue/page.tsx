@@ -77,6 +77,7 @@ function taskToGcodeFile(task: PrintTask): GcodeFile {
     uploaded_at: task.created_at,
     uploaded_by_name: task.created_by_name,
     folder_id: null,
+    tags: [],
   };
 }
 

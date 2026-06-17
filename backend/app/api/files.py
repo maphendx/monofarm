@@ -23,11 +23,13 @@ from app.api.deps import get_current_org, require_roles
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
+from app.services.auto_tag import auto_tag_file
 from app.models.gcode_folder import GcodeFolder
 from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
+from app.schemas.tag import TagOut
 from app.services import bambu_dispatch, bambu_lan_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
@@ -75,6 +77,7 @@ class GcodeFileOut(BaseModel):
     uploaded_at: str
     uploaded_by_name: str | None
     folder_id: int | None
+    tags: list[TagOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -144,6 +147,7 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
         uploaded_at=f.uploaded_at.isoformat(),
         uploaded_by_name=name,
         folder_id=f.folder_id,
+        tags=[TagOut(id=t.id, kind=t.kind, label=t.label, color=t.color, meta=t.meta, display=t.display) for t in (f.tags or [])],
     )
 
 
@@ -357,6 +361,10 @@ async def upload_file(
     db.add(row)
     db.commit()
     db.refresh(row)
+    try:
+        auto_tag_file(db, org, row)
+    except Exception:
+        pass  # never block upload on tagging errors
     return _to_out(row, db)
 
 

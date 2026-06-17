@@ -126,6 +126,9 @@ class Organization(Base):
     horoshop_hook_ids:       Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     horoshop_last_sync_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Tag settings (auto-tag, clusters, matching behaviour)
+    tag_settings: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
+
     # Costing rates for spec cost calculations
     electricity_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("4.5"), server_default="4.5")
     labor_rate:       Mapped[Decimal] = mapped_column(Numeric(8, 4), default=Decimal("150"), server_default="150")

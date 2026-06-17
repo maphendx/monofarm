@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import { ApiError, api, getToken } from "@/lib/api";
 import { SendModal, checkSlots, compatBadge, fitCheck, modelCheck, nozzleCheck } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
@@ -414,6 +415,12 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
         {file.original_name}
       </p>
 
+      {/* tags */}
+      {file.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1">
+          {file.tags.map(t => <TagBadge key={t.id} tag={t as TagType} />)}
+        </div>
+      )}
       {/* filament swatches */}
       {file.filament_meta && <SlotSwatches meta={file.filament_meta} />}
 

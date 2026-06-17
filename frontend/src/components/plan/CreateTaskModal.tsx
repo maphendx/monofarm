@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { CreateTagModal } from "@/components/ui/CreateTagModal";
 import { Modal } from "@/components/ui/Modal";
+import { TagPicker } from "@/components/ui/TagPicker";
+import { useTags } from "@/hooks/useTags";
 import { ApiError, api, getToken } from "@/lib/api";
 import type { PrintTask } from "@/lib/types";
 
@@ -30,7 +33,10 @@ export function CreateTaskModal({
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tagIds, setTagIds] = useState<number[]>([]);
+  const [showCreateTag, setShowCreateTag] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { tags, reload: reloadTags, setTaskTags } = useTags();
 
   useEffect(() => {
     if (open) api<ProductOption[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
@@ -39,7 +45,7 @@ export function CreateTaskModal({
   function reset() {
     setTitle(""); setQty("1"); setFilamentType("");
     setFilamentColor(""); setEtaMin(""); setDeadline("");
-    setProductId(null); setFile(null); setError(null);
+    setProductId(null); setFile(null); setError(null); setTagIds([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -77,6 +83,9 @@ export function CreateTaskModal({
         final = (await resp.json()) as PrintTask;
       }
 
+      if (tagIds.length > 0) {
+        await setTaskTags(final.id, tagIds).catch(() => {});
+      }
       onCreated(final);
       reset();
       onClose();
@@ -176,8 +185,22 @@ export function CreateTaskModal({
             </p>
           )}
         </label>
+        <div>
+          <span className="mb-1 block">Теги</span>
+          <TagPicker
+            available={tags}
+            selected={tagIds}
+            onChange={setTagIds}
+            onCreateTag={() => setShowCreateTag(true)}
+          />
+        </div>
         {error && <p className="text-[var(--state-error)]">{error}</p>}
       </form>
+      <CreateTagModal
+        open={showCreateTag}
+        onClose={() => setShowCreateTag(false)}
+        onCreated={() => { reloadTags(); setShowCreateTag(false); }}
+      />
     </Modal>
   );
 }

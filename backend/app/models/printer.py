@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 from app.core.db import Base
@@ -66,3 +66,11 @@ class Printer(Base):
 
     # Last file sent via monofarm (for reprint)
     last_gcode_file_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Tags
+    tags: Mapped[list] = relationship(
+        "Tag",
+        secondary="printer_tags",
+        back_populates="printers",
+        lazy="selectin",
+    )
