@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Plus, Tag as TagIcon } from "lucide-react";
-import { TagBadge, Tag } from "./TagBadge";
+import { useEffect, useRef, useState } from "react";
+import { Check, Plus } from "lucide-react";
+import { TagBadge, type Tag } from "./TagBadge";
+
+const KIND_DEFAULTS: Record<string, string> = {
+  nozzle: "#6366f1",
+  material: "#0ea5e9",
+  bed_type: "#f59e0b",
+  custom: "#6b7280",
+};
 
 interface Props {
-  /** All tags available in the org */
   available: Tag[];
-  /** Currently assigned tag IDs */
   selected: number[];
   onChange: (ids: number[]) => void;
   disabled?: boolean;
-  /** Open "Create tag" modal */
   onCreateTag?: () => void;
 }
 
@@ -28,74 +32,66 @@ export function TagPicker({ available, selected, onChange, disabled, onCreateTag
   }, []);
 
   const selectedTags = available.filter((t) => selected.includes(t.id));
-  const unselected = available.filter((t) => !selected.includes(t.id));
 
   const toggle = (id: number) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((s) => s !== id));
-    } else {
-      onChange([...selected, id]);
-    }
+    onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
   };
 
   return (
-    <div className="relative inline-block" ref={ref}>
-      {/* Selected tags strip */}
-      <div className="flex flex-wrap gap-1 items-center">
-        {selectedTags.map((tag) => (
-          <TagBadge
-            key={tag.id}
-            tag={tag}
-            onRemove={disabled ? undefined : () => toggle(tag.id)}
-          />
-        ))}
+    <div className="relative inline-flex flex-wrap items-center gap-1" ref={ref}>
+      {selectedTags.map((tag) => (
+        <TagBadge
+          key={tag.id}
+          tag={tag}
+          onRemove={disabled ? undefined : () => toggle(tag.id)}
+        />
+      ))}
 
-        {!disabled && (
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="inline-flex items-center gap-1 rounded-full border-2 border-dashed border-gray-300 hover:border-gray-400 px-2 py-0.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-            {selectedTags.length === 0 && "Add tag"}
-          </button>
-        )}
-      </div>
+      {!disabled && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-[var(--border-strong)] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+          title="Додати тег"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      )}
 
-      {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg dark:bg-gray-900 dark:border-gray-700">
-          <div className="p-2 border-b border-gray-100 dark:border-gray-800">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assign tags</p>
-          </div>
-
-          {unselected.length === 0 && (
-            <p className="px-3 py-2 text-xs text-gray-400">All tags assigned</p>
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+          {available.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Тегів немає</p>
+          ) : (
+            <ul className="max-h-52 overflow-y-auto py-1">
+              {available.map((tag) => {
+                const isOn = selected.includes(tag.id);
+                const dot = tag.color ?? KIND_DEFAULTS[tag.kind] ?? "#6b7280";
+                return (
+                  <li key={tag.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-[var(--surface-hi)] transition-colors"
+                      onClick={() => toggle(tag.id)}
+                    >
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: dot }} />
+                      <span className="flex-1 text-[var(--text)]">{tag.display || tag.label}</span>
+                      {isOn && <Check className="h-3 w-3 shrink-0 text-[var(--accent)]" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           )}
 
-          <ul className="max-h-48 overflow-y-auto">
-            {unselected.map((tag) => (
-              <li key={tag.id}>
-                <button
-                  type="button"
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-left"
-                  onClick={() => toggle(tag.id)}
-                >
-                  <TagIcon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                  <TagBadge tag={tag} />
-                </button>
-              </li>
-            ))}
-          </ul>
-
           {onCreateTag && (
-            <div className="border-t border-gray-100 dark:border-gray-800 p-2">
+            <div className="border-t border-[var(--border)] p-1.5">
               <button
                 type="button"
-                className="w-full text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--surface-hi)] transition-colors"
                 onClick={() => { setOpen(false); onCreateTag(); }}
               >
-                <Plus className="h-3 w-3" /> Create new tag
+                <Plus className="h-3 w-3" /> Створити тег
               </button>
             </div>
           )}
