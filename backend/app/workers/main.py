@@ -116,6 +116,7 @@ async def main() -> None:
     from app.core import leader
     from app.core.db import SessionLocal
     from app.models.organization import Organization
+    import app.models.tag  # noqa: F401 — register Tag mapper before Printer is used
 
     # Redis command relay (runs in daemon thread — dies with the process)
     threading.Thread(target=_redis_cmd_relay, daemon=True, name="redis-cmd-relay").start()

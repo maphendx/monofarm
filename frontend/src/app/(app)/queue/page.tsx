@@ -499,7 +499,7 @@ function QueuePageInner() {
   const canEdit = user.role === "admin" || user.role === "operator";
   const router = useRouter();
   const searchParams = useSearchParams();
-  const view = (searchParams.get("view") ?? "list") as "list" | "calendar";
+  const view = (searchParams.get("view") ?? "calendar") as "list" | "calendar";
 
   function setView(v: "list" | "calendar") {
     const p = new URLSearchParams(searchParams.toString());
@@ -594,12 +594,15 @@ function QueuePageInner() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (view === "list") load();
+    else setLoading(false);
+  }, [load, view]);
 
   // Auto-refresh on WebSocket queue events
   useEffect(() => {
     if (queueVersion === 0) return;
-    load();
+    if (view === "list") load();
     if (view === "calendar") loadCalendarSilent();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queueVersion]);
