@@ -47,7 +47,7 @@ function parseDurationFromText(text: string | null | undefined): number | null {
   return null;
 }
 
-function getEntryDurationMins(entry: CalendarEntry): number {
+export function getEntryDurationMins(entry: CalendarEntry): number {
   if (entry.task.estimated_minutes && entry.task.estimated_minutes > 0) {
     return entry.task.estimated_minutes;
   }
@@ -59,6 +59,19 @@ function getEntryDurationMins(entry: CalendarEntry): number {
     parseDurationFromText(entry.task.title) ??
     0
   );
+}
+
+function getEntryEndMins(entry: CalendarEntry, startMins: number, durationMins: number): number {
+  if (!entry.end_time) return startMins + durationMins;
+
+  let endMins = parseTimeMins(entry.end_time);
+  if (endMins <= startMins) endMins += 1440;
+
+  const computedEnd = startMins + durationMins;
+  const backendLooksMidnightCapped = durationMins > 0 && computedEnd > 1440 && endMins <= 1440;
+  if (backendLooksMidnightCapped) return computedEnd;
+
+  return endMins;
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -129,16 +142,17 @@ export function buildCalendarBlocks(
       for (const entry of day.entries) {
         if (!entry.start_time) continue; // untimed/asap — rendered separately
 
-        const duration = getEntryDurationMins(entry);
         const startMins = parseTimeMins(entry.start_time);
-        const totalEndMins = startMins + duration;
+        const duration = getEntryDurationMins(entry);
+        const totalEndMins = getEntryEndMins(entry, startMins, duration);
+        const totalDurationMins = Math.max(0, totalEndMins - startMins);
 
         // Single block — even if totalEndMins > 1440 the block overflows
         push(lane.printer_id, dayIdx, {
           entry, printerId: lane.printer_id,
           dayIndex: dayIdx,
           startMins, endMins: totalEndMins,
-          isContinuation: false, totalDurationMins: duration,
+          isContinuation: false, totalDurationMins,
         });
       }
     }

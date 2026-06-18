@@ -766,6 +766,7 @@ async def list_printers(
     rows.sort(key=lambda p: (
         p.group_id is None,
         groups_order.get(p.group_id, 0) if p.group_id is not None else 0,
+        p.sort_order,
         _natural_key(p.name),
     ))
 

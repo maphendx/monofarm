@@ -577,10 +577,6 @@ function QueuePageInner() {
     } catch { /* ignore */ }
   }, [weekStart]);
 
-  useEffect(() => {
-    if (view === "calendar") loadCalendar();
-  }, [view, loadCalendar]);
-
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -595,17 +591,26 @@ function QueuePageInner() {
   }, []);
 
   useEffect(() => {
-    if (view === "list") load();
-    else setLoading(false);
-  }, [load, view]);
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (view === "calendar") loadCalendar();
+  }, [view, loadCalendar]);
+
+  const refreshQueueSurface = useCallback(async () => {
+    await Promise.all([load(), loadCalendarSilent()]);
+  }, [load, loadCalendarSilent]);
 
   // Auto-refresh on WebSocket queue events
   useEffect(() => {
     if (queueVersion === 0) return;
-    if (view === "list") load();
-    if (view === "calendar") loadCalendarSilent();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queueVersion]);
+    if (view === "list") {
+      load();
+      return;
+    }
+    refreshQueueSurface();
+  }, [queueVersion, view, load, refreshQueueSurface]);
 
   // Keep printers in sync with live WS stream
   useEffect(() => {
@@ -759,7 +764,7 @@ function QueuePageInner() {
                 setWeekStart(d);
               }}
               onOpenModal={setScheduleModal}
-              onRefresh={loadCalendarSilent}
+              onRefresh={refreshQueueSurface}
             />
           </div>
           <div className="w-72 shrink-0 border-l border-[var(--border)] overflow-y-auto">
@@ -912,7 +917,7 @@ function QueuePageInner() {
           mode={scheduleModal}
           printers={printers}
           onClose={() => setScheduleModal(null)}
-          onSaved={async () => { setScheduleModal(null); await Promise.all([load(), loadCalendarSilent()]); }}
+          onSaved={async () => { setScheduleModal(null); await refreshQueueSurface(); }}
         />
       )}
     </div>

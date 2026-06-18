@@ -152,25 +152,24 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
 function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: number }) {
   if (printer.state !== "printing" || !printer.eta_minutes) return null;
   const remainMins = printer.eta_minutes;
-  const progressPct = printer.progress_pct ?? 0;
-  const totalMins = progressPct > 0 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
-  const elapsedMins = totalMins - remainMins;
-  if (totalMins <= 0) return null;
-  const startMins = Math.max(0, nowMins - elapsedMins);
-  const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.min((totalMins / 1440) * 100, 100 - leftPct);
+  if (remainMins <= 0) return null;
+  const progressPct = Math.max(0, Math.min(100, printer.progress_pct ?? 0));
+  const endMins = nowMins + remainMins;
+  const leftPct = (nowMins / 1440) * 100;
+  const widthPct = Math.max(0.6, Math.min((remainMins / 1440) * 100, 100 - leftPct));
+  const endLabel = `${String(Math.floor((endMins % 1440) / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}`;
   return (
     <div
       className="absolute top-0.5 z-[5] flex h-[calc(100%-4px)] items-center overflow-hidden rounded-sm border border-[var(--state-print)]/40"
       style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: "rgba(59,130,246,.08)" }}
-      title={`${printer.job ?? "друк"} — ${remainMins}хв залишилось`}
+      title={`${printer.job ?? "друк"} — зараз → ${endLabel}, залишилось ${remainMins}хв`}
     >
       <div
         className="absolute inset-y-0 left-0 bg-[var(--state-print)]/15"
         style={{ width: `${progressPct}%` }}
       />
       <span className="relative z-10 truncate px-1 text-[8px] font-medium text-[var(--state-print)]">
-        {printer.job ?? "друк"} · {remainMins}хв
+        {printer.job ?? "друк"} · до {endLabel} · {remainMins}хв
       </span>
     </div>
   );
@@ -261,7 +260,6 @@ export function ScheduleCalendar({
   const [dropping, setDropping]       = useState(false);
   const [dropError, setDropError]     = useState<string | null>(null);
   const [dropIncompat, setDropIncompat] = useState(false);
-  const dropPreviewRef = useRef<{ cell: string | null; mins: number | null }>({ cell: null, mins: null });
 
   // Scroll to a specific day column
   const scrollToDay = useCallback((dayIndex: number) => {
@@ -340,7 +338,6 @@ export function ScheduleCalendar({
     e.preventDefault();
     setDropCell(null);
     setDropIncompat(false);
-    dropPreviewRef.current = { cell: null, mins: null };
 
     let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number; fileName?: string; quantity?: number; durationMins?: number };
     try {
@@ -400,8 +397,8 @@ export function ScheduleCalendar({
         const dur = data.durationMins || 60;
         
         let currMins = startMins;
-        let [y, m, d] = planDate.split("-").map(Number);
-        let currDate = new Date(y, (m || 1) - 1, d || 1);
+        const [y, m, d] = planDate.split("-").map(Number);
+        const currDate = new Date(y, (m || 1) - 1, d || 1);
         
         for (let i = 0; i < qty; i++) {
           const t = minsToStartTime(currMins % 1440);
@@ -643,12 +640,9 @@ export function ScheduleCalendar({
                         onDragOver={e => {
                           e.preventDefault();
                           const startMins = getDropMins(e);
-                          const last = dropPreviewRef.current;
-                          if (last.cell === cellKey && last.mins === startMins) return;
-                          dropPreviewRef.current = { cell: cellKey, mins: startMins };
 
                           // Check compatibility from dragged data
-                          let incompat = false;
+                          const incompat = false;
                           try {
                             const raw = e.dataTransfer.types.includes("text/plain") ? "" : "";
                             // File type check based on lane kind
@@ -665,7 +659,6 @@ export function ScheduleCalendar({
                         }}
                         onDragLeave={e => {
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                            dropPreviewRef.current = { cell: null, mins: null };
                             setDropCell(null);
                             setDropIncompat(false);
                           }

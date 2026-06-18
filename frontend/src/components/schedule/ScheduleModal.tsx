@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
+import { fmtDuration } from "./utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -29,6 +30,16 @@ interface Props {
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addMinutesToTime(value: string, minutes: number | null | undefined): string | null {
+  if (!value || !minutes || minutes <= 0) return null;
+  const [hours, mins] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(mins)) return null;
+  const total = hours * 60 + mins + minutes;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  const daySuffix = total >= 1440 ? " +1д" : "";
+  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}${daySuffix}`;
 }
 
 const MODE_LABELS: Record<ScheduleMode, string> = {
@@ -93,6 +104,8 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
 
       if (isEdit && entry) {
         await updatePlanEntry(entry.id, {
+          plan_date: planDate,
+          printer_id: Number(printerId),
           start_time: startTimeVal,
           schedule_mode: scheduleMode,
         });
@@ -164,6 +177,8 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
   }
 
   const title = isEdit ? "Змінити розклад" : "Запланувати друк";
+  const duration = task.estimated_minutes ?? task.filament_meta?.estimated_minutes ?? null;
+  const finishTime = scheduleMode !== "asap" ? addMinutesToTime(startTime, duration) : null;
 
   return (
     <>
@@ -254,8 +269,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
             <select
               value={printerId}
               onChange={e => setPrinterId(Number(e.target.value))}
-              disabled={isEdit}
-              className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+              className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
             >
               <option value="">— оберіть —</option>
               {printers.filter(p => p.is_active).map(p => (
@@ -273,8 +287,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
               type="date"
               value={planDate}
               onChange={e => setPlanDate(e.target.value)}
-              disabled={isEdit}
-              className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+              className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
           </label>
         </div>
@@ -308,6 +321,13 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
               className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />
           </label>
+        )}
+
+        {finishTime && (
+          <div className="rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text-muted)]">
+            Завершення: <span className="font-medium tabular-nums text-[var(--text)]">{finishTime}</span>
+            {duration ? <span className="text-[var(--text-faint)]"> · {fmtDuration(duration)}</span> : null}
+          </div>
         )}
       </div>
     </Modal>

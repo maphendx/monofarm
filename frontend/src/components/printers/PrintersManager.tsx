@@ -8,6 +8,7 @@ import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
+import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
 
 // ── types & constants ─────────────────────────────────────────────────────────
 
@@ -262,6 +263,7 @@ export function PrintersManager() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Printer | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -327,6 +329,14 @@ export function PrintersManager() {
             <svg className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             {syncing ? "Синхронізація…" : "Синх"}
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setGroupsOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+            >
+              Сортування
+            </button>
+          )}
           {isAdmin && (
             <button onClick={() => setWizardOpen(true)} className="btn btn-primary">
               + Додати принтер
@@ -405,6 +415,7 @@ export function PrintersManager() {
 
       <AddPrinterWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onDone={load} />
       <PrinterEditModal open={modalOpen} onClose={() => setModalOpen(false)} printer={editing} onDone={load} />
+      <PrinterGroupsModal open={groupsOpen} onClose={() => setGroupsOpen(false)} onChange={load} />
     </div>
   );
 }

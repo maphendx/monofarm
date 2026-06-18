@@ -10,6 +10,7 @@ import { useUser } from "@/lib/auth-context";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
 import { TableSkeleton } from "@/components/ui/ContentSkeleton";
+import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
 
 // ── add wizard types ──────────────────────────────────────────────────────────
 
@@ -483,6 +484,7 @@ export default function PrintersPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Printer | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -582,6 +584,14 @@ export default function PrintersPage() {
             </svg>
             {syncing ? "Синхронізація…" : "Синх"}
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setGroupsOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+            >
+              Сортування
+            </button>
+          )}
           {isAdmin && (
             <button
               onClick={() => setWizardOpen(true)}
@@ -733,6 +743,7 @@ export default function PrintersPage() {
         printer={editing}
         onDone={load}
       />
+      <PrinterGroupsModal open={groupsOpen} onClose={() => setGroupsOpen(false)} onChange={load} />
     </div>
   );
 }
