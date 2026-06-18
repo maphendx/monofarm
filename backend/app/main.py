@@ -136,7 +136,7 @@ def root_redirect(request: Request):
 
 
 @app.get("/api/health")
-def health() -> dict:
+async def health() -> dict:
     return {"ok": True}
 
 
