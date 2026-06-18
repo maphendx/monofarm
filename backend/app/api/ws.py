@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
@@ -33,7 +34,10 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ws"])
 
-_TICK = 3  # seconds between state snapshots
+_TICK = 5  # seconds between state snapshots
+_SNAPSHOT_TTL = 4.0
+_snapshot_cache: dict[int, tuple[float, str, list[dict]]] = {}
+_snapshot_locks: dict[int, asyncio.Lock] = {}
 
 
 def _build_snapshot(org_id: int) -> list[dict]:
@@ -89,6 +93,26 @@ def _build_snapshot(org_id: int) -> list[dict]:
         return out
 
 
+async def _get_snapshot(org_id: int) -> tuple[list[dict], str]:
+    now = time.monotonic()
+    cached = _snapshot_cache.get(org_id)
+    if cached and now - cached[0] < _SNAPSHOT_TTL:
+        return cached[2], cached[1]
+
+    lock = _snapshot_locks.setdefault(org_id, asyncio.Lock())
+    async with lock:
+        now = time.monotonic()
+        cached = _snapshot_cache.get(org_id)
+        if cached and now - cached[0] < _SNAPSHOT_TTL:
+            return cached[2], cached[1]
+
+        data = await asyncio.to_thread(_build_snapshot, org_id)
+        raw = json.dumps(data, default=str)
+        digest = hashlib.md5(raw.encode()).hexdigest()
+        _snapshot_cache[org_id] = (time.monotonic(), digest, data)
+        return data, digest
+
+
 @router.websocket("/ws/printers")
 async def printer_stream(
     websocket: WebSocket,
@@ -112,9 +136,7 @@ async def printer_stream(
             nonlocal last_hash
             while True:
                 try:
-                    data = _build_snapshot(org_id)
-                    raw = json.dumps(data, default=str)
-                    h = hashlib.md5(raw.encode()).hexdigest()
+                    data, h = await _get_snapshot(org_id)
                     if h != last_hash:
                         last_hash = h
                         await websocket.send_json({"type": "printers", "data": data})
