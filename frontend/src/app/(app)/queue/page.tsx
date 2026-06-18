@@ -11,6 +11,8 @@ import { ApiError, api, getPlanCalendar } from "@/lib/api";
 import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
 import type { CalendarLane, Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
+import { useQueueStream } from "@/hooks/useQueueStream";
+import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { KanbanSkeleton } from "@/components/ui/ContentSkeleton";
 import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
@@ -505,6 +507,10 @@ function QueuePageInner() {
     router.replace(`/queue?${p.toString()}`);
   }
 
+  // ── Real-time streams ──
+  const { version: queueVersion } = useQueueStream();
+  const { printers: livePrinters } = usePrinterStream();
+
   // ── List-view state ──
   const [tasks, setTasks] = useState<PrintTask[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -589,6 +595,19 @@ function QueuePageInner() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh on WebSocket queue events
+  useEffect(() => {
+    if (queueVersion === 0) return;
+    load();
+    if (view === "calendar") loadCalendarSilent();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queueVersion]);
+
+  // Keep printers in sync with live WS stream
+  useEffect(() => {
+    if (livePrinters.length > 0) setPrinters(livePrinters);
+  }, [livePrinters]);
 
   const counts = useMemo(
     () => tasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] ?? 0) + 1; return acc; }, {} as Record<string, number>),
@@ -725,6 +744,7 @@ function QueuePageInner() {
               lanes={calendarLanes}
               weekStart={weekStart}
               loading={calendarLoading}
+              livePrinters={livePrinters}
               onPrevWeek={() => {
                 const d = new Date(weekStart);
                 d.setDate(d.getDate() - 7);

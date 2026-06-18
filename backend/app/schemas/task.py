@@ -60,6 +60,8 @@ class PrintTaskOut(BaseModel):
     pieces_defective: int | None = None
     defect_reason: str | None = None
     material_cost_uah: float | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     # Queue page fields (computed in list_tasks)
     gcode_file_id: int | None = None
     has_thumbnail: bool = False

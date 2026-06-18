@@ -152,6 +152,8 @@ export interface PrintTask {
   notes: string | null;
   status: PrintTaskStatus;
   created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
   file_name: string | null;
   file_size: number | null;
   filament_meta: FilamentMeta | null;

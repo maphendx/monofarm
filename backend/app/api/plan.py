@@ -12,7 +12,7 @@ from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.printer import Printer
 from app.models.printer_group import PrinterGroup
-from app.models.task import PrintTask
+from app.models.task import PrintTask, PrintTaskStatus
 from app.models.user import UserRole
 from app.schemas.plan import (
     CalendarDayOut,
@@ -329,5 +329,19 @@ async def send_entry_to_printer(
     printer.manual_eta_minutes = task.estimated_minutes
     printer.manual_updated_at = datetime.now(timezone.utc)
 
+    if task.status == PrintTaskStatus.queued:
+        task.status = PrintTaskStatus.in_progress
+        task.started_at = datetime.now(timezone.utc)
+
     db.commit()
+
+    from app.api.ws import broadcast_queue
+    import asyncio
+    try:
+        asyncio.get_event_loop().create_task(
+            broadcast_queue(org.id, "task_started", task_id=task.id, printer_id=printer.id)
+        )
+    except RuntimeError:
+        pass
+
     return SendResult(ok=True, message=f"Запущено друк на {printer.name}")

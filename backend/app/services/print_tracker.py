@@ -11,8 +11,10 @@ from sqlalchemy import or_
 
 from app.core.db import SessionLocal
 from app.models.organization import Organization
+from app.models.plan import PlanEntry
 from app.models.print_history import PrintHistory
 from app.models.printer import Printer, PrinterKind
+from app.models.task import PrintTask, PrintTaskStatus
 from app.services.telegram_notify import send_print_event_notification
 
 log = logging.getLogger(__name__)
@@ -216,6 +218,12 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
             )
 
     transition_job(job, target or job.status, reason=reason, now=now, **updates)
+
+    if target and target.value in ("completed", "failed", "cancelled"):
+        if target.value == "completed":
+            _advance_queue(db, printer, now)
+        _broadcast_completion(printer.organization_id, printer.id)
+
     db.commit()
 
 
@@ -257,4 +265,52 @@ def _finalize_print(db, printer: Printer, now: datetime, result: str) -> None:
 
     from app.services.print_costing import finalize_print
     finalize_print(db, entry, printer, result, now=now)
+
+    # Auto-advance queue: mark today's PlanEntry as done on successful print
+    if result == "completed":
+        _advance_queue(db, printer, now)
+
     db.commit()
+
+    # Broadcast queue event for real-time UI updates
+    if result == "completed":
+        _broadcast_completion(printer.organization_id, printer.id)
+
+
+def _advance_queue(db, printer: Printer, now: datetime) -> None:
+    """Mark today's first undone PlanEntry for this printer as done."""
+    from datetime import date as date_cls
+
+    entry = (
+        db.query(PlanEntry)
+        .filter(
+            PlanEntry.printer_id == printer.id,
+            PlanEntry.organization_id == printer.organization_id,
+            PlanEntry.plan_date == date_cls.today(),
+            PlanEntry.done.is_(False),
+        )
+        .order_by(PlanEntry.sequence)
+        .first()
+    )
+    if not entry:
+        return
+
+    entry.done = True
+    log.info(
+        "queue advance: printer=%s entry=%d marked done",
+        printer.name, entry.id,
+    )
+
+
+def _broadcast_completion(org_id: int, printer_id: int) -> None:
+    """Fire-and-forget WS broadcast for queue completion."""
+    import asyncio
+    from app.api.ws import broadcast_queue
+
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(
+            broadcast_queue(org_id, "print_completed", printer_id=printer_id)
+        )
+    except RuntimeError:
+        pass

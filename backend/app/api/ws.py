@@ -183,3 +183,13 @@ async def org_event_stream(
 async def broadcast_warehouse(org_id: int, entity: str) -> None:
     """Broadcast a warehouse mutation event to all connected clients in the org."""
     await manager.broadcast(org_id, {"type": "warehouse_update", "entity": entity})
+
+
+async def broadcast_queue(org_id: int, event: str, task_id: int | None = None, printer_id: int | None = None) -> None:
+    """Broadcast a queue/task event so frontend can refresh in real time."""
+    await manager.broadcast(org_id, {
+        "type": "queue_update",
+        "event": event,
+        "task_id": task_id,
+        "printer_id": printer_id,
+    })

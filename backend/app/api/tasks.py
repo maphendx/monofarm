@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import asyncio
 from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.gcode_file import GcodeFile
@@ -278,6 +279,16 @@ def bulk_distribute(
         sent.append(_DistributeEntry(task_id=task.id, printer_id=chosen.id, printer_name=chosen.name))
 
     db.commit()
+
+    if sent:
+        from app.api.ws import broadcast_queue
+        try:
+            asyncio.get_event_loop().create_task(
+                broadcast_queue(org.id, "distributed")
+            )
+        except RuntimeError:
+            pass
+
     return BulkDistributeResult(sent=sent, skipped=skipped)
 
 
@@ -349,6 +360,15 @@ def update_task(
         if total_cost > 0:
             task.material_cost_uah = round(total_cost, 2)
 
+    # set timestamps on status transitions
+    if payload.status == PrintTaskStatus.in_progress and old_status == PrintTaskStatus.queued:
+        if not task.started_at:
+            from datetime import timezone as _tz
+            task.started_at = datetime.now(_tz.utc)
+    if payload.status == PrintTaskStatus.done and old_status != PrintTaskStatus.done:
+        from datetime import timezone as _tz
+        task.completed_at = datetime.now(_tz.utc)
+
     # warehouse sync when task → done
     transitioning_to_done = (
         payload.status == PrintTaskStatus.done
@@ -415,6 +435,17 @@ def update_task(
 
     db.commit()
     db.refresh(task)
+
+    if payload.status and payload.status != old_status:
+        from app.api.ws import broadcast_queue
+        event = f"task_{payload.status.value}"
+        try:
+            asyncio.get_event_loop().create_task(
+                broadcast_queue(org.id, event, task_id=task.id)
+            )
+        except RuntimeError:
+            pass
+
     return _to_out(task, db, org.id)
 
 
@@ -433,6 +464,68 @@ def delete_task(
     db.query(PlanEntry).filter(PlanEntry.task_id == task_id).delete()
     db.delete(task)
     db.commit()
+
+
+# ── compatibility ────────────────────────────────────────────────────────────
+
+class PrinterCompat(BaseModel):
+    printer_id: int
+    compatible: bool
+    reasons: list[str]
+
+
+@router.get("/compat", response_model=dict[str, list[PrinterCompat]])
+def check_compatibility(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> dict[str, list[PrinterCompat]]:
+    """Per-printer compatibility for queued tasks — used by calendar red highlights."""
+    from app.models.printer_slot import PrinterSlot, SlotState
+
+    tasks = (
+        db.query(PrintTask)
+        .filter(PrintTask.organization_id == org.id, PrintTask.status == PrintTaskStatus.queued)
+        .all()
+    )
+    printers = (
+        db.query(Printer)
+        .filter(Printer.organization_id == org.id, Printer.is_active)
+        .all()
+    )
+    all_slots = (
+        db.query(PrinterSlot)
+        .filter(PrinterSlot.printer_id.in_([p.id for p in printers]))
+        .all()
+    )
+    slots_by_printer: dict[int, list[PrinterSlot]] = {}
+    for s in all_slots:
+        slots_by_printer.setdefault(s.printer_id, []).append(s)
+
+    result: dict[str, list[PrinterCompat]] = {}
+    for task in tasks:
+        fname = task.file_name or ""
+        is_3mf = ".3mf" in fname.lower()
+        task_types = set((task.filament_meta or {}).get("types", []))
+
+        entries: list[PrinterCompat] = []
+        for p in printers:
+            reasons: list[str] = []
+            if is_3mf and p.kind.value != "bambu":
+                reasons.append("3mf → тільки Bambu")
+            elif not is_3mf and fname and p.kind.value == "bambu":
+                reasons.append("gcode → не Bambu")
+            if task_types:
+                loaded = {
+                    s.material.upper()
+                    for s in (slots_by_printer.get(p.id) or [])
+                    if s.state == SlotState.loaded and s.material
+                }
+                missing = {t.upper() for t in task_types if t} - loaded
+                if missing:
+                    reasons.append(f"немає: {', '.join(sorted(missing))}")
+            entries.append(PrinterCompat(printer_id=p.id, compatible=not reasons, reasons=reasons))
+        result[str(task.id)] = entries
+    return result
 
 
 # ── file attachment ─────────────────────────────────────────────────────────

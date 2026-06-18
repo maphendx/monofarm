@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CalendarEntry, CalendarLane } from "@/lib/types";
+import type { CalendarEntry, CalendarLane, Printer } from "@/lib/types";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
 import { ScheduleWeekNav } from "./ScheduleWeekNav";
@@ -129,17 +129,18 @@ function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
 
 // ── Drop-time indicator overlay ───────────────────────────────────────────────
 
-function DropOverlay({ relX }: { relX: number }) {
+function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
   const mins = Math.min(Math.round(relX * 1440 / 15) * 15, 1410);
   const label = `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+  const color = incompat ? "var(--state-error)" : "var(--accent)";
   return (
     <div
       className="pointer-events-none absolute inset-y-0 z-30 flex items-center"
       style={{ left: `${relX * 100}%` }}
     >
-      <div className="h-full w-0.5 bg-[var(--accent)]" />
-      <span className="ml-1 rounded bg-[var(--accent)] px-1 py-px text-[9px] font-bold text-white">
-        {label}
+      <div className="h-full w-0.5" style={{ background: color }} />
+      <span className="ml-1 rounded px-1 py-px text-[9px] font-bold text-white" style={{ background: color }}>
+        {incompat ? "✕" : label}
       </span>
     </div>
   );
@@ -147,10 +148,39 @@ function DropOverlay({ relX }: { relX: number }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+/** Running print bar — shows active job directly on the calendar grid. */
+function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: number }) {
+  if (printer.state !== "printing" || !printer.eta_minutes) return null;
+  const remainMins = printer.eta_minutes;
+  const progressPct = printer.progress_pct ?? 0;
+  const totalMins = progressPct > 0 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
+  const elapsedMins = totalMins - remainMins;
+  if (totalMins <= 0) return null;
+  const startMins = Math.max(0, nowMins - elapsedMins);
+  const leftPct = (startMins / 1440) * 100;
+  const widthPct = Math.min((totalMins / 1440) * 100, 100 - leftPct);
+  return (
+    <div
+      className="absolute top-0.5 z-[5] flex h-[calc(100%-4px)] items-center overflow-hidden rounded-sm border border-[var(--state-print)]/40"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: "rgba(59,130,246,.08)" }}
+      title={`${printer.job ?? "друк"} — ${remainMins}хв залишилось`}
+    >
+      <div
+        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/15"
+        style={{ width: `${progressPct}%` }}
+      />
+      <span className="relative z-10 truncate px-1 text-[8px] font-medium text-[var(--state-print)]">
+        {printer.job ?? "друк"} · {remainMins}хв
+      </span>
+    </div>
+  );
+}
+
 interface Props {
   lanes: CalendarLane[];
   weekStart: Date;
   loading: boolean;
+  livePrinters?: Printer[];
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onOpenModal: (mode: ScheduleModalMode) => void;
@@ -161,11 +191,17 @@ export function ScheduleCalendar({
   lanes,
   weekStart,
   loading,
+  livePrinters,
   onPrevWeek,
   onNextWeek,
   onOpenModal,
   onRefresh,
 }: Props) {
+  const printerById = useMemo(() => {
+    const map = new Map<number, Printer>();
+    for (const p of (livePrinters ?? [])) map.set(p.id, p);
+    return map;
+  }, [livePrinters]);
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
   const todayStr  = isoDateStr(new Date());
 
@@ -224,6 +260,7 @@ export function ScheduleCalendar({
   const [dropRelX,  setDropRelX]      = useState<number>(0);
   const [dropping, setDropping]       = useState(false);
   const [dropError, setDropError]     = useState<string | null>(null);
+  const [dropIncompat, setDropIncompat] = useState(false);
   const dropPreviewRef = useRef<{ cell: string | null; mins: number | null }>({ cell: null, mins: null });
 
   // Scroll to a specific day column
@@ -302,6 +339,7 @@ export function ScheduleCalendar({
   ) {
     e.preventDefault();
     setDropCell(null);
+    setDropIncompat(false);
     dropPreviewRef.current = { cell: null, mins: null };
 
     let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number; fileName?: string; quantity?: number; durationMins?: number };
@@ -558,13 +596,28 @@ export function ScheduleCalendar({
                     }}
                   >
                     <span className="text-xs font-medium text-[var(--text)]">{lane.printer_name}</span>
-                    <span className="mt-0.5 text-[10px] text-[var(--text-faint)] capitalize">
-                      {lane.printer_kind === "bambu"
-                        ? "Bambu"
-                        : lane.printer_kind === "snapmaker_u1"
-                        ? "Snapmaker"
-                        : "Інший"}
-                    </span>
+                    {(() => {
+                      const lp = printerById.get(lane.printer_id);
+                      if (!lp) return (
+                        <span className="mt-0.5 text-[10px] text-[var(--text-faint)] capitalize">
+                          {lane.printer_kind === "bambu" ? "Bambu" : lane.printer_kind === "snapmaker_u1" ? "Snapmaker" : "Інший"}
+                        </span>
+                      );
+                      const stateColors: Record<string, string> = {
+                        printing: "text-[var(--state-print)]",
+                        idle: "text-[var(--state-ok)]",
+                        paused: "text-[var(--state-warn)]",
+                        error: "text-[var(--state-error)]",
+                        offline: "text-[var(--state-offline)]",
+                        operational: "text-[var(--state-idle)]",
+                      };
+                      const cls = (lp.state && stateColors[lp.state]) ?? "text-[var(--text-faint)]";
+                      return (
+                        <span className={`mt-0.5 text-[10px] capitalize ${cls}`}>
+                          {lp.state === "printing" ? ("друкує · " + (lp.eta_minutes ?? 0) + "хв") : lp.state}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Day cells */}
@@ -582,30 +635,50 @@ export function ScheduleCalendar({
                         className={[
                           "relative overflow-visible border-b border-r border-[var(--border)] transition-colors",
                           isToday ? "bg-[rgba(34,211,238,.03)]" : "bg-[var(--bg-elevated)]",
-                          isDropTarget ? "bg-[rgba(34,211,238,.10)] ring-1 ring-inset ring-[var(--accent)]" : "",
+                          isDropTarget && !dropIncompat ? "bg-[rgba(34,211,238,.10)] ring-1 ring-inset ring-[var(--accent)]" : "",
+                          isDropTarget && dropIncompat ? "bg-[rgba(239,68,68,.08)] ring-1 ring-inset ring-[var(--state-error)]" : "",
                           dropping ? "cursor-wait" : "",
                         ].join(" ")}
                         style={{ minHeight: rowH }}
                         onDragOver={e => {
                           e.preventDefault();
-                          e.dataTransfer.dropEffect = "move";
                           const startMins = getDropMins(e);
                           const last = dropPreviewRef.current;
                           if (last.cell === cellKey && last.mins === startMins) return;
                           dropPreviewRef.current = { cell: cellKey, mins: startMins };
+
+                          // Check compatibility from dragged data
+                          let incompat = false;
+                          try {
+                            const raw = e.dataTransfer.types.includes("text/plain") ? "" : "";
+                            // File type check based on lane kind
+                            const kind = lane.printer_kind;
+                            // We can't read dataTransfer during dragOver (security),
+                            // so we rely on the existing drop-time check
+                            void raw; void kind;
+                          } catch { /* ignore */ }
+
+                          setDropIncompat(incompat);
+                          e.dataTransfer.dropEffect = incompat ? "none" : "move";
                           setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
                         }}
                         onDragLeave={e => {
-                          // only clear if leaving the cell itself (not a child)
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                             dropPreviewRef.current = { cell: null, mins: null };
                             setDropCell(null);
+                            setDropIncompat(false);
                           }
                         }}
                         onDrop={e => handleDrop(e, lane.printer_id, dateStr)}
                       >
                         <HourGrid step={step} />
+
+                        {/* Running print bar (today only) */}
+                        {isToday && printerById.get(lane.printer_id) && (
+                          <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} />
+                        )}
+
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
 
                         {blocks.map((block, bi) => (
@@ -617,7 +690,7 @@ export function ScheduleCalendar({
                         ))}
 
                         {/* Drop position indicator */}
-                        {isDropTarget && <DropOverlay relX={dropRelX} />}
+                        {isDropTarget && <DropOverlay relX={dropRelX} incompat={dropIncompat} />}
 
                         {/* Current time line */}
                         {isToday && (
