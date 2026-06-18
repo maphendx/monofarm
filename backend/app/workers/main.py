@@ -35,20 +35,27 @@ def _redis_cmd_relay() -> None:
 
     Web workers publish to 'bambu:cmd' when they have no local MQTT client.
     This thread picks them up and publishes to the real MQTT broker.
-    Reconnects automatically on socket timeouts or connection drops.
+    Reconnects automatically on connection drops.
     """
     import time as _time
-    from app.services.cache import _r
+    import redis as _lib
+    from app.core.config import settings
     from app.services.bambu import _mqtt_clients, _dev_to_org
 
-    r = _r()
-    if r is None:
+    if not settings.REDIS_URL:
         log.warning("Redis not configured — Bambu command relay disabled")
         return
 
     backoff = 1
     while True:
         try:
+            r = _lib.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_timeout=None,
+                socket_keepalive=True,
+                health_check_interval=30,
+            )
             pubsub = r.pubsub()
             pubsub.subscribe("bambu:cmd")
             log.info("Redis cmd relay: subscribed to bambu:cmd")
