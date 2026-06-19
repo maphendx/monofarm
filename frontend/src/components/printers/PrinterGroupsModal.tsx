@@ -15,16 +15,13 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/hooks/useConfirm";
 import { ApiError, api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
+import type { TKey } from "@/lib/i18n";
 import type { Printer, PrinterGroup } from "@/lib/types";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "ASA", "TPU", "PA", "PC", "PVA", "HIPS", "CF"];
-const NOZZLES = [
-  { value: "", label: "Будь-яке сопло" },
-  { value: "0.2", label: "0.2 мм" },
-  { value: "0.4", label: "0.4 мм" },
-  { value: "0.6", label: "0.6 мм" },
-  { value: "0.8", label: "0.8 мм" },
-];
+const NOZZLE_VALUES = ["", "0.2", "0.4", "0.6", "0.8"];
+const NOZZLE_LABELS = ["", "0.2 мм", "0.4 мм", "0.6 мм", "0.8 мм"];
 const PALETTE = ["#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6", "#64748b", "#22c55e"];
 
 const inputClass =
@@ -60,6 +57,7 @@ function GroupProfileEditor({
   group,
   profile,
   savingId,
+  t,
   onField,
   onToggleMaterial,
   onSave,
@@ -68,6 +66,7 @@ function GroupProfileEditor({
   group: PrinterGroup;
   profile: GroupProfile;
   savingId: number | null;
+  t: (key: TKey) => string;
   onField: (id: number, key: keyof GroupProfile, val: string | string[]) => void;
   onToggleMaterial: (id: number, mat: string) => void;
   onSave: (group: PrinterGroup) => void;
@@ -78,7 +77,7 @@ function GroupProfileEditor({
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text)]">
           <Icon icon={Settings2} className="h-3.5 w-3.5 text-[var(--accent)]" />
-          Профіль групи
+          {t("printerGroups.profileTitle")}
         </div>
         <button type="button" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded hover:bg-[var(--surface-hi)]">
           <Icon icon={X} className="h-3.5 w-3.5 text-[var(--text-muted)]" />
@@ -87,12 +86,12 @@ function GroupProfileEditor({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Назва</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{t("printerGroups.profileName")}</span>
           <input value={profile.name} onChange={e => onField(group.id, "name", e.target.value)} className={`w-full ${inputClass}`} />
         </label>
 
         <div>
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Колір</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{t("printerGroups.profileColor")}</span>
           <div className="flex flex-wrap gap-1.5">
             {PALETTE.map(color => (
               <button
@@ -107,14 +106,14 @@ function GroupProfileEditor({
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Сопло</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{t("printerGroups.profileNozzle")}</span>
           <select value={profile.nozzle_diameter} onChange={e => onField(group.id, "nozzle_diameter", e.target.value)} className={`w-full ${inputClass}`}>
-            {NOZZLES.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+            {NOZZLE_VALUES.map((v, i) => <option key={v} value={v}>{v ? NOZZLE_LABELS[i] : t("printerGroups.anyNozzle")}</option>)}
           </select>
         </label>
 
         <div>
-          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Обʼєм, мм</span>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{t("printerGroups.profileVolume")}</span>
           <div className="grid grid-cols-3 gap-1.5">
             {(["build_x", "build_y", "build_z"] as const).map((key, idx) => (
               <input
@@ -132,7 +131,7 @@ function GroupProfileEditor({
       </div>
 
       <div className="mt-3">
-        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Матеріали</span>
+        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{t("printerGroups.profileMaterials")}</span>
         <div className="flex flex-wrap gap-1">
           {MATERIALS.map(mat => {
             const active = profile.supported_materials.includes(mat);
@@ -162,7 +161,7 @@ function GroupProfileEditor({
         className="mt-3 flex h-7 items-center gap-1 rounded-md bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
       >
         <Icon icon={Save} className="h-3 w-3" />
-        {savingId === group.id ? "Збереження…" : "Зберегти"}
+        {savingId === group.id ? t("printerGroups.profileSaving") : t("printerGroups.profileSave")}
       </button>
     </div>
   );
@@ -177,6 +176,7 @@ export function PrinterGroupsModal({
   onClose: () => void;
   onChange: () => void;
 }) {
+  const t = useT();
   const { confirm, dialog } = useConfirm();
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -203,7 +203,7 @@ export function PrinterGroupsModal({
       setPrinters(printerData);
       setProfiles(Object.fromEntries(groupData.map(g => [g.id, groupToProfile(g)])));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка завантаження");
+      setError(err instanceof ApiError ? err.message : "Error");
     } finally {
       setLoading(false);
     }
@@ -261,7 +261,7 @@ export function PrinterGroupsModal({
       setEditingGroupId(created.id);
       onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка створення");
+      setError(err instanceof ApiError ? err.message : "Error");
     } finally {
       setBusy(false);
     }
@@ -289,7 +289,7 @@ export function PrinterGroupsModal({
       setEditingGroupId(null);
       onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка збереження");
+      setError(err instanceof ApiError ? err.message : "Error");
     } finally {
       setSavingId(null);
     }
@@ -297,8 +297,8 @@ export function PrinterGroupsModal({
 
   async function deleteGroup(group: PrinterGroup) {
     const label = group.printer_count > 0
-      ? `Видалити групу "${group.name}"? ${group.printer_count} принтер(ів) буде переміщено в "Без групи".`
-      : `Видалити групу "${group.name}"?`;
+      ? `${group.name} — ${group.printer_count} printer(s)`
+      : group.name;
     if (!await confirm({ message: label, variant: "danger" })) return;
     setError(null);
     try {
@@ -307,7 +307,7 @@ export function PrinterGroupsModal({
       await load();
       onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка видалення");
+      setError(err instanceof ApiError ? err.message : "Error");
     }
   }
 
@@ -321,7 +321,7 @@ export function PrinterGroupsModal({
       });
       onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка сортування груп");
+      setError(err instanceof ApiError ? err.message : "Error");
       await load();
     }
   }
@@ -350,7 +350,7 @@ export function PrinterGroupsModal({
       });
       onChange();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка сортування принтерів");
+      setError(err instanceof ApiError ? err.message : "Error");
       await load();
     }
   }
@@ -381,7 +381,7 @@ export function PrinterGroupsModal({
       onChange();
     } catch (err) {
       setPrinters(previous);
-      setError(err instanceof ApiError ? err.message : "Помилка зміни групи");
+      setError(err instanceof ApiError ? err.message : "Error");
     }
   }
 
@@ -413,7 +413,7 @@ export function PrinterGroupsModal({
         }
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка сортування");
+      setError(err instanceof ApiError ? err.message : "Error");
     } finally {
       setBusy(false);
     }
@@ -434,7 +434,7 @@ export function PrinterGroupsModal({
         }
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка сортування");
+      setError(err instanceof ApiError ? err.message : "Error");
     } finally {
       setBusy(false);
     }
@@ -472,7 +472,7 @@ export function PrinterGroupsModal({
       <Modal
         open={open}
         onClose={onClose}
-        title="Group and arrange printers"
+        title={t("printerGroups.title")}
         size="5xl"
         footer={
           <button
@@ -480,7 +480,7 @@ export function PrinterGroupsModal({
             onClick={onClose}
             className="rounded-md border border-[var(--border-strong)] px-5 py-2 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-hi)]"
           >
-            CLOSE
+            {t("printerGroups.close")}
           </button>
         }
       >
@@ -494,7 +494,7 @@ export function PrinterGroupsModal({
                 className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-40"
               >
                 <Icon icon={ArrowDownAZ} className="h-3.5 w-3.5" />
-                AUTO-SORT BY NAME
+                {t("printerGroups.sortByName")}
               </button>
               <button
                 type="button"
@@ -503,14 +503,14 @@ export function PrinterGroupsModal({
                 className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-40"
               >
                 <Icon icon={SlidersHorizontal} className="h-3.5 w-3.5" />
-                AUTO-SORT BY MODEL
+                {t("printerGroups.sortByModel")}
               </button>
             </div>
             <form onSubmit={createGroup} className="flex items-center gap-2">
               <input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
-                placeholder="Group name"
+                placeholder={t("printerGroups.groupName")}
                 maxLength={120}
                 className="h-8 w-[160px] rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs outline-none focus:border-[var(--accent)]"
               />
@@ -519,7 +519,7 @@ export function PrinterGroupsModal({
                 disabled={busy || !newName.trim()}
                 className="flex h-8 items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
               >
-                + CREATE NEW GROUP
+                {t("printerGroups.createGroup")}
               </button>
             </form>
           </div>
@@ -531,7 +531,7 @@ export function PrinterGroupsModal({
           )}
 
           {loading ? (
-            <div className="flex min-h-[300px] items-center justify-center text-sm text-[var(--text-muted)]">Завантаження…</div>
+            <div className="flex min-h-[300px] items-center justify-center text-sm text-[var(--text-muted)]">{t("printerGroups.loading")}</div>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {groups.map(group => {
@@ -572,7 +572,7 @@ export function PrinterGroupsModal({
                         type="button"
                         onClick={() => setEditingGroupId(isEditing ? null : group.id)}
                         className="mr-0.5 flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:text-[var(--text)]"
-                        title="Профіль групи"
+                        title={t("printerGroups.profileTitle")}
                       >
                         <Icon icon={Settings2} className="h-3.5 w-3.5" />
                       </button>
@@ -591,6 +591,7 @@ export function PrinterGroupsModal({
                           group={group}
                           profile={profiles[group.id]}
                           savingId={savingId}
+                          t={t}
                           onField={setField}
                           onToggleMaterial={toggleMaterial}
                           onSave={saveProfile}
@@ -603,7 +604,7 @@ export function PrinterGroupsModal({
                       <div className="overflow-hidden rounded-b-lg border border-t-0 border-[var(--border)] bg-[var(--bg-elevated)]">
                         {groupPrinters.length === 0 ? (
                           <div className="flex items-center justify-center px-4 py-8 text-xs text-[var(--text-faint)]">
-                            Drag printers here
+                            {t("printerGroups.dragHere")}
                           </div>
                         ) : (
                           groupPrinters.map(p => renderPrinterRow(p, key))
@@ -625,7 +626,7 @@ export function PrinterGroupsModal({
                   onDrop={e => handleGroupDrop("ungrouped", e)}
                 >
                   <div className="flex items-center rounded-t-lg border border-[var(--border)] bg-[var(--surface-hi)] px-4 py-2.5">
-                    <span className="flex-1 text-center text-sm font-bold text-[var(--text)]">Other</span>
+                    <span className="flex-1 text-center text-sm font-bold text-[var(--text)]">{t("printerGroups.other")}</span>
                     <button
                       type="button"
                       onClick={() => toggleCollapsed("ungrouped")}
@@ -644,7 +645,7 @@ export function PrinterGroupsModal({
 
               {groups.length === 0 && ungroupedCount === 0 && !loading && (
                 <div className="col-span-full flex min-h-[200px] items-center justify-center text-sm text-[var(--text-muted)]">
-                  Немає принтерів
+                  {t("printerGroups.noData")}
                 </div>
               )}
             </div>
