@@ -2,15 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
-  FolderPlus,
-  GripVertical,
-  Pencil,
+  ArrowDownAZ,
+  ChevronsUpDown,
   Printer as PrinterIcon,
   Save,
   Settings2,
-  Trash2,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 
@@ -55,101 +52,8 @@ function groupToProfile(g: PrinterGroup): GroupProfile {
   };
 }
 
-function groupSummary(g: PrinterGroup): string {
-  const parts: string[] = [];
-  if (g.nozzle_diameter) parts.push(`∅${g.nozzle_diameter}`);
-  if (g.build_x && g.build_y && g.build_z) parts.push(`${g.build_x}×${g.build_y}×${g.build_z}`);
-  if (g.supported_materials?.length) parts.push(g.supported_materials.join("/"));
-  return parts.join(" · ");
-}
-
 function sortPrinters(list: Printer[]) {
   return [...list].sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, "uk"));
-}
-
-function KindBadge({ printer }: { printer: Printer }) {
-  const label = printer.kind === "bambu" ? "Bambu" : printer.kind === "snapmaker_u1" ? "Klipper" : "Manual";
-  return (
-    <span className="rounded border border-[var(--border)] bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">
-      {label}
-    </span>
-  );
-}
-
-function PrinterRow({
-  printer,
-  index,
-  total,
-  groups,
-  onMove,
-  onAssign,
-  dragId,
-  onDragStart,
-  onDrop,
-}: {
-  printer: Printer;
-  index: number;
-  total: number;
-  groups: PrinterGroup[];
-  onMove: (id: number, dir: -1 | 1) => void;
-  onAssign: (printer: Printer, groupId: number | null) => void;
-  dragId: number | null;
-  onDragStart: (id: number) => void;
-  onDrop: (id: number) => void;
-}) {
-  return (
-    <div
-      draggable
-      onDragStart={() => onDragStart(printer.id)}
-      onDragOver={e => e.preventDefault()}
-      onDrop={() => onDrop(printer.id)}
-      className={[
-        "flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition",
-        dragId === printer.id
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] opacity-70"
-          : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]",
-      ].join(" ")}
-    >
-      <Icon icon={GripVertical} className="h-3.5 w-3.5 shrink-0 cursor-grab text-[var(--text-faint)]" />
-
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-xs font-semibold text-[var(--text)]">{printer.name}</span>
-          <KindBadge printer={printer} />
-        </span>
-      </span>
-
-      <select
-        value={printer.group_id ?? ""}
-        onChange={e => onAssign(printer, e.target.value ? Number(e.target.value) : null)}
-        className="h-6 w-[110px] shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1 text-[10px] outline-none focus:border-[var(--accent)]"
-      >
-        <option value="">Без групи</option>
-        {groups.map(g => (
-          <option key={g.id} value={g.id}>{g.name}</option>
-        ))}
-      </select>
-
-      <div className="flex shrink-0 gap-0.5">
-        <button
-          type="button"
-          onClick={() => onMove(printer.id, -1)}
-          disabled={index === 0}
-          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-20"
-        >
-          <Icon icon={ChevronUp} className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onMove(printer.id, 1)}
-          disabled={index === total - 1}
-          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-20"
-        >
-          <Icon icon={ChevronDown} className="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function GroupProfileEditor({
@@ -285,6 +189,7 @@ export function PrinterGroupsModal({
   const [savingId, setSavingId] = useState<number | null>(null);
   const [dragGroupId, setDragGroupId] = useState<number | null>(null);
   const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -421,15 +326,6 @@ export function PrinterGroupsModal({
     }
   }
 
-  async function moveGroup(groupId: number, dir: -1 | 1) {
-    const index = groups.findIndex(g => g.id === groupId);
-    const target = index + dir;
-    if (index < 0 || target < 0 || target >= groups.length) return;
-    const next = [...groups];
-    [next[index], next[target]] = [next[target], next[index]];
-    await persistGroupOrder(next);
-  }
-
   async function dropGroup(targetId: number) {
     if (dragGroupId == null || dragGroupId === targetId) return;
     const from = groups.findIndex(g => g.id === dragGroupId);
@@ -459,17 +355,7 @@ export function PrinterGroupsModal({
     }
   }
 
-  async function movePrinter(groupKey: string, printerId: number, dir: -1 | 1) {
-    const list = printersByGroup[groupKey] ?? [];
-    const index = list.findIndex(p => p.id === printerId);
-    const target = index + dir;
-    if (index < 0 || target < 0 || target >= list.length) return;
-    const next = [...list];
-    [next[index], next[target]] = [next[target], next[index]];
-    await persistPrinterOrder(groupKey, next);
-  }
-
-  async function dropPrinter(groupKey: string, targetId: number) {
+  async function dropPrinterInGroup(groupKey: string, targetId: number) {
     if (dragPrinterId == null || dragPrinterId === targetId) return;
     const list = printersByGroup[groupKey] ?? [];
     const from = list.findIndex(p => p.id === dragPrinterId);
@@ -499,30 +385,141 @@ export function PrinterGroupsModal({
     }
   }
 
+  function handleGroupDrop(groupKey: string, e: React.DragEvent) {
+    e.preventDefault();
+    if (dragPrinterId == null) return;
+    const printer = printers.find(p => p.id === dragPrinterId);
+    if (!printer) return;
+    const targetGroupId = groupKey === "ungrouped" ? null : Number(groupKey);
+    if (printer.group_id !== targetGroupId) {
+      assignPrinter(printer, targetGroupId);
+    }
+    setDragPrinterId(null);
+    setDragOverGroup(null);
+  }
+
+  async function autoSortByName() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const allKeys = [...groups.map(g => String(g.id)), "ungrouped"];
+      for (const key of allKeys) {
+        const list = printersByGroup[key] ?? [];
+        if (list.length < 2) continue;
+        const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name, "uk"));
+        if (sorted.some((p, i) => p.id !== list[i].id)) {
+          await persistPrinterOrder(key, sorted);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка сортування");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function autoSortByModel() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const allKeys = [...groups.map(g => String(g.id)), "ungrouped"];
+      for (const key of allKeys) {
+        const list = printersByGroup[key] ?? [];
+        if (list.length < 2) continue;
+        const sorted = [...list].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name, "uk"));
+        if (sorted.some((p, i) => p.id !== list[i].id)) {
+          await persistPrinterOrder(key, sorted);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Помилка сортування");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function renderPrinterRow(printer: Printer, groupKey: string) {
+    return (
+      <div
+        key={printer.id}
+        draggable
+        onDragStart={() => setDragPrinterId(printer.id)}
+        onDragEnd={() => { setDragPrinterId(null); setDragOverGroup(null); }}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => {
+          const list = printersByGroup[groupKey] ?? [];
+          if (list.some(p => p.id === dragPrinterId)) {
+            e.stopPropagation();
+            dropPrinterInGroup(groupKey, printer.id);
+          }
+        }}
+        className={[
+          "flex cursor-grab items-center gap-3 border-b border-[var(--border)] px-3 py-2.5 last:border-b-0 transition-colors",
+          dragPrinterId === printer.id ? "opacity-40" : "hover:bg-[var(--surface-hi)]",
+        ].join(" ")}
+      >
+        <Icon icon={PrinterIcon} className="h-4 w-4 shrink-0 text-[var(--text-faint)]" />
+        <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">{printer.name}</span>
+        <Icon icon={ChevronsUpDown} className="h-4 w-4 shrink-0 text-[var(--text-faint)]" />
+      </div>
+    );
+  }
+
   return (
     <>
-      <Modal open={open} onClose={onClose} title="Сортування принтерів" size="2xl">
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Group and arrange printers"
+        size="5xl"
+        footer={
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-[var(--border-strong)] px-5 py-2 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-hi)]"
+          >
+            CLOSE
+          </button>
+        }
+      >
         <div className="-mx-1 -my-1">
-          {/* top bar */}
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-[var(--text-muted)]">
-              {groups.length} груп · {printers.length} принтерів
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={autoSortByName}
+                disabled={busy}
+                className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-40"
+              >
+                <Icon icon={ArrowDownAZ} className="h-3.5 w-3.5" />
+                AUTO-SORT BY NAME
+              </button>
+              <button
+                type="button"
+                onClick={autoSortByModel}
+                disabled={busy}
+                className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)] disabled:opacity-40"
+              >
+                <Icon icon={SlidersHorizontal} className="h-3.5 w-3.5" />
+                AUTO-SORT BY MODEL
+              </button>
             </div>
             <form onSubmit={createGroup} className="flex items-center gap-2">
               <input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
-                placeholder="Нова група"
+                placeholder="Group name"
                 maxLength={120}
-                className="h-7 w-[180px] rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs outline-none focus:border-[var(--accent)]"
+                className="h-8 w-[160px] rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs outline-none focus:border-[var(--accent)]"
               />
               <button
                 type="submit"
                 disabled={busy || !newName.trim()}
-                className="flex h-7 items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+                className="flex h-8 items-center gap-1.5 rounded-md bg-[var(--accent)] px-4 text-xs font-bold text-white hover:opacity-90 disabled:opacity-40"
               >
-                <Icon icon={FolderPlus} className="h-3.5 w-3.5" />
-                Додати
+                + CREATE NEW GROUP
               </button>
             </form>
           </div>
@@ -536,105 +533,60 @@ export function PrinterGroupsModal({
           {loading ? (
             <div className="flex min-h-[300px] items-center justify-center text-sm text-[var(--text-muted)]">Завантаження…</div>
           ) : (
-            <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
-              {groups.map((group, gi) => {
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {groups.map(group => {
                 const key = String(group.id);
                 const isCollapsed = collapsed[key];
                 const groupPrinters = printersByGroup[key] ?? [];
-                const summary = groupSummary(group);
                 const isEditing = editingGroupId === group.id;
+                const isDragTarget = dragOverGroup === key && dragPrinterId != null;
 
                 return (
-                  <section
+                  <div
                     key={group.id}
-                    className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]"
+                    className={[
+                      "relative self-start rounded-lg transition-shadow",
+                      isDragTarget ? "ring-2 ring-[var(--accent)] shadow-lg" : "",
+                    ].join(" ")}
+                    onDragOver={e => { e.preventDefault(); setDragOverGroup(key); }}
+                    onDragLeave={() => setDragOverGroup(null)}
+                    onDrop={e => handleGroupDrop(key, e)}
                   >
-                    {/* group header */}
+                    <button
+                      type="button"
+                      onClick={() => deleteGroup(group)}
+                      className="absolute -right-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--state-error)] text-white shadow-sm hover:opacity-80"
+                    >
+                      <Icon icon={X} className="h-3 w-3" />
+                    </button>
+
                     <div
+                      className="flex cursor-grab items-center rounded-t-lg border border-[var(--border)] bg-[var(--surface-hi)] px-4 py-2.5"
                       draggable
                       onDragStart={() => setDragGroupId(group.id)}
                       onDragOver={e => e.preventDefault()}
-                      onDrop={() => dropGroup(group.id)}
-                      className={[
-                        "flex items-center gap-2 px-3 py-2 transition",
-                        dragGroupId === group.id ? "opacity-50" : "",
-                      ].join(" ")}
+                      onDrop={e => { e.stopPropagation(); dropGroup(group.id); }}
                     >
-                      <Icon icon={GripVertical} className="h-3.5 w-3.5 shrink-0 cursor-grab text-[var(--text-faint)]" />
-
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-full border border-black/10"
-                        style={{ background: group.color ?? "var(--surface-hi)" }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => toggleCollapsed(key)}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      >
-                        <span className="truncate text-sm font-semibold text-[var(--text)]">{group.name}</span>
-                        {summary && (
-                          <span className="hidden truncate text-[10px] text-[var(--text-faint)] sm:inline">{summary}</span>
-                        )}
-                      </button>
-
-                      <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--text-muted)]">
-                        {groupPrinters.length}
-                      </span>
-
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={() => moveGroup(group.id, -1)}
-                          disabled={gi === 0}
-                          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] disabled:opacity-20"
-                        >
-                          <Icon icon={ChevronUp} className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveGroup(group.id, 1)}
-                          disabled={gi === groups.length - 1}
-                          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] disabled:opacity-20"
-                        >
-                          <Icon icon={ChevronDown} className="h-3 w-3" />
-                        </button>
-                      </div>
-
+                      <span className="flex-1 text-center text-sm font-bold text-[var(--text)]">{group.name}</span>
                       <button
                         type="button"
                         onClick={() => setEditingGroupId(isEditing ? null : group.id)}
-                        className={[
-                          "flex h-6 w-6 items-center justify-center rounded transition",
-                          isEditing
-                            ? "bg-[var(--accent-soft)] text-[var(--accent)]"
-                            : "text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)]",
-                        ].join(" ")}
+                        className="mr-0.5 flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:text-[var(--text)]"
                         title="Профіль групи"
                       >
-                        <Icon icon={isEditing ? Pencil : Settings2} className="h-3.5 w-3.5" />
+                        <Icon icon={Settings2} className="h-3.5 w-3.5" />
                       </button>
-
-                      <button
-                        type="button"
-                        onClick={() => deleteGroup(group)}
-                        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]"
-                        title="Видалити групу"
-                      >
-                        <Icon icon={Trash2} className="h-3.5 w-3.5" />
-                      </button>
-
                       <button
                         type="button"
                         onClick={() => toggleCollapsed(key)}
-                        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
+                        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:text-[var(--text)]"
                       >
-                        <Icon icon={isCollapsed ? ChevronDown : ChevronUp} className="h-3.5 w-3.5" />
+                        <Icon icon={ChevronsUpDown} className="h-4 w-4" />
                       </button>
                     </div>
 
                     {isEditing && profiles[group.id] && (
-                      <div className="border-t border-[var(--border)] px-3 py-2">
+                      <div className="border-x border-[var(--border)] p-3">
                         <GroupProfileEditor
                           group={group}
                           profile={profiles[group.id]}
@@ -648,85 +600,50 @@ export function PrinterGroupsModal({
                     )}
 
                     {!isCollapsed && (
-                      <div className="space-y-1 border-t border-[var(--border)] p-2">
+                      <div className="overflow-hidden rounded-b-lg border border-t-0 border-[var(--border)] bg-[var(--bg-elevated)]">
                         {groupPrinters.length === 0 ? (
-                          <div className="flex items-center justify-center rounded border border-dashed border-[var(--border-strong)] px-4 py-4 text-center">
-                            <div>
-                              <Icon icon={PrinterIcon} className="mx-auto h-5 w-5 text-[var(--text-faint)]" />
-                              <p className="mt-1 text-xs text-[var(--text-muted)]">Порожня група</p>
-                            </div>
+                          <div className="flex items-center justify-center px-4 py-8 text-xs text-[var(--text-faint)]">
+                            Drag printers here
                           </div>
                         ) : (
-                          groupPrinters.map((printer, pi) => (
-                            <PrinterRow
-                              key={printer.id}
-                              printer={printer}
-                              index={pi}
-                              total={groupPrinters.length}
-                              groups={groups}
-                              onMove={(id, dir) => movePrinter(key, id, dir)}
-                              onAssign={assignPrinter}
-                              dragId={dragPrinterId}
-                              onDragStart={setDragPrinterId}
-                              onDrop={id => dropPrinter(key, id)}
-                            />
-                          ))
+                          groupPrinters.map(p => renderPrinterRow(p, key))
                         )}
                       </div>
                     )}
-                  </section>
+                  </div>
                 );
               })}
 
-              {/* ungrouped */}
               {ungroupedCount > 0 && (
-                <section className="overflow-hidden rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-elevated)]">
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)]">
-                      —
-                    </span>
+                <div
+                  className={[
+                    "relative self-start rounded-lg transition-shadow",
+                    dragOverGroup === "ungrouped" && dragPrinterId != null ? "ring-2 ring-[var(--accent)] shadow-lg" : "",
+                  ].join(" ")}
+                  onDragOver={e => { e.preventDefault(); setDragOverGroup("ungrouped"); }}
+                  onDragLeave={() => setDragOverGroup(null)}
+                  onDrop={e => handleGroupDrop("ungrouped", e)}
+                >
+                  <div className="flex items-center rounded-t-lg border border-[var(--border)] bg-[var(--surface-hi)] px-4 py-2.5">
+                    <span className="flex-1 text-center text-sm font-bold text-[var(--text)]">Other</span>
                     <button
                       type="button"
                       onClick={() => toggleCollapsed("ungrouped")}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:text-[var(--text)]"
                     >
-                      <span className="text-sm font-semibold text-[var(--text)]">Без групи</span>
-                      <span className="text-[10px] text-[var(--text-faint)]">нові або не відсортовані</span>
-                    </button>
-                    <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--text-muted)]">
-                      {ungroupedCount}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => toggleCollapsed("ungrouped")}
-                      className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
-                    >
-                      <Icon icon={collapsed["ungrouped"] ? ChevronDown : ChevronUp} className="h-3.5 w-3.5" />
+                      <Icon icon={ChevronsUpDown} className="h-4 w-4" />
                     </button>
                   </div>
                   {!collapsed["ungrouped"] && (
-                    <div className="space-y-1 border-t border-[var(--border)] p-2">
-                      {(printersByGroup["ungrouped"] ?? []).map((printer, pi) => (
-                        <PrinterRow
-                          key={printer.id}
-                          printer={printer}
-                          index={pi}
-                          total={ungroupedCount}
-                          groups={groups}
-                          onMove={(id, dir) => movePrinter("ungrouped", id, dir)}
-                          onAssign={assignPrinter}
-                          dragId={dragPrinterId}
-                          onDragStart={setDragPrinterId}
-                          onDrop={id => dropPrinter("ungrouped", id)}
-                        />
-                      ))}
+                    <div className="overflow-hidden rounded-b-lg border border-t-0 border-[var(--border)] bg-[var(--bg-elevated)]">
+                      {(printersByGroup["ungrouped"] ?? []).map(p => renderPrinterRow(p, "ungrouped"))}
                     </div>
                   )}
-                </section>
+                </div>
               )}
 
               {groups.length === 0 && ungroupedCount === 0 && !loading && (
-                <div className="flex min-h-[200px] items-center justify-center text-sm text-[var(--text-muted)]">
+                <div className="col-span-full flex min-h-[200px] items-center justify-center text-sm text-[var(--text-muted)]">
                   Немає принтерів
                 </div>
               )}
