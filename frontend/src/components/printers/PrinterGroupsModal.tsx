@@ -11,6 +11,7 @@ import {
   Save,
   Settings2,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { Icon } from "@/components/ui/Icon";
@@ -31,9 +32,6 @@ const PALETTE = ["#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#8b5cf6
 
 const inputClass =
   "h-8 rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]";
-const groupKeyUngrouped = "ungrouped";
-
-type GroupKey = number | typeof groupKeyUngrouped;
 
 interface GroupProfile {
   name: string;
@@ -69,17 +67,200 @@ function sortPrinters(list: Printer[]) {
   return [...list].sort((a, b) => (a.sort_order - b.sort_order) || a.name.localeCompare(b.name, "uk"));
 }
 
-function selectedGroupLabel(key: GroupKey, groups: PrinterGroup[]) {
-  if (key === groupKeyUngrouped) return "Без групи";
-  return groups.find(g => g.id === key)?.name ?? "Група";
-}
-
-function KindPill({ printer }: { printer: Printer }) {
+function KindBadge({ printer }: { printer: Printer }) {
   const label = printer.kind === "bambu" ? "Bambu" : printer.kind === "snapmaker_u1" ? "Klipper" : "Manual";
   return (
-    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-hi)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+    <span className="rounded border border-[var(--border)] bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">
       {label}
     </span>
+  );
+}
+
+function PrinterRow({
+  printer,
+  index,
+  total,
+  groups,
+  onMove,
+  onAssign,
+  dragId,
+  onDragStart,
+  onDrop,
+}: {
+  printer: Printer;
+  index: number;
+  total: number;
+  groups: PrinterGroup[];
+  onMove: (id: number, dir: -1 | 1) => void;
+  onAssign: (printer: Printer, groupId: number | null) => void;
+  dragId: number | null;
+  onDragStart: (id: number) => void;
+  onDrop: (id: number) => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(printer.id)}
+      onDragOver={e => e.preventDefault()}
+      onDrop={() => onDrop(printer.id)}
+      className={[
+        "flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition",
+        dragId === printer.id
+          ? "border-[var(--accent)] bg-[var(--accent-soft)] opacity-70"
+          : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]",
+      ].join(" ")}
+    >
+      <Icon icon={GripVertical} className="h-3.5 w-3.5 shrink-0 cursor-grab text-[var(--text-faint)]" />
+
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-xs font-semibold text-[var(--text)]">{printer.name}</span>
+          <KindBadge printer={printer} />
+        </span>
+      </span>
+
+      <select
+        value={printer.group_id ?? ""}
+        onChange={e => onAssign(printer, e.target.value ? Number(e.target.value) : null)}
+        className="h-6 w-[110px] shrink-0 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-1 text-[10px] outline-none focus:border-[var(--accent)]"
+      >
+        <option value="">Без групи</option>
+        {groups.map(g => (
+          <option key={g.id} value={g.id}>{g.name}</option>
+        ))}
+      </select>
+
+      <div className="flex shrink-0 gap-0.5">
+        <button
+          type="button"
+          onClick={() => onMove(printer.id, -1)}
+          disabled={index === 0}
+          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-20"
+        >
+          <Icon icon={ChevronUp} className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onMove(printer.id, 1)}
+          disabled={index === total - 1}
+          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)] disabled:opacity-20"
+        >
+          <Icon icon={ChevronDown} className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GroupProfileEditor({
+  group,
+  profile,
+  savingId,
+  onField,
+  onToggleMaterial,
+  onSave,
+  onClose,
+}: {
+  group: PrinterGroup;
+  profile: GroupProfile;
+  savingId: number | null;
+  onField: (id: number, key: keyof GroupProfile, val: string | string[]) => void;
+  onToggleMaterial: (id: number, mat: string) => void;
+  onSave: (group: PrinterGroup) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--accent)]/20 bg-[var(--bg-elevated)] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-semibold text-[var(--text)]">
+          <Icon icon={Settings2} className="h-3.5 w-3.5 text-[var(--accent)]" />
+          Профіль групи
+        </div>
+        <button type="button" onClick={onClose} className="flex h-6 w-6 items-center justify-center rounded hover:bg-[var(--surface-hi)]">
+          <Icon icon={X} className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Назва</span>
+          <input value={profile.name} onChange={e => onField(group.id, "name", e.target.value)} className={`w-full ${inputClass}`} />
+        </label>
+
+        <div>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Колір</span>
+          <div className="flex flex-wrap gap-1.5">
+            {PALETTE.map(color => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => onField(group.id, "color", profile.color === color ? "" : color)}
+                className="h-6 w-6 rounded-full border-2"
+                style={{ background: color, borderColor: profile.color === color ? "var(--text)" : "transparent" }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Сопло</span>
+          <select value={profile.nozzle_diameter} onChange={e => onField(group.id, "nozzle_diameter", e.target.value)} className={`w-full ${inputClass}`}>
+            {NOZZLES.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+          </select>
+        </label>
+
+        <div>
+          <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Обʼєм, мм</span>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(["build_x", "build_y", "build_z"] as const).map((key, idx) => (
+              <input
+                key={key}
+                type="number"
+                min="0"
+                value={profile[key]}
+                onChange={e => onField(group.id, key, e.target.value)}
+                placeholder={["X", "Y", "Z"][idx]}
+                className={`${inputClass} px-1.5 text-center`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Матеріали</span>
+        <div className="flex flex-wrap gap-1">
+          {MATERIALS.map(mat => {
+            const active = profile.supported_materials.includes(mat);
+            return (
+              <button
+                key={mat}
+                type="button"
+                onClick={() => onToggleMaterial(group.id, mat)}
+                className={[
+                  "rounded-full border px-2 py-0.5 text-[11px] font-medium transition",
+                  active
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                ].join(" ")}
+              >
+                {mat}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onSave(group)}
+        disabled={savingId === group.id}
+        className="mt-3 flex h-7 items-center gap-1 rounded-md bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+      >
+        <Icon icon={Save} className="h-3 w-3" />
+        {savingId === group.id ? "Збереження…" : "Зберегти"}
+      </button>
+    </div>
   );
 }
 
@@ -95,13 +276,13 @@ export function PrinterGroupsModal({
   const { confirm, dialog } = useConfirm();
   const [groups, setGroups] = useState<PrinterGroup[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
-  const [selectedKey, setSelectedKey] = useState<GroupKey>(groupKeyUngrouped);
   const [profiles, setProfiles] = useState<Record<number, GroupProfile>>({});
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [editingGroupId, setEditingGroupId] = useState<number | null>(null);
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [savingId, setSavingId] = useState<number | null>(null);
-  const [editingProfile, setEditingProfile] = useState(false);
   const [dragGroupId, setDragGroupId] = useState<number | null>(null);
   const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,10 +297,6 @@ export function PrinterGroupsModal({
       setGroups(groupData);
       setPrinters(printerData);
       setProfiles(Object.fromEntries(groupData.map(g => [g.id, groupToProfile(g)])));
-      setSelectedKey(prev => {
-        if (prev === groupKeyUngrouped || groupData.some(g => g.id === prev)) return prev;
-        return groupData[0]?.id ?? groupKeyUngrouped;
-      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Помилка завантаження");
     } finally {
@@ -131,17 +308,27 @@ export function PrinterGroupsModal({
     if (!open) return;
     setNewName("");
     setError(null);
-    setEditingProfile(false);
+    setEditingGroupId(null);
     void load();
   }, [open, load]);
 
-  const selectedGroup = selectedKey === groupKeyUngrouped ? null : groups.find(g => g.id === selectedKey) ?? null;
-  const selectedPrinters = useMemo(
-    () => sortPrinters(printers.filter(p => (selectedKey === groupKeyUngrouped ? p.group_id == null : p.group_id === selectedKey))),
-    [printers, selectedKey],
-  );
-  const ungroupedCount = printers.filter(p => p.group_id == null).length;
-  const totalPrinters = printers.length;
+  const printersByGroup = useMemo(() => {
+    const map: Record<string, Printer[]> = {};
+    for (const g of groups) map[g.id] = [];
+    map["ungrouped"] = [];
+    for (const p of printers) {
+      const key = p.group_id != null && map[p.group_id] ? String(p.group_id) : "ungrouped";
+      map[key].push(p);
+    }
+    for (const key of Object.keys(map)) map[key] = sortPrinters(map[key]);
+    return map;
+  }, [printers, groups]);
+
+  const ungroupedCount = printersByGroup["ungrouped"]?.length ?? 0;
+
+  function toggleCollapsed(key: string) {
+    setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  }
 
   function setField(id: number, key: keyof GroupProfile, val: string | string[]) {
     setProfiles(prev => ({ ...prev, [id]: { ...prev[id], [key]: val } }));
@@ -166,8 +353,7 @@ export function PrinterGroupsModal({
       });
       setNewName("");
       await load();
-      setSelectedKey(created.id);
-      setEditingProfile(true);
+      setEditingGroupId(created.id);
       onChange();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Помилка створення");
@@ -195,7 +381,7 @@ export function PrinterGroupsModal({
         }),
       });
       await load();
-      setEditingProfile(false);
+      setEditingGroupId(null);
       onChange();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Помилка збереження");
@@ -212,7 +398,7 @@ export function PrinterGroupsModal({
     setError(null);
     try {
       await api(`/api/printer-groups/${group.id}`, { method: "DELETE" });
-      setSelectedKey(groupKeyUngrouped);
+      if (editingGroupId === group.id) setEditingGroupId(null);
       await load();
       onChange();
     } catch (err) {
@@ -256,7 +442,7 @@ export function PrinterGroupsModal({
     await persistGroupOrder(next);
   }
 
-  async function persistPrinterOrder(nextList: Printer[]) {
+  async function persistPrinterOrder(groupKey: string, nextList: Printer[]) {
     const updated = nextList.map((printer, index) => ({ ...printer, sort_order: index }));
     const updatedById = new Map(updated.map(p => [p.id, p]));
     setPrinters(prev => prev.map(p => updatedById.get(p.id) ?? p));
@@ -273,25 +459,27 @@ export function PrinterGroupsModal({
     }
   }
 
-  async function movePrinter(printerId: number, dir: -1 | 1) {
-    const index = selectedPrinters.findIndex(p => p.id === printerId);
+  async function movePrinter(groupKey: string, printerId: number, dir: -1 | 1) {
+    const list = printersByGroup[groupKey] ?? [];
+    const index = list.findIndex(p => p.id === printerId);
     const target = index + dir;
-    if (index < 0 || target < 0 || target >= selectedPrinters.length) return;
-    const next = [...selectedPrinters];
+    if (index < 0 || target < 0 || target >= list.length) return;
+    const next = [...list];
     [next[index], next[target]] = [next[target], next[index]];
-    await persistPrinterOrder(next);
+    await persistPrinterOrder(groupKey, next);
   }
 
-  async function dropPrinter(targetId: number) {
+  async function dropPrinter(groupKey: string, targetId: number) {
     if (dragPrinterId == null || dragPrinterId === targetId) return;
-    const from = selectedPrinters.findIndex(p => p.id === dragPrinterId);
-    const to = selectedPrinters.findIndex(p => p.id === targetId);
+    const list = printersByGroup[groupKey] ?? [];
+    const from = list.findIndex(p => p.id === dragPrinterId);
+    const to = list.findIndex(p => p.id === targetId);
     if (from < 0 || to < 0) return;
-    const next = [...selectedPrinters];
+    const next = [...list];
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     setDragPrinterId(null);
-    await persistPrinterOrder(next);
+    await persistPrinterOrder(groupKey, next);
   }
 
   async function assignPrinter(printer: Printer, groupId: number | null) {
@@ -311,28 +499,27 @@ export function PrinterGroupsModal({
     }
   }
 
-  const activeProfile = selectedGroup ? profiles[selectedGroup.id] : null;
-
   return (
     <>
-      <Modal open={open} onClose={onClose} title="Сортування принтерів" size="3xl">
+      <Modal open={open} onClose={onClose} title="Сортування принтерів" size="2xl">
         <div className="-mx-1 -my-1">
+          {/* top bar */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-[var(--text-muted)]">
-              {groups.length} груп · {totalPrinters} принтерів
+              {groups.length} груп · {printers.length} принтерів
             </div>
-            <form onSubmit={createGroup} className="flex min-w-[260px] items-center gap-2">
+            <form onSubmit={createGroup} className="flex items-center gap-2">
               <input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="Нова група"
                 maxLength={120}
-                className="h-8 flex-1 rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs outline-none focus:border-[var(--accent)]"
+                className="h-7 w-[180px] rounded-md border border-[var(--border-strong)] bg-[var(--bg)] px-2.5 text-xs outline-none focus:border-[var(--accent)]"
               />
               <button
                 type="submit"
                 disabled={busy || !newName.trim()}
-                className="flex h-8 items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+                className="flex h-7 items-center gap-1 rounded-md bg-[var(--accent)] px-2.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
               >
                 <Icon icon={FolderPlus} className="h-3.5 w-3.5" />
                 Додати
@@ -346,293 +533,205 @@ export function PrinterGroupsModal({
             </div>
           )}
 
-          <div className="grid min-h-[520px] grid-cols-[240px_minmax(0,1fr)] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg)]">
-            <aside className="border-r border-[var(--border)] bg-[var(--bg-elevated)]">
-              <div className="border-b border-[var(--border)] px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                Групи
-              </div>
-              <div className="space-y-1 p-2">
-                {groups.map((group, index) => {
-                  const selected = selectedKey === group.id;
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
+          {loading ? (
+            <div className="flex min-h-[300px] items-center justify-center text-sm text-[var(--text-muted)]">Завантаження…</div>
+          ) : (
+            <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+              {groups.map((group, gi) => {
+                const key = String(group.id);
+                const isCollapsed = collapsed[key];
+                const groupPrinters = printersByGroup[key] ?? [];
+                const summary = groupSummary(group);
+                const isEditing = editingGroupId === group.id;
+
+                return (
+                  <section
+                    key={group.id}
+                    className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]"
+                  >
+                    {/* group header */}
+                    <div
                       draggable
-                      onClick={() => { setSelectedKey(group.id); setEditingProfile(false); }}
                       onDragStart={() => setDragGroupId(group.id)}
                       onDragOver={e => e.preventDefault()}
                       onDrop={() => dropGroup(group.id)}
                       className={[
-                        "group flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition",
-                        selected
-                          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                          : "border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-hi)]",
+                        "flex items-center gap-2 px-3 py-2 transition",
+                        dragGroupId === group.id ? "opacity-50" : "",
                       ].join(" ")}
                     >
-                      <Icon icon={GripVertical} className="h-3.5 w-3.5 shrink-0 text-[var(--text-faint)]" />
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-black/10" style={{ background: group.color ?? "var(--surface-hi)" }} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold text-[var(--text)]">{group.name}</span>
-                        <span className="block truncate text-[10px] text-[var(--text-faint)]">{groupSummary(group) || "без профілю"}</span>
-                      </span>
-                      <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-muted)]">
-                        {group.printer_count}
-                      </span>
-                      <span className="flex flex-col opacity-0 transition group-hover:opacity-100">
-                        <span onClick={e => { e.stopPropagation(); void moveGroup(group.id, -1); }} className={index === 0 ? "pointer-events-none opacity-25" : ""}>
-                          <Icon icon={ChevronUp} className="h-3 w-3 text-[var(--text-muted)]" />
-                        </span>
-                        <span onClick={e => { e.stopPropagation(); void moveGroup(group.id, 1); }} className={index === groups.length - 1 ? "pointer-events-none opacity-25" : ""}>
-                          <Icon icon={ChevronDown} className="h-3 w-3 text-[var(--text-muted)]" />
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
+                      <Icon icon={GripVertical} className="h-3.5 w-3.5 shrink-0 cursor-grab text-[var(--text-faint)]" />
 
-                <button
-                  type="button"
-                  onClick={() => { setSelectedKey(groupKeyUngrouped); setEditingProfile(false); }}
-                  className={[
-                    "mt-2 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition",
-                    selectedKey === groupKeyUngrouped
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                      : "border-transparent hover:border-[var(--border)] hover:bg-[var(--surface-hi)]",
-                  ].join(" ")}
-                >
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)]">
-                    —
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-semibold text-[var(--text)]">Без групи</span>
-                    <span className="block truncate text-[10px] text-[var(--text-faint)]">нові або не відсортовані</span>
-                  </span>
-                  <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-muted)]">
-                    {ungroupedCount}
-                  </span>
-                </button>
-              </div>
-            </aside>
-
-            <section className="flex min-w-0 flex-col bg-[var(--bg-elevated)]">
-              <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    {selectedGroup?.color && <span className="h-3 w-3 rounded-full" style={{ background: selectedGroup.color }} />}
-                    <h3 className="truncate text-sm font-semibold text-[var(--text)]">{selectedGroupLabel(selectedKey, groups)}</h3>
-                    <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-[10px] text-[var(--text-muted)]">
-                      {selectedPrinters.length} принт.
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">
-                    Перетягніть рядки, щоб змінити порядок. Зміна зберігається одразу.
-                  </p>
-                </div>
-
-                {selectedGroup && (
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingProfile(v => !v)}
-                      className="flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
-                    >
-                      <Icon icon={editingProfile ? PrinterIcon : Settings2} className="h-3.5 w-3.5" />
-                      {editingProfile ? "Принтери" : "Профіль"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteGroup(selectedGroup)}
-                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[rgba(239,68,68,.25)] text-[var(--state-error)] hover:bg-[rgba(239,68,68,.08)]"
-                      aria-label="Видалити групу"
-                    >
-                      <Icon icon={Trash2} className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {loading ? (
-                <div className="flex flex-1 items-center justify-center text-sm text-[var(--text-muted)]">Завантаження…</div>
-              ) : editingProfile && selectedGroup && activeProfile ? (
-                <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
-                  <div className="space-y-4">
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Назва групи</span>
-                      <input
-                        value={activeProfile.name}
-                        onChange={e => setField(selectedGroup.id, "name", e.target.value)}
-                        className={`w-full ${inputClass}`}
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full border border-black/10"
+                        style={{ background: group.color ?? "var(--surface-hi)" }}
                       />
-                    </label>
 
-                    <div>
-                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Колір</span>
-                      <div className="flex flex-wrap gap-2">
-                        {PALETTE.map(color => (
-                          <button
-                            key={color}
-                            type="button"
-                            onClick={() => setField(selectedGroup.id, "color", activeProfile.color === color ? "" : color)}
-                            className="h-7 w-7 rounded-full border-2"
-                            style={{ background: color, borderColor: activeProfile.color === color ? "var(--text)" : "transparent" }}
-                            aria-label={color}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleCollapsed(key)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <span className="truncate text-sm font-semibold text-[var(--text)]">{group.name}</span>
+                        {summary && (
+                          <span className="hidden truncate text-[10px] text-[var(--text-faint)] sm:inline">{summary}</span>
+                        )}
+                      </button>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="block">
-                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Сопло</span>
-                        <select
-                          value={activeProfile.nozzle_diameter}
-                          onChange={e => setField(selectedGroup.id, "nozzle_diameter", e.target.value)}
-                          className={`w-full ${inputClass}`}
+                      <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--text-muted)]">
+                        {groupPrinters.length}
+                      </span>
+
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => moveGroup(group.id, -1)}
+                          disabled={gi === 0}
+                          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] disabled:opacity-20"
                         >
-                          {NOZZLES.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
-                        </select>
-                      </label>
+                          <Icon icon={ChevronUp} className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveGroup(group.id, 1)}
+                          disabled={gi === groups.length - 1}
+                          className="flex h-6 w-5 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)] disabled:opacity-20"
+                        >
+                          <Icon icon={ChevronDown} className="h-3 w-3" />
+                        </button>
+                      </div>
 
-                      <div>
-                        <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Обʼєм, мм</span>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {(["build_x", "build_y", "build_z"] as const).map((key, idx) => (
-                            <input
-                              key={key}
-                              type="number"
-                              min="0"
-                              value={activeProfile[key]}
-                              onChange={e => setField(selectedGroup.id, key, e.target.value)}
-                              placeholder={["X", "Y", "Z"][idx]}
-                              className={`${inputClass} px-1.5 text-center`}
+                      <button
+                        type="button"
+                        onClick={() => setEditingGroupId(isEditing ? null : group.id)}
+                        className={[
+                          "flex h-6 w-6 items-center justify-center rounded transition",
+                          isEditing
+                            ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                            : "text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text-muted)]",
+                        ].join(" ")}
+                        title="Профіль групи"
+                      >
+                        <Icon icon={isEditing ? Pencil : Settings2} className="h-3.5 w-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteGroup(group)}
+                        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[rgba(239,68,68,.08)] hover:text-[var(--state-error)]"
+                        title="Видалити групу"
+                      >
+                        <Icon icon={Trash2} className="h-3.5 w-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleCollapsed(key)}
+                        className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
+                      >
+                        <Icon icon={isCollapsed ? ChevronDown : ChevronUp} className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {isEditing && profiles[group.id] && (
+                      <div className="border-t border-[var(--border)] px-3 py-2">
+                        <GroupProfileEditor
+                          group={group}
+                          profile={profiles[group.id]}
+                          savingId={savingId}
+                          onField={setField}
+                          onToggleMaterial={toggleMaterial}
+                          onSave={saveProfile}
+                          onClose={() => setEditingGroupId(null)}
+                        />
+                      </div>
+                    )}
+
+                    {!isCollapsed && (
+                      <div className="space-y-1 border-t border-[var(--border)] p-2">
+                        {groupPrinters.length === 0 ? (
+                          <div className="flex items-center justify-center rounded border border-dashed border-[var(--border-strong)] px-4 py-4 text-center">
+                            <div>
+                              <Icon icon={PrinterIcon} className="mx-auto h-5 w-5 text-[var(--text-faint)]" />
+                              <p className="mt-1 text-xs text-[var(--text-muted)]">Порожня група</p>
+                            </div>
+                          </div>
+                        ) : (
+                          groupPrinters.map((printer, pi) => (
+                            <PrinterRow
+                              key={printer.id}
+                              printer={printer}
+                              index={pi}
+                              total={groupPrinters.length}
+                              groups={groups}
+                              onMove={(id, dir) => movePrinter(key, id, dir)}
+                              onAssign={assignPrinter}
+                              dragId={dragPrinterId}
+                              onDragStart={setDragPrinterId}
+                              onDrop={id => dropPrinter(key, id)}
                             />
-                          ))}
-                        </div>
+                          ))
+                        )}
                       </div>
-                    </div>
+                    )}
+                  </section>
+                );
+              })}
 
-                    <div>
-                      <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Матеріали</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {MATERIALS.map(material => {
-                          const active = activeProfile.supported_materials.includes(material);
-                          return (
-                            <button
-                              key={material}
-                              type="button"
-                              onClick={() => toggleMaterial(selectedGroup.id, material)}
-                              className={[
-                                "rounded-full border px-2 py-1 text-xs font-medium transition",
-                                active
-                                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                                  : "border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text)]",
-                              ].join(" ")}
-                            >
-                              {material}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
-                    <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-[var(--text)]">
-                      <Icon icon={Pencil} className="h-3.5 w-3.5 text-[var(--accent)]" />
-                      Профіль для автопідбору
-                    </div>
-                    <p className="text-xs leading-5 text-[var(--text-muted)]">
-                      Ці параметри використовуються для підбору сумісних файлів і швидкого планування черги.
-                    </p>
+              {/* ungrouped */}
+              {ungroupedCount > 0 && (
+                <section className="overflow-hidden rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-elevated)]">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-dashed border-[var(--border-strong)] text-[10px] text-[var(--text-faint)]">
+                      —
+                    </span>
                     <button
                       type="button"
-                      onClick={() => saveProfile(selectedGroup)}
-                      disabled={savingId === selectedGroup.id}
-                      className="mt-4 flex h-8 w-full items-center justify-center gap-1 rounded-md bg-[var(--accent)] text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+                      onClick={() => toggleCollapsed("ungrouped")}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <Icon icon={Save} className="h-3.5 w-3.5" />
-                      {savingId === selectedGroup.id ? "Збереження…" : "Зберегти"}
+                      <span className="text-sm font-semibold text-[var(--text)]">Без групи</span>
+                      <span className="text-[10px] text-[var(--text-faint)]">нові або не відсортовані</span>
+                    </button>
+                    <span className="rounded bg-[var(--surface-hi)] px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-[var(--text-muted)]">
+                      {ungroupedCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapsed("ungrouped")}
+                      className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-faint)] hover:bg-[var(--surface-hi)]"
+                    >
+                      <Icon icon={collapsed["ungrouped"] ? ChevronDown : ChevronUp} className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto p-3">
-                  {selectedPrinters.length === 0 ? (
-                    <div className="flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-[var(--border-strong)] text-center">
-                      <div>
-                        <Icon icon={PrinterIcon} className="mx-auto h-7 w-7 text-[var(--text-faint)]" />
-                        <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">У цій групі немає принтерів</p>
-                        <p className="mt-1 text-xs text-[var(--text-faint)]">Виберіть групу в рядку принтера або перемістіть його з “Без групи”.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {selectedPrinters.map((printer, index) => (
-                        <div
+                  {!collapsed["ungrouped"] && (
+                    <div className="space-y-1 border-t border-[var(--border)] p-2">
+                      {(printersByGroup["ungrouped"] ?? []).map((printer, pi) => (
+                        <PrinterRow
                           key={printer.id}
-                          draggable
-                          onDragStart={() => setDragPrinterId(printer.id)}
-                          onDragOver={e => e.preventDefault()}
-                          onDrop={() => dropPrinter(printer.id)}
-                          className={[
-                            "grid grid-cols-[24px_minmax(0,1fr)_120px_110px_42px] items-center gap-2 rounded-md border px-2 py-2 transition",
-                            dragPrinterId === printer.id
-                              ? "border-[var(--accent)] bg-[var(--accent-soft)] opacity-70"
-                              : "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
-                          ].join(" ")}
-                        >
-                          <Icon icon={GripVertical} className="h-4 w-4 cursor-grab text-[var(--text-faint)]" />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-sm font-semibold text-[var(--text)]">{printer.name}</span>
-                              <KindPill printer={printer} />
-                            </div>
-                            <p className="truncate text-[10px] text-[var(--text-faint)]">
-                              {printer.state ?? "unknown"} · sort {printer.sort_order}
-                            </p>
-                          </div>
-                          <select
-                            value={printer.group_id ?? ""}
-                            onChange={e => assignPrinter(printer, e.target.value ? Number(e.target.value) : null)}
-                            className="h-7 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1.5 text-[11px] outline-none focus:border-[var(--accent)]"
-                          >
-                            <option value="">Без групи</option>
-                            {groups.map(group => (
-                              <option key={group.id} value={group.id}>{group.name}</option>
-                            ))}
-                          </select>
-                          <div className="text-right text-[10px] text-[var(--text-faint)]">
-                            #{index + 1}
-                          </div>
-                          <div className="flex justify-end gap-0.5">
-                            <button
-                              type="button"
-                              onClick={() => movePrinter(printer.id, -1)}
-                              disabled={index === 0}
-                              className="flex h-7 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] disabled:opacity-20"
-                              aria-label="Вище"
-                            >
-                              <Icon icon={ChevronUp} className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => movePrinter(printer.id, 1)}
-                              disabled={index === selectedPrinters.length - 1}
-                              className="flex h-7 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] disabled:opacity-20"
-                              aria-label="Нижче"
-                            >
-                              <Icon icon={ChevronDown} className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
+                          printer={printer}
+                          index={pi}
+                          total={ungroupedCount}
+                          groups={groups}
+                          onMove={(id, dir) => movePrinter("ungrouped", id, dir)}
+                          onAssign={assignPrinter}
+                          dragId={dragPrinterId}
+                          onDragStart={setDragPrinterId}
+                          onDrop={id => dropPrinter("ungrouped", id)}
+                        />
                       ))}
                     </div>
                   )}
+                </section>
+              )}
+
+              {groups.length === 0 && ungroupedCount === 0 && !loading && (
+                <div className="flex min-h-[200px] items-center justify-center text-sm text-[var(--text-muted)]">
+                  Немає принтерів
                 </div>
               )}
-            </section>
-          </div>
+            </div>
+          )}
         </div>
       </Modal>
       {dialog}
