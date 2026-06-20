@@ -221,7 +221,7 @@ def _to_dto(
         nozzle_diameter=printer.nozzle_diameter,
         bed_type=printer.bed_type,
         last_gcode_file_id=printer.last_gcode_file_id,
-        tags=printer.tags,
+        tags=printer.tags or [],
     )
 
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
