@@ -363,10 +363,10 @@ def update_task(
     # set timestamps on status transitions
     if payload.status == PrintTaskStatus.in_progress and old_status == PrintTaskStatus.queued:
         if not task.started_at:
-            from datetime import timezone as _tz
+            from datetime import datetime, timezone as _tz
             task.started_at = datetime.now(_tz.utc)
     if payload.status == PrintTaskStatus.done and old_status != PrintTaskStatus.done:
-        from datetime import timezone as _tz
+        from datetime import datetime, timezone as _tz
         task.completed_at = datetime.now(_tz.utc)
 
     # warehouse sync when task → done

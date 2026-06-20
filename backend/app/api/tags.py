@@ -244,7 +244,7 @@ def get_matching_printers(
 
     printers = db.query(Printer).filter(
         Printer.organization_id == org.id,
-        Printer.is_active == True,
+        Printer.is_active.is_(True),
     ).all()
 
     results = []

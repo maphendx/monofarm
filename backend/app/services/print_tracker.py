@@ -14,7 +14,6 @@ from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.print_history import PrintHistory
 from app.models.printer import Printer, PrinterKind
-from app.models.task import PrintTask, PrintTaskStatus
 from app.services.telegram_notify import send_print_event_notification
 
 log = logging.getLogger(__name__)

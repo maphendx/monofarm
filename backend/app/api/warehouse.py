@@ -5789,8 +5789,6 @@ def order_invoice(
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.lib.units import mm
 
     order = db.query(Order).filter_by(organization_id=org.id, id=order_id).first()
