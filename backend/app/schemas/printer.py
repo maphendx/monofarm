@@ -31,6 +31,7 @@ class PrinterCreate(BaseModel):
     build_y: int | None = None
     build_z: int | None = None
     nozzle_diameter: float | None = None
+    bed_type: str | None = None
 
 
 class PrinterUpdate(BaseModel):
@@ -46,6 +47,7 @@ class PrinterUpdate(BaseModel):
     build_y: int | None = None
     build_z: int | None = None
     nozzle_diameter: float | None = None
+    bed_type: str | None = None
 
 
 class PrinterManualUpdate(BaseModel):
@@ -117,6 +119,7 @@ class PrinterOut(BaseModel):
     build_y: int | None = None
     build_z: int | None = None
     nozzle_diameter: float | None = None
+    bed_type: str | None = None
 
     # Last file sent via monofarm (for reprint)
     last_gcode_file_id: int | None = None

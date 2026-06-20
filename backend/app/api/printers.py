@@ -205,7 +205,9 @@ def _to_dto(
         bambu_dev_id=printer.bambu_dev_id,
         bambu_dev_ip=printer.bambu_dev_ip,
         bambu_model=printer.bambu_model,
+        bambu_lan_mode=printer.bambu_lan_mode,
         is_active=printer.is_active,
+        sort_order=printer.sort_order,
         group_id=printer.group_id,
         group_name=group_name,
         loaded_filaments=printer.loaded_filaments or [],
@@ -213,6 +215,13 @@ def _to_dto(
         firmware_version=printer.firmware_version,
         power_watts=printer.power_watts,
         firmware_features=_fw_features(printer.firmware_version) if printer.firmware_version else None,
+        build_x=printer.build_x,
+        build_y=printer.build_y,
+        build_z=printer.build_z,
+        nozzle_diameter=printer.nozzle_diameter,
+        bed_type=printer.bed_type,
+        last_gcode_file_id=printer.last_gcode_file_id,
+        tags=printer.tags,
     )
 
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
@@ -1115,6 +1124,8 @@ def update_printer(
         row.build_z = payload.build_z
     if payload.nozzle_diameter is not None:
         row.nozzle_diameter = payload.nozzle_diameter
+    if payload.bed_type is not None:
+        row.bed_type = payload.bed_type.strip() or None
     db.commit()
     db.refresh(row)
 

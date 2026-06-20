@@ -127,6 +127,7 @@ export interface Printer {
   build_y: number | null;
   build_z: number | null;
   nozzle_diameter: number | null;
+  bed_type: string | null;
   last_gcode_file_id: number | null;
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }

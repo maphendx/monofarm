@@ -1236,103 +1236,207 @@ function ColorPaletteModal({
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function AmsDisplay({
-  slots,
-  activeTray,
-  inventory,
-}: {
-  slots: FilamentSlot[];
-  activeTray: number | null;
-  inventory: Filament[];
-}) {
-  // Group by unit_id, external (slot 254) separate
+// ── SimplyPrint-style AMS spool visualization ─────────────────────────────────
+
+interface SpoolView {
+  key: string;
+  label: number;          // 1-based position within its unit (for "#N")
+  empty: boolean;
+  hex: string;
+  colorName: string | null;
+  material: string | null;
+  brand: string | null;
+  grams: number | null;
+  active: boolean;
+}
+
+interface SpoolGroup {
+  title: string | null;   // "AMS 1"… ; null = single unit / inline
+  external: boolean;
+  slots: SpoolView[];
+}
+
+/** Small AMS cartridge glyph shown in the unit header (à la SimplyPrint). */
+function AmsCartridgeIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <path d="M7 6v12M12 6v12M17 6v12" />
+    </svg>
+  );
+}
+
+function NozzleGlyph({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22V12M8 22h8M9 12h6M12 2v4M9 6h6" /><path d="M7 6a5 5 0 0 0 10 0" />
+    </svg>
+  );
+}
+
+/** Nozzle + build-plate chips, SimplyPrint header style. */
+function NozzleBedChips({ printer }: { printer: Printer }) {
+  const nozzle = printer.nozzle_diameter;
+  const bed = printer.bed_type;
+  if (nozzle == null && !bed) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {nozzle != null && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+          <NozzleGlyph /> {nozzle} мм
+        </span>
+      )}
+      {bed && (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]">
+          <span className="size-3 rounded-sm ring-1 ring-black/15" style={{ background: "linear-gradient(135deg,#cda86b,#9a7a44)" }} />
+          {bed}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SpoolTile({ slot }: { slot: SpoolView }) {
+  return (
+    <div className="flex w-full max-w-[96px] flex-col items-center gap-1.5">
+      <div
+        className={[
+          "rounded-xl p-1 ring-2 transition",
+          slot.active ? "bg-[rgba(56,189,248,.08)] ring-[var(--state-print)]" : "ring-transparent",
+        ].join(" ")}
+      >
+        {slot.empty ? <EmptySpoolIcon size={54} /> : <SpoolIcon color={slot.hex} size={54} />}
+      </div>
+      {slot.empty ? (
+        <div className="font-mono text-[10px] text-[var(--text-faint)]">#{slot.label}</div>
+      ) : (
+        <div className="w-full text-center leading-tight">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-medium text-[var(--text)]">
+            <span className="truncate">
+              #{slot.label}
+              {slot.colorName ? `, ${slot.colorName}` : ""}
+              {slot.material ? `, ${slot.material}` : ""}
+            </span>
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ background: slot.active ? "var(--state-print)" : "var(--state-ok)" }}
+            />
+          </div>
+          {(slot.grams != null || slot.brand) && (
+            <div className="font-mono text-[10px] text-[var(--text-faint)]">
+              {[slot.brand, slot.grams != null ? `${slot.grams} г` : null].filter(Boolean).join(" · ")}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Renders one or more AMS unit boxes (+ external spool) with spool icons. */
+function SpoolSlotsView({ groups }: { groups: SpoolGroup[] }) {
+  if (groups.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      {groups.map((g, gi) => (
+        <div key={gi} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+          <div className="mb-2.5 inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[var(--text-muted)]">
+            <AmsCartridgeIcon />
+            <span className="text-[11px] font-medium">{g.external ? "Зовнішня котушка" : (g.title ?? "AMS")}</span>
+          </div>
+          <div className="flex flex-wrap items-start justify-around gap-2">
+            {g.slots.map((s) => (
+              <SpoolTile key={s.key} slot={s} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function spoolHex(color: string | null | undefined): string {
+  if (color && color.startsWith("#")) return color.slice(0, 7);
+  return colorHex(color);
+}
+
+/** Build SimplyPrint spool groups from a printer's live/loaded filaments (Bambu, other). */
+function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[] {
+  const slots = printer.loaded_filaments ?? [];
   const units = new Map<number, FilamentSlot[]>();
   const external: FilamentSlot[] = [];
-
   for (const s of slots) {
     if (s.slot === 254) { external.push(s); continue; }
     const uid = s.unit_id ?? 0;
     if (!units.has(uid)) units.set(uid, []);
     units.get(uid)!.push(s);
   }
-  const sortedUnits = [...units.entries()].sort(([a], [b]) => a - b);
+  const multi = units.size > 1;
+  const isBambu = printer.kind === "bambu";
+  const groups: SpoolGroup[] = [];
 
-  return (
-    <div className="space-y-4">
-      {sortedUnits.map(([uid, unitSlots]) => (
-        <div key={uid}>
-          {sortedUnits.length > 1 && (
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">
-              AMS {uid + 1}
-            </p>
-          )}
-          <div className="grid grid-cols-4 gap-2">
-            {unitSlots.sort((a, b) => a.slot - b.slot).map((s) => {
-              const isActive = activeTray === s.slot;
-              const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
-              const hex = s.color.startsWith("#") ? s.color.slice(0, 7) : s.color;
-              const label = String.fromCharCode(65 + (s.slot % 4)); // A B C D
-              return (
-                <div
-                  key={s.slot}
-                  title={s.empty ? "Порожній" : `${s.type}${s.brand ? ` · ${s.brand}` : ""}${s.color_name ? ` (${s.color_name})` : ""}`}
-                  className={[
-                    "relative flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 transition-all",
-                    isActive
-                      ? "border-[var(--state-print)] bg-[rgba(56,189,248,.08)] shadow-sm"
-                      : "border-[var(--border)] ",
-                  ].join(" ")}
-                >
-                  {isActive && (
-                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white leading-none" style={{ background: "var(--state-print)" }}>
-                      друкує
-                    </span>
-                  )}
-                  {s.empty ? (
-                    <div className="size-7 rounded-full border-2 border-dashed border-[var(--border)] " />
-                  ) : (
-                    <div
-                      className="size-7 rounded-full ring-2 ring-black/10 dark:ring-white/10"
-                      style={{ backgroundColor: hex }}
-                    />
-                  )}
-                  <div className="w-full text-center">
-                    <div className="truncate text-[11px] font-semibold leading-tight text-[var(--text)] ">
-                      {s.empty ? "—" : (s.type || "?")}
-                    </div>
-                    {invItem && (
-                      <div className="text-[9px] text-[var(--text-faint)]">{invItem.grams_remaining} г</div>
-                    )}
-                    <div className="text-[9px] text-[var(--text-faint)]">{label}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+  const toView = (s: FilamentSlot, label: number): SpoolView => {
+    const inv = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
+    return {
+      key: `${s.unit_id ?? 0}-${s.slot}`,
+      label,
+      empty: s.empty || (!s.color && !s.type),
+      hex: spoolHex(s.color),
+      colorName: s.color_name,
+      material: s.type || null,
+      brand: s.brand,
+      grams: inv?.grams_remaining ?? null,
+      active: printer.active_tray === s.slot,
+    };
+  };
 
-      {external.map((s) => {
-        const isActive = activeTray === s.slot;
-        const hex = s.color.startsWith("#") ? s.color.slice(0, 7) : s.color;
-        return (
-          <div key={s.slot} className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-4 py-3 ">
-            <div
-              className="size-6 shrink-0 rounded-full ring-2"
-            style={{ boxShadow: isActive ? `0 0 0 2px var(--state-print)` : undefined, backgroundColor: hex }}
-            />
-            <div className="min-w-0">
-              <div className="text-xs font-semibold">{s.type || "—"}</div>
-              {s.brand && <div className="text-[10px] text-[var(--text-faint)]">{s.brand}</div>}
-            </div>
-            <span className="ml-auto text-[10px] text-[var(--text-faint)]">Зовнішня</span>
-            {isActive && <span className="rounded-full px-2 py-0.5 text-[9px] font-bold text-white" style={{ background: "var(--state-print)" }}>друкує</span>}
-          </div>
-        );
-      })}
-    </div>
-  );
+  for (const [uid, raw] of [...units.entries()].sort(([a], [b]) => a - b)) {
+    const sorted = [...raw].sort((a, b) => a.slot - b.slot);
+    // Bambu AMS always presents 4 trays — pad missing ones with empty spools.
+    const count = isBambu ? Math.max(4, sorted.length) : sorted.length;
+    const view: SpoolView[] = [];
+    for (let i = 0; i < count; i++) {
+      const s = sorted[i];
+      view.push(
+        s
+          ? toView(s, i + 1)
+          : { key: `u${uid}-empty${i}`, label: i + 1, empty: true, hex: "#888888", colorName: null, material: null, brand: null, grams: null, active: false },
+      );
+    }
+    groups.push({ title: multi ? `AMS ${uid + 1}` : null, external: false, slots: view });
+  }
+
+  if (external.length) {
+    groups.push({
+      title: null,
+      external: true,
+      slots: external.map((s, i) => toView(s, i + 1)),
+    });
+  }
+  return groups;
+}
+
+/** Build SimplyPrint spool groups from U1 / Klipper toolhead slots. */
+function buildU1Groups(printer: Printer, slots: PrinterSlotInfo[], inventory: Filament[]): SpoolGroup[] {
+  if (slots.length === 0) return [];
+  const view: SpoolView[] = [...slots]
+    .sort((a, b) => a.slot_index - b.slot_index)
+    .map((s) => {
+      const empty = s.state === "empty" || !s.filament_id;
+      const inv = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
+      return {
+        key: `t${s.slot_index}`,
+        label: s.slot_index + 1,
+        empty,
+        hex: spoolHex(s.hex_color ?? s.color),
+        colorName: s.color,
+        material: s.material,
+        brand: s.brand,
+        grams: inv?.grams_remaining ?? null,
+        active: printer.active_tray === s.slot_index,
+      };
+    });
+  return [{ title: null, external: false, slots: view }];
 }
 
 function LoadedFilamentsCard({
@@ -1349,6 +1453,8 @@ function LoadedFilamentsCard({
   const [inventory, setInventory] = useState<Filament[]>([]);
   const [editing, setEditing] = useState(false);
   const [paletteSlot, setPaletteSlot] = useState<number | null>(null);
+  const [nozzle, setNozzle] = useState<string>(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
+  const [bedType, setBedType] = useState<string>(printer.bed_type ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1356,6 +1462,14 @@ function LoadedFilamentsCard({
   useEffect(() => {
     api<Filament[]>("/api/materials").then(setInventory).catch(() => {});
   }, []);
+
+  // Display reads live data straight off the printer; the editor works on a draft.
+  function startEdit() {
+    setSlots(printer.loaded_filaments ?? []);
+    setNozzle(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
+    setBedType(printer.bed_type ?? "");
+    setEditing(true);
+  }
 
   function addSlot() {
     setSlots((prev) => [
@@ -1392,6 +1506,14 @@ function LoadedFilamentsCard({
         method: "PUT",
         body: JSON.stringify(slots),
       });
+      const nz = nozzle.trim() ? Number(nozzle) : null;
+      const bt = bedType.trim() || null;
+      if (nz !== (printer.nozzle_diameter ?? null) || bt !== (printer.bed_type ?? null)) {
+        await api(`/api/printers/${printer.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ nozzle_diameter: nz, bed_type: bt }),
+        });
+      }
       onUpdated();
       setSaved(true);
       setEditing(false);
@@ -1402,6 +1524,8 @@ function LoadedFilamentsCard({
       setBusy(false);
     }
   }
+
+  const groups = buildLoadedGroups(printer, inventory);
 
   return (
     <>
@@ -1415,61 +1539,77 @@ function LoadedFilamentsCard({
       )}
 
       <Card title="Пластик в принтері">
-        {slots.length === 0 ? (
+        {/* ── chips + gear header (SimplyPrint style) ── */}
+        <div className="mb-3 flex items-center gap-2">
+          <NozzleBedChips printer={printer} />
+          {canEdit && !editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              title="Налаштування пластику"
+              className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {groups.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-4 text-center">
             <EmptySpoolIcon size={56} />
             <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            {slots.map((s, i) => {
-              const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
-              const isActive = printer.active_tray === s.slot;
-              return (
-                <div
-                  key={i}
-                  className={[
-                    "relative grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors",
-                    isActive ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)] bg-[var(--surface-2)]",
-                  ].join(" ")}
-                >
-                  {isActive && (
-                    <span className="absolute right-2 top-2 size-1.5 rounded-full" style={{ background: "var(--accent)" }} />
-                  )}
-                  <SpoolIcon color={s.color} size={32} />
-                  <div className="min-w-0">
-                    <div className="truncate text-xs font-medium text-[var(--text)] ">
-                      {s.color_name ? `${s.type} · ${s.color_name}` : s.type}
-                    </div>
-                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
-                      <span>#{i + 1}{s.brand ? ` · ${s.brand}` : ""}</span>
-                      {invItem && <span className="text-[var(--text-muted)]">· {invItem.grams_remaining} г</span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <SpoolSlotsView groups={groups} />
         )}
 
-        {/* ── status / action bar ── */}
-        <div className="mt-3 flex items-center gap-3">
-          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
-          {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
-          {canEdit && !editing && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="ml-auto rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   "
-            >
-              Редагувати
-            </button>
-          )}
-        </div>
+        {/* ── status bar ── */}
+        {(saved || err) && (
+          <div className="mt-3 flex items-center gap-3">
+            {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+            {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
+          </div>
+        )}
 
         {/* ── edit panel ── */}
         {canEdit && editing && (
           <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4 ">
+            {/* nozzle + build plate */}
+            <div className="flex flex-wrap items-end gap-3 pb-1">
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-[var(--text-muted)]">Сопло (мм)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={nozzle}
+                  onChange={(e) => setNozzle(e.target.value)}
+                  placeholder="0.4"
+                  className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-[var(--text-muted)]">Поверхня столу</span>
+                <input
+                  type="text"
+                  value={bedType}
+                  onChange={(e) => setBedType(e.target.value)}
+                  placeholder="Textured PEI"
+                  list="bed-types"
+                  className="w-48 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none"
+                />
+                <datalist id="bed-types">
+                  <option value="Textured PEI" />
+                  <option value="Smooth PEI" />
+                  <option value="Cool Plate" />
+                  <option value="Engineering Plate" />
+                  <option value="High Temp Plate" />
+                </datalist>
+              </label>
+            </div>
             {slots.map((s, i) => (
               <div
                 key={i}
@@ -1612,6 +1752,8 @@ function U1SlotsCard({
   const [inventory, setInventory] = useState<Filament[]>([]);
   const [editing, setEditing] = useState(false);
   const [paletteSlot, setPaletteSlot] = useState<number | null>(null);
+  const [nozzle, setNozzle] = useState<string>(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
+  const [bedType, setBedType] = useState<string>(printer.bed_type ?? "");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1620,11 +1762,18 @@ function U1SlotsCard({
     setSlots(printer.slots ?? []);
   }, [printer.slots]);
 
+  // Load inventory for grams labels + the editor.
   useEffect(() => {
-    if (editing && inventory.length === 0) {
+    if (inventory.length === 0) {
       api<Filament[]>("/api/materials").then(setInventory).catch(() => {});
     }
-  }, [editing, inventory.length]);
+  }, [inventory.length]);
+
+  function startEdit() {
+    setNozzle(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
+    setBedType(printer.bed_type ?? "");
+    setEditing(true);
+  }
 
   function updateDraft(slotIdx: number, patch: Partial<PrinterSlotInfo>) {
     setSlots((prev) => prev.map((s) => (s.slot_index === slotIdx ? { ...s, ...patch } : s)));
@@ -1670,6 +1819,14 @@ function U1SlotsCard({
           })
         )
       );
+      const nz = nozzle.trim() ? Number(nozzle) : null;
+      const bt = bedType.trim() || null;
+      if (nz !== (printer.nozzle_diameter ?? null) || bt !== (printer.bed_type ?? null)) {
+        await api(`/api/printers/${printer.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ nozzle_diameter: nz, bed_type: bt }),
+        });
+      }
       onUpdated();
       setSaved(true);
       setEditing(false);
@@ -1680,6 +1837,8 @@ function U1SlotsCard({
       setBusy(false);
     }
   }
+
+  const groups = buildU1Groups(printer, slots, inventory);
 
   return (
     <>
@@ -1692,60 +1851,75 @@ function U1SlotsCard({
       )}
 
       <Card title="Пластик в принтері">
-        {slots.length === 0 ? (
+        {/* ── chips + gear header (SimplyPrint style) ── */}
+        <div className="mb-3 flex items-center gap-2">
+          <NozzleBedChips printer={printer} />
+          {canEdit && !editing && (
+            <button
+              type="button"
+              onClick={startEdit}
+              title="Налаштування пластику"
+              className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {groups.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-4 text-center">
             <EmptySpoolIcon size={56} />
             <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {slots.map((s) => {
-                const hex = colorHex(s.hex_color ?? s.color);
-                const empty = s.state === "empty" || !s.filament_id;
-                const invItem = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
-                return (
-                  <div
-                    key={s.slot_index}
-                    className="grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
-                  >
-                    <SpoolIcon color={empty ? "#888888" : hex} size={32} />
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-medium text-[var(--text)]">
-                        {empty ? "—" : [s.material, s.color].filter(Boolean).join(" · ")}
-                      </div>
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-[var(--text-faint)]">
-                        <span>T{s.slot_index + 1}</span>
-                        {!empty && <span className="uppercase">· {s.hex_color ?? hex}</span>}
-                        {invItem && <span className="text-[var(--text-muted)]">· {invItem.grams_remaining} г</span>}
-                      </div>
-                      {!empty && s.brand && (
-                        <div className="truncate text-[10px] text-[var(--text-faint)]">{s.brand}</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          <SpoolSlotsView groups={groups} />
+        )}
+
+        {(saved || err) && (
+          <div className="mt-3 flex items-center gap-3">
+            {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
+            {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
           </div>
         )}
 
-        <div className="mt-3 flex items-center gap-3">
-          {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
-          {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
-          {canEdit && !editing && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="ml-auto rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
-            >
-              Редагувати
-            </button>
-          )}
-        </div>
-
         {canEdit && editing && (
           <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+            {/* nozzle + build plate */}
+            <div className="flex flex-wrap items-end gap-3 pb-1">
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-[var(--text-muted)]">Сопло (мм)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={nozzle}
+                  onChange={(e) => setNozzle(e.target.value)}
+                  placeholder="0.4"
+                  className="w-24 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] text-[var(--text-muted)]">Поверхня столу</span>
+                <input
+                  type="text"
+                  value={bedType}
+                  onChange={(e) => setBedType(e.target.value)}
+                  placeholder="Textured PEI"
+                  list="bed-types"
+                  className="w-48 rounded border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-sm outline-none"
+                />
+                <datalist id="bed-types">
+                  <option value="Textured PEI" />
+                  <option value="Smooth PEI" />
+                  <option value="Cool Plate" />
+                  <option value="Engineering Plate" />
+                  <option value="High Temp Plate" />
+                </datalist>
+              </label>
+            </div>
             {slots.map((s) => (
               <div
                 key={s.slot_index}
