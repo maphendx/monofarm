@@ -49,6 +49,25 @@ function safeZpl(s: string): string {
   return s.replace(/[\\^~]/g, "").slice(0, 100);
 }
 
+// Shrink a font height (dots) so wrapped text fits inside a w×h box (dots).
+// Mirrors the editor's AutoFitText so the ZPL printout matches the on-screen
+// preview and text never spills onto neighbouring elements (e.g. the barcode).
+// Approximates browser wrapping with an average glyph width — exact metrics
+// differ, but the goal is keeping text within its box, which this guarantees.
+function fitFontDots(text: string, wDots: number, hDots: number, baseFh: number): number {
+  if (!text || wDots <= 0 || hDots <= 0) return baseFh;
+  let fh = baseFh;
+  for (let i = 0; i < 16; i++) {
+    const charW = fh * 0.58;                              // avg Arial-like glyph width
+    const cpl   = Math.max(1, Math.floor(wDots / charW)); // chars per line
+    const lines = Math.max(1, Math.ceil(text.length / cpl));
+    const needed = lines * fh * 1.25;                     // line-height factor
+    if (needed <= hDots || fh <= 8) break;
+    fh = Math.floor(fh * 0.92);
+  }
+  return Math.max(8, fh);
+}
+
 function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): string {
   const d = (mm: number) => dots(mm, dpi);
   const x = d(el.x), y = d(el.y), w = d(el.w), h = d(el.h);
@@ -57,7 +76,9 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): str
     case "text": {
       const text = safeZpl(substituteVars(el.text ?? "", vars));
       if (!text) return "";
-      const fh = Math.max(8, d(el.fontSize ?? 4));
+      // Shrink to fit the box (matches the editor's auto-fit) so text stays inside
+      // its element and never overprints the barcode/QR next to it.
+      const fh = fitFontDots(text, w, h, Math.max(8, d(el.fontSize ?? 4)));
       const just = el.align === "center" ? "C" : el.align === "right" ? "R" : "L";
       // Always use ^FB to constrain width and enable wrapping.
       // maxLines based on element height / line height (1.25 factor for line spacing).
@@ -66,7 +87,9 @@ function elementToZpl(el: LabelElement, vars: LabelDataVars, dpi = ZPL_DPI): str
 
       const cmd = `^A0N,${fh}${fb}^FD${text}^FS`;
       if (el.fontWeight === "bold") {
-        const off = Math.max(1, Math.round(fh / 30)); // 1-3 dots offset depending on size
+        // Faux-bold via overprint. The offset must scale with font height to be
+        // visible — the previous fh/30 produced 1-2 dots and looked non-bold.
+        const off = Math.max(2, Math.round(fh / 14));
         return [
           `^FO${x},${y}${cmd}`,
           `^FO${x + off},${y}${cmd}`,
