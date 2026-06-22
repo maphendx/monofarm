@@ -20,13 +20,13 @@ const ITEM_TYPES = [
 
 const SAMPLE_VARS: Record<string, LabelDataVars> = {
   cell:      { code: "A1", zone_name: "Стелаж 1", notes: "Верхня полиця", CELL_QR: "CELL:42" },
-  product:   { name: "Брелок Dragon", sku: "P-0312", barcode: "03026100", categories: "Брелоки · Дракони", PROD_QR: "03026100" },
+  product:   { name: "Брелок Dragon", sku: "P-0312", barcode: "03026100", categories: "Брелоки · Дракони", PROD_QR: "03026100", price: "100", cost: "13.19", currency: "₴" },
   action:    { label: "Списання", code: "ACTION:WRITE_OFF", ACTION_QR: "ACTION:WRITE_OFF" },
   universal: { code: "A1", name: "Товар", sku: "SKU-001", CELL_QR: "CELL:1", PROD_QR: "SKU-001", ACTION_QR: "ACTION:RECEIVE" },
 };
 
 const ALL_VARS = [
-  "{{name}}", "{{sku}}", "{{barcode}}", "{{categories}}", "{{PROD_QR}}",
+  "{{name}}", "{{sku}}", "{{barcode}}", "{{categories}}", "{{price}}", "{{cost}}", "{{currency}}", "{{PROD_QR}}",
   "{{code}}", "{{zone_name}}", "{{notes}}", "{{CELL_QR}}",
   "{{label}}", "{{ACTION_QR}}",
 ];

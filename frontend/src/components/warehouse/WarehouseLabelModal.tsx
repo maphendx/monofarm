@@ -28,7 +28,7 @@ import {
 
 export type WarehouseLabelItem =
   | { type: "cell";    id: number; code: string; zone_name: string; notes?: string | null }
-  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[] }
+  | { type: "product"; id: number; name: string; sku: string; barcode?: string | null; image_url?: string | null; categories?: string[]; price?: string | null; cost?: string | null }
   | { type: "action";  id: number; code: string; label: string };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -292,10 +292,22 @@ async function fetchDataUrl(src: string): Promise<string | null> {
   } catch { return null; }
 }
 
+// Format a money string: "100.00" -> "100", "13.19" -> "13.19", "13.10" -> "13.1".
+function fmtMoney(v?: string | null): string {
+  if (v == null || v === "") return "";
+  const n = parseFloat(v);
+  if (!isFinite(n)) return "";
+  return n.toFixed(2).replace(/\.?0+$/, "");
+}
+
 function itemToVars(item: WarehouseLabelItem, qrVal: string, imgUrl?: string): LabelDataVars {
   if (item.type === "cell")   return { code: item.code, zone_name: item.zone_name, notes: item.notes ?? "", CELL_QR: qrVal };
   if (item.type === "action") return { label: item.label, code: item.code, ACTION_QR: qrVal };
-  return { name: item.name, sku: item.sku, barcode: item.barcode ?? "", categories: item.categories?.join(" · ") ?? "", PROD_QR: qrVal, product_image: imgUrl };
+  return {
+    name: item.name, sku: item.sku, barcode: item.barcode ?? "",
+    categories: item.categories?.join(" · ") ?? "", PROD_QR: qrVal, product_image: imgUrl,
+    price: fmtMoney(item.price), cost: fmtMoney(item.cost), currency: "₴",
+  };
 }
 
 function uid() { return Math.random().toString(36).slice(2, 8); }
@@ -323,7 +335,7 @@ function handlePos(h: Handle, w: number, hh: number) {
   return { left: m[h][0], top: m[h][1] };
 }
 
-const ALL_VARS = ["{{name}}","{{sku}}","{{barcode}}","{{categories}}","{{PROD_QR}}","{{code}}","{{zone_name}}","{{notes}}","{{CELL_QR}}","{{label}}","{{ACTION_QR}}"];
+const ALL_VARS = ["{{name}}","{{sku}}","{{barcode}}","{{categories}}","{{price}}","{{cost}}","{{currency}}","{{PROD_QR}}","{{code}}","{{zone_name}}","{{notes}}","{{CELL_QR}}","{{label}}","{{ACTION_QR}}"];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -1109,9 +1121,15 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
                 }
                 #wl-a4-print {
                   display: grid !important;
+                  position: static !important;
+                  left: auto !important;
+                  top: auto !important;
                 }
               }
-              @media screen { #wl-a4-print { display: none !important; } }
+              /* On screen: keep it laid out (so auto-fit text can measure) but
+                 push it off-canvas instead of display:none, which would zero out
+                 element sizes and disable shrink-to-fit on the printout. */
+              @media screen { #wl-a4-print { position: fixed !important; left: -10000px !important; top: 0 !important; } }
             ` }} />
             <div id="wl-a4-print" style={{
               display: "grid",

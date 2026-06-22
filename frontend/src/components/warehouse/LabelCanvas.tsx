@@ -7,6 +7,7 @@
  * All coordinates/sizes in mm. For screen display, wrap in a scaled container.
  */
 
+import { useLayoutEffect, useRef, useState } from "react";
 import QRCode from "react-qr-code";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -71,6 +72,9 @@ export interface LabelDataVars {
   categories?: string;
   PROD_QR?: string;
   product_image?: string;   // data URL or absolute URL
+  price?: string;           // formatted sale price (no currency)
+  cost?: string;            // formatted cost (no currency)
+  currency?: string;        // e.g. "₴"
   // action
   label?: string;
   ACTION_QR?: string;
@@ -81,6 +85,64 @@ export interface LabelDataVars {
 
 export function substituteVars(tpl: string, vars: LabelDataVars): string {
   return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "");
+}
+
+// ─── Auto-fit text ───────────────────────────────────────────────────────────
+// Renders text that shrinks to fit its box: starts at the configured font size
+// (treated as a max) and steps down until the content fits both width and height.
+// Keeps labels readable for any box the user draws — never silently clips.
+
+const MIN_FIT_MM = 1.2;
+
+function AutoFitText({
+  content, fontSize, fontWeight, color, align,
+}: {
+  content: string;
+  fontSize: number;                    // mm — acts as the maximum
+  fontWeight?: "normal" | "bold";
+  color?: string;
+  align?: "left" | "center" | "right";
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(fontSize);
+
+  // Reset to the configured size whenever inputs change; the layout effect
+  // below then steps it down if the content overflows.
+  useLayoutEffect(() => { setFit(fontSize); }, [content, fontSize]);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // overflow:hidden means scrollHeight/Width reflect full (clipped) content.
+    const overH = el.scrollHeight - el.clientHeight;
+    const overW = el.scrollWidth - el.clientWidth;
+    if (overH > 0.5 || overW > 0.5) {
+      const ratio = Math.min(
+        el.clientHeight / Math.max(1, el.scrollHeight),
+        el.clientWidth / Math.max(1, el.scrollWidth),
+      );
+      const next = Math.max(MIN_FIT_MM, fit * ratio * 0.97);
+      if (next < fit - 0.03) setFit(next);
+    }
+  });
+
+  return (
+    <div ref={ref} style={{
+      width: "100%",
+      height: "100%",
+      overflow: "hidden",
+      fontSize: `${fit}mm`,
+      fontWeight: fontWeight ?? "normal",
+      color: color ?? "#000",
+      textAlign: align ?? "left",
+      lineHeight: 1.15,
+      fontFamily: "Arial, Helvetica, sans-serif",
+      wordBreak: "break-word",
+      overflowWrap: "break-word",
+    }}>
+      {content}
+    </div>
+  );
 }
 
 // ─── Element renderer ────────────────────────────────────────────────────────
@@ -103,20 +165,13 @@ function ElementRenderer({
     case "text": {
       const content = substituteVars(el.text ?? "", vars);
       return (
-        <div style={{
-          ...pos,
-          fontSize: `${el.fontSize ?? 4}mm`,
-          fontWeight: el.fontWeight ?? "normal",
-          color: el.color ?? "#000",
-          textAlign: el.align ?? "left",
-          lineHeight: 1.2,
-          display: "block",
-          fontFamily: "Arial, Helvetica, sans-serif",
-          wordBreak: "break-word",
-          overflowWrap: "break-word",
-        }}>
-          {content}
-        </div>
+        <AutoFitText
+          content={content}
+          fontSize={el.fontSize ?? 4}
+          fontWeight={el.fontWeight}
+          color={el.color}
+          align={el.align}
+        />
       );
     }
 
