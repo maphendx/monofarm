@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { API_URL, api, getToken } from "@/lib/api";
 import { useBodyScrollLock } from "@/components/ui/Modal";
 import { generateCode128Url } from "@/components/warehouse/labelUtils";
+import { labelNodeToGfaZpl } from "@/components/warehouse/labelRaster";
 import {
   LabelCanvas,
   substituteVars,
@@ -248,7 +249,7 @@ async function _loadBPLib(): Promise<boolean> {
   });
 }
 
-async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" | "blocked" | "error"> {
+async function sendToBrowserPrint(zpl: string, batchSize = 10): Promise<"ok" | "not_available" | "blocked" | "error"> {
   try {
     const loaded = await _loadBPLib();
     if (!loaded) return "not_available";
@@ -259,7 +260,7 @@ async function sendToBrowserPrint(zpl: string): Promise<"ok" | "not_available" |
     // Split into individual label blocks (^XA … ^XZ) and batch them
     // to avoid Java printing crashes on large jobs (60+ labels).
     const labels = zpl.match(/\^XA[\s\S]*?\^XZ/g) ?? [zpl];
-    const BATCH = 10;
+    const BATCH = batchSize;
     const batches: string[] = [];
     for (let i = 0; i < labels.length; i += BATCH) {
       batches.push(labels.slice(i, i + BATCH).join("\n"));
@@ -383,6 +384,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const [confirmDelTpl, setConfirmDelTpl] = useState(false);
   const [saving,      setSaving]      = useState(false);
   const [printing,    setPrinting]    = useState(false);
+  const [rasterPortal, setRasterPortal] = useState(false);
   const [zplDpi,      setZplDpi]      = useState<203 | 300 | 600>(() => {
     const saved = parseInt(localStorage.getItem("zebra_dpi") ?? "203");
     return (saved === 300 || saved === 600) ? saved : 203;
@@ -396,6 +398,7 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   const dragRef      = useRef<{id:string;startCX:number;startCY:number;origX:number;origY:number}|null>(null);
   const resizeRef    = useRef<{id:string;handle:Handle;startCX:number;startCY:number;origEl:LabelElement}|null>(null);
   const inFlight     = useRef(false);
+  const rasterRef    = useRef<HTMLDivElement>(null);
 
   const activeTpl  = localTpl ?? templates.find(t => t.id === tplId) ?? null;
   const isSingle   = items.length === 1;
@@ -605,33 +608,84 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
   }
 
   // ── Zebra ZPL — uses template elements for universal output ──────────────
+  // Zebra print uses raster (^GFA): the exact rendered label is captured to a
+  // 1-bit bitmap and sent as a graphic, so the printout matches the editor
+  // pixel-for-pixel (auto-fit text, bold, barcode, QR). The hidden raster portal
+  // renders the labels; the effect below captures + sends them.
   async function printZebra() {
-    if (inFlight.current || totalLabels === 0) return;
-    inFlight.current = true; setBusy(true); setStatus(null);
+    if (inFlight.current || totalLabels === 0 || !activeTpl) return;
+    inFlight.current = true; setBusy(true); setStatus("Рендеринг міток…");
 
-    let zpl: string;
-    if (activeTpl) {
-      // Template-based: each element type → correct ZPL command
-      const varsList = printItems.map(item =>
-        itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
-      );
-      zpl = buildZplFromTemplate(activeTpl, printItems, varsList, zplDpi);
-    } else {
-      // Fallback: simple QR + text
-      const qrVals = printItems.map(item => defaultQr(item));
-      zpl = buildZplFallback(printItems, qrVals, 57, 32, zplDpi);
-    }
-
-    setStatus("Підключення до Zebra Browser Print…");
-    const result = await sendToBrowserPrint(toZplBrowserPrint(zpl));
-    setStatus(
-      result === "ok"           ? "✓ Відправлено на Zebra" :
-      result === "not_available"? "✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint" :
-      result === "blocked"      ? "✗ Chrome заблокував доступ. Відкрийте chrome://flags/#block-insecure-private-network-requests → Disabled, перезапустіть Chrome" :
-                                  "✗ Помилка відправки",
+    // Pre-generate every barcode SVG so the rasterised labels include them.
+    const allBc: Record<string, string> = { ...bcUrls };
+    await Promise.all(
+      activeTpl.elements.filter(e => e.type === "barcode").flatMap(el => {
+        const showText = el.showText ?? false;
+        return printItems.map(async item => {
+          const vars     = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+          const raw      = substituteVars(el.value ?? "", vars as Record<string, string>);
+          const cacheKey = `${raw}__${showText ? "1" : "0"}`;
+          if (!raw || allBc[cacheKey]) return;
+          const url = await generateCode128Url(raw, 0, showText);
+          if (url) { allBc[cacheKey] = url; allBc[raw] = url; }
+        });
+      }),
     );
-    inFlight.current = false; setBusy(false);
+    setPrintBcUrls(allBc);
+    setRasterPortal(true); // the effect captures the rendered nodes and sends them
   }
+
+  // Element-based ZPL fallback (used only if raster capture fails on a browser).
+  async function printZebraElementFallback(): Promise<"ok" | "not_available" | "blocked" | "error"> {
+    if (!activeTpl) return "error";
+    const varsList = printItems.map(item =>
+      itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined),
+    );
+    const zpl = buildZplFromTemplate(activeTpl, printItems, varsList, zplDpi);
+    return sendToBrowserPrint(toZplBrowserPrint(zpl));
+  }
+
+  // Capture the hidden raster portal → ^GFA → Zebra Browser Print.
+  useEffect(() => {
+    if (!rasterPortal) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await new Promise(r => setTimeout(r, 250)); // let the portal mount + auto-fit settle
+        const container = rasterRef.current;
+        if (!container || !activeTpl) throw new Error("raster container missing");
+        // Wait for barcode/QR/image bitmaps to decode.
+        await Promise.all(Array.from(container.querySelectorAll("img"))
+          .map(im => (im as HTMLImageElement).decode?.().catch(() => {})));
+        if (document.fonts?.ready) { try { await document.fonts.ready; } catch { /* ignore */ } }
+
+        const nodes = Array.from(container.querySelectorAll<HTMLElement>("[data-rlabel] > *"));
+        const blocks: string[] = [];
+        for (const node of nodes) {
+          if (cancelled) return;
+          blocks.push(await labelNodeToGfaZpl(node, activeTpl.width_mm, activeTpl.height_mm, zplDpi));
+        }
+        if (blocks.length === 0) throw new Error("no labels rendered");
+        if (cancelled) return;
+
+        setStatus("Підключення до Zebra Browser Print…");
+        const result = await sendToBrowserPrint(blocks.join("\n"), 1);
+        setStatus(
+          result === "ok"            ? "✓ Відправлено на Zebra" :
+          result === "not_available" ? "✗ Zebra Browser Print не знайдено. Встановіть з zebra.com/browserprint" :
+          result === "blocked"       ? "✗ Chrome заблокував доступ. chrome://flags/#block-insecure-private-network-requests → Disabled" :
+                                       "✗ Помилка відправки",
+        );
+      } catch (e) {
+        console.error("[raster] capture failed, falling back to element ZPL", e);
+        const result = await printZebraElementFallback().catch(() => "error" as const);
+        setStatus(result === "ok" ? "✓ Відправлено на Zebra (резервний режим)" : "✗ Помилка друку");
+      } finally {
+        if (!cancelled) { setRasterPortal(false); inFlight.current = false; setBusy(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [rasterPortal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function downloadZpl() {
     if (!activeTpl || totalLabels === 0) return;
@@ -1188,6 +1242,22 @@ export function WarehouseLabelModal({ items, onClose }: { items: WarehouseLabelI
           </>
         );
       })(),
+      document.body,
+    )}
+
+    {/* Hidden raster portal — labels rendered off-screen and captured to ^GFA */}
+    {rasterPortal && activeTpl && createPortal(
+      <div ref={rasterRef} style={{ position: "fixed", left: "-99999px", top: 0, background: "#fff", pointerEvents: "none" }}>
+        {printItems.map((item, i) => {
+          const vars = itemToVars(item, defaultQr(item), item.type === "product" ? imgUrls[item.id] : undefined);
+          const bcu: Record<string, string> = {};
+          activeTpl.elements.filter(e => e.type === "barcode").forEach(el => {
+            const raw = substituteVars(el.value ?? "", vars as Record<string, string>);
+            if (printBcUrls[raw]) bcu[raw] = printBcUrls[raw];
+          });
+          return <div key={i} data-rlabel={i}><LabelCanvas template={activeTpl} vars={vars} barcodeUrls={bcu} /></div>;
+        })}
+      </div>,
       document.body,
     )}
     </>
