@@ -6,6 +6,8 @@ maintained automatically through every stock movement.
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -114,17 +116,17 @@ def test_order_payment_updates_order_and_cashflow(setup, client, auth_headers):
                           json={"amount": 20, "method": "cash"}, headers=auth_headers)
 
     assert payment.status_code == 201, payment.text
-    assert payment.json()["amount"] == "20.0000"
+    assert Decimal(payment.json()["amount"]) == Decimal("20")
 
     fetched = client.get(f"/api/warehouse/orders/{order_id}", headers=auth_headers)
     assert fetched.status_code == 200, fetched.text
-    assert fetched.json()["paid_amount"] == "20.0000"
+    assert Decimal(fetched.json()["paid_amount"]) == Decimal("20")
 
     cashflow = client.get("/api/warehouse/cashflow?limit=10", headers=auth_headers)
     assert cashflow.status_code == 200, cashflow.text
     payment_rows = [row for row in cashflow.json() if row["order_id"] == order_id]
     assert len(payment_rows) == 1
-    assert payment_rows[0]["amount"] == "20.0000"
+    assert Decimal(payment_rows[0]["amount"]) == Decimal("20")
     assert payment_rows[0]["type"] == "income"
 
 
