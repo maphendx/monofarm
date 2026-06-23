@@ -76,6 +76,58 @@ def test_product_update_persists_cell_limit(setup, client, auth_headers):
     assert fetched.json()["cell_limit"] == 24
 
 
+def test_scan_cell_returns_batched_stock_detail(setup, client, auth_headers):
+    wh, p, cells = setup["wh"], setup["product"], setup["cells"]
+    _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],
+          warehouse_to_id=wh["id"], quantity=25, unit_cost=5)
+    putaway = client.post(f"/api/warehouse/cells/{cells[0]['id']}/putaway",
+                          json={"product_id": p["id"], "quantity": 12}, headers=auth_headers)
+    assert putaway.status_code == 200, putaway.text
+
+    response = client.get(f"/api/warehouse/scan?q=CELL:{cells[0]['id']}", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["type"] == "cell"
+    assert body["cell"]["warehouse_id"] == wh["id"]
+    assert body["cell"]["zone_id"] == setup["zone"]["id"]
+    assert body["cell"]["stock"] == [{
+        "product_id": p["id"],
+        "product_name": "Widget",
+        "product_sku": "W-1",
+        "product_unit": "шт",
+        "quantity": "12.0000",
+        "image_url": None,
+    }]
+
+
+def test_order_payment_updates_order_and_cashflow(setup, client, auth_headers):
+    p = setup["product"]
+    order = client.post("/api/warehouse/orders", json={
+        "customer_name": "Payment Buyer",
+        "items": [{"product_id": p["id"], "quantity": 2, "unit_price": 15}],
+    }, headers=auth_headers)
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+
+    payment = client.post(f"/api/warehouse/orders/{order_id}/payments",
+                          json={"amount": 20, "method": "cash"}, headers=auth_headers)
+
+    assert payment.status_code == 201, payment.text
+    assert payment.json()["amount"] == "20.0000"
+
+    fetched = client.get(f"/api/warehouse/orders/{order_id}", headers=auth_headers)
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["paid_amount"] == "20.0000"
+
+    cashflow = client.get("/api/warehouse/cashflow?limit=10", headers=auth_headers)
+    assert cashflow.status_code == 200, cashflow.text
+    payment_rows = [row for row in cashflow.json() if row["order_id"] == order_id]
+    assert len(payment_rows) == 1
+    assert payment_rows[0]["amount"] == "20.0000"
+    assert payment_rows[0]["type"] == "income"
+
+
 def test_putaway_then_clamp_on_oversell(setup, client, auth_headers):
     wh, p, cells = setup["wh"], setup["product"], setup["cells"]
     _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],

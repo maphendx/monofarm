@@ -106,26 +106,31 @@ def scan(
             cell_id = int(q.split(":", 1)[1])
         except ValueError:
             raise HTTPException(status_code=400, detail="Невірний формат CELL")
-        cell = (
-            db.query(WarehouseCell)
+        row = (
+            db.query(WarehouseCell, WarehouseZone, Warehouse)
             .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+            .join(Warehouse, Warehouse.id == WarehouseZone.warehouse_id)
             .filter(WarehouseCell.id == cell_id, WarehouseZone.organization_id == org.id)
             .first()
         )
-        if not cell:
+        if not row:
             raise HTTPException(status_code=404, detail="Комірку не знайдено")
-        zone = db.get(WarehouseZone, cell.zone_id)
-        wh   = db.get(Warehouse, zone.warehouse_id)
-        stocks = db.query(CellStock).filter_by(cell_id=cell.id).all()
-        stock_out = []
-        for cs in stocks:
-            p = db.get(Product, cs.product_id)
-            if p:
-                stock_out.append(CellStockOut(
-                    product_id=cs.product_id, product_name=p.name,
-                    product_sku=p.sku, product_unit=p.unit, quantity=cs.quantity,
-                    image_url=_product_image_url(p, org.id),
-                ))
+        cell, zone, wh = row
+        stock_rows = (
+            db.query(CellStock, Product)
+            .join(Product, Product.id == CellStock.product_id)
+            .filter(CellStock.cell_id == cell.id, Product.organization_id == org.id)
+            .order_by(Product.name, Product.id)
+            .all()
+        )
+        stock_out = [
+            CellStockOut(
+                product_id=cs.product_id, product_name=p.name,
+                product_sku=p.sku, product_unit=p.unit, quantity=cs.quantity,
+                image_url=_product_image_url(p, org.id),
+            )
+            for cs, p in stock_rows
+        ]
         detail = CellDetailOut(
             cell_id=cell.id, cell_code=cell.code, cell_notes=cell.notes,
             zone_id=zone.id, zone_name=zone.name,
@@ -4829,6 +4834,7 @@ def cancel_order(
 def record_payment(
     order_id: int,
     payload:  OrderPaymentCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4891,6 +4897,8 @@ def record_payment(
 
     db.commit()
     db.refresh(payment)
+    bg.add_task(broadcast_warehouse, org.id, "orders")
+    bg.add_task(broadcast_warehouse, org.id, "cashflow")
     return OrderPaymentOut.model_validate(payment)
 
 
@@ -4916,6 +4924,7 @@ def list_payments(
 def delete_payment(
     order_id:   int,
     payment_id: int,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     _:    User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -4956,6 +4965,8 @@ def delete_payment(
             cp.balance += amount
 
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "orders")
+    bg.add_task(broadcast_warehouse, org.id, "cashflow")
 
 
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
@@ -5692,6 +5703,7 @@ def cashregister_sell(
 
     bg.add_task(broadcast_warehouse, org.id, "cashflow")
     bg.add_task(broadcast_warehouse, org.id, "movements")
+    bg.add_task(broadcast_warehouse, org.id, "stock")
 
     return CashRegisterReceipt(
         total=total,
@@ -5793,6 +5805,7 @@ def list_purchases(
 @_full.post("/purchases", response_model=PurchaseOrderOut, status_code=status.HTTP_201_CREATED)
 def create_purchase(
     payload: PurchaseOrderCreate,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -5831,6 +5844,7 @@ def create_purchase(
     db.commit()
     db.refresh(po)
 
+    bg.add_task(broadcast_warehouse, org.id, "purchases")
     product_map, cp_map, wh_map = _po_lookup_maps(po, org.id, db)
     return _po_to_out(po, product_map, cp_map, wh_map)
 
@@ -5895,6 +5909,9 @@ def receive_purchase(
 
     bg.add_task(broadcast_warehouse, org.id, "stock")
     bg.add_task(broadcast_warehouse, org.id, "movements")
+    bg.add_task(broadcast_warehouse, org.id, "purchases")
+    if po.counterparty_id:
+        bg.add_task(broadcast_warehouse, org.id, "counterparties")
 
     product_map, cp_map, wh_map = _po_lookup_maps(po, org.id, db)
     return _po_to_out(po, product_map, cp_map, wh_map)
@@ -5903,6 +5920,7 @@ def receive_purchase(
 @_full.delete("/purchases/{po_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_purchase(
     po_id: int,
+    bg:   BackgroundTasks,
     db:   Session      = Depends(get_db),
     org:  Organization = Depends(get_current_org),
     _user: User        = Depends(require_roles(UserRole.admin)),
@@ -5914,6 +5932,7 @@ def delete_purchase(
         raise HTTPException(status_code=400, detail="Cannot delete a received purchase order")
     db.delete(po)
     db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "purchases")
 
 
 # ── Order Invoice PDF ─────────────────────────────────────────────────────────
