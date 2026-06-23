@@ -1,0 +1,276 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: 29711e0 2026.06.12 13:34
+  - text: 
+  - img "intercom" [ref=e4] [cursor=pointer]
+  - text:   
+  - generic [ref=e6]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - link [ref=e10] [cursor=pointer]:
+          - /url: "#"
+        - generic [ref=e14] [cursor=pointer]: 
+      - generic:
+        - link "... Oleksandr Yatsyshyn Власник":
+          - /url: personal_profile
+          - generic [ref=e16] [cursor=pointer]:
+            - img "..." [ref=e17]: dd
+            - text: 
+          - generic [ref=e18] [cursor=pointer]:
+            - heading "Oleksandr Yatsyshyn" [level=2] [ref=e19]
+            - generic [ref=e20]: Власник
+      - generic [ref=e22]:
+        - generic [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: 
+          - generic [ref=e26]: LeoCode
+        - list [ref=e28]:
+          - listitem [ref=e29] [cursor=pointer]:
+            - link " Ваші компанії" [ref=e30]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/client_companies
+              - generic [ref=e31]: 
+              - text: Ваші компанії
+          - listitem [ref=e32] [cursor=pointer]:
+            - link " Ваші склади 823" [ref=e33]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/warehouses
+              - generic [ref=e34]: 
+              - text: Ваші склади
+              - generic [ref=e35]: "823"
+          - listitem [ref=e36] [cursor=pointer]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: 
+              - text: Замовлення
+              - generic [ref=e39]: "2"
+              - generic [ref=e40]: 
+          - listitem [ref=e41] [cursor=pointer]:
+            - link " Каса" [ref=e42]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/sale
+              - generic [ref=e43]: 
+              - text: Каса
+          - listitem [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]:
+              - generic [ref=e46]: 
+              - text: Виробництво
+              - generic [ref=e47]: 
+          - listitem [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]:
+              - generic [ref=e50]: 
+              - text: Товари
+              - generic [ref=e51]: 
+          - listitem [ref=e52] [cursor=pointer]:
+            - generic [ref=e53]:
+              - generic [ref=e54]: 
+              - text: Банк
+              - generic [ref=e55]: 
+          - listitem [ref=e56] [cursor=pointer]:
+            - generic [ref=e57]:
+              - generic [ref=e58]: 
+              - text: Контрагенти
+              - generic [ref=e59]: 
+          - listitem [ref=e60] [cursor=pointer]:
+            - generic [ref=e61]:
+              - generic [ref=e62]: 
+              - text: Послуги
+              - generic [ref=e63]: 
+          - listitem [ref=e64] [cursor=pointer]:
+            - link " Проєкти" [ref=e65]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/contracts
+              - generic [ref=e66]: 
+              - text: Проєкти
+          - listitem [ref=e67] [cursor=pointer]:
+            - link " Звіти" [ref=e68]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/reports
+              - generic [ref=e69]: 
+              - text: Звіти
+          - listitem [ref=e70] [cursor=pointer]:
+            - link " Інвентаризація" [ref=e71]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/inventory
+              - generic [ref=e72]: 
+              - text: Інвентаризація
+          - listitem [ref=e73] [cursor=pointer]:
+            - link " Працівники" [ref=e74]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/workers
+              - generic [ref=e75]: 
+              - text: Працівники
+          - listitem [ref=e76] [cursor=pointer]:
+            - link " Імпорт" [ref=e77]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/import
+              - generic [ref=e78]: 
+              - text: Імпорт
+          - listitem [ref=e79] [cursor=pointer]:
+            - generic [ref=e80]:
+              - generic [ref=e81]: 
+              - text: Налаштування
+              - generic [ref=e82]: 
+          - listitem [ref=e83] [cursor=pointer]:
+            - generic [ref=e84]:
+              - generic [ref=e85]: 
+              - text: Архів
+              - generic [ref=e86]: 
+    - generic [ref=e87]:
+      - navigation:
+        - list [ref=e88]:
+          - listitem [ref=e89]:
+            - link "Oleksandr Yatsyshyn " [ref=e90] [cursor=pointer]:
+              - /url: javascript:;
+              - text: Oleksandr Yatsyshyn
+              - generic [ref=e91]: 
+            - text: 
+          - listitem [ref=e92]:
+            - link "" [ref=e93] [cursor=pointer]:
+              - /url: personal_profile
+              - generic [ref=e94]: 
+          - listitem [ref=e95]:
+            - link "" [ref=e96] [cursor=pointer]:
+              - /url: javascript:;
+              - generic [ref=e97]: 
+          - listitem [ref=e98]:
+            - link "UA" [ref=e99] [cursor=pointer]:
+              - /url: "#"
+    - main [ref=e100]:
+      - heading "Ваші склади" [level=3] [ref=e104]
+      - generic [ref=e107]:
+        - generic [ref=e108]:
+          - generic [ref=e109]:
+            - generic [ref=e111]: 
+            - textbox [ref=e112]
+          - generic [ref=e113]:
+            - generic [ref=e114]: 72 238,83
+            - generic [ref=e115]: 473 788,4
+          - button "Додати склад" [ref=e117] [cursor=pointer]:
+            - generic [ref=e118]: +
+            - text: Додати склад
+        - generic [ref=e123]:
+          - generic [ref=e125]:
+            - list [ref=e126]:
+              - listitem [ref=e127]:
+                - button "" [ref=e128] [cursor=pointer]:
+                  - generic [ref=e129]: 
+                - text:    
+            - generic [ref=e130] [cursor=pointer]: Склад
+            - heading "1 Наукова 49А" [level=3] [ref=e131] [cursor=pointer]
+            - generic [ref=e132] [cursor=pointer]:
+              - generic [ref=e133]: "148"
+              - generic [ref=e134]:
+                - generic [ref=e135]: Собівартість
+                - text: 3 127,89
+              - generic [ref=e136]:
+                - generic [ref=e137]: Ціна роздрібна
+                - text: 31 870
+            - list [ref=e138]:
+              - listitem [ref=e139] [cursor=pointer]: Дрони
+              - listitem [ref=e140] [cursor=pointer]: Іграшки
+          - generic [ref=e142]:
+            - list [ref=e143]:
+              - listitem [ref=e144]:
+                - button "" [ref=e145] [cursor=pointer]:
+                  - generic [ref=e146]: 
+                - text:    
+            - generic [ref=e147] [cursor=pointer]: Склад
+            - heading "3 Мазепи 25Д" [level=3] [ref=e148] [cursor=pointer]
+            - generic [ref=e149] [cursor=pointer]:
+              - generic [ref=e150]: "237"
+              - generic [ref=e151]:
+                - generic [ref=e152]: Собівартість
+                - text: 50 277,2
+              - generic [ref=e153]:
+                - generic [ref=e154]: Ціна роздрібна
+                - text: 282 850
+            - list [ref=e155]:
+              - listitem [ref=e156] [cursor=pointer]: Дрони
+              - listitem [ref=e157] [cursor=pointer]: Іграшки
+          - generic [ref=e159]:
+            - list [ref=e160]:
+              - listitem [ref=e161]:
+                - button "" [ref=e162] [cursor=pointer]:
+                  - generic [ref=e163]: 
+                - text:    
+            - generic [ref=e164] [cursor=pointer]: Склад
+            - heading "3D LAB" [level=3] [ref=e165] [cursor=pointer]
+            - generic [ref=e166] [cursor=pointer]:
+              - generic [ref=e167]: "128"
+              - generic [ref=e168]:
+                - generic [ref=e169]: Собівартість
+                - text: 2 948,6
+              - generic [ref=e170]:
+                - generic [ref=e171]: Ціна роздрібна
+                - text: 19 948,4
+            - list [ref=e172]:
+              - listitem [ref=e173] [cursor=pointer]: Головний
+          - generic [ref=e175]:
+            - list [ref=e176]:
+              - listitem [ref=e177]:
+                - button "" [ref=e178] [cursor=pointer]:
+                  - generic [ref=e179]: 
+                - text:    
+            - generic [ref=e180] [cursor=pointer]: Склад
+            - heading "World School" [level=3] [ref=e181] [cursor=pointer]
+            - generic [ref=e182] [cursor=pointer]:
+              - generic [ref=e183]: "125"
+              - generic [ref=e184]:
+                - generic [ref=e185]: Собівартість
+                - text: "0"
+              - generic [ref=e186]:
+                - generic [ref=e187]: Ціна роздрібна
+                - text: "0"
+            - list [ref=e188]:
+              - listitem [ref=e189] [cursor=pointer]: Дрони
+          - generic [ref=e191]:
+            - list [ref=e192]:
+              - listitem [ref=e193]:
+                - button "" [ref=e194] [cursor=pointer]:
+                  - generic [ref=e195]: 
+                - text:    
+            - generic [ref=e196] [cursor=pointer]: Склад
+            - heading "МК Дрони" [level=3] [ref=e197] [cursor=pointer]
+            - generic [ref=e198] [cursor=pointer]:
+              - generic [ref=e199]: "22"
+              - generic [ref=e200]:
+                - generic [ref=e201]: Собівартість
+                - text: "350"
+              - generic [ref=e202]:
+                - generic [ref=e203]: Ціна роздрібна
+                - text: 4 800
+            - list [ref=e204]:
+              - listitem [ref=e205] [cursor=pointer]: Основний
+          - generic [ref=e207]:
+            - list [ref=e208]:
+              - listitem [ref=e209]:
+                - button "" [ref=e210] [cursor=pointer]:
+                  - generic [ref=e211]: 
+                - text:    
+            - generic [ref=e212] [cursor=pointer]: Склад
+            - heading "Резервний" [level=3] [ref=e213] [cursor=pointer]
+            - generic [ref=e214] [cursor=pointer]:
+              - generic [ref=e215]: "56"
+              - generic [ref=e216]:
+                - generic [ref=e217]: Собівартість
+                - text: "0"
+              - generic [ref=e218]:
+                - generic [ref=e219]: Ціна роздрібна
+                - text: "0"
+            - list [ref=e220]:
+              - listitem [ref=e221] [cursor=pointer]: Склад
+          - generic [ref=e223]:
+            - list [ref=e224]:
+              - listitem [ref=e225]:
+                - button "" [ref=e226] [cursor=pointer]:
+                  - generic [ref=e227]: 
+                - text:    
+            - generic [ref=e228] [cursor=pointer]: Склад
+            - heading "Ярмарка" [level=3] [ref=e229] [cursor=pointer]
+            - generic [ref=e230] [cursor=pointer]:
+              - generic [ref=e231]: "107"
+              - generic [ref=e232]:
+                - generic [ref=e233]: Собівартість
+                - text: 15 535,14
+              - generic [ref=e234]:
+                - generic [ref=e235]: Ціна роздрібна
+                - text: 134 320
+            - list [ref=e236]:
+              - listitem [ref=e237] [cursor=pointer]: Кейси
+    - text:   
+    - contentinfo [ref=e238]
+    - text:         
+  - text:   
+  - text:               
+  - iframe [ref=e239]:
+    

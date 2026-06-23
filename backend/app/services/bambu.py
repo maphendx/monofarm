@@ -808,17 +808,7 @@ def _sync_cloud_job_from_report(
 
         printer = db.get(Printer, job.printer_id)
         if printer is not None:
-            if target_status == BambuCloudJobStatus.paused and not error_msg:
-                send_print_event_notification(
-                    db,
-                    job.organization_id,
-                    event="paused",
-                    printer_name=printer.name,
-                    printer_id=printer.id,
-                    file_name=job.file_name or filename,
-                    dedupe_key=f"{job.id}:paused",
-                )
-            elif target_status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused) and error_msg and error_msg != prior_error_msg:
+            if target_status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused) and error_msg and error_msg != prior_error_msg:
                 send_print_event_notification(
                     db,
                     job.organization_id,

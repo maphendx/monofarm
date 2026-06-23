@@ -1,0 +1,8 @@
+- generic [ref=e3]:
+  - img "404" [ref=e5]
+  - generic [ref=e6]: Looks like this page doesn't exist yet!
+  - generic [ref=e7]: You can go back home or contact us to find the info you’ve been looking for.
+  - link "Back home" [ref=e8] [cursor=pointer]:
+    - /url: /
+  - link "www.ordage.com" [ref=e10] [cursor=pointer]:
+    - /url: /

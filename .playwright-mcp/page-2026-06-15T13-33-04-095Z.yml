@@ -1,0 +1,40 @@
+- generic [active] [ref=e1]:
+  - link "UA " [ref=e4] [cursor=pointer]:
+    - /url: "#"
+    - generic [ref=e5]:
+      - text: UA
+      - generic [ref=e6]: 
+      - text: 
+  - img "intercom" [ref=e8] [cursor=pointer]
+  - link "Ordg." [ref=e10] [cursor=pointer]:
+    - /url: https://ordage.com
+    - img "Ordg." [ref=e11]
+  - generic [ref=e12]:
+    - img "pc" [ref=e14]
+    - generic [ref=e17]:
+      - heading "Вхід" [level=1] [ref=e18]
+      - generic [ref=e19]:
+        - generic [ref=e20]:
+          - textbox "Email" [ref=e22]
+          - generic [ref=e23]:
+            - textbox "Пароль" [ref=e24]
+            - generic [ref=e25] [cursor=pointer]: 
+          - link "Забули пароль?" [ref=e26] [cursor=pointer]:
+            - /url: /password_reset/reset_request
+          - button "Увійти" [ref=e28] [cursor=pointer]: Увійти 
+        - separator [ref=e29]
+        - link "Увійти через Google" [ref=e32] [cursor=pointer]:
+          - /url: /auth/redirect/google?fp=f8659d2c00a5d6d5666b44c22f9e139f
+          - text: Увійти через Google
+        - paragraph [ref=e34]:
+          - text: Ще не маєте облікового запису?
+          - link "Зареєструватися" [ref=e35] [cursor=pointer]:
+            - /url: /page/register_form
+  - generic [ref=e36]:
+    - link "Публічна оферта" [ref=e37] [cursor=pointer]:
+      - /url: https://ordage.com/public-offer-ua
+    - link "Політика конфіденційності" [ref=e38] [cursor=pointer]:
+      - /url: https://ordage.com/privacy-notice-ua
+  - text: 
+  - strong:
+    - strong

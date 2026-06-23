@@ -1,0 +1,41 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - link [ref=e10] [cursor=pointer]:
+        - /url: https://simplyprint.io/panel/
+        - img [ref=e26]
+      - list [ref=e12]:
+        - listitem [ref=e49]
+        - listitem [ref=e53]
+        - listitem [ref=e57]
+        - listitem [ref=e61]
+        - listitem [ref=e65]
+        - listitem [ref=e69]
+        - listitem [ref=e73]
+        - listitem [ref=e77]
+        - listitem [ref=e83]
+        - listitem [ref=e87]
+        - listitem [ref=e90]
+        - listitem [ref=e94]
+        - listitem [ref=e98]
+        - listitem [ref=e102]
+        - listitem [ref=e106]
+        - listitem [ref=e110]
+        - listitem [ref=e113]
+        - listitem [ref=e117]
+        - listitem [ref=e121]
+        - listitem [ref=e126]
+    - generic [ref=e13]:
+      - generic [ref=e15]:
+        - list [ref=e129]
+        - list [ref=e133]
+      - main [ref=e16]:
+        - generic [ref=e173]
+      - contentinfo [ref=e17]:
+        - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+        - text: ® "SimplyPrint" is a registered trademark.
+        - generic [ref=e18]
+  - log [ref=e25]
+  - generic [ref=e381]: giItT1WQy@!-/#
+  - generic [ref=e382]: giItT1WQy@!-/#
+  - button "Open chat" [ref=e383] [cursor=pointer]

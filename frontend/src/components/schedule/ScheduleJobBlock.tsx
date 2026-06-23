@@ -24,6 +24,7 @@ export function ScheduleJobBlock({
   const { entry, startMins, endMins, isContinuation, totalDurationMins } = block;
   const isConflict = entry.conflict;
   const isBlocked  = !!entry.blocked_reason && entry.schedule_mode !== "asap";
+  const status = entry.task.status;
 
   const leftPct   = (startMins / 1440) * 100;
   const widthPct  = ((endMins - startMins) / 1440) * 100;
@@ -50,10 +51,24 @@ export function ScheduleJobBlock({
   const base =
     "absolute top-1 bottom-1 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
 
+  const statusTone = status === "done"
+    ? "done"
+    : status === "cancelled"
+    ? "cancelled"
+    : status === "in_progress"
+    ? "printing"
+    : "queued";
+
   const colorCls = isConflict
     ? "bg-[rgba(217,119,6,.18)] border border-[rgba(217,119,6,.45)]"
     : isBlocked
     ? "bg-[rgba(113,113,122,.14)] border border-[rgba(113,113,122,.35)]"
+    : statusTone === "done"
+    ? "bg-[rgba(34,197,94,.10)] border border-[rgba(34,197,94,.36)]"
+    : statusTone === "cancelled"
+    ? "bg-[rgba(239,68,68,.09)] border border-[rgba(239,68,68,.34)]"
+    : statusTone === "printing"
+    ? "bg-[rgba(56,189,248,.10)] border border-[rgba(56,189,248,.36)]"
     : isContinuation
     ? "bg-[var(--accent-soft)] border border-dashed border-[var(--accent)]"
     : "bg-[var(--accent-soft)] border border-[var(--accent)]";
@@ -63,8 +78,22 @@ export function ScheduleJobBlock({
       ? "border-t-[3px] border-t-[var(--state-warn)]"
       : isBlocked
       ? "border-t-[3px] border-t-[var(--state-idle)]"
+      : statusTone === "done"
+      ? "border-t-[3px] border-t-[var(--state-ok)]"
+      : statusTone === "cancelled"
+      ? "border-t-[3px] border-t-[var(--state-error)]"
+      : statusTone === "printing"
+      ? "border-t-[3px] border-t-[var(--state-print)]"
       : "border-t-[3px] border-t-[var(--accent)]"
     : "";
+
+  const statusLabel = status === "done"
+    ? "завершено"
+    : status === "cancelled"
+    ? "скасовано"
+    : status === "in_progress"
+    ? "друкується"
+    : "у плані";
 
   function onDragStart(e: React.DragEvent<HTMLButtonElement>) {
     e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id }));
@@ -77,7 +106,7 @@ export function ScheduleJobBlock({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}`}
+      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}\n${statusLabel}`}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, zIndex: isOverflow ? 5 : undefined }}
       className={`${base} ${colorCls} ${topBorder}`}
     >
@@ -86,7 +115,7 @@ export function ScheduleJobBlock({
           <div className="flex h-full w-full items-center justify-center px-0.5 py-1">
             <span className={[
               "max-h-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-semibold leading-none [text-orientation:mixed] [writing-mode:vertical-rl]",
-              isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+              isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
             ].join(" ")}>
               {isContinuation ? `↩ ${fileLabel}` : fileLabel}
             </span>
@@ -112,7 +141,7 @@ export function ScheduleJobBlock({
           {/* File name line */}
           <span className={[
             "truncate text-[10px] font-semibold leading-tight",
-            isConflict ? "text-[var(--state-warn)]" : "text-[var(--text)]",
+            isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
           ].join(" ")}>
             {isContinuation ? `↩ ${fileLabel}` : fileLabel}
           </span>
@@ -134,6 +163,14 @@ export function ScheduleJobBlock({
           )}
           {!isCompact && isBlocked && !isConflict && (
             <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
+          )}
+          {!isCompact && !isConflict && !isBlocked && status !== "queued" && (
+            <span className={[
+              "text-[9px]",
+              statusTone === "done" ? "text-[var(--state-ok)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : "text-[var(--state-print)]",
+            ].join(" ")}>
+              {statusLabel}
+            </span>
           )}
         </div>}
       </div>

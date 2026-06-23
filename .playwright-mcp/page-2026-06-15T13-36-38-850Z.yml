@@ -1,0 +1,169 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: 29711e0 2026.06.12 13:34
+  - text: 
+  - img "intercom" [ref=e4] [cursor=pointer]
+  - text:   
+  - generic [ref=e6]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - link [ref=e10] [cursor=pointer]:
+          - /url: "#"
+        - generic [ref=e14] [cursor=pointer]: 
+      - generic:
+        - link "... Oleksandr Yatsyshyn Власник":
+          - /url: personal_profile
+          - generic [ref=e16] [cursor=pointer]:
+            - img "..." [ref=e17]: dd
+            - text: 
+          - generic [ref=e18] [cursor=pointer]:
+            - heading "Oleksandr Yatsyshyn" [level=2] [ref=e19]
+            - generic [ref=e20]: Власник
+      - generic [ref=e22]:
+        - generic [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]: 
+          - generic [ref=e26]: LeoCode
+        - list [ref=e28]:
+          - listitem [ref=e29] [cursor=pointer]:
+            - link " Ваші компанії" [ref=e30]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/client_companies
+              - generic [ref=e31]: 
+              - text: Ваші компанії
+          - listitem [ref=e32] [cursor=pointer]:
+            - link " Ваші склади 823" [ref=e33]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/warehouses
+              - generic [ref=e34]: 
+              - text: Ваші склади
+              - generic [ref=e35]: "823"
+          - listitem [ref=e36] [cursor=pointer]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: 
+              - text: Замовлення
+              - generic [ref=e39]: "2"
+              - generic [ref=e40]: 
+          - listitem [ref=e41] [cursor=pointer]:
+            - link " Каса" [ref=e42]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/sale
+              - generic [ref=e43]: 
+              - text: Каса
+          - listitem [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]:
+              - generic [ref=e46]: 
+              - text: Виробництво
+              - generic [ref=e47]: 
+          - listitem [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]:
+              - generic [ref=e50]: 
+              - text: Товари
+              - generic [ref=e51]: 
+            - list [ref=e52]:
+              - listitem [ref=e53]:
+                - link "Рух товарів" [ref=e54]:
+                  - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/warehouse_invoices
+              - listitem [ref=e55]:
+                - link "Залишки на складі" [ref=e56]:
+                  - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/warehouse_products
+              - listitem [ref=e57]:
+                - link "Номенклатура" [ref=e58]:
+                  - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/products
+              - listitem [ref=e59]:
+                - link "Категорії товарів" [ref=e60]:
+                  - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/product_categories
+              - listitem [ref=e61]:
+                - link "Журнал транзакцій" [ref=e62]:
+                  - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/warehouse_transactions
+          - listitem [ref=e63] [cursor=pointer]:
+            - generic [ref=e64]:
+              - generic [ref=e65]: 
+              - text: Банк
+              - generic [ref=e66]: 
+          - listitem [ref=e67] [cursor=pointer]:
+            - generic [ref=e68]:
+              - generic [ref=e69]: 
+              - text: Контрагенти
+              - generic [ref=e70]: 
+          - listitem [ref=e71] [cursor=pointer]:
+            - generic [ref=e72]:
+              - generic [ref=e73]: 
+              - text: Послуги
+              - generic [ref=e74]: 
+          - listitem [ref=e75] [cursor=pointer]:
+            - link " Проєкти" [ref=e76]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/contracts
+              - generic [ref=e77]: 
+              - text: Проєкти
+          - listitem [ref=e78] [cursor=pointer]:
+            - link " Звіти" [ref=e79]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/reports
+              - generic [ref=e80]: 
+              - text: Звіти
+          - listitem [ref=e81] [cursor=pointer]:
+            - link " Інвентаризація" [ref=e82]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/inventory
+              - generic [ref=e83]: 
+              - text: Інвентаризація
+          - listitem [ref=e84] [cursor=pointer]:
+            - link " Працівники" [ref=e85]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/workers
+              - generic [ref=e86]: 
+              - text: Працівники
+          - listitem [ref=e87] [cursor=pointer]:
+            - link " Імпорт" [ref=e88]:
+              - /url: https://my.ordage.com/9fd75ea1ed760be1.6227.420dfe/import
+              - generic [ref=e89]: 
+              - text: Імпорт
+          - listitem [ref=e90] [cursor=pointer]:
+            - generic [ref=e91]:
+              - generic [ref=e92]: 
+              - text: Налаштування
+              - generic [ref=e93]: 
+          - listitem [ref=e94] [cursor=pointer]:
+            - generic [ref=e95]:
+              - generic [ref=e96]: 
+              - text: Архів
+              - generic [ref=e97]: 
+    - generic [ref=e98]:
+      - navigation:
+        - list [ref=e99]:
+          - listitem [ref=e100]:
+            - link "Oleksandr Yatsyshyn " [ref=e101] [cursor=pointer]:
+              - /url: javascript:;
+              - text: Oleksandr Yatsyshyn
+              - generic [ref=e102]: 
+            - text: 
+          - listitem [ref=e103]:
+            - link "" [ref=e104] [cursor=pointer]:
+              - /url: personal_profile
+              - generic [ref=e105]: 
+          - listitem [ref=e106]:
+            - link "" [ref=e107] [cursor=pointer]:
+              - /url: javascript:;
+              - generic [ref=e108]: 
+          - listitem [ref=e109]:
+            - link "UA" [ref=e110] [cursor=pointer]:
+              - /url: "#"
+    - main [ref=e111]:
+      - heading "Товари" [level=3] [ref=e115]
+      - generic [ref=e118]:
+        - generic [ref=e119]:
+          - heading "Журнал транзакцій" [level=2] [ref=e120]
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - generic [ref=e125]: Прихід (сума)
+              - text: "--"
+            - generic [ref=e126]:
+              - generic [ref=e127]: Витрата (сума)
+              - text: "--"
+          - generic [ref=e131]:
+            - generic [ref=e133] [cursor=pointer]:
+              - generic [ref=e134]: 
+              - generic [ref=e135]: Останній тиждень
+            - generic [ref=e136] [cursor=pointer]:
+              - generic [ref=e137]: 
+              - generic [ref=e139]: Фільтр
+        - generic [ref=e143]: 
+    - contentinfo [ref=e144]
+    - text:               
+  - text:   
+  - text:                
+  - iframe [ref=e145]:
+    

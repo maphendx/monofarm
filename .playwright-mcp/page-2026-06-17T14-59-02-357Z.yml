@@ -1,0 +1,20 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img [ref=e5]
+      - generic [ref=e20]:
+        - heading "monofarm" [level=1] [ref=e21]
+        - paragraph [ref=e22]: Вхід в систему
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Email
+        - textbox "Email" [active] [ref=e26]
+      - generic [ref=e27]:
+        - generic [ref=e28]: Пароль
+        - textbox "Пароль" [ref=e29]
+    - button "Увійти" [ref=e30] [cursor=pointer]
+    - paragraph [ref=e31]:
+      - text: Ще немає акаунту?
+      - link "Зареєструватись" [ref=e32] [cursor=pointer]:
+        - /url: /register
+  - alert [ref=e33]

@@ -1,0 +1,49 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - region "Notifications alt+T"
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - link "Dokploy" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - text: Dokploy
+        - blockquote [ref=e12]:
+          - paragraph [ref=e13]: “The Open Source alternative to Netlify, Vercel, Heroku.”
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - heading "Sign in" [level=1] [ref=e17]:
+              - generic [ref=e18]:
+                - img [ref=e19]
+                - text: Sign in
+            - paragraph [ref=e23]: Enter your email and password to sign in
+          - generic [ref=e24]:
+            - generic [ref=e25]:
+              - generic [ref=e26]:
+                - text: Email
+                - textbox "Email" [ref=e28]:
+                  - /placeholder: john@example.com
+              - generic [ref=e29]:
+                - text: Password
+                - generic [ref=e30]:
+                  - textbox "Password" [ref=e31]:
+                    - /placeholder: Enter your password
+                  - button [ref=e33] [cursor=pointer]:
+                    - img [ref=e34]
+              - button "Login" [ref=e37] [cursor=pointer]
+            - link "Lost your password?" [ref=e40] [cursor=pointer]:
+              - /url: https://docs.dokploy.com/docs/core/reset-password
+        - generic [ref=e42]:
+          - button "github" [ref=e43] [cursor=pointer]:
+            - link "github" [ref=e44]:
+              - /url: https://github.com/dokploy/dokploy
+              - img "github" [ref=e45]
+          - button [ref=e47] [cursor=pointer]:
+            - link [ref=e48]:
+              - /url: https://x.com/getdokploy
+              - img [ref=e49]
+          - button [ref=e51] [cursor=pointer]:
+            - link [ref=e52]:
+              - /url: https://discord.com/invite/2tBnJ3jDJc
+              - img [ref=e53]
+  - alert [ref=e55]

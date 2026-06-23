@@ -1,0 +1,5 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - img [ref=e11]
+    - paragraph [ref=e32]: Завантаження…
+  - alert [ref=e33]

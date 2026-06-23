@@ -106,15 +106,6 @@ def _check_org(db, org: Organization) -> None:
 
         # printing → paused without a visible error: keep the job open.
         if prev_state in PRINTING_STATES and state == "paused" and not error_msg:
-            send_print_event_notification(
-                db,
-                org.id,
-                event="paused",
-                printer_name=row.name,
-                printer_id=row.id,
-                file_name=current.get("file"),
-                dedupe_key=f"{row.id}:paused:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
-            )
             _prev[row.id] = current
             continue
 

@@ -1,0 +1,28 @@
+- generic [ref=e2]:
+  - generic [ref=e6]:
+    - link [ref=e10] [cursor=pointer]:
+      - /url: https://simplyprint.io/panel/
+    - list [ref=e12]
+  - generic [ref=e13]:
+    - main [ref=e16]
+    - contentinfo [ref=e17]:
+      - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+      - text: ® "SimplyPrint" is a registered trademark.
+      - generic [ref=e18]:
+        - link "Terms of trade and subscription" [ref=e19] [cursor=pointer]:
+          - /url: https://simplyprint.io/legal/tos
+        - text: "|"
+        - link "Privacy policy" [ref=e20] [cursor=pointer]:
+          - /url: https://simplyprint.io/legal/privacy
+        - text: "|"
+        - link "Trademark rules" [ref=e21] [cursor=pointer]:
+          - /url: https://simplyprint.io/legal/trademark-rules
+        - text: "|"
+        - link "Service status" [ref=e22] [cursor=pointer]:
+          - /url: https://status.simplyprint.io/
+        - text: "|"
+        - link "Cookie Policy" [ref=e23] [cursor=pointer]:
+          - /url: https://simplyprint.io/legal/privacy/cookies
+        - text: "|"
+        - link "Cookie Settings" [ref=e24] [cursor=pointer]:
+          - /url: "#"

@@ -1,0 +1,72 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - link "SimplyPrint logo" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - img "SimplyPrint logo" [ref=e6]
+    - heading "Sign in" [level=1] [ref=e7]
+    - tablist [ref=e8]:
+      - listitem [ref=e9] [cursor=pointer]:
+        - link "Sign in" [ref=e10]:
+          - /url: /panel/login
+          - text: Sign in
+      - listitem [ref=e12] [cursor=pointer]:
+        - link "Sign up" [ref=e13]:
+          - /url: /panel/signup
+          - text: Sign up
+      - listitem [ref=e15] [cursor=pointer]:
+        - link "Education" [ref=e16]:
+          - /url: /panel/login/school
+          - text: Education
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e61]: Wrong username or password
+        - generic [ref=e20]:
+          - textbox "Email" [ref=e21]:
+            - /placeholder: E-mail
+            - text: sashayatsyshyn72@gmail.com
+          - textbox "Password" [ref=e22]: 26592608sasHA
+          - paragraph [ref=e23] [cursor=pointer]: Forgot password?
+          - generic [ref=e24]:
+            - checkbox "Stay signed in" [checked]
+            - generic [ref=e25] [cursor=pointer]: Stay signed in
+          - button "Sign in" [ref=e56] [cursor=pointer]
+          - generic [ref=e27]: Don't have an account? Sign up
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - separator [ref=e30]
+          - generic [ref=e31]: or
+          - separator [ref=e32]
+        - generic [ref=e34]:
+          - textbox "Select your school, university, or organization" [ref=e37]
+          - generic [ref=e38]:
+            - generic:
+              - img
+        - generic [ref=e39]: If you don't see your school, university, or organization, please contact your administrator.
+        - generic [ref=e40]:
+          - separator [ref=e41]
+          - generic [ref=e42]: or
+          - separator [ref=e43]
+        - heading "More login options" [level=6] [ref=e44] [cursor=pointer]: More login options
+  - contentinfo [ref=e47]:
+    - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+    - text: ® "SimplyPrint" is a registered trademark.
+    - generic [ref=e48]:
+      - link "Terms of trade and subscription" [ref=e49] [cursor=pointer]:
+        - /url: https://simplyprint.io/legal/tos
+      - text: "|"
+      - link "Privacy policy" [ref=e50] [cursor=pointer]:
+        - /url: https://simplyprint.io/legal/privacy
+      - text: "|"
+      - link "Trademark rules" [ref=e51] [cursor=pointer]:
+        - /url: https://simplyprint.io/legal/trademark-rules
+      - text: "|"
+      - link "Service status" [ref=e52] [cursor=pointer]:
+        - /url: https://status.simplyprint.io/
+      - text: "|"
+      - link "Cookie Policy" [ref=e53] [cursor=pointer]:
+        - /url: https://simplyprint.io/legal/privacy/cookies
+      - text: "|"
+      - link "Cookie Settings" [ref=e54] [cursor=pointer]:
+        - /url: "#"
+  - log [ref=e55]
+  - button "Open chat" [ref=e57] [cursor=pointer]

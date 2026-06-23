@@ -1,0 +1,727 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - link [ref=e10] [cursor=pointer]:
+        - /url: https://simplyprint.io/panel/
+        - img [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e30]: i
+              - generic [ref=e31]: m
+              - generic [ref=e32]: p
+              - generic [ref=e33]: l
+              - generic [ref=e34]: "y"
+            - generic [ref=e36]: P
+            - generic [ref=e37]:
+              - generic [ref=e38]: P
+              - generic [ref=e39]: r
+              - generic [ref=e40]: i
+              - generic [ref=e41]: "n"
+              - generic [ref=e42]: t
+            - generic [ref=e44]: S
+      - list [ref=e12]:
+        - listitem [ref=e49]:
+          - link "Printer icon" [ref=e50] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/printers
+            - img "Printer icon" [ref=e52]
+        - listitem [ref=e53]:
+          - link [ref=e54] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/files
+        - listitem [ref=e57]:
+          - link [ref=e58] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/queue
+        - listitem [ref=e61]:
+          - link [ref=e62] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/statistics
+        - listitem [ref=e65]:
+          - link "Print jobs icon (Benchy)" [ref=e66] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/jobs
+            - img "Print jobs icon (Benchy)" [ref=e68]
+        - listitem [ref=e69]:
+          - link "Filament icon" [ref=e70] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/filament
+            - img "Filament icon" [ref=e72]
+        - listitem [ref=e73]:
+          - link [ref=e74] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/slicer
+        - listitem [ref=e77]:
+          - link [ref=e78] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/maintenance
+          - button [ref=e81] [cursor=pointer]
+        - listitem [ref=e83]:
+          - link [ref=e84] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/academy
+        - listitem [ref=e87]:
+          - separator [ref=e89]
+        - listitem [ref=e90]:
+          - link [ref=e91] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/settings
+        - listitem [ref=e94]:
+          - link [ref=e95] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/users
+        - listitem [ref=e98]:
+          - link [ref=e99] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/integrations
+        - listitem [ref=e102]:
+          - link [ref=e103] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/refer-a-friend
+        - listitem [ref=e106]
+        - listitem [ref=e110]:
+          - separator [ref=e112]
+        - listitem [ref=e113]
+        - listitem [ref=e117]
+        - listitem [ref=e121]
+        - listitem [ref=e126]:
+          - button [ref=e127] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e15]:
+        - list [ref=e129]:
+          - listitem [ref=e130]
+        - list [ref=e133]:
+          - listitem [ref=e134]:
+            - link "7" [ref=e135] [cursor=pointer]:
+              - /url: https://simplyprint.io/panel/files
+              - generic [ref=e138]: "7"
+          - listitem [ref=e139]:
+            - link [ref=e140] [cursor=pointer]:
+              - /url: https://simplyprint.io/discord
+          - listitem [ref=e143]
+          - listitem [ref=e147]
+          - listitem [ref=e151]
+          - listitem [ref=e155]
+          - listitem [ref=e159]:
+            - generic [ref=e163] [cursor=pointer]: LEOCODE & OYTOY
+          - listitem [ref=e164]:
+            - generic [ref=e166] [cursor=pointer]:
+              - img "Олександр Яцишин avatar" [ref=e169]
+              - generic [ref=e171]: Олександр Яцишин
+      - main [ref=e16]:
+        - generic [ref=e173]:
+          - heading "Settings" [level=4] [ref=e174]
+          - tablist [ref=e176]:
+            - generic [ref=e178]:
+              - link "General" [ref=e180] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/general
+                - generic [ref=e182]: General
+              - link "Organization" [ref=e184] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/organization
+                - generic [ref=e186]: Organization
+              - link "Printers Printers" [ref=e188] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/printers
+                - img "Printers" [ref=e189]
+                - generic [ref=e190]: Printers
+              - link "AutoPrint" [ref=e192] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/autoprint
+                - generic [ref=e194]: AutoPrint
+              - link "Filament Filament" [ref=e196] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/filament
+                - img "Filament" [ref=e197]
+                - generic [ref=e198]: Filament
+              - link "Queue" [ref=e200] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/queue
+                - generic [ref=e202]: Queue
+              - link "Tagging" [active] [ref=e204] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/tagging
+                - generic [ref=e206]: Tagging
+              - link "Slicing" [ref=e208] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/slicing
+                - generic [ref=e210]: Slicing
+              - link "Staggered Start" [ref=e212] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/staggered-start
+                - generic [ref=e214]: Staggered Start
+              - link "Maintenance" [ref=e216] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/maintenance
+                - generic [ref=e218]: Maintenance
+              - link "Gcode Macros" [ref=e220] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/gcode-macros
+                - generic [ref=e222]: Gcode Macros
+              - link "Webhooks" [ref=e224] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/webhooks
+                - generic [ref=e226]: Webhooks
+              - link "Custom Fields" [ref=e228] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/custom-fields
+                - generic [ref=e230]: Custom Fields
+              - link "Data & security" [ref=e232] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/data-security
+                - generic [ref=e234]: Data & security
+              - link "Subscription" [ref=e236] [cursor=pointer]:
+                - /url: https://simplyprint.io/panel/settings/subscription
+                - generic [ref=e238]: Subscription
+          - generic [ref=e387]:
+            - generic [ref=e388]:
+              - generic [ref=e389]:
+                - heading "Tags & printer selections" [level=4] [ref=e390]: Tags & printer selections
+                - separator [ref=e392]
+                - generic [ref=e393]:
+                  - checkbox "Auto-tag files" [checked]
+                  - generic [ref=e394] [cursor=pointer]: Auto-tag files
+                  - paragraph [ref=e395]:
+                    - text: Automatically tag files with nozzle and material information, if available.
+                    - generic [ref=e396] [cursor=pointer]: Learn more
+                - generic [ref=e399]:
+                  - checkbox "Auto-tag material color for single extrusion files" [checked]
+                  - generic [ref=e400] [cursor=pointer]: Auto-tag material color for single extrusion files
+                  - paragraph [ref=e401]: When enabled, we'll automatically apply the material color to files with just one extrusion, like we do for multi-extrusion files. Enable this if you always set the right color in the slicer by purpose - otherwise you might want to disable this feature.
+              - generic [ref=e402]:
+                - heading "Bed type" [level=4] [ref=e403]: Bed type
+                - separator [ref=e405]
+                - generic [ref=e406]:
+                  - generic [ref=e407]:
+                    - checkbox "Auto-tag bed type" [checked]
+                    - generic [ref=e408] [cursor=pointer]: Auto-tag bed type
+                    - paragraph [ref=e409]: Automatically tag files with bed type information when detected.
+                  - generic [ref=e411]:
+                    - checkbox "Only auto-tag bed type for specific models"
+                    - generic [ref=e412] [cursor=pointer]: Only auto-tag bed type for specific models
+                    - paragraph [ref=e413]: When enabled, bed type auto-tagging will only apply to files made for the selected printer models.
+                - generic [ref=e415]:
+                  - heading "Bed type mapping" [level=6] [ref=e416]
+                  - paragraph [ref=e417]: Map detected bed types to different bed types. For example, if a file is detected as "Bambu Lab Cool Plate" but you want it tagged as "BIQU Panda CryoGrip", you can create a mapping here.
+                  - list [ref=e418]:
+                    - listitem [ref=e419]:
+                      - generic [ref=e420]:
+                        - generic [ref=e421]:
+                          - generic [ref=e422]:
+                            - generic [ref=e423]: "From (detected):"
+                            - generic [ref=e426]:
+                              - generic [ref=e428]:
+                                - generic [ref=e430]:
+                                  - img "Smooth PEI image" [ref=e431]
+                                  - text: Smooth PEI
+                                - textbox [ref=e432]
+                              - generic [ref=e433]:
+                                - button [ref=e434]:
+                                  - img [ref=e435]
+                                - generic:
+                                  - img
+                          - generic [ref=e439]:
+                            - generic [ref=e440]: "To (mapped):"
+                            - generic [ref=e443]:
+                              - generic [ref=e445]:
+                                - generic [ref=e447]:
+                                  - img "Textured PEI image" [ref=e448]
+                                  - text: Textured PEI
+                                - textbox [ref=e449]
+                              - generic [ref=e450]:
+                                - button [ref=e451]:
+                                  - img [ref=e452]
+                                - generic:
+                                  - img
+                        - button [ref=e454] [cursor=pointer]
+                  - button "Add bed type mapping" [ref=e457] [cursor=pointer]: Add bed type mapping
+                - generic [ref=e460]:
+                  - heading "Bed type clusters" [level=6] [ref=e461]
+                  - paragraph [ref=e462]: Create clusters of bed types that should be considered equivalent for auto-selection. When one bed type in a cluster is detected, all other bed types in the same cluster will also be considered valid matches. Each cluster must contain at least 2 bed types.
+                  - button "Add bed type cluster" [ref=e464] [cursor=pointer]: Add bed type cluster
+                - generic [ref=e466]:
+                  - heading "Visible bed types" [level=6] [ref=e467]
+                  - paragraph [ref=e468]: Select which bed types should be visible in bed type selectors throughout the system. Unselected bed types will be hidden from view. This helps reduce clutter if you only use specific bed types.
+                  - generic [ref=e471]:
+                    - textbox "Select one or more bed types" [ref=e474]
+                    - generic [ref=e475]:
+                      - generic:
+                        - img
+                - generic [ref=e476] [cursor=pointer]:
+                  - generic:
+                    - heading "Custom bed types" [level=6]: Custom bed types
+                    - paragraph: Create your own bed types for custom or aftermarket build plates. Since custom bed types aren't recognized by slicers, consider setting up Bed type mapping and Bed type clusters below to ensure proper slicer compatibility and automatic bed type selection.
+                    - generic:
+                      - button "Add custom bed type": Add custom bed type
+              - generic [ref=e478]:
+                - heading "Materials" [level=4] [ref=e479]: Materials
+                - separator [ref=e481]
+                - generic [ref=e483]:
+                  - checkbox "Auto-tag materials" [checked]
+                  - generic [ref=e484] [cursor=pointer]: Auto-tag materials
+                  - paragraph [ref=e485]: Automatically tag files with material information when detected.
+                - generic [ref=e487]:
+                  - heading "Material clusters" [level=6] [ref=e488]
+                  - paragraph [ref=e489]: Create clusters of materials that should be considered equivalent for auto-selection. When one material in a cluster is detected, all other materials in the same cluster will also be considered valid matches. Each cluster must contain at least 2 materials.
+                  - list [ref=e490]:
+                    - listitem [ref=e491]:
+                      - generic [ref=e492]:
+                        - generic [ref=e494]:
+                          - generic [ref=e495]: "Materials:"
+                          - generic [ref=e497]:
+                            - generic [ref=e499]:
+                              - generic [ref=e501]: PLA
+                              - img [ref=e503]
+                              - generic [ref=e506]: Bambu Lab PLA Basic
+                              - img [ref=e508]
+                              - generic [ref=e511]: Bambu Lab PLA Matte
+                              - img [ref=e513]
+                              - textbox [ref=e515]
+                            - generic [ref=e516]:
+                              - button [ref=e517]:
+                                - img [ref=e518]
+                              - generic:
+                                - img
+                        - button [ref=e520] [cursor=pointer]
+                  - button "Add material cluster" [ref=e523] [cursor=pointer]: Add material cluster
+              - generic [ref=e525]:
+                - heading "Nozzle" [level=4] [ref=e526]:
+                  - img [ref=e528]
+                  - text: Nozzle
+                - separator [ref=e530]
+                - generic [ref=e531]:
+                  - generic [ref=e532]:
+                    - checkbox "Auto-tag nozzle" [checked]
+                    - generic [ref=e533] [cursor=pointer]: Auto-tag nozzle
+                    - paragraph [ref=e534]: Automatically tag files with nozzle information when detected.
+                  - generic [ref=e535]:
+                    - generic [ref=e536]:
+                      - checkbox "Auto-tag nozzle size" [checked]
+                      - generic [ref=e537] [cursor=pointer]: Auto-tag nozzle size
+                      - paragraph [ref=e538]: Automatically tag files with nozzle size information when detected.
+                    - generic [ref=e539]:
+                      - checkbox "Auto-tag nozzle type"
+                      - generic [ref=e540] [cursor=pointer]: Auto-tag nozzle type
+                      - paragraph [ref=e541]: Automatically tag files with nozzle type information when detected.
+                    - generic [ref=e542]:
+                      - checkbox "Auto-tag nozzle volume type" [checked]
+                      - generic [ref=e543] [cursor=pointer]: Auto-tag nozzle volume type
+                      - paragraph [ref=e544]: Automatically tag files with nozzle volume type information when detected.
+                - generic [ref=e545]:
+                  - heading "Visible nozzle types" [level=6] [ref=e546]
+                  - paragraph [ref=e547]: Select which nozzle types should be visible in nozzle type selectors throughout the system. Unselected nozzle types will be hidden from view. This helps reduce clutter if you only use specific nozzle types.
+                  - generic [ref=e550]:
+                    - textbox "Nozzle types" [ref=e553]
+                    - generic [ref=e554]:
+                      - generic:
+                        - img
+            - generic [ref=e555]:
+              - generic [ref=e556]:
+                - heading "Colors" [level=4] [ref=e557]: Colors
+                - separator [ref=e559]
+                - generic [ref=e560]:
+                  - heading "Color picker palette" [level=6] [ref=e561]
+                  - paragraph [ref=e562]:
+                    - text: Choose which colors the color picker offers when assigning colors to files, printers and in the slicer. When adding spools to your filament inventory, the full palette is always available.
+                    - generic [ref=e563] [cursor=pointer]: Learn more
+                  - generic [ref=e565]:
+                    - radio "Standard palette" [checked] [ref=e566]
+                    - generic [ref=e567]: Standard palette
+                    - paragraph [ref=e568]: The standard colors, plus your custom colors and brand colors from the filament database.
+                  - generic [ref=e569]:
+                    - radio "Custom palette only" [ref=e570]
+                    - generic [ref=e571]: Custom palette only
+                    - paragraph [ref=e572]: Hide the standard colors and only offer the custom colors you define below.
+                  - generic [ref=e573]:
+                    - radio "Filament inventory" [ref=e574]
+                    - generic [ref=e575]: Filament inventory
+                    - paragraph [ref=e576]: Only offer colors of spools in your filament inventory. Selecting a generic material type shows matching spools across all brands; a branded type only shows spools of that exact material.
+                  - generic [ref=e577]:
+                    - radio "Loaded filament only" [ref=e578]
+                    - generic [ref=e579]: Loaded filament only
+                    - paragraph [ref=e580]: Only offer colors of spools currently loaded in a printer.
+                  - generic [ref=e581]:
+                    - radio "Loaded color tags only" [ref=e582]
+                    - generic [ref=e583]: Loaded color tags only
+                    - paragraph [ref=e584]: "Strictest: only offer colors currently set on a printer, whether from a loaded inventory spool or a material tag set directly on the printer."
+                  - generic [ref=e586]:
+                    - checkbox "Lock selection to the palette"
+                    - generic [ref=e587]: Lock selection to the palette
+                    - paragraph [ref=e588]: Remove the "add custom color" option so users can only pick from the colors above. An item's existing color is still shown even if it isn't in the palette. Users with the "Pick colors outside the locked palette" permission (e.g. admins) can still pick any color.
+                - generic [ref=e589]:
+                  - heading "Custom colors" [level=6] [ref=e590]
+                  - paragraph [ref=e591]: "Your own colors, shown in the color picker. Optionally restrict a color to a material type: restricting to a generic type (e.g. PLA) applies to all brands of that material, while a branded type only applies to that exact material."
+                  - list [ref=e592]:
+                    - listitem [ref=e593]:
+                      - generic [ref=e594]:
+                        - textbox "Color" [ref=e595]: "#68fafd"
+                        - textbox "Name" [ref=e596]: Пастельно синій
+                        - generic [ref=e599]:
+                          - textbox "Any material type" [ref=e602]
+                          - generic [ref=e603]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e604] [cursor=pointer]
+                    - listitem [ref=e606]:
+                      - generic [ref=e607]:
+                        - textbox "Color" [ref=e608]: "#00b2ff"
+                        - textbox "Name" [ref=e609]: Небесно синій
+                        - generic [ref=e612]:
+                          - textbox "Any material type" [ref=e615]
+                          - generic [ref=e616]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e617] [cursor=pointer]
+                    - listitem [ref=e619]:
+                      - generic [ref=e620]:
+                        - textbox "Color" [ref=e621]: "#1c5ffd"
+                        - textbox "Name" [ref=e622]: Синій
+                        - generic [ref=e625]:
+                          - textbox "Any material type" [ref=e628]
+                          - generic [ref=e629]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e630] [cursor=pointer]
+                    - listitem [ref=e632]:
+                      - generic [ref=e633]:
+                        - textbox "Color" [ref=e634]: "#ff94c2"
+                        - textbox "Name" [ref=e635]: Світло рожевий
+                        - generic [ref=e638]:
+                          - textbox "Any material type" [ref=e641]
+                          - generic [ref=e642]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e643] [cursor=pointer]
+                    - listitem [ref=e645]:
+                      - generic [ref=e646]:
+                        - textbox "Color" [ref=e647]: "#2a7443"
+                        - textbox "Name" [ref=e648]: Зелений
+                        - generic [ref=e651]:
+                          - textbox "Any material type" [ref=e654]
+                          - generic [ref=e655]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e656] [cursor=pointer]
+                    - listitem [ref=e658]:
+                      - generic [ref=e659]:
+                        - textbox "Color" [ref=e660]: "#adadad"
+                        - textbox "Name" [ref=e661]: Сірий
+                        - generic [ref=e664]:
+                          - textbox "Any material type" [ref=e667]
+                          - generic [ref=e668]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e669] [cursor=pointer]
+                    - listitem [ref=e671]:
+                      - generic [ref=e672]:
+                        - textbox "Color" [ref=e673]: "#ffd814"
+                        - textbox "Name" [ref=e674]: Жовто золотий
+                        - generic [ref=e677]:
+                          - textbox "Any material type" [ref=e680]
+                          - generic [ref=e681]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e682] [cursor=pointer]
+                    - listitem [ref=e684]:
+                      - generic [ref=e685]:
+                        - textbox "Color" [ref=e686]: "#63fe58"
+                        - textbox "Name" [ref=e687]: Салатовий
+                        - generic [ref=e690]:
+                          - textbox "Any material type" [ref=e693]
+                          - generic [ref=e694]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e695] [cursor=pointer]
+                    - listitem [ref=e697]:
+                      - generic [ref=e698]:
+                        - textbox "Color" [ref=e699]: "#e8e5ca"
+                        - textbox "Name" [ref=e700]: Гальково сірий
+                        - generic [ref=e703]:
+                          - textbox "Any material type" [ref=e706]
+                          - generic [ref=e707]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e708] [cursor=pointer]
+                    - listitem [ref=e710]:
+                      - generic [ref=e711]:
+                        - textbox "Color" [ref=e712]: "#ffaf00"
+                        - textbox "Name" [ref=e713]: Жовто золотий
+                        - generic [ref=e716]:
+                          - textbox "Any material type" [ref=e719]
+                          - generic [ref=e720]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e721] [cursor=pointer]
+                    - listitem [ref=e723]:
+                      - generic [ref=e724]:
+                        - textbox "Color" [ref=e725]: "#ff7b00"
+                        - textbox "Name" [ref=e726]: Помаранчевий
+                        - generic [ref=e729]:
+                          - textbox "Any material type" [ref=e732]
+                          - generic [ref=e733]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e734] [cursor=pointer]
+                    - listitem [ref=e736]:
+                      - generic [ref=e737]:
+                        - textbox "Color" [ref=e738]: "#8e00c2"
+                        - textbox "Name" [ref=e739]: Фіолетовий
+                        - generic [ref=e742]:
+                          - textbox "Any material type" [ref=e745]
+                          - generic [ref=e746]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e747] [cursor=pointer]
+                    - listitem [ref=e749]:
+                      - generic [ref=e750]:
+                        - textbox "Color" [ref=e751]: "#a1a1a1"
+                        - textbox "Name" [ref=e752]: Сірий металік
+                        - generic [ref=e755]:
+                          - textbox "Any material type" [ref=e758]
+                          - generic [ref=e759]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e760] [cursor=pointer]
+                    - listitem [ref=e762]:
+                      - generic [ref=e763]:
+                        - textbox "Color" [ref=e764]: "#ffc380"
+                        - textbox "Name" [ref=e765]: Бежевий
+                        - generic [ref=e768]:
+                          - textbox "Any material type" [ref=e771]
+                          - generic [ref=e772]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e773] [cursor=pointer]
+                    - listitem [ref=e775]:
+                      - generic [ref=e776]:
+                        - textbox "Color" [ref=e777]: "#fffff0"
+                        - textbox "Name" [ref=e778]: Перламутр
+                        - generic [ref=e781]:
+                          - textbox "Any material type" [ref=e784]
+                          - generic [ref=e785]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e786] [cursor=pointer]
+                    - listitem [ref=e788]:
+                      - generic [ref=e789]:
+                        - textbox "Color" [ref=e790]: "#3d4e1d"
+                        - textbox "Name" [ref=e791]: Хакі
+                        - generic [ref=e794]:
+                          - textbox "Any material type" [ref=e797]
+                          - generic [ref=e798]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e799] [cursor=pointer]
+                    - listitem [ref=e801]:
+                      - generic [ref=e802]:
+                        - textbox "Color" [ref=e803]: "#ff0000"
+                        - textbox "Name" [ref=e804]: Червоний
+                        - generic [ref=e807]:
+                          - textbox "Any material type" [ref=e810]
+                          - generic [ref=e811]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e812] [cursor=pointer]
+                    - listitem [ref=e814]:
+                      - generic [ref=e815]:
+                        - textbox "Color" [ref=e816]: "#643c00"
+                        - textbox "Name" [ref=e817]: Шок-коричневий
+                        - generic [ref=e820]:
+                          - textbox "Any material type" [ref=e823]
+                          - generic [ref=e824]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e825] [cursor=pointer]
+                    - listitem [ref=e827]:
+                      - generic [ref=e828]:
+                        - textbox "Color" [ref=e829]: "#fe589a"
+                        - textbox "Name" [ref=e830]: Рожевий
+                        - generic [ref=e833]:
+                          - textbox "Any material type" [ref=e836]
+                          - generic [ref=e837]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e838] [cursor=pointer]
+                    - listitem [ref=e840]:
+                      - generic [ref=e841]:
+                        - textbox "Color" [ref=e842]: "#5c5c5c"
+                        - textbox "Name" [ref=e843]: Графітово сірий
+                        - generic [ref=e846]:
+                          - textbox "Any material type" [ref=e849]
+                          - generic [ref=e850]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e851] [cursor=pointer]
+                    - listitem [ref=e853]:
+                      - generic [ref=e854]:
+                        - textbox "Color" [ref=e855]: "#d3b7a7"
+                        - textbox "Name" [ref=e856]: Latte Brown
+                        - generic [ref=e859]:
+                          - textbox "Any material type" [ref=e862]
+                          - generic [ref=e863]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e864] [cursor=pointer]
+                    - listitem [ref=e866]:
+                      - generic [ref=e867]:
+                        - textbox "Color" [ref=e868]: "#8e9089"
+                        - textbox "Name" [ref=e869]: Gray
+                        - generic [ref=e872]:
+                          - textbox "Any material type" [ref=e875]
+                          - generic [ref=e876]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e877] [cursor=pointer]
+                    - listitem [ref=e879]:
+                      - generic [ref=e880]:
+                        - textbox "Color" [ref=e881]: "#6f5034"
+                        - textbox "Name" [ref=e882]: Cocoa Brown
+                        - generic [ref=e885]:
+                          - textbox "Any material type" [ref=e888]
+                          - generic [ref=e889]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e890] [cursor=pointer]
+                    - listitem [ref=e892]:
+                      - generic [ref=e893]:
+                        - textbox "Color" [ref=e894]: "#c12e1f"
+                        - textbox "Name" [ref=e895]: Red
+                        - generic [ref=e898]:
+                          - textbox "Any material type" [ref=e901]
+                          - generic [ref=e902]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e903] [cursor=pointer]
+                    - listitem [ref=e905]:
+                      - generic [ref=e906]:
+                        - textbox "Color" [ref=e907]: "#00ae42"
+                        - textbox "Name" [ref=e908]: Bambu Green
+                        - generic [ref=e911]:
+                          - textbox "Any material type" [ref=e914]
+                          - generic [ref=e915]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e916] [cursor=pointer]
+                    - listitem [ref=e918]:
+                      - generic [ref=e919]:
+                        - textbox "Color" [ref=e920]: "#fec600"
+                        - textbox "Name" [ref=e921]: Sunflower Yellow
+                        - generic [ref=e924]:
+                          - textbox "Any material type" [ref=e927]
+                          - generic [ref=e928]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e929] [cursor=pointer]
+                    - listitem [ref=e931]:
+                      - generic [ref=e932]:
+                        - textbox "Color" [ref=e933]: "#795548"
+                        - textbox "Name" [ref=e934]: Chocolate Brown
+                        - generic [ref=e937]:
+                          - textbox "Any material type" [ref=e940]
+                          - generic [ref=e941]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e942] [cursor=pointer]
+                    - listitem [ref=e944]:
+                      - generic [ref=e945]:
+                        - textbox "Color" [ref=e946]: "#000000"
+                        - textbox "Name" [ref=e947]: Чорний
+                        - generic [ref=e950]:
+                          - textbox "Any material type" [ref=e953]
+                          - generic [ref=e954]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e955] [cursor=pointer]
+                    - listitem [ref=e957]:
+                      - generic [ref=e958]:
+                        - textbox "Color" [ref=e959]: "#ffffff"
+                        - textbox "Name" [ref=e960]: Білий
+                        - generic [ref=e963]:
+                          - textbox "Any material type" [ref=e966]
+                          - generic [ref=e967]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e968] [cursor=pointer]
+                    - listitem [ref=e970]:
+                      - generic [ref=e971]:
+                        - textbox "Color" [ref=e972]: "#eebc51"
+                        - textbox "Name" [ref=e973]: Золотий
+                        - generic [ref=e976]:
+                          - textbox "Any material type" [ref=e979]
+                          - generic [ref=e980]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e981] [cursor=pointer]
+                    - listitem [ref=e983]:
+                      - generic [ref=e984]:
+                        - textbox "Color" [ref=e985]: "#009688"
+                        - textbox "Name" [ref=e986]: Бірюзовий
+                        - generic [ref=e989]:
+                          - textbox "Any material type" [ref=e992]
+                          - generic [ref=e993]:
+                            - generic:
+                              - img
+                        - button "Remove" [ref=e994] [cursor=pointer]
+                  - generic [ref=e996]:
+                    - button "Add color" [ref=e997] [cursor=pointer]: Add color
+                    - button "Import colors" [ref=e999] [cursor=pointer]: Import colors
+                - generic [ref=e1002]:
+                  - heading "Color mapping" [level=6] [ref=e1003]
+                  - paragraph [ref=e1004]: Map specific hex colors (optionally for a specific material type) to other colors.
+                  - button "Add color map" [ref=e1006] [cursor=pointer]: Add color map
+                - generic [ref=e1009]:
+                  - heading "Color clusters" [level=6] [ref=e1010]
+                  - paragraph [ref=e1011]: Create clusters of colors that should be considered equivalent for matching. When one color in a cluster is detected on a file, all other colors in the same cluster will also be considered valid matches. Each entry can specify a hex color, a color name, and optionally a material type. At least hex or name must be set for each entry, and each cluster must contain at least 2 entries.
+                  - button "Add color cluster" [ref=e1013] [cursor=pointer]: Add color cluster
+              - generic [ref=e1015]:
+                - heading "Auto-select printer model" [level=4] [ref=e1016]
+                - separator [ref=e1017]
+                - generic [ref=e1018]:
+                  - checkbox "Auto-select printer model" [checked]
+                  - generic [ref=e1019] [cursor=pointer]: Auto-select printer model
+                  - paragraph [ref=e1020]:
+                    - text: Automatically select & assign printer model when uploading file to Your files or the print queue, based on the Gcode Analysis.
+                    - generic [ref=e1021] [cursor=pointer]: Learn more
+                - generic [ref=e1023]:
+                  - generic [ref=e1024]:
+                    - checkbox "Use default printer model clusters" [checked]
+                    - generic [ref=e1025] [cursor=pointer]: Use default printer model clusters
+                    - paragraph [ref=e1026]: When enabled, the system will use default printer model clusters for automatic selection
+                  - generic [ref=e1029]:
+                    - heading "Printer model clusters" [level=6] [ref=e1030]
+                    - paragraph [ref=e1031]: Create clusters of printer models that should be auto-selected together. When one model in a cluster is auto-selected, all other models in the same cluster will also be selected. Each cluster must contain at least 2 printer models.
+                    - button "Add printer model cluster" [ref=e1033] [cursor=pointer]: Add printer model cluster
+              - generic [ref=e1035]:
+                - heading "Advanced smart tagging" [level=4] [ref=e1036]: Advanced smart tagging
+                - separator [ref=e1038]
+                - paragraph [ref=e1039]:
+                  - text: Parse embedded SimplyPrint metadata from GCode comments (
+                  - code [ref=e1040]: ; sp:key = value
+                  - text: ) and 3MF files (
+                  - code [ref=e1041]: simplyprint-metadata.json
+                  - text: ) to automatically apply tags, nozzle, material, bed type and custom field overrides.
+                  - generic [ref=e1042] [cursor=pointer]: Learn more
+                - generic [ref=e1044]:
+                  - checkbox "Parse SimplyPrint metadata from files" [checked]
+                  - generic [ref=e1045] [cursor=pointer]: Parse SimplyPrint metadata from files
+                  - paragraph [ref=e1046]: When enabled, files will be scanned for embedded SimplyPrint metadata on upload.
+                - generic [ref=e1047]:
+                  - checkbox "Auto-create tags from metadata" [checked]
+                  - generic [ref=e1048] [cursor=pointer]: Auto-create tags from metadata
+                  - paragraph [ref=e1049]: When enabled, custom tags referenced in file metadata will be automatically created if they don't already exist in your organization.
+                - generic [ref=e1051] [cursor=pointer]:
+                  - generic:
+                    - heading "Filename tag rules" [level=6]: Filename tag rules
+                    - generic:
+                      - strong: Advanced feature.
+                      - text: This requires knowledge of regular expressions (regex). Misconfigured patterns may match unintended files. These rules are applied
+                      - strong: after
+                      - text: regular auto-tagging — use them for things auto-tagging can't do, like applying custom tags or filling custom field values based on filename patterns.
+                    - paragraph:
+                      - text: Automatically apply tags, set bed types and fill in custom fields based on filename patterns. Uses regex — capture groups (
+                      - code: $1
+                      - text: ","
+                      - code: $2
+                      - text: ) can extract parts of the filename into custom field values. See examples & tips.
+                    - paragraph: No rules configured. Add a rule to automatically tag files based on their filename.
+                    - generic:
+                      - button "Add rule": Add rule
+      - contentinfo [ref=e17]:
+        - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+        - text: ® "SimplyPrint" is a registered trademark.
+        - generic [ref=e18]:
+          - link "Terms of trade and subscription" [ref=e19] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/tos
+          - text: "|"
+          - link "Privacy policy" [ref=e20] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy
+          - text: "|"
+          - link "Trademark rules" [ref=e21] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/trademark-rules
+          - text: "|"
+          - link "Service status" [ref=e22] [cursor=pointer]:
+            - /url: https://status.simplyprint.io/
+          - text: "|"
+          - link "Cookie Policy" [ref=e23] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy/cookies
+          - text: "|"
+          - link "Cookie Settings" [ref=e24] [cursor=pointer]:
+            - /url: "#"
+  - log [ref=e25]
+  - generic [ref=e381]: giItT1WQy@!-/#
+  - generic [ref=e382]: giItT1WQy@!-/#
+  - button "Open chat" [ref=e383] [cursor=pointer]

@@ -752,7 +752,7 @@ function QueuePageInner() {
               lanes={calendarLanes}
               weekStart={weekStart}
               loading={calendarLoading}
-              livePrinters={livePrinters}
+              livePrinters={livePrinters.length > 0 ? livePrinters : printers}
               onPrevWeek={() => {
                 const d = new Date(weekStart);
                 d.setDate(d.getDate() - 7);
@@ -761,6 +761,26 @@ function QueuePageInner() {
               onNextWeek={() => {
                 const d = new Date(weekStart);
                 d.setDate(d.getDate() + 7);
+                setWeekStart(d);
+              }}
+              onPrevDay={() => {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() - 1);
+                setWeekStart(d);
+              }}
+              onNextDay={() => {
+                const d = new Date(weekStart);
+                d.setDate(d.getDate() + 1);
+                setWeekStart(d);
+              }}
+              onToday={() => {
+                const d = new Date();
+                d.setHours(0, 0, 0, 0);
+                setWeekStart(d);
+              }}
+              onDateChange={date => {
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
                 setWeekStart(d);
               }}
               onOpenModal={setScheduleModal}

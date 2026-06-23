@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEntry, CalendarLane, Printer } from "@/lib/types";
+import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
 import { ScheduleWeekNav } from "./ScheduleWeekNav";
@@ -9,6 +10,7 @@ import { ApiError, createPlanEntry, updatePlanEntry } from "@/lib/api";
 import {
   buildCalendarBlocks,
   buildUntimedMap,
+  fmtDuration,
   getWeekDates,
   isoDateStr,
 } from "./utils";
@@ -23,6 +25,34 @@ type  Zoom = 1 | 2 | 3 | 4;
 const UA_DAY = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"] as const;
 const UA_MON = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"] as const;
 const ROW_LABEL_W = "152px";
+type StateFilter = "all" | "attention" | "printing" | "idle" | "paused" | "offline";
+
+const ATTENTION_STATES = new Set(["error", "paused", "offline", "not_connected", "awaiting_bed_clear", "in_maintenance"]);
+
+function weekdayLabel(d: Date): string {
+  return UA_DAY[(d.getDay() + 6) % 7];
+}
+
+function minutesSince(iso: string | null | undefined, now: Date): number | null {
+  if (!iso) return null;
+  const start = new Date(iso);
+  if (Number.isNaN(start.getTime())) return null;
+  return Math.max(0, Math.round((now.getTime() - start.getTime()) / 60000));
+}
+
+function printerMatchesFilter(printer: Printer | undefined, filter: StateFilter): boolean {
+  if (filter === "all") return true;
+  if (!printer) return false;
+  const state = printer.state ?? "unknown";
+  const flags = printer.flags ?? [];
+  if (filter === "attention") {
+    return ATTENTION_STATES.has(state) || flags.includes("requires_attention") || flags.includes("ai_detected_high") || flags.includes("ai_detected_low");
+  }
+  if (filter === "printing") return state === "printing";
+  if (filter === "paused") return state === "paused";
+  if (filter === "offline") return state === "offline" || state === "not_connected";
+  return state === "idle" || state === "operational" || state === "online" || state === "print_pending";
+}
 
 // ── Adaptive hour ruler ───────────────────────────────────────────────────────
 
@@ -175,6 +205,113 @@ function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: numb
   );
 }
 
+function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date; nowMins: number }) {
+  const state = printer.state ?? "unknown";
+  if (state === "printing") return null;
+
+  const relevant = state === "error" || state === "paused" || state === "offline" || state === "not_connected" || state === "idle";
+  if (!relevant) return null;
+
+  const since = minutesSince(printer.updated_at, now);
+  const startMins = since == null ? Math.max(0, nowMins - 30) : Math.max(0, nowMins - since);
+  const leftPct = (startMins / 1440) * 100;
+  const widthPct = Math.max(1.2, ((nowMins - startMins) / 1440) * 100);
+  const isBad = state === "error" || state === "offline" || state === "not_connected";
+  const color = isBad ? "var(--state-error)" : state === "paused" ? "var(--state-warn)" : "var(--state-idle)";
+  const bg = isBad ? "rgba(239,68,68,.10)" : state === "paused" ? "rgba(245,158,11,.10)" : "rgba(113,113,122,.09)";
+  const label = state === "idle" ? "простій" : stateLabel(state);
+  const duration = since == null ? "" : ` · ${fmtDuration(since)}`;
+
+  return (
+    <div
+      className="absolute bottom-1 z-[6] flex h-5 items-center overflow-hidden rounded-sm border px-1"
+      style={{ left: `${leftPct}%`, width: `max(42px, ${widthPct}%)`, borderColor: color, background: bg, color }}
+      title={`${printer.name}: ${label}${duration}`}
+    >
+      <span className="truncate text-[8px] font-semibold leading-none">
+        {label}{duration}
+      </span>
+    </div>
+  );
+}
+
+function FarmStatusPanel({
+  printers,
+  lanes,
+  entries,
+  filter,
+  onFilterChange,
+}: {
+  printers: Printer[];
+  lanes: CalendarLane[];
+  entries: CalendarEntry[];
+  filter: StateFilter;
+  onFilterChange: (filter: StateFilter) => void;
+}) {
+  const total = lanes.length;
+  const active = printers.filter(p => p.is_active);
+  const printing = active.filter(p => p.state === "printing").length;
+  const paused = active.filter(p => p.state === "paused").length;
+  const attention = active.filter(p => printerMatchesFilter(p, "attention")).length;
+  const offline = active.filter(p => printerMatchesFilter(p, "offline")).length;
+  const idle = active.filter(p => printerMatchesFilter(p, "idle")).length;
+  const eta = active.reduce((sum, p) => sum + (p.state === "printing" ? (p.eta_minutes ?? 0) : 0), 0);
+  const done = entries.filter(e => e.task.status === "done").length;
+  const cancelled = entries.filter(e => e.task.status === "cancelled").length;
+  const plannedMinutes = entries.reduce((sum, e) => sum + (e.task.estimated_minutes ?? e.task.filament_meta?.estimated_minutes ?? 0), 0);
+
+  const chips: { id: StateFilter; label: string; count: number; dot: string }[] = [
+    { id: "all", label: "Усі", count: total, dot: "bg-[var(--text-faint)]" },
+    { id: "attention", label: "Увага", count: attention, dot: "bg-[var(--state-error)]" },
+    { id: "printing", label: "Друк", count: printing, dot: "bg-[var(--state-print)]" },
+    { id: "idle", label: "Вільні", count: idle, dot: "bg-[var(--state-idle)]" },
+    { id: "paused", label: "Пауза", count: paused, dot: "bg-[var(--state-warn)]" },
+    { id: "offline", label: "Офлайн", count: offline, dot: "bg-[var(--state-offline)]" },
+  ];
+
+  return (
+    <div className="border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="mr-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="font-semibold text-[var(--text)]">Стан ферми</span>
+          <span className="text-[var(--text-muted)]">{printing}/{total} друкують</span>
+          {eta > 0 && <span className="text-[var(--text-muted)]">ETA {fmtDuration(eta)}</span>}
+          <span className={attention > 0 ? "font-semibold text-[var(--state-error)]" : "text-[var(--text-muted)]"}>
+            {attention} потребують уваги
+          </span>
+          {plannedMinutes > 0 && <span className="text-[var(--text-muted)]">план {fmtDuration(plannedMinutes)}</span>}
+          {(done > 0 || cancelled > 0) && (
+            <span className="text-[var(--text-muted)]">
+              <span className="text-[var(--state-ok)]">{done} заверш.</span>
+              {cancelled > 0 && <span className="ml-2 text-[var(--state-error)]">{cancelled} скас.</span>}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {chips.map(chip => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => onFilterChange(chip.id)}
+              className={[
+                "inline-flex h-6 items-center gap-1.5 rounded border px-2 text-[10px] font-medium transition-colors",
+                filter === chip.id
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]",
+              ].join(" ")}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />
+              {chip.label}
+              <span className="tabular-nums">{chip.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   lanes: CalendarLane[];
   weekStart: Date;
@@ -182,6 +319,10 @@ interface Props {
   livePrinters?: Printer[];
   onPrevWeek: () => void;
   onNextWeek: () => void;
+  onPrevDay: () => void;
+  onNextDay: () => void;
+  onToday: () => void;
+  onDateChange: (date: Date) => void;
   onOpenModal: (mode: ScheduleModalMode) => void;
   onRefresh: () => void;
 }
@@ -193,6 +334,10 @@ export function ScheduleCalendar({
   livePrinters,
   onPrevWeek,
   onNextWeek,
+  onPrevDay,
+  onNextDay,
+  onToday,
+  onDateChange,
   onOpenModal,
   onRefresh,
 }: Props) {
@@ -216,15 +361,10 @@ export function ScheduleCalendar({
   const gridRef = useRef<HTMLDivElement>(null);
 
   // Current time
-  const [nowMins, setNowMins] = useState(() => {
-    const d = new Date();
-    return d.getHours() * 60 + d.getMinutes();
-  });
+  const [now, setNow] = useState(() => new Date());
+  const nowMins = now.getHours() * 60 + now.getMinutes();
   useEffect(() => {
-    const timer = setInterval(() => {
-      const d = new Date();
-      setNowMins(d.getHours() * 60 + d.getMinutes());
-    }, 60000);
+    const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
@@ -285,12 +425,18 @@ export function ScheduleCalendar({
 
   const blockMap   = useMemo(() => buildCalendarBlocks(lanes, weekDates), [lanes, weekDates]);
   const untimedMap = useMemo(() => buildUntimedMap(lanes, weekDates), [lanes, weekDates]);
+  const allEntries = useMemo(
+    () => lanes.flatMap(lane => lane.days.flatMap(day => day.entries)),
+    [lanes],
+  );
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
 
   // Group lanes by group_id, preserving server sort order
   const grouped = useMemo(() => {
     const groups: { groupId: number | null; groupName: string | null; groupColor: string | null; lanes: CalendarLane[] }[] = [];
     const seen = new Map<number | null, typeof groups[0]>();
     for (const lane of lanes) {
+      if (!printerMatchesFilter(printerById.get(lane.printer_id), stateFilter)) continue;
       const key = lane.group_id ?? null;
       if (!seen.has(key)) {
         const g = { groupId: key, groupName: lane.group_name ?? null, groupColor: lane.group_color ?? null, lanes: [] as CalendarLane[] };
@@ -300,7 +446,7 @@ export function ScheduleCalendar({
       seen.get(key)!.lanes.push(lane);
     }
     return groups;
-  }, [lanes]);
+  }, [lanes, printerById, stateFilter]);
 
   function handleEntryClick(entry: CalendarEntry) {
     onOpenModal({ type: "edit", entry });
@@ -434,7 +580,16 @@ export function ScheduleCalendar({
 
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2">
-        <ScheduleWeekNav weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} onDayClick={scrollToDay} />
+        <ScheduleWeekNav
+          weekStart={weekStart}
+          onPrev={onPrevWeek}
+          onNext={onNextWeek}
+          onPrevDay={onPrevDay}
+          onNextDay={onNextDay}
+          onToday={onToday}
+          onDateChange={onDateChange}
+          onDayClick={scrollToDay}
+        />
 
         <div className="flex items-center gap-4">
           {/* Legend */}
@@ -494,6 +649,14 @@ export function ScheduleCalendar({
         </div>
       )}
 
+      <FarmStatusPanel
+        printers={livePrinters ?? []}
+        lanes={lanes}
+        entries={allEntries}
+        filter={stateFilter}
+        onFilterChange={setStateFilter}
+      />
+
       {/* ── Grid ── */}
       <div ref={gridRef} className="cal-scroll-grid flex-1">
         {loading ? (
@@ -528,7 +691,7 @@ export function ScheduleCalendar({
                       "text-[10px] font-semibold",
                       isToday ? "text-[var(--accent)]" : "text-[var(--text-muted)]",
                     ].join(" ")}>
-                      {UA_DAY[di]} {d.getDate()} {UA_MON[d.getMonth()]}
+                      {weekdayLabel(d)} {d.getDate()} {UA_MON[d.getMonth()]}
                     </span>
                     {isToday && (
                       <span className="rounded-full bg-[var(--accent)] px-1 py-px text-[8px] font-bold text-white">
@@ -556,6 +719,10 @@ export function ScheduleCalendar({
               <div className="sticky left-0 z-10 col-span-8 border-b border-[var(--border)] bg-[var(--bg-elevated)] py-12 text-center text-sm text-[var(--text-faint)]">
                 Принтерів не знайдено. Додайте принтери в Налаштуваннях.
               </div>
+            ) : grouped.length === 0 ? (
+              <div className="sticky left-0 z-10 col-span-8 border-b border-[var(--border)] bg-[var(--bg-elevated)] py-12 text-center text-sm text-[var(--text-faint)]">
+                У цьому фільтрі немає принтерів.
+              </div>
             ) : (
               grouped.map(({ groupId, groupName, groupColor, lanes: groupLanes }) => (
                 <Fragment key={groupId ?? "__ungrouped"}>
@@ -580,6 +747,19 @@ export function ScheduleCalendar({
                       <span className="text-[10px] text-[var(--text-faint)]">
                         {groupLanes.length} принт.
                       </span>
+                      {(() => {
+                        const groupPrinters = groupLanes.map(l => printerById.get(l.printer_id)).filter((p): p is Printer => !!p);
+                        const printing = groupPrinters.filter(p => p.state === "printing").length;
+                        const attention = groupPrinters.filter(p => printerMatchesFilter(p, "attention")).length;
+                        const idle = groupPrinters.filter(p => printerMatchesFilter(p, "idle")).length;
+                        return (
+                          <span className="ml-auto flex items-center gap-2 text-[10px] text-[var(--text-faint)]">
+                            {printing > 0 && <span className="text-[var(--state-print)]">{printing} друк</span>}
+                            {idle > 0 && <span>{idle} вільн.</span>}
+                            {attention > 0 && <span className="font-semibold text-[var(--state-error)]">{attention} увага</span>}
+                          </span>
+                        );
+                      })()}
                     </div>
                   )}
                   {groupLanes.map(lane => (
@@ -609,10 +789,22 @@ export function ScheduleCalendar({
                         operational: "text-[var(--state-idle)]",
                       };
                       const cls = (lp.state && stateColors[lp.state]) ?? "text-[var(--text-faint)]";
+                      const flags = lp.flags ?? [];
+                      const needsAttention = flags.includes("requires_attention") || flags.includes("ai_detected_high") || lp.state === "error";
+                      const secondary = lp.state === "printing"
+                        ? `друкує · ${lp.eta_minutes ?? 0}хв${lp.progress_pct != null ? ` · ${Math.round(lp.progress_pct)}%` : ""}`
+                        : stateLabel(lp.state);
                       return (
-                        <span className={`mt-0.5 text-[10px] capitalize ${cls}`}>
-                          {lp.state === "printing" ? ("друкує · " + (lp.eta_minutes ?? 0) + "хв") : lp.state}
-                        </span>
+                        <>
+                          <span className={`mt-0.5 text-[10px] ${cls}`}>
+                            {secondary}
+                          </span>
+                          {needsAttention && (
+                            <span className="mt-0.5 truncate text-[9px] font-medium text-[var(--state-error)]" title={lp.error_msg ?? "Потребує уваги"}>
+                              {lp.error_msg ?? "потребує уваги"}
+                            </span>
+                          )}
+                        </>
                       );
                     })()}
                   </div>
@@ -670,6 +862,10 @@ export function ScheduleCalendar({
                         {/* Running print bar (today only) */}
                         {isToday && printerById.get(lane.printer_id) && (
                           <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} />
+                        )}
+
+                        {isToday && printerById.get(lane.printer_id) && (
+                          <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} />
                         )}
 
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />

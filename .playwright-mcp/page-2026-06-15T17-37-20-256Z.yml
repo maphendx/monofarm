@@ -1,0 +1,669 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - link [ref=e10] [cursor=pointer]:
+        - /url: https://simplyprint.io/panel/
+        - img [ref=e25]:
+          - generic [ref=e26]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: i
+              - generic [ref=e30]: m
+              - generic [ref=e31]: p
+              - generic [ref=e32]: l
+              - generic [ref=e33]: "y"
+            - generic [ref=e35]: P
+            - generic [ref=e36]:
+              - generic [ref=e37]: P
+              - generic [ref=e38]: r
+              - generic [ref=e39]: i
+              - generic [ref=e40]: "n"
+              - generic [ref=e41]: t
+            - generic [ref=e43]: S
+      - list [ref=e12]:
+        - listitem [ref=e48]:
+          - link "Printer icon" [ref=e49] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/printers
+            - img "Printer icon" [ref=e51]
+        - listitem [ref=e52]:
+          - link [ref=e53] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/files
+        - listitem [ref=e56]:
+          - link [ref=e57] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/queue
+        - listitem [ref=e60]:
+          - link [ref=e61] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/statistics
+        - listitem [ref=e64]:
+          - link "Print jobs icon (Benchy)" [ref=e65] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/jobs
+            - img "Print jobs icon (Benchy)" [ref=e67]
+        - listitem [ref=e68]:
+          - link "Filament icon" [ref=e69] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/filament
+            - img "Filament icon" [ref=e71]
+        - listitem [ref=e72]:
+          - link [ref=e73] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/slicer
+        - listitem [ref=e76]:
+          - link [ref=e77] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/maintenance
+          - button [ref=e80] [cursor=pointer]
+        - listitem [ref=e82]:
+          - link [ref=e83] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/academy
+        - listitem [ref=e86]:
+          - separator [ref=e88]
+        - listitem [ref=e89]:
+          - link [ref=e90] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/settings
+        - listitem [ref=e93]:
+          - link [ref=e94] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/users
+        - listitem [ref=e97]:
+          - link [ref=e98] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/integrations
+        - listitem [ref=e101]:
+          - link [ref=e102] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/refer-a-friend
+        - listitem [ref=e105]
+        - listitem [ref=e109]:
+          - separator [ref=e111]
+        - listitem [ref=e112]
+        - listitem [ref=e116]
+        - listitem [ref=e120]
+        - listitem [ref=e125]:
+          - button [ref=e126] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e15]:
+        - list [ref=e128]:
+          - listitem [ref=e129]
+        - list [ref=e132]:
+          - listitem [ref=e133]:
+            - link "7" [ref=e134] [cursor=pointer]:
+              - /url: https://simplyprint.io/panel/files
+              - generic [ref=e137]: "7"
+          - listitem [ref=e138]:
+            - link [ref=e139] [cursor=pointer]:
+              - /url: https://simplyprint.io/discord
+          - listitem [ref=e142]
+          - listitem [ref=e146]
+          - listitem [ref=e150]
+          - listitem [ref=e154]
+          - listitem [ref=e158]:
+            - generic [ref=e162] [cursor=pointer]: LEOCODE & OYTOY
+          - listitem [ref=e163]:
+            - generic [ref=e165] [cursor=pointer]:
+              - img "Олександр Яцишин avatar" [ref=e168]
+              - generic [ref=e170]: Олександр Яцишин
+      - main [ref=e16]:
+        - generic [ref=e172]:
+          - generic [ref=e174]:
+            - searchbox "Search" [ref=e177]
+            - generic [ref=e178]:
+              - button "1-click print" [ref=e179] [cursor=pointer]:
+                - img [ref=e180]
+                - generic [ref=e190]: 1-click print
+              - button "Update SimplyPrint" [ref=e191] [cursor=pointer]:
+                - generic [ref=e193]: Update SimplyPrint
+              - button [ref=e194] [cursor=pointer]
+              - button [ref=e196] [cursor=pointer]
+              - button [ref=e198] [cursor=pointer]
+              - group [ref=e200]:
+                - button [ref=e201] [cursor=pointer]
+                - button [ref=e203] [cursor=pointer]
+                - button [ref=e205] [cursor=pointer]
+              - button [ref=e207] [cursor=pointer]
+          - generic [ref=e209]:
+            - generic [ref=e210]:
+              - tab "Maz P1S Multi-tagging" [ref=e211]:
+                - generic [ref=e213] [cursor=pointer]:
+                  - heading "Maz P1S" [level=5] [ref=e214]:
+                    - generic [ref=e215]: Maz P1S
+                  - button "Multi-tagging" [ref=e221]:
+                    - generic [ref=e223]: Multi-tagging
+              - tabpanel "Maz P1S Multi-tagging" [ref=e225]:
+                - generic [ref=e226]:
+                  - generic [ref=e228]:
+                    - generic [ref=e229]:
+                      - generic [ref=e233]:
+                        - generic [ref=e234] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e235]:
+                          - generic: "+5"
+                      - generic [ref=e241]:
+                        - img "Printer" [ref=e242]
+                        - heading "P1" [level=5] [ref=e243]
+                    - generic [ref=e246]:
+                      - button [ref=e248] [cursor=pointer]
+                      - button [ref=e251] [cursor=pointer]
+                    - generic [ref=e255]:
+                      - generic [ref=e256] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e259] [cursor=pointer]
+                  - generic [ref=e261]:
+                    - generic [ref=e262]:
+                      - generic [ref=e266]:
+                        - generic [ref=e267] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e268]:
+                          - generic: "+8"
+                      - generic [ref=e274]:
+                        - img "Printer" [ref=e275]
+                        - heading "P2" [level=5] [ref=e276]
+                    - generic [ref=e279]:
+                      - button [ref=e281] [cursor=pointer]
+                      - button [ref=e284] [cursor=pointer]
+                    - generic [ref=e288]:
+                      - generic [ref=e289] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e292] [cursor=pointer]
+                  - generic [ref=e294]:
+                    - generic [ref=e295]:
+                      - generic [ref=e299]:
+                        - generic [ref=e300] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e301]:
+                          - generic: "+8"
+                      - generic [ref=e307]:
+                        - img "Printer" [ref=e308]
+                        - heading "P3" [level=5] [ref=e309]
+                    - generic [ref=e312]:
+                      - button [ref=e314] [cursor=pointer]
+                      - button [ref=e317] [cursor=pointer]
+                    - generic [ref=e321]:
+                      - generic [ref=e322] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e325] [cursor=pointer]
+                  - generic [ref=e327]:
+                    - generic [ref=e328]:
+                      - generic [ref=e332]:
+                        - generic [ref=e333] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e334]:
+                          - generic: "+6"
+                      - generic [ref=e340]:
+                        - img "Printer" [ref=e341]
+                        - heading "P4" [level=5] [ref=e342]
+                    - generic [ref=e346]:
+                      - button [disabled]
+                    - generic [ref=e349]:
+                      - generic [ref=e350] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e353] [cursor=pointer]
+                  - generic [ref=e355] [cursor=pointer]:
+                    - generic [ref=e356]:
+                      - generic [ref=e362]:
+                        - generic [ref=e363]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e364]:
+                          - generic: "+3"
+                      - generic [ref=e368]:
+                        - img "Printer" [ref=e369]
+                        - heading "P5" [level=5] [ref=e370]
+                    - generic [ref=e373]:
+                      - generic: 0%
+                  - generic [ref=e375]:
+                    - generic [ref=e376]:
+                      - generic [ref=e380]:
+                        - generic [ref=e381] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e382]:
+                          - generic: "+7"
+                      - generic [ref=e388]:
+                        - img "Printer" [ref=e389]
+                        - heading "P6" [level=5] [ref=e390]
+                    - button [ref=e395] [cursor=pointer]
+                    - generic [ref=e399]:
+                      - generic [ref=e400] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e403] [cursor=pointer]
+                  - generic [ref=e405]:
+                    - generic [ref=e406]:
+                      - generic [ref=e410]:
+                        - generic [ref=e411] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e412]:
+                          - generic: "+6"
+                      - generic [ref=e418]:
+                        - img "Printer" [ref=e419]
+                        - heading "P7" [level=5] [ref=e420]
+                    - button [ref=e425] [cursor=pointer]
+                    - generic [ref=e429]:
+                      - generic [ref=e430] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e433] [cursor=pointer]
+                  - generic [ref=e435] [cursor=pointer]:
+                    - generic [ref=e436]:
+                      - generic [ref=e443]:
+                        - generic: "+4"
+                      - generic [ref=e449]:
+                        - img "Printer" [ref=e450]
+                        - heading "P8" [level=5] [ref=e451]
+                      - generic [ref=e453]:
+                        - generic [ref=e454]: Finished in
+                        - generic [ref=e455]: 6h 22m
+                        - generic [ref=e456]: Tomorrow, 02:59
+                    - generic [ref=e457]:
+                      - generic [ref=e460]: 61%
+                      - generic [ref=e462]:
+                        - button [ref=e464]
+                        - button [ref=e467]
+            - generic [ref=e469]:
+              - tab "A1" [ref=e470]:
+                - heading "A1" [level=5] [ref=e473] [cursor=pointer]:
+                  - generic [ref=e474]: A1
+              - tabpanel "A1" [ref=e480]:
+                - generic [ref=e481]:
+                  - generic [ref=e483]:
+                    - generic [ref=e484]:
+                      - generic [ref=e488]:
+                        - generic [ref=e489] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e490]:
+                          - generic: "+7"
+                      - generic [ref=e496]:
+                        - img "Printer" [ref=e497]
+                        - heading "A1" [level=5] [ref=e498]
+                    - generic [ref=e502]:
+                      - button [disabled]
+                    - generic [ref=e505]:
+                      - generic [ref=e506] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e509] [cursor=pointer]
+                  - generic [ref=e511]:
+                    - generic [ref=e512]:
+                      - generic [ref=e516]:
+                        - generic [ref=e517] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e518]:
+                          - generic: "+7"
+                      - generic [ref=e524]:
+                        - img "Printer" [ref=e525]
+                        - heading "A2" [level=5] [ref=e526]
+                    - generic [ref=e530]:
+                      - button [disabled]
+                    - generic [ref=e533]:
+                      - generic [ref=e534] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e537] [cursor=pointer]
+                  - generic [ref=e539]:
+                    - generic [ref=e540]:
+                      - generic [ref=e544]:
+                        - generic [ref=e545] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e546]:
+                          - generic: "+7"
+                      - generic [ref=e552]:
+                        - img "Printer" [ref=e553]
+                        - heading "A3" [level=5] [ref=e554]
+                    - button [ref=e559] [cursor=pointer]
+                    - generic [ref=e563]:
+                      - generic [ref=e564] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e567] [cursor=pointer]
+                  - generic [ref=e569]:
+                    - generic [ref=e570]:
+                      - generic [ref=e574]:
+                        - generic [ref=e575] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e576]:
+                          - generic: "+7"
+                      - generic [ref=e582]:
+                        - img "Printer" [ref=e583]
+                        - heading "A4" [level=5] [ref=e584]
+                    - generic [ref=e588]:
+                      - button [disabled]
+                    - generic [ref=e591]:
+                      - generic [ref=e592] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e595] [cursor=pointer]
+                  - generic [ref=e597]:
+                    - generic [ref=e598]:
+                      - generic [ref=e602]:
+                        - generic [ref=e603] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e604]:
+                          - generic: "+7"
+                      - generic [ref=e610]:
+                        - img "Printer" [ref=e611]
+                        - heading "A5" [level=5] [ref=e612]
+                    - generic [ref=e616]:
+                      - button [disabled]
+                    - generic [ref=e619]:
+                      - generic [ref=e620] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e623] [cursor=pointer]
+                  - generic [ref=e625]:
+                    - generic [ref=e626]:
+                      - generic [ref=e630]:
+                        - generic [ref=e631] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e632]:
+                          - generic: "+7"
+                      - generic [ref=e638]:
+                        - img "Printer" [ref=e639]
+                        - heading "A6" [level=5] [ref=e640]
+                    - generic [ref=e644]:
+                      - button [disabled]
+                    - generic [ref=e647]:
+                      - generic [ref=e648] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e651] [cursor=pointer]
+                  - generic [ref=e653]:
+                    - generic [ref=e654]:
+                      - generic [ref=e658]:
+                        - generic [ref=e659] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e660]:
+                          - generic: "+7"
+                      - generic [ref=e666]:
+                        - img "Printer" [ref=e667]
+                        - heading "A7" [level=5] [ref=e668]
+                    - generic [ref=e672]:
+                      - button [disabled]
+                    - generic [ref=e675]:
+                      - generic [ref=e676] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e679] [cursor=pointer]
+                  - generic [ref=e681]:
+                    - generic [ref=e682]:
+                      - generic [ref=e686]:
+                        - generic [ref=e687] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e688]:
+                          - generic: "+5"
+                      - generic [ref=e694]:
+                        - img "Printer" [ref=e695]
+                        - heading "A8" [level=5] [ref=e696]
+                    - generic [ref=e700]:
+                      - button [disabled]
+                    - generic [ref=e703]:
+                      - generic [ref=e704] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e707] [cursor=pointer]
+                  - generic [ref=e709]:
+                    - generic [ref=e710]:
+                      - generic [ref=e714]:
+                        - generic [ref=e715] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e716]:
+                          - generic: "+5"
+                      - generic [ref=e722]:
+                        - img "Printer" [ref=e723]
+                        - heading "A9" [level=5] [ref=e724]
+                    - generic [ref=e728]:
+                      - button [disabled]
+                    - generic [ref=e731]:
+                      - generic [ref=e732] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e735] [cursor=pointer]
+                  - generic [ref=e737]:
+                    - generic [ref=e738]:
+                      - generic [ref=e742]:
+                        - generic [ref=e743] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e744]:
+                          - generic: "+6"
+                      - generic [ref=e748]:
+                        - img "Printer" [ref=e749]
+                        - heading "A10" [level=5] [ref=e750]
+                    - generic [ref=e753]:
+                      - generic [ref=e754] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e757] [cursor=pointer]
+                  - generic [ref=e759]:
+                    - generic [ref=e760]:
+                      - generic [ref=e764]:
+                        - generic [ref=e765] [cursor=pointer]:
+                          - generic:
+                            - img
+                            - text: "0.4"
+                        - generic [ref=e766]:
+                          - generic: "+3"
+                      - generic [ref=e772]:
+                        - img "Printer" [ref=e773]
+                        - heading "A11" [level=5] [ref=e774]
+                    - generic [ref=e778]:
+                      - button [disabled]
+                    - generic [ref=e781]:
+                      - generic [ref=e782] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e785] [cursor=pointer]
+            - generic [ref=e786]:
+              - tab "A1Mini" [ref=e787]:
+                - heading "A1Mini" [level=5] [ref=e790] [cursor=pointer]:
+                  - generic [ref=e791]: A1Mini
+              - tabpanel "A1Mini" [ref=e797]:
+                - generic [ref=e798]:
+                  - generic [ref=e800]:
+                    - generic [ref=e808]:
+                      - img "Printer" [ref=e809]
+                      - heading "M1" [level=5] [ref=e810]
+                    - button [ref=e815] [cursor=pointer]
+                    - generic [ref=e819]:
+                      - generic [ref=e820] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e823] [cursor=pointer]
+                  - generic [ref=e825]:
+                    - generic [ref=e833]:
+                      - img "Printer" [ref=e834]
+                      - heading "M2" [level=5] [ref=e835]
+                    - button [ref=e840] [cursor=pointer]
+                    - generic [ref=e844]:
+                      - generic [ref=e845] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e848] [cursor=pointer]
+                  - generic [ref=e850]:
+                    - generic [ref=e856]:
+                      - img "Printer" [ref=e857]
+                      - heading "M3" [level=5] [ref=e858]
+                    - generic [ref=e861]:
+                      - generic [ref=e862] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e865] [cursor=pointer]
+                  - generic [ref=e867]:
+                    - generic [ref=e875]:
+                      - img "Printer" [ref=e876]
+                      - heading "M4" [level=5] [ref=e877]
+                    - button [ref=e882] [cursor=pointer]
+                    - generic [ref=e886]:
+                      - generic [ref=e887] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e890] [cursor=pointer]
+                  - generic [ref=e892]:
+                    - generic [ref=e900]:
+                      - img "Printer" [ref=e901]
+                      - heading "M5" [level=5] [ref=e902]
+                    - button [ref=e907] [cursor=pointer]
+                    - generic [ref=e911]:
+                      - generic [ref=e912] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e915] [cursor=pointer]
+                  - generic [ref=e917]:
+                    - generic [ref=e925]:
+                      - img "Printer" [ref=e926]
+                      - heading "M6" [level=5] [ref=e927]
+                    - button [ref=e932] [cursor=pointer]
+                    - generic [ref=e936]:
+                      - generic [ref=e937] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e940] [cursor=pointer]
+                  - generic [ref=e942]:
+                    - generic [ref=e950]:
+                      - img "Printer" [ref=e951]
+                      - heading "M7" [level=5] [ref=e952]
+                    - button [ref=e957] [cursor=pointer]
+                    - generic [ref=e961]:
+                      - generic [ref=e962] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e965] [cursor=pointer]
+                  - generic [ref=e967]:
+                    - generic [ref=e975]:
+                      - img "Printer" [ref=e976]
+                      - heading "M8" [level=5] [ref=e977]
+                    - button [ref=e982] [cursor=pointer]
+                    - generic [ref=e986]:
+                      - generic [ref=e987] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e990] [cursor=pointer]
+                  - generic [ref=e992]:
+                    - generic [ref=e993]:
+                      - button "Notifications" [ref=e999] [cursor=pointer]:
+                        - generic "1 unresolved" [ref=e1001]: "1"
+                      - generic [ref=e1004]:
+                        - img "Printer" [ref=e1005]
+                        - heading "M9" [level=5] [ref=e1006]
+                    - button [ref=e1011] [cursor=pointer]
+                    - generic [ref=e1015]:
+                      - generic [ref=e1016] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1019] [cursor=pointer]
+                  - generic [ref=e1021]:
+                    - generic [ref=e1029]:
+                      - img "Printer" [ref=e1030]
+                      - heading "M10" [level=5] [ref=e1031]
+                    - button [ref=e1036] [cursor=pointer]
+                    - generic [ref=e1040]:
+                      - generic [ref=e1041] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1044] [cursor=pointer]
+            - generic [ref=e1045]:
+              - tab "U1" [ref=e1046]:
+                - heading "U1" [level=5] [ref=e1049] [cursor=pointer]:
+                  - generic [ref=e1050]: U1
+              - tabpanel "U1" [ref=e1056]:
+                - generic [ref=e1057]:
+                  - generic [ref=e1059]:
+                    - generic [ref=e1065]:
+                      - img "Printer" [ref=e1066]
+                      - heading "U1" [level=5] [ref=e1067]
+                    - generic [ref=e1070]:
+                      - button [ref=e1072] [cursor=pointer]
+                      - button [ref=e1075] [cursor=pointer]
+                    - generic [ref=e1079]:
+                      - generic [ref=e1080] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1083] [cursor=pointer]
+                  - generic [ref=e1085]:
+                    - generic [ref=e1091]:
+                      - img "Printer" [ref=e1092]
+                      - heading "U2" [level=5] [ref=e1093]
+                    - generic [ref=e1096]:
+                      - generic [ref=e1097] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1100] [cursor=pointer]
+                  - generic [ref=e1102]:
+                    - generic [ref=e1108]:
+                      - img "Printer" [ref=e1109]
+                      - heading "U3" [level=5] [ref=e1110]
+                    - generic [ref=e1113]:
+                      - button [ref=e1115] [cursor=pointer]
+                      - button [ref=e1118] [cursor=pointer]
+                    - generic [ref=e1122]:
+                      - generic [ref=e1123] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1126] [cursor=pointer]
+            - generic [ref=e1127]:
+              - tab "Other" [ref=e1128]:
+                - heading "Other" [level=5] [ref=e1131] [cursor=pointer]:
+                  - generic [ref=e1132]: Other
+              - tabpanel "Other" [ref=e1138]:
+                - generic [ref=e1139]:
+                  - generic [ref=e1141]:
+                    - generic [ref=e1149]:
+                      - img "Printer" [ref=e1150]
+                      - heading "MC1" [level=5] [ref=e1151]
+                    - button [ref=e1156] [cursor=pointer]
+                    - generic [ref=e1160]:
+                      - generic [ref=e1161] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1164] [cursor=pointer]
+                  - generic [ref=e1166]:
+                    - generic [ref=e1174]:
+                      - img "Printer" [ref=e1175]
+                      - heading "MC2" [level=5] [ref=e1176]
+                    - button [ref=e1181] [cursor=pointer]
+                    - generic [ref=e1185]:
+                      - generic [ref=e1186] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1189] [cursor=pointer]
+                  - generic [ref=e1191]:
+                    - generic [ref=e1199]:
+                      - img "Printer" [ref=e1200]
+                      - heading "MC3" [level=5] [ref=e1201]
+                    - button [ref=e1206] [cursor=pointer]
+                    - generic [ref=e1210]:
+                      - generic [ref=e1211] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1214] [cursor=pointer]
+                  - generic [ref=e1216]:
+                    - generic [ref=e1217]:
+                      - button "Notifications" [ref=e1223] [cursor=pointer]:
+                        - generic "1 unresolved" [ref=e1225]: "1"
+                      - generic [ref=e1228]:
+                        - img "Printer" [ref=e1229]
+                        - heading "MC4" [level=5] [ref=e1230]
+                    - button [ref=e1235] [cursor=pointer]
+                    - generic [ref=e1239]:
+                      - generic [ref=e1240] [cursor=pointer]: Printer is locked
+                      - text: .
+                      - button [ref=e1243] [cursor=pointer]
+      - contentinfo [ref=e17]:
+        - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+        - text: ® "SimplyPrint" is a registered trademark.
+        - generic [ref=e18]:
+          - link "Terms of trade and subscription" [ref=e19] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/tos
+          - text: "|"
+          - link "Privacy policy" [ref=e20] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy
+          - text: "|"
+          - link "Trademark rules" [ref=e21] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/trademark-rules
+          - text: "|"
+          - link "Service status" [ref=e22] [cursor=pointer]:
+            - /url: https://status.simplyprint.io/
+          - text: "|"
+          - link "Cookie Policy" [ref=e23] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy/cookies
+          - text: "|"
+          - link "Cookie Settings" [ref=e24] [cursor=pointer]:
+            - /url: "#"
+  - log [ref=e1244]
+  - generic [ref=e1245]: giItT1WQy@!-/#
+  - generic [ref=e1246]: giItT1WQy@!-/#
+  - button "Open chat" [ref=e1288] [cursor=pointer]

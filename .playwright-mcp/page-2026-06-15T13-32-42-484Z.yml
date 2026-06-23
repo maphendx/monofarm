@@ -1,0 +1,1243 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e8]:
+      - generic [ref=e15]:
+        - link "Return to home page" [ref=e19] [cursor=pointer]:
+          - /url: /
+          - img "logo" [ref=e21]
+        - generic [ref=e23]:
+          - generic "Switch language" [ref=e26] [cursor=pointer]:
+            - 'option "Selected language: UA" [selected] [ref=e28]':
+              - img [ref=e30]
+            - img [ref=e34]
+          - navigation "Main navigation menu" [ref=e36]:
+            - list [ref=e37]:
+              - listitem [ref=e38]:
+                - link "Для кого" [ref=e40] [cursor=pointer]:
+                  - /url: /#features
+              - listitem [ref=e41]:
+                - link "Тарифи" [ref=e43] [cursor=pointer]:
+                  - /url: /price-plans
+              - listitem [ref=e44]:
+                - link "Демо" [ref=e46] [cursor=pointer]:
+                  - /url: /#cta
+              - listitem [ref=e47]:
+                - link "Функції" [ref=e49] [cursor=pointer]:
+                  - /url: /#cover-12
+              - listitem [ref=e50]:
+                - link "Інтеграції" [ref=e52] [cursor=pointer]:
+                  - /url: /#partners-3
+              - listitem [ref=e53]:
+                - link "Відгуки" [ref=e55] [cursor=pointer]:
+                  - /url: /#partners-2
+              - listitem [ref=e56]:
+                - link "Блог" [ref=e58] [cursor=pointer]:
+                  - /url: /blog
+          - list [ref=e60]:
+            - listitem [ref=e61]:
+              - button "phone" [ref=e62] [cursor=pointer]:
+                - img [ref=e63]
+          - generic [ref=e68]:
+            - button "Open external web-address" [ref=e69] [cursor=pointer]:
+              - generic [ref=e72]: Вхід
+            - button "Open external web-address" [ref=e73] [cursor=pointer]:
+              - generic [ref=e76]: Реєстрація
+    - generic [ref=e84]:
+      - heading "Зручний облік товарів на складах та планування виробництва в одному місці" [level=1] [ref=e92]:
+        - generic [ref=e93]: Зручний облік товарів
+        - text: на складах
+        - text: та
+        - generic [ref=e94]: планування виробництва
+        - text: в одному місці
+      - generic [ref=e99]:
+        - paragraph [ref=e100]:
+          - generic [ref=e103]: Ordage – сучасний інструмент для обліку товарів та ефективного управління виробництвом без зайвих витрат
+        - generic [ref=e105]:
+          - button "Open external web-address" [ref=e106] [cursor=pointer]:
+            - generic [ref=e109]: Спробувати безкоштовно
+          - button "Open popup" [ref=e110] [cursor=pointer]:
+            - generic [ref=e112]:
+              - img [ref=e116]
+              - generic [ref=e119]: Отримати консультацію
+        - paragraph [ref=e120]:
+          - emphasis [ref=e124]: "*без привʼязки карток"
+    - generic [ref=e136]:
+      - img "Illustration" [ref=e138]
+      - button "Scale image" [ref=e139] [cursor=pointer]
+    - generic [ref=e148]:
+      - generic [ref=e150]:
+        - paragraph [ref=e151]:
+          - generic [ref=e153]: 250+
+        - paragraph [ref=e154]:
+          - generic [ref=e156]: компаній
+        - paragraph [ref=e157]:
+          - generic [ref=e159]: обрали Ordage
+      - generic [ref=e161]:
+        - paragraph [ref=e162]:
+          - generic [ref=e164]: 1000+
+        - paragraph [ref=e165]:
+          - generic [ref=e167]: користувачів
+        - paragraph [ref=e168]:
+          - generic [ref=e169]: працюють в системі
+      - generic [ref=e171]:
+        - paragraph [ref=e172]:
+          - generic [ref=e174]: 210+ тис.
+        - paragraph [ref=e175]:
+          - generic [ref=e177]: товарів
+        - paragraph [ref=e178]:
+          - generic [ref=e179]: внесено у систему
+      - generic [ref=e181]:
+        - paragraph [ref=e182]:
+          - generic [ref=e184]: 180+ тис.
+        - paragraph [ref=e185]:
+          - generic [ref=e187]: замовлень
+        - paragraph [ref=e188]:
+          - generic [ref=e189]: опрацьовано через Ordage
+    - generic [ref=e195]:
+      - generic [ref=e200]:
+        - paragraph [ref=e201]:
+          - generic [ref=e202]: Універсальне рішення
+        - heading "Ordage - це автоматизація процесів обліку виробництва та роздрібу для різних напрямків та індустрій" [level=2] [ref=e203]:
+          - generic [ref=e205]: Ordage - це автоматизація процесів обліку виробництва та роздрібу для різних напрямків та індустрій
+      - generic [ref=e212]:
+        - generic [ref=e214]:
+          - generic "Icon" [ref=e217]:
+            - img "icon" [ref=e219]
+          - paragraph [ref=e220]:
+            - generic [ref=e223]: Інтернет-магазини
+        - generic [ref=e225]:
+          - generic "Icon" [ref=e228]:
+            - img "icon" [ref=e230]
+          - paragraph [ref=e231]:
+            - generic [ref=e233]: Retail бізнеси
+        - generic [ref=e235]:
+          - generic "Icon" [ref=e238]:
+            - img "icon" [ref=e240]
+          - paragraph [ref=e241]:
+            - generic [ref=e244]: Виробничі підприємства
+        - generic [ref=e246]:
+          - generic "Icon" [ref=e249]:
+            - img "icon" [ref=e251]
+          - paragraph [ref=e252]:
+            - generic [ref=e255]: Виробництва Одягу&Аксесуарів
+        - generic [ref=e257]:
+          - generic "Icon" [ref=e260]:
+            - img "icon" [ref=e262]
+          - paragraph [ref=e263]:
+            - generic [ref=e266]: Виробництва електронних приладів
+        - generic [ref=e268]:
+          - generic "Icon" [ref=e271]:
+            - img "icon" [ref=e273]
+          - paragraph [ref=e274]:
+            - generic [ref=e277]: Логістичні компанії
+        - generic [ref=e279]:
+          - generic "Icon" [ref=e282]:
+            - img "icon" [ref=e284]
+          - paragraph [ref=e285]:
+            - generic [ref=e288]: Будівельні компанії
+        - generic [ref=e290]:
+          - generic "Icon" [ref=e293]:
+            - img "icon" [ref=e295]
+          - paragraph [ref=e296]:
+            - generic [ref=e299]: Виробництва харчових продуктів
+        - generic [ref=e301]:
+          - generic "Icon" [ref=e304]:
+            - img "icon" [ref=e306]
+          - paragraph [ref=e307]:
+            - generic [ref=e309]: Металообробка
+        - generic [ref=e311]:
+          - generic "Icon" [ref=e314]:
+            - img "icon" [ref=e316]
+          - paragraph [ref=e317]:
+            - generic [ref=e319]: Меблі та деревообробка
+        - generic [ref=e321]:
+          - generic "Icon" [ref=e324]:
+            - img "icon" [ref=e326]
+          - paragraph [ref=e327]:
+            - generic [ref=e329]: Автомобілі та інструменти
+        - generic [ref=e331]:
+          - generic "Icon" [ref=e334]:
+            - img "icon" [ref=e336]
+          - paragraph [ref=e337]:
+            - generic [ref=e339]: Косметика та хімія
+    - generic [ref=e350]:
+      - paragraph [ref=e351]:
+        - generic [ref=e353]: Що ми робимо за вас
+      - heading "Ефективно керуйте своїм бізнесом і збільшуйте прибуток" [level=2] [ref=e354]:
+        - generic [ref=e356]: Ефективно керуйте своїм бізнесом і збільшуйте прибуток
+      - paragraph [ref=e357]
+    - generic [ref=e369]:
+      - generic [ref=e371]:
+        - generic "Icon" [ref=e376]:
+          - img "icon" [ref=e378]
+        - paragraph [ref=e379]:
+          - generic [ref=e380]: Для обліку товарів
+        - list [ref=e382]:
+          - generic [ref=e383]:
+            - generic [ref=e385]:
+              - generic "Icon" [ref=e387]:
+                - img [ref=e389]
+              - generic [ref=e392]: "Номенклатура та вся інформація про товари в одному місці: фото, собівартість, прайсові ціни, штрихкоди, артикули, опис."
+            - generic [ref=e394]:
+              - generic "Icon" [ref=e396]:
+                - img [ref=e398]
+              - generic [ref=e401]: Облік залишків різних складах та локаціях.
+            - generic [ref=e403]:
+              - generic "Icon" [ref=e405]:
+                - img [ref=e407]
+              - generic [ref=e410]: Замовлення клієнтів в одному місці.
+        - list [ref=e412]:
+          - generic [ref=e413]:
+            - generic [ref=e415]:
+              - generic "Icon" [ref=e417]:
+                - img [ref=e419]
+              - generic [ref=e422]: Друк етикеток з усією інформацією про товар
+            - generic [ref=e424]:
+              - generic "Icon" [ref=e426]:
+                - img [ref=e428]
+              - generic [ref=e431]: Інвентаризація залишків на складах.
+            - generic [ref=e433]:
+              - generic "Icon" [ref=e435]:
+                - img [ref=e437]
+              - generic [ref=e440]: Ведення розрахунків та звірок з постачальниками
+        - list [ref=e442]:
+          - generic [ref=e443]:
+            - generic [ref=e445]:
+              - generic "Icon" [ref=e447]:
+                - img [ref=e449]
+              - generic [ref=e452]: "Формування документів: Накладні, Акти, Рахунки-фактури."
+            - generic [ref=e454]:
+              - generic "Icon" [ref=e456]:
+                - img [ref=e458]
+              - generic [ref=e461]: "Облік товарів за штрих кодами: скануйте та робіть прийом чи продаж товару швидше."
+            - generic [ref=e463]:
+              - generic "Icon" [ref=e465]:
+                - img [ref=e467]
+              - generic [ref=e470]: Планування закупок товарів на склад.
+      - generic [ref=e472]:
+        - generic "Icon" [ref=e477]:
+          - img "icon" [ref=e479]
+        - paragraph [ref=e480]:
+          - generic [ref=e481]: Для обліку виробництва
+        - list [ref=e483]:
+          - generic [ref=e484]:
+            - generic [ref=e486]:
+              - generic "Icon" [ref=e488]:
+                - img [ref=e490]
+              - generic [ref=e493]: Облік за технічними картами виробів.
+            - generic [ref=e495]:
+              - generic "Icon" [ref=e497]:
+                - img [ref=e499]
+              - generic [ref=e502]: Автоматичне списання матеріалів при збірках.
+            - generic [ref=e504]:
+              - generic "Icon" [ref=e506]:
+                - img [ref=e508]
+              - generic [ref=e511]: Автоматична збірка товару при продажі.
+        - list [ref=e513]:
+          - generic [ref=e514]:
+            - generic [ref=e516]:
+              - generic "Icon" [ref=e518]:
+                - img [ref=e520]
+              - generic [ref=e523]: Нарахування ЗП працівникам на виробництві.
+            - generic [ref=e525]:
+              - generic "Icon" [ref=e527]:
+                - img [ref=e529]
+              - generic [ref=e532]: Автоматичний розрахунок собівартості виробів.
+            - generic [ref=e534]:
+              - generic "Icon" [ref=e536]:
+                - img [ref=e538]
+              - generic [ref=e541]: Планування виробництва з відповідальними в режимі Канбан.
+        - list [ref=e543]:
+          - generic [ref=e544]:
+            - generic [ref=e546]:
+              - generic "Icon" [ref=e548]:
+                - img [ref=e550]
+              - generic [ref=e553]: План недостачі матеріалів для виробництва.
+            - generic [ref=e555]:
+              - generic "Icon" [ref=e557]:
+                - img [ref=e559]
+              - generic [ref=e562]: Облік залишків матеріалів та виробів на складах та комірках.
+            - generic [ref=e564]:
+              - generic "Icon" [ref=e566]:
+                - img [ref=e568]
+              - generic [ref=e571]: Звіти про Маржинальний прибуток та Обіг товарів.
+    - generic [ref=e577]:
+      - generic [ref=e580]:
+        - generic [ref=e582]:
+          - paragraph [ref=e583]:
+            - generic [ref=e585]: Робимо облік легшим
+          - heading "Об’єднайте процеси обліку складу, залишків та фінансів в єдиній автоматизованій програмі" [level=2] [ref=e586]:
+            - generic [ref=e588]: Об’єднайте процеси обліку складу, залишків та фінансів в єдиній автоматизованій програмі
+          - paragraph [ref=e589]:
+            - generic [ref=e590]: дивіться короткий огляд сервісу 👉
+        - generic "Video" [ref=e594]
+      - button "Open external web-address" [ref=e604] [cursor=pointer]:
+        - generic [ref=e607]: Спробувати безкоштовно 7 днів
+    - generic [ref=e616]:
+      - generic [ref=e627]:
+        - paragraph [ref=e628]:
+          - generic [ref=e630]: Контроль залишків
+        - generic [ref=e632]:
+          - generic [ref=e633]:
+            - paragraph [ref=e634]:
+              - generic [ref=e636]: Проста інвентаризація
+            - paragraph [ref=e637]:
+              - generic [ref=e638]: Скануйте QR-коди або штрихкоди для швидкої актуалізації залишків.
+          - generic [ref=e639]:
+            - paragraph [ref=e640]:
+              - generic [ref=e642]: Залишки в одному місці
+            - paragraph [ref=e643]:
+              - generic [ref=e644]: Наявні товари на кожному складі та локації в онлайн-режимі.
+      - generic [ref=e655]:
+        - paragraph [ref=e656]:
+          - generic [ref=e658]: Планування закупок
+        - generic [ref=e660]:
+          - generic [ref=e661]:
+            - paragraph [ref=e662]:
+              - generic [ref=e664]: Мінімальні залишки
+            - paragraph [ref=e665]:
+              - generic [ref=e666]: Система підсвітить, який товар вже завершується та ви встигнете закупити.
+          - generic [ref=e667]:
+            - paragraph [ref=e668]:
+              - generic [ref=e670]: Задачі на покупку
+            - paragraph [ref=e671]:
+              - generic [ref=e672]: Плануйте закупки товарів на склад завчасно, фіксуйте дати, статуси та відповідальних за закупку.
+      - generic [ref=e683]:
+        - paragraph [ref=e684]:
+          - generic [ref=e686]: Замовлення клієнтів
+        - generic [ref=e688]:
+          - generic [ref=e689]:
+            - paragraph [ref=e690]:
+              - generic [ref=e692]: Замовлення з різних каналів
+            - paragraph [ref=e693]:
+              - generic [ref=e694]: Всі замовлення від клієнтів в одному місці.
+          - generic [ref=e695]:
+            - paragraph [ref=e696]:
+              - generic [ref=e698]: План замовлення
+            - paragraph [ref=e699]:
+              - generic [ref=e700]: Система підсвітить, якщо на залишках не вистачає товару для клієнта.
+          - generic [ref=e701]:
+            - paragraph [ref=e702]:
+              - generic [ref=e704]: Резерви та статуси
+            - paragraph [ref=e705]:
+              - generic [ref=e706]: Резервуйте товари та змінюйте статуси під замовлення, щоб уникати незручних ситуацій з клієнтами.
+      - generic [ref=e717]:
+        - paragraph [ref=e718]:
+          - generic [ref=e720]: Контроль виробництва
+        - generic [ref=e722]:
+          - generic [ref=e723]:
+            - paragraph [ref=e724]:
+              - generic [ref=e725]: Списання за технічною картою
+            - paragraph [ref=e726]:
+              - generic [ref=e727]: Фіксуйте збірки, а система спише всі матеріали автоматично.
+          - generic [ref=e728]:
+            - paragraph [ref=e729]:
+              - generic [ref=e730]: Актуальна собіварітсть виробів
+            - paragraph [ref=e731]:
+              - generic [ref=e732]: Автоматчино прорахована собівартість виробу з матеріалами, роботами та додатковими витратами.
+          - generic [ref=e733]:
+            - paragraph [ref=e734]:
+              - generic [ref=e735]: Планування
+            - paragraph [ref=e736]:
+              - generic [ref=e737]: Плануйте виробництво та контролюйте скільки вам потрібно матеріалів для виробництва кожного товару.
+      - generic [ref=e748]:
+        - paragraph [ref=e749]:
+          - generic [ref=e750]: Звіти для аналізу бізнесу
+        - generic [ref=e753]:
+          - paragraph [ref=e754]:
+            - generic [ref=e755]: 8 звітів
+          - paragraph [ref=e756]:
+            - generic [ref=e757]: Маржинальний прибуток, Обіг товарів, Рентабельність та ще 5 звітів для аналізу вашого бізнесу, щоб виявити найуспішніші позиції, а від неприбуткових відмовитись.
+      - generic [ref=e768]:
+        - paragraph [ref=e769]:
+          - generic [ref=e770]: Розрахунки з контаргентами
+        - generic [ref=e772]:
+          - generic [ref=e773]:
+            - paragraph [ref=e774]:
+              - generic [ref=e775]: Актуальні заборгованості
+            - paragraph [ref=e776]:
+              - generic [ref=e777]: Ведіть рухи товарів та грошей, щоб відслідковувати поточну суму заборгованості з контрагентами.
+          - generic [ref=e778]:
+            - paragraph [ref=e779]:
+              - generic [ref=e780]: Автоматичні звірки
+            - paragraph [ref=e781]:
+              - generic [ref=e782]: Система сформує звірку за будь-який період для звіряння балансу між компаніями.
+      - generic [ref=e793]:
+        - paragraph [ref=e794]:
+          - generic [ref=e795]: Формування документів
+        - generic [ref=e797]:
+          - generic [ref=e798]:
+            - paragraph [ref=e799]:
+              - generic [ref=e800]: Накладні та Акти
+            - paragraph [ref=e801]:
+              - generic [ref=e802]: Спростіть формування щоденних документів на прийом чи відправку товарів.
+          - generic [ref=e803]:
+            - paragraph [ref=e804]:
+              - generic [ref=e805]: Рахунки-фактури
+            - paragraph [ref=e806]:
+              - generic [ref=e807]: Формуйте замовлення для клієнта, а рахунок сформується автоматично на основі внесених позицій.
+      - generic [ref=e808]:
+        - button [ref=e810] [cursor=pointer]:
+          - img [ref=e812]
+        - button [ref=e815] [cursor=pointer]:
+          - img [ref=e817]
+    - generic [ref=e829]:
+      - paragraph [ref=e832]:
+        - generic [ref=e834]: Бажаєш, щоб твій бізнес зростав?
+      - paragraph [ref=e835]:
+        - generic [ref=e836]: Спробуй 7-денну безкоштовну пробну версію
+      - paragraph [ref=e837]:
+        - generic [ref=e838]: У сучасному бізнесі успіх залежить від здатності орієнтуватися в ньому
+      - button "Open external web-address" [ref=e841] [cursor=pointer]:
+        - generic [ref=e844]: Спробувати безкоштовно
+    - generic [ref=e855]:
+      - paragraph [ref=e856]:
+        - generic [ref=e857]: Переваги
+      - heading "Ordage легко впровадити у ваш бізнес" [level=2] [ref=e858]:
+        - generic [ref=e860]: Ordage легко впровадити у ваш бізнес
+    - generic [ref=e871]:
+      - generic [ref=e883]:
+        - paragraph [ref=e884]:
+          - generic [ref=e885]: Швидкий старт
+        - paragraph [ref=e886]:
+          - generic [ref=e888]: Імпортуйте дані з таблиць або іншої системи всього за 10 хвилин і відразу ж починайте реєструвати продажі та покупки. Система гнучко реагує на зміни у вашому бізнесі — ви можете додавати або видаляти дані в будь-який час, не впливаючи на роботу.
+      - generic [ref=e900]:
+        - paragraph [ref=e901]:
+          - generic [ref=e902]: Система, яка не потребує розробників
+        - paragraph [ref=e903]:
+          - generic [ref=e905]: Всі функції вже готові та доступні для використання. Всі дані взаємопов'язані та створюють повну картину про ваш бізнес.
+      - generic [ref=e917]:
+        - paragraph [ref=e918]:
+          - generic [ref=e919]: Безкоштовна технічна підтримка
+        - paragraph [ref=e920]:
+          - generic [ref=e922]: Ми відповімо на всі ваші запитання та допоможемо налаштувати систему для вас. Крім того, наші фахівці розуміються на обілку та готові порадити, як поліпшити ваші процеси.
+    - generic [ref=e928]:
+      - generic [ref=e933]:
+        - paragraph [ref=e934]:
+          - generic [ref=e935]: Клієнти Ordage
+        - heading "Вже 250+ компаній з різних індустрій користуються Ordage" [level=2] [ref=e936]:
+          - generic [ref=e938]: Вже 250+ компаній з різних індустрій користуються Ordage
+      - generic [ref=e945]:
+        - button "Scale image" [ref=e964] [cursor=pointer]
+        - button "Scale image" [ref=e971] [cursor=pointer]
+        - button "Scale image" [ref=e978] [cursor=pointer]
+        - generic [ref=e983]:
+          - img "Illustration" [ref=e985]
+          - button "Scale image" [ref=e986] [cursor=pointer]
+        - button "Scale image" [ref=e999] [cursor=pointer]
+        - button "Scale image" [ref=e1006] [cursor=pointer]
+        - button "Scale image" [ref=e1013] [cursor=pointer]
+        - button "Scale image" [ref=e1020] [cursor=pointer]
+        - generic [ref=e1021]:
+          - button [ref=e1023] [cursor=pointer]:
+            - img [ref=e1025]
+          - button [ref=e1028] [cursor=pointer]:
+            - img [ref=e1030]
+    - generic [ref=e1040]:
+      - generic [ref=e1044]:
+        - link "Open external web-address" [ref=e1047] [cursor=pointer]:
+          - /url: https://ua.rbtnk.world/
+          - img "Illustration" [ref=e1049]
+        - generic [ref=e1051]:
+          - paragraph [ref=e1052]:
+            - generic [ref=e1053]: RBTNK
+          - generic [ref=e1054]:
+            - generic [ref=e1056]: Іордан
+            - generic [ref=e1059]: Засновник
+          - paragraph [ref=e1060]:
+            - generic [ref=e1061]: Виробництво жетонів
+          - paragraph [ref=e1062]:
+            - generic [ref=e1065]: "Довгі пошуки хмарної системи обліку та виробництва привели до українського сервісу Ordage. За допомоги команди налаштували всі інтеграції та допрацювали помилки. Автоматизації дозволяють всій системі працювати без зайвої уваги і щодня допомагають економити купу часу: Ordage збирає товари з замовлень по специфікаціям, які автоматично попали в систему з CRM, генерує документи та рахує правильну собівартість і відправляє її в Finmap. Це дуже круто налаштований флоу, який дозволяє обліку і виробництву працювати на нас, а не навпаки."
+            - generic [ref=e1067]: Бажаю успіхів команді та розвитку, і дякую за весь зекономлений час на «складі» :)
+      - generic [ref=e1077]:
+        - paragraph [ref=e1078]:
+          - generic [ref=e1079]: Маркет-Меблів
+        - generic [ref=e1080]:
+          - paragraph [ref=e1081]:
+            - generic [ref=e1082]: Володимир
+          - paragraph [ref=e1084]:
+            - generic [ref=e1085]: Менеджер
+        - paragraph [ref=e1086]:
+          - generic [ref=e1087]: Виробництво меблів
+        - paragraph [ref=e1088]:
+          - generic [ref=e1091]: Ми використовуємо Ordage у компанії Маркет-Меблів — сервіс дуже зручний, продуманий і реально допомагає в роботі. Нам вдалося повністю налаштувати складський облік, автоматизувати замовлення і ставити завдання на виробництво. Особливо цінуємо зручність контролю залишків зі смартфона, швидку підтримку та демократичну вартість.
+          - generic [ref=e1093]: Ordage реально підвищив нашу ефективність — щиро рекомендуємо!
+      - generic [ref=e1103]:
+        - paragraph [ref=e1104]:
+          - generic [ref=e1105]: Шипелик
+        - generic [ref=e1106]:
+          - generic [ref=e1108]: Поліна
+          - generic [ref=e1111]: Менеджер
+        - paragraph [ref=e1112]:
+          - generic [ref=e1113]: Український бренд одягу та аксесуарів
+        - paragraph [ref=e1114]:
+          - generic [ref=e1117]: Також хотіли б сказати що нам дуже зручно користуватись сервісом Ordage, функціонал зрозумілий, все чудово працює.
+          - generic [ref=e1119]: Окремо дякуємо за технічну підтримку, і за те що виконуєте наші побажання.
+      - generic [ref=e1129]:
+        - paragraph [ref=e1130]:
+          - generic [ref=e1131]: NDA
+        - generic [ref=e1132]:
+          - generic [ref=e1134]: Олександр
+          - generic [ref=e1137]: Керівник
+        - paragraph [ref=e1138]:
+          - generic [ref=e1139]: Виробництво електронних приладів
+        - paragraph [ref=e1140]:
+          - generic [ref=e1143]: Легкий інтерфейс; можливість відслідковувати весь процес виробництва - включно зі збіркою проміжних вузлів; можливість відслідковувати рухи товарів/коштів по окремим проєктам. Ordage допомогла оптимізувати час на облік та адміністрування і кількість залучених до цього процесу працівників.
+      - generic [ref=e1153]:
+        - paragraph [ref=e1154]:
+          - generic [ref=e1155]: PlayersGetReady
+        - generic [ref=e1156]:
+          - generic [ref=e1158]: Анна
+          - generic [ref=e1161]: Операційна менеджерка
+        - paragraph [ref=e1162]:
+          - generic [ref=e1163]: Психологічні настільні і онлайн ігри
+        - paragraph [ref=e1164]:
+          - generic [ref=e1167]: Ordage автоматизував Excel табличку, яку ми ненавиділи.
+          - generic [ref=e1169]: Тепер ми можемо спокійно відслідковувати заборгованість, оплати контрагентів!
+      - generic [ref=e1179]:
+        - paragraph [ref=e1180]:
+          - generic [ref=e1181]: ТОВ «Вінтек Сервіс»
+        - generic [ref=e1182]:
+          - generic [ref=e1184]: Олег
+          - generic [ref=e1187]: Головний інженер
+        - paragraph [ref=e1188]:
+          - generic [ref=e1189]: Виробництво систем газопостачання
+        - paragraph [ref=e1190]:
+          - generic [ref=e1193]: Пошуки рішення обліку cкладу для дрібного бізнесу у мене зайняли роки. Спробував Ordage, зайшло. Основною перевагою вважаю простоту і логічну зрозумілість. Ще б виділив - це підтримка, навіть більше, розробники дослухаються до пропозицій і впроваджують їх.
+          - generic [ref=e1195]: Зараз я повністю «довірився» сервісу і знаю скільки в мене, де в мене і по якій вартості.
+      - generic [ref=e1205]:
+        - paragraph [ref=e1206]:
+          - generic [ref=e1207]: Ayurveda-Vin
+        - generic [ref=e1208]:
+          - generic [ref=e1210]: Ромі
+          - generic [ref=e1213]: Власник
+        - paragraph [ref=e1214]:
+          - generic [ref=e1215]: Магазин біодобавок
+        - paragraph [ref=e1216]:
+          - generic [ref=e1218]: Допомогло систематизувати складський облік та правильно аналізувати обіг товарів.
+      - generic [ref=e1228]:
+        - paragraph [ref=e1229]:
+          - generic [ref=e1230]: Вироби Майстрів
+        - generic [ref=e1231]:
+          - generic [ref=e1233]: Віктор
+          - generic [ref=e1236]: Власник
+        - paragraph [ref=e1237]:
+          - generic [ref=e1238]: Вироби з дерева
+        - paragraph [ref=e1239]:
+          - generic [ref=e1242]: У нас невелике виробництво, але відсутність нормальних впорядкування, синхронізації та обліку призвела до жахливого сповільнення продуктивності. Почали шукати якусь програму для обліку виробництва. Деякі виявилися для нас завеликими, деякі дорогими, в інших не підходив функціонал. Ordage сподобався відразу. Звернулися за допомогою до підтримки і вже в період налаштування багато процесів упорядкувалося і ми почали вибудовувати процеси виробництва по-інакшому. Часу на все йде в рази менше, а аналізувати швидше та чіткіше завдяки Ordage. Ми задоволені.
+      - generic [ref=e1252]:
+        - paragraph [ref=e1253]:
+          - generic [ref=e1254]: Kseonics Technology
+        - generic [ref=e1255]:
+          - generic [ref=e1257]: Юрій
+          - generic [ref=e1260]: Керівник виробництва
+        - paragraph [ref=e1261]:
+          - generic [ref=e1262]: Виробництво електронних приладів
+        - paragraph [ref=e1263]:
+          - generic [ref=e1266]: Користуємось Ordage на виробництві близько півроку — все просто, зрозуміло і зручно. Зі складом тепер порядок, нічого не губиться і не плутається. Хороша програма, полегшила життя конкретно. Завдяки ній без проблем можна швидко знайти, що де лежить.
+      - generic [ref=e1267]:
+        - button [ref=e1269] [cursor=pointer]:
+          - img [ref=e1271]
+        - button [ref=e1274] [cursor=pointer]:
+          - img [ref=e1276]
+    - generic [ref=e1283]:
+      - generic [ref=e1288]:
+        - paragraph [ref=e1289]:
+          - generic [ref=e1290]: Інтеграції
+        - heading "Ordage легко інтегрується з популярними сервісами, котрі ви вже використовуєте в роботі" [level=2] [ref=e1291]:
+          - generic [ref=e1293]: Ordage легко інтегрується з популярними сервісами, котрі ви вже використовуєте в роботі
+        - paragraph [ref=e1294]:
+          - generic [ref=e1296]: Оберіть свою комбінацію систем та налаштуйте для потреб свого бізнесу без витрат на розробників.
+      - generic [ref=e1303]:
+        - button "Scale image" [ref=e1308] [cursor=pointer]
+        - link "Open external web-address" [ref=e1311] [cursor=pointer]:
+          - /url: https://my.finmap.online/auth/register/uk?utm_source=partner&utm_medium=refferal&utm_campaign=ordage&utm_content=ordage
+        - button "Scale image" [ref=e1317] [cursor=pointer]
+    - generic [ref=e1322]:
+      - generic:
+        - heading "Безпека 360°" [level=2] [ref=e1329]:
+          - generic [ref=e1331]: Безпека 360°
+        - paragraph [ref=e1333]:
+          - generic [ref=e1335]: Ordg. - повністю хмарний сервіс, котрий забезпечує надійність збереження даних Ваших компаній та працівників 24/7.
+        - paragraph [ref=e1352]:
+          - generic [ref=e1354]: Хмарний сервіс
+        - paragraph [ref=e1356]:
+          - generic [ref=e1358]: Контроль доступу
+        - paragraph [ref=e1360]:
+          - generic [ref=e1362]: Безпечний старт
+        - paragraph [ref=e1364]:
+          - generic [ref=e1366]: Шифрування
+        - paragraph [ref=e1380]:
+          - generic [ref=e1382]: Оrdg. використовує розподілене хмарне сховище і регулярне резервне копіювання для забезпечення високої доступності та безпеки даних.
+        - paragraph [ref=e1384]:
+          - generic [ref=e1386]: Ви маєте можливість власноруч налаштовувати доступ співробітників до даних компанії відповідно до їхніх ролей і обов'язків.
+        - paragraph [ref=e1388]:
+          - generic [ref=e1390]: Конфіденційні дані компанії можна ввести в систему пізніше, після того, як ви ознайомитесь з основними функціями та перевагами.
+        - paragraph [ref=e1392]:
+          - generic [ref=e1394]: Ми гарантуємо конфіденційність ваших даних, використовуючи 256-бітне SSL-шифрування, яке відповідає найвищим стандартам безпеки.
+    - generic [ref=e1403]:
+      - generic [ref=e1408]:
+        - heading "Оберіть свій тариф" [level=1] [ref=e1411]:
+          - generic [ref=e1412]: Оберіть свій тариф
+        - paragraph [ref=e1413]:
+          - generic [ref=e1414]: Спробуйте сервіс безкоштовно протягом 7 днів, а потім оберіть тарифний план, який найкраще підходить для ваших потреб.
+        - paragraph [ref=e1415]:
+          - generic [ref=e1416]: "*Ціна вказана за 1 компанію"
+          - generic [ref=e1417]: "*Без привʼязки банківських карток"
+      - generic [ref=e1421]:
+        - generic [ref=e1423]:
+          - button "Рік Знижка -25%" [ref=e1424] [cursor=pointer]:
+            - generic [ref=e1427]: Рік Знижка -25%
+          - button "Пів року Знижка -15%" [ref=e1428] [cursor=pointer]:
+            - generic [ref=e1431]: Пів року Знижка -15%
+          - button "Місяць" [ref=e1432] [cursor=pointer]:
+            - generic [ref=e1434]: Місяць
+        - generic [ref=e1437]:
+          - generic [ref=e1439]:
+            - heading "-25% економія" [level=1] [ref=e1444]:
+              - generic [ref=e1445]: "-25% економія"
+            - paragraph [ref=e1446]:
+              - generic [ref=e1447]: PRO
+            - paragraph [ref=e1448]:
+              - generic [ref=e1449]: Для малих і середніх виробничих бізнесів, яким потрібен повний контроль над запасами, плануванням і собівартістю.
+            - paragraph [ref=e1450]:
+              - deletion [ref=e1453]: 49$ / місяць
+              - generic [ref=e1456]: 36$ / місяць
+            - heading "$440" [level=2] [ref=e1457]:
+              - generic [ref=e1459]: $440
+            - list [ref=e1461]:
+              - generic [ref=e1464]:
+                - generic "Icon" [ref=e1466]:
+                  - img [ref=e1468]
+                - paragraph [ref=e1471]:
+                  - generic [ref=e1473]: 8 Користувачів
+                  - generic [ref=e1475]: +3$ за додаткового користувача
+            - paragraph [ref=e1476]:
+              - generic [ref=e1479]: Товари
+            - list [ref=e1481]:
+              - generic [ref=e1482]:
+                - generic [ref=e1484]:
+                  - generic "Icon" [ref=e1486]:
+                    - img [ref=e1488]
+                  - paragraph [ref=e1490]:
+                    - generic [ref=e1492]: Номенклатура [необмежена кількість SKU]
+                - generic [ref=e1494]:
+                  - generic "Icon" [ref=e1496]:
+                    - img [ref=e1498]
+                  - paragraph [ref=e1500]:
+                    - generic [ref=e1502]: Склади [необмежена кількість]
+                - generic [ref=e1504]:
+                  - generic "Icon" [ref=e1506]:
+                    - img [ref=e1508]
+                  - paragraph [ref=e1510]:
+                    - generic [ref=e1511]: Залишки на складі
+                - generic [ref=e1513]:
+                  - generic "Icon" [ref=e1515]:
+                    - img [ref=e1517]
+                  - paragraph [ref=e1519]:
+                    - generic [ref=e1520]: Рухи товарів
+                - generic [ref=e1522]:
+                  - generic "Icon" [ref=e1524]:
+                    - img [ref=e1526]
+                  - paragraph [ref=e1528]:
+                    - generic [ref=e1529]: Друк етикеток
+                - generic [ref=e1531]:
+                  - generic "Icon" [ref=e1533]:
+                    - img [ref=e1535]
+                  - paragraph [ref=e1537]:
+                    - generic [ref=e1538]: Каса
+            - paragraph [ref=e1539]:
+              - generic [ref=e1542]: Замовлення та планування
+            - list [ref=e1544]:
+              - generic [ref=e1545]:
+                - generic [ref=e1547]:
+                  - generic "Icon" [ref=e1549]:
+                    - img [ref=e1551]
+                  - paragraph [ref=e1553]:
+                    - generic [ref=e1554]: Замовлення від клієнтів
+                - generic [ref=e1556]:
+                  - generic "Icon" [ref=e1558]:
+                    - img [ref=e1560]
+                  - paragraph [ref=e1562]:
+                    - generic [ref=e1563]: Планування закупок
+                - generic [ref=e1565]:
+                  - generic "Icon" [ref=e1567]:
+                    - img [ref=e1569]
+                  - paragraph [ref=e1571]:
+                    - generic [ref=e1572]: Планування виробництва
+            - paragraph [ref=e1573]:
+              - generic [ref=e1576]: Фінанси та контрагенти
+            - list [ref=e1578]:
+              - generic [ref=e1579]:
+                - generic [ref=e1581]:
+                  - generic "Icon" [ref=e1583]:
+                    - img [ref=e1585]
+                  - paragraph [ref=e1587]:
+                    - generic [ref=e1589]: Контрагенти [необмежена кількість]
+                - generic [ref=e1591]:
+                  - generic "Icon" [ref=e1593]:
+                    - img [ref=e1595]
+                  - paragraph [ref=e1597]:
+                    - generic [ref=e1598]: Звірки з контрагентами
+                - generic [ref=e1600]:
+                  - generic "Icon" [ref=e1602]:
+                    - img [ref=e1604]
+                  - paragraph [ref=e1606]:
+                    - generic [ref=e1607]: Рух грошей
+            - list [ref=e1609]:
+              - generic [ref=e1612]:
+                - generic "Icon" [ref=e1614]:
+                  - img [ref=e1616]
+                - paragraph [ref=e1618]:
+                  - generic [ref=e1619]: Кредиторська та дебіторська заборгованість
+            - paragraph [ref=e1620]:
+              - generic [ref=e1623]: Виробництво
+            - list [ref=e1625]:
+              - generic [ref=e1626]:
+                - generic [ref=e1628]:
+                  - generic "Icon" [ref=e1630]:
+                    - img [ref=e1632]
+                  - paragraph [ref=e1634]:
+                    - generic [ref=e1635]: Специфікації виробів
+                - generic [ref=e1637]:
+                  - generic "Icon" [ref=e1639]:
+                    - img [ref=e1641]
+                  - paragraph [ref=e1643]:
+                    - generic [ref=e1644]: Збірки/Розбірки
+                - generic [ref=e1646]:
+                  - generic "Icon" [ref=e1648]:
+                    - img [ref=e1650]
+                  - paragraph [ref=e1652]:
+                    - generic [ref=e1653]: Послуги та Роботи працівників
+                - generic [ref=e1655]:
+                  - generic "Icon" [ref=e1657]:
+                    - img [ref=e1659]
+                  - paragraph [ref=e1661]:
+                    - generic [ref=e1662]: Автоматичний розрахунок собівартості
+                - generic [ref=e1664]:
+                  - generic "Icon" [ref=e1666]:
+                    - img [ref=e1668]
+                  - paragraph [ref=e1670]:
+                    - generic [ref=e1671]: Автоматичні збірки
+            - paragraph [ref=e1672]
+            - list [ref=e1674]:
+              - generic [ref=e1675]:
+                - generic [ref=e1677]:
+                  - generic "Icon" [ref=e1679]:
+                    - img [ref=e1681]
+                  - paragraph [ref=e1683]:
+                    - generic [ref=e1685]: Інтеграції [Finmap, KeyCRM, Checkbox]
+                - generic [ref=e1687]:
+                  - generic "Icon" [ref=e1689]:
+                    - img [ref=e1691]
+                  - paragraph [ref=e1693]:
+                    - generic [ref=e1695]: Звіти [Маржинальний прибуток, Рентабельність та ще 6 звітів]
+                - generic [ref=e1697]:
+                  - generic "Icon" [ref=e1699]:
+                    - img [ref=e1701]
+                  - paragraph [ref=e1703]:
+                    - generic [ref=e1704]: Мультивалютність
+                - generic [ref=e1706]:
+                  - generic "Icon" [ref=e1708]:
+                    - img [ref=e1710]
+                  - paragraph [ref=e1712]:
+                    - generic [ref=e1714]:
+                      - text: Open АРІ
+                      - generic [ref=e1715]: "[Скоро]"
+                - generic [ref=e1717]:
+                  - generic "Icon" [ref=e1719]:
+                    - img [ref=e1721]
+                  - paragraph [ref=e1723]:
+                    - generic [ref=e1724]: Технічна підтримка в чаті
+            - button "Open external web-address" [ref=e1727] [cursor=pointer]:
+              - generic [ref=e1730]: Спробувати безкоштовно
+          - generic [ref=e1732]:
+            - heading "-25% економія" [level=1] [ref=e1737]:
+              - generic [ref=e1738]: "-25% економія"
+            - paragraph [ref=e1739]:
+              - generic [ref=e1740]: BASIC
+            - paragraph [ref=e1741]:
+              - generic [ref=e1742]: Для магазинів та торгових бізнесів, які продають готові товари й хочуть навести порядок у складі та продажах.
+            - paragraph [ref=e1743]:
+              - deletion [ref=e1746]: 29$ / місяць
+              - generic [ref=e1749]: 21$ / місяць
+            - heading "$260" [level=2] [ref=e1750]:
+              - generic [ref=e1752]: $260
+            - list [ref=e1754]:
+              - generic [ref=e1757]:
+                - generic "Icon" [ref=e1759]:
+                  - img [ref=e1761]
+                - paragraph [ref=e1764]:
+                  - generic [ref=e1766]: 5 Користувачів
+                  - generic [ref=e1768]: +3$ за додаткового користувача
+            - paragraph [ref=e1769]:
+              - generic [ref=e1772]: Товари
+            - list [ref=e1774]:
+              - generic [ref=e1775]:
+                - generic [ref=e1777]:
+                  - generic "Icon" [ref=e1779]:
+                    - img [ref=e1781]
+                  - paragraph [ref=e1783]:
+                    - generic [ref=e1785]: Номенклатура [необмежена кількість SKU]
+                - generic [ref=e1787]:
+                  - generic "Icon" [ref=e1789]:
+                    - img [ref=e1791]
+                  - paragraph [ref=e1793]:
+                    - generic [ref=e1795]: Склади [необмежена кількість]
+                - generic [ref=e1797]:
+                  - generic "Icon" [ref=e1799]:
+                    - img [ref=e1801]
+                  - paragraph [ref=e1803]:
+                    - generic [ref=e1804]: Залишки на складі
+                - generic [ref=e1806]:
+                  - generic "Icon" [ref=e1808]:
+                    - img [ref=e1810]
+                  - paragraph [ref=e1812]:
+                    - generic [ref=e1813]: Рухи товарів
+                - generic [ref=e1815]:
+                  - generic "Icon" [ref=e1817]:
+                    - img [ref=e1819]
+                  - paragraph [ref=e1821]:
+                    - generic [ref=e1822]: Друк етикеток
+                - generic [ref=e1824]:
+                  - generic "Icon" [ref=e1826]:
+                    - img [ref=e1828]
+                  - paragraph [ref=e1830]:
+                    - generic [ref=e1831]: Каса
+            - paragraph [ref=e1832]:
+              - generic [ref=e1835]: Замовлення та планування
+            - list [ref=e1837]:
+              - generic [ref=e1838]:
+                - generic [ref=e1840]:
+                  - generic "Icon" [ref=e1842]:
+                    - img [ref=e1844]
+                  - paragraph [ref=e1846]:
+                    - generic [ref=e1847]: Замовлення від клієнтів
+                - generic [ref=e1849]:
+                  - generic "Icon" [ref=e1851]:
+                    - img [ref=e1853]
+                  - paragraph [ref=e1855]:
+                    - generic [ref=e1856]: Планування закупок
+                - generic [ref=e1858]:
+                  - generic "Icon" [ref=e1860]:
+                    - img [ref=e1862]
+                  - paragraph [ref=e1867]:
+                    - generic [ref=e1868]: Планування виробництва
+            - paragraph [ref=e1869]:
+              - generic [ref=e1872]: Фінанси та контрагенти
+            - list [ref=e1874]:
+              - generic [ref=e1875]:
+                - generic [ref=e1877]:
+                  - generic "Icon" [ref=e1879]:
+                    - img [ref=e1881]
+                  - paragraph [ref=e1883]:
+                    - generic [ref=e1885]: Контрагенти [необмежена кількість]
+                - generic [ref=e1887]:
+                  - generic "Icon" [ref=e1889]:
+                    - img [ref=e1891]
+                  - paragraph [ref=e1893]:
+                    - generic [ref=e1894]: Звірки з контрагентами
+                - generic [ref=e1896]:
+                  - generic "Icon" [ref=e1898]:
+                    - img [ref=e1900]
+                  - paragraph [ref=e1902]:
+                    - generic [ref=e1903]: Рух грошей
+            - list [ref=e1905]:
+              - generic [ref=e1908]:
+                - generic "Icon" [ref=e1910]:
+                  - img [ref=e1912]
+                - paragraph [ref=e1914]:
+                  - generic [ref=e1915]: Кредиторська та дебіторська заборгованість
+            - paragraph [ref=e1916]:
+              - generic [ref=e1919]: Виробництво
+            - list [ref=e1921]:
+              - generic [ref=e1922]:
+                - generic [ref=e1924]:
+                  - generic "Icon" [ref=e1926]:
+                    - img [ref=e1928]
+                  - paragraph [ref=e1933]:
+                    - generic [ref=e1934]: Специфікації виробів
+                - generic [ref=e1936]:
+                  - generic "Icon" [ref=e1938]:
+                    - img [ref=e1940]
+                  - paragraph [ref=e1945]:
+                    - generic [ref=e1946]: Збірки/Розбірки
+                - generic [ref=e1948]:
+                  - generic "Icon" [ref=e1950]:
+                    - img [ref=e1952]
+                  - paragraph [ref=e1957]:
+                    - generic [ref=e1958]: Послуги та Роботи працівників
+                - generic [ref=e1960]:
+                  - generic "Icon" [ref=e1962]:
+                    - img [ref=e1964]
+                  - paragraph [ref=e1969]:
+                    - generic [ref=e1970]: Автоматичний розрахунок собівартості
+                - generic [ref=e1972]:
+                  - generic "Icon" [ref=e1974]:
+                    - img [ref=e1976]
+                  - paragraph [ref=e1981]:
+                    - generic [ref=e1982]: Автоматичні збірки
+            - paragraph [ref=e1983]
+            - list [ref=e1985]:
+              - generic [ref=e1986]:
+                - generic [ref=e1988]:
+                  - generic "Icon" [ref=e1990]:
+                    - img [ref=e1992]
+                  - paragraph [ref=e1994]:
+                    - generic [ref=e1996]: Інтеграції [Finmap, KeyCRM, Checkbox]
+                - generic [ref=e1998]:
+                  - generic "Icon" [ref=e2000]:
+                    - img [ref=e2002]
+                  - paragraph [ref=e2004]:
+                    - generic [ref=e2006]: Звіти [Маржинальний прибуток, Рентабельність та ще 6 звітів]
+                - generic [ref=e2008]:
+                  - generic "Icon" [ref=e2010]:
+                    - img [ref=e2012]
+                  - paragraph [ref=e2014]:
+                    - generic [ref=e2015]: Мультивалютність
+                - generic [ref=e2017]:
+                  - generic "Icon" [ref=e2019]:
+                    - img [ref=e2021]
+                  - paragraph [ref=e2023]:
+                    - generic [ref=e2025]:
+                      - text: Open АРІ
+                      - generic [ref=e2026]: "[Скоро]"
+                - generic [ref=e2028]:
+                  - generic "Icon" [ref=e2030]:
+                    - img [ref=e2032]
+                  - paragraph [ref=e2034]:
+                    - generic [ref=e2035]: Технічна підтримка в чаті
+            - button "Open external web-address" [ref=e2038] [cursor=pointer]:
+              - generic [ref=e2041]: Спробувати безкоштовно
+    - generic [ref=e2047]:
+      - generic [ref=e2052]:
+        - paragraph [ref=e2053]:
+          - generic [ref=e2054]: Додаткові послуги
+        - paragraph [ref=e2055]:
+          - generic [ref=e2057]: Заощаджуйте час та підвищуйте ефективність впровадження системи
+        - list [ref=e2059]:
+          - listitem [ref=e2060]:
+            - paragraph [ref=e2069]:
+              - emphasis [ref=e2072]: "\"Витратив весь день на імпорт і вніс його неправильно, тепер все переробляти, а мені сумно, що я втратив час\""
+              - generic [ref=e2074]: 65% клієнтів на початку впровадження.
+        - paragraph [ref=e2075]:
+          - generic [ref=e2076]: Замовте послугу при купівлі тарифу, щоб уникнути помилок при налаштуванні та зберегти час своєї команди і почати працювати швидше.
+      - generic [ref=e2080]:
+        - generic [ref=e2082]:
+          - button "Супровід клієнтів" [ref=e2083] [cursor=pointer]:
+            - generic [ref=e2085]: Супровід клієнтів
+          - button "Впровадження для нових клієнтів" [ref=e2086] [cursor=pointer]:
+            - generic [ref=e2088]: Впровадження для нових клієнтів
+        - generic [ref=e2091]:
+          - generic [ref=e2093]:
+            - paragraph [ref=e2096]:
+              - generic [ref=e2097]: Консультація
+            - generic "Icon" [ref=e2100]:
+              - img [ref=e2102]
+            - paragraph [ref=e2110]:
+              - generic [ref=e2111]: Безкоштовно
+            - paragraph [ref=e2112]:
+              - generic [ref=e2114]: до 30 хв.
+              - generic [ref=e2116]: 1 раз після першої підписки
+            - list [ref=e2118]:
+              - generic [ref=e2121]:
+                - generic "Icon" [ref=e2123]:
+                  - img [ref=e2125]
+                - paragraph [ref=e2127]:
+                  - generic [ref=e2129]: Отримаєте відповіді на питання по роботі Ordage.
+            - paragraph [ref=e2132]:
+              - generic [ref=e2135]: "Результат:"
+            - list [ref=e2137]:
+              - generic [ref=e2140]:
+                - generic "Icon" [ref=e2142]:
+                  - img [ref=e2144]
+                - paragraph [ref=e2146]:
+                  - generic [ref=e2148]: Маєте план подальших дій по налаштуванню системи.
+          - generic [ref=e2150]:
+            - heading "Корисно в будь-який момент" [level=1] [ref=e2155]:
+              - generic [ref=e2156]: Корисно в будь-який момент
+            - paragraph [ref=e2157]:
+              - generic [ref=e2158]: Індивідуальний супровід
+            - generic "Icon" [ref=e2161]:
+              - img [ref=e2163]
+            - paragraph [ref=e2167]:
+              - generic [ref=e2168]: $25
+            - paragraph [ref=e2169]:
+              - generic [ref=e2171]: за 1 год.
+            - list [ref=e2173]:
+              - generic [ref=e2174]:
+                - generic [ref=e2176]:
+                  - generic "Icon" [ref=e2178]:
+                    - img [ref=e2180]
+                  - paragraph [ref=e2182]:
+                    - generic [ref=e2184]: Підготуємо і внесемо разом дані без помилок.
+                - generic [ref=e2186]:
+                  - generic "Icon" [ref=e2188]:
+                    - img [ref=e2190]
+                  - paragraph [ref=e2192]:
+                    - generic [ref=e2194]: Переглянемо ваші налаштування та дамо рекомендації.
+                - generic [ref=e2196]:
+                  - generic "Icon" [ref=e2198]:
+                    - img [ref=e2200]
+                  - paragraph [ref=e2202]:
+                    - generic [ref=e2204]: Відповіді на ваші питання по бізнес-процесам.
+            - paragraph [ref=e2207]:
+              - generic [ref=e2210]: "Результат:"
+            - list [ref=e2212]:
+              - generic [ref=e2213]:
+                - generic [ref=e2215]:
+                  - generic "Icon" [ref=e2217]:
+                    - img [ref=e2219]
+                  - paragraph [ref=e2221]:
+                    - generic [ref=e2223]: Економія часу на формуванні таблиці для імпорту
+                - generic [ref=e2225]:
+                  - generic "Icon" [ref=e2227]:
+                    - img [ref=e2229]
+                  - paragraph [ref=e2231]:
+                    - generic [ref=e2233]: Маєте план подальших дій по налаштуванню системи.
+          - generic [ref=e2235]:
+            - heading "Встигніть більше зі знижкою -5%" [level=1] [ref=e2240]:
+              - generic [ref=e2241]: Встигніть більше зі знижкою -5%
+            - paragraph [ref=e2242]:
+              - generic [ref=e2243]: Індивідуальний супровід
+            - generic "Icon" [ref=e2246]:
+              - img [ref=e2248]
+            - paragraph [ref=e2250]:
+              - generic [ref=e2251]: $70
+            - paragraph [ref=e2252]:
+              - generic [ref=e2254]: за 3 год
+            - list [ref=e2256]:
+              - generic [ref=e2257]:
+                - generic [ref=e2259]:
+                  - generic "Icon" [ref=e2261]:
+                    - img [ref=e2263]
+                  - paragraph [ref=e2265]:
+                    - generic [ref=e2267]: Підготуємо і внесемо разом дані без помилок.
+                - generic [ref=e2269]:
+                  - generic "Icon" [ref=e2271]:
+                    - img [ref=e2273]
+                  - paragraph [ref=e2275]:
+                    - generic [ref=e2277]: Індивідуальні інструкції по роботі.
+                - generic [ref=e2279]:
+                  - generic "Icon" [ref=e2281]:
+                    - img [ref=e2283]
+                  - paragraph [ref=e2285]:
+                    - generic [ref=e2287]: Підключимо інтеграції.
+                - generic [ref=e2289]:
+                  - generic "Icon" [ref=e2291]:
+                    - img [ref=e2293]
+                  - paragraph [ref=e2295]:
+                    - generic [ref=e2297]: Переглянемо ваші налаштування та дамо рекомендації
+                - generic [ref=e2299]:
+                  - generic "Icon" [ref=e2301]:
+                    - img [ref=e2303]
+                  - paragraph [ref=e2305]:
+                    - generic [ref=e2307]: Відповіді на ваші питання по бізнес-процесам
+            - paragraph [ref=e2310]:
+              - generic [ref=e2313]: "Результат:"
+            - list [ref=e2315]:
+              - generic [ref=e2316]:
+                - generic [ref=e2318]:
+                  - generic "Icon" [ref=e2320]:
+                    - img [ref=e2322]
+                  - paragraph [ref=e2324]:
+                    - generic [ref=e2326]: Економія часу на формуванні таблиці для імпорту
+                - generic [ref=e2328]:
+                  - generic "Icon" [ref=e2330]:
+                    - img [ref=e2332]
+                  - paragraph [ref=e2334]:
+                    - generic [ref=e2336]: Внесені дані Номенклатури
+                - generic [ref=e2338]:
+                  - generic "Icon" [ref=e2340]:
+                    - img [ref=e2342]
+                  - paragraph [ref=e2344]:
+                    - generic [ref=e2346]: Підключені інтеграції та проведений онбординг по роботі
+                - generic [ref=e2348]:
+                  - generic "Icon" [ref=e2350]:
+                    - img [ref=e2352]
+                  - paragraph [ref=e2354]:
+                    - generic [ref=e2356]: Маєте план подальших дій по налаштуванню системи.
+    - generic [ref=e2362]:
+      - generic [ref=e2367]:
+        - heading "Запишіться на безкоштовну демонстрацію" [level=1] [ref=e2370]:
+          - generic [ref=e2371]: Запишіться на безкоштовну демонстрацію
+        - paragraph [ref=e2372]:
+          - generic [ref=e2374]: Облік не має займати весь ваш час 24/7
+        - paragraph [ref=e2375]:
+          - generic [ref=e2377]: "Всього за 🕒30 хвилин переконайтеся, що сервіс допоможе упорядкувати ваші процеси:"
+      - generic [ref=e2384]:
+        - generic [ref=e2386]:
+          - list [ref=e2388]:
+            - generic [ref=e2389]:
+              - generic [ref=e2391]:
+                - generic "Icon" [ref=e2393]:
+                  - img [ref=e2395]
+                - paragraph [ref=e2397]:
+                  - generic [ref=e2398]: Познайомтесь зі всіма функціями Ordage на прикладі вашої ніші.
+              - generic [ref=e2400]:
+                - generic "Icon" [ref=e2402]:
+                  - img [ref=e2404]
+                - paragraph [ref=e2406]:
+                  - generic [ref=e2407]: Отримаєте поради з налаштування сервісу для вашого бізнесу.
+              - generic [ref=e2409]:
+                - generic "Icon" [ref=e2411]:
+                  - img [ref=e2413]
+                - paragraph [ref=e2415]:
+                  - generic [ref=e2416]: Зрозумієте як Ordage вирішує задачі вашого бізнесу.
+          - generic [ref=e2419]:
+            - paragraph [ref=e2420]:
+              - generic [ref=e2423]: 80%
+            - paragraph [ref=e2425]:
+              - generic [ref=e2426]: клієнтів Ordage після демо знайшли нові рішення для своїх задач обліку
+        - form "Contact form" [ref=e2430]:
+          - textbox "Ваше Імʼя" [ref=e2432]
+          - textbox "+38(000)0000000" [ref=e2435]
+          - button "Записатись на демо" [ref=e2436] [cursor=pointer]:
+            - generic [ref=e2440]: Записатись на демо
+      - generic [ref=e2448]:
+        - heading "Звʼяжіться з нами:" [level=2] [ref=e2449]:
+          - generic [ref=e2451]: "Звʼяжіться з нами:"
+        - list [ref=e2454]:
+          - listitem [ref=e2455]:
+            - button "phone" [ref=e2456] [cursor=pointer]:
+              - img [ref=e2457]
+          - listitem [ref=e2461]:
+            - button "telegram" [ref=e2462] [cursor=pointer]:
+              - img [ref=e2463]
+          - listitem [ref=e2467]:
+            - button "whatsapp" [ref=e2468] [cursor=pointer]:
+              - img [ref=e2469]
+          - listitem [ref=e2473]:
+            - button "instagram" [ref=e2474] [cursor=pointer]:
+              - img [ref=e2475]
+          - listitem [ref=e2483]:
+            - button "youtube" [ref=e2484] [cursor=pointer]:
+              - img [ref=e2485]
+          - listitem [ref=e2489]:
+            - button "linkedin" [ref=e2490] [cursor=pointer]:
+              - img [ref=e2491]
+    - generic [ref=e2506]:
+      - generic [ref=e2508]:
+        - generic "Switch language" [ref=e2511] [cursor=pointer]:
+          - 'option "Selected language: UA" [selected] [ref=e2513]':
+            - img [ref=e2515]
+          - img [ref=e2519]
+        - generic [ref=e2521]:
+          - link "Return to home page" [ref=e2522] [cursor=pointer]:
+            - /url: /
+          - paragraph [ref=e2524]
+        - list [ref=e2527]:
+          - generic [ref=e2530]:
+            - generic "Icon" [ref=e2532]:
+              - img [ref=e2534]
+            - paragraph [ref=e2539]:
+              - link "Інструкції та оновлення" [ref=e2542] [cursor=pointer]:
+                - /url: https://help.ordage.com/uk/changelog
+        - paragraph [ref=e2543]
+      - generic [ref=e2546]:
+        - list [ref=e2548]:
+          - generic [ref=e2551]:
+            - generic "Icon" [ref=e2553]:
+              - img [ref=e2555]
+            - paragraph [ref=e2557]:
+              - link "info@ordage.com" [ref=e2560] [cursor=pointer]:
+                - /url: http://mailto:info@ordage.com
+        - list [ref=e2562]:
+          - generic [ref=e2563]:
+            - generic [ref=e2565]:
+              - generic "Icon" [ref=e2567]:
+                - img "icon" [ref=e2569]
+              - paragraph [ref=e2570]:
+                - link "Політика конфіденційності" [ref=e2573] [cursor=pointer]:
+                  - /url: https://ordage.com/privacy-notice-ua
+            - generic [ref=e2575]:
+              - generic "Icon" [ref=e2577]:
+                - img "icon" [ref=e2579]
+              - paragraph [ref=e2580]:
+                - link "Публічна оферта" [ref=e2583] [cursor=pointer]:
+                  - /url: https://ordage.com/public-offer-ua
+        - list [ref=e2585]:
+          - generic [ref=e2586]:
+            - generic [ref=e2588]:
+              - generic "Icon" [ref=e2590]:
+                - img "icon" [ref=e2592]
+              - paragraph [ref=e2593]:
+                - link "Privacy policy" [ref=e2596] [cursor=pointer]:
+                  - /url: https://ordage.com/privacy-notice-en
+            - generic [ref=e2598]:
+              - generic "Icon" [ref=e2600]:
+                - img "icon" [ref=e2602]
+              - paragraph [ref=e2603]:
+                - link "Public offer" [ref=e2606] [cursor=pointer]:
+                  - /url: https://ordage.com/public-offer-en
+      - generic [ref=e2610]:
+        - generic [ref=e2611]:
+          - paragraph [ref=e2613]:
+            - generic [ref=e2614]: USA
+          - paragraph [ref=e2616]:
+            - link "+13039702037" [ref=e2619] [cursor=pointer]:
+              - /url: http://callto:+13039702037
+        - generic [ref=e2620]:
+          - paragraph [ref=e2622]:
+            - generic [ref=e2624]: BR
+          - paragraph [ref=e2626]:
+            - link "+552140420518" [ref=e2629] [cursor=pointer]:
+              - /url: http://callto:+552140420518
+      - generic [ref=e2631]:
+        - generic [ref=e2633]:
+          - generic [ref=e2634]:
+            - paragraph [ref=e2636]:
+              - generic [ref=e2638]: UA
+            - paragraph [ref=e2640]:
+              - link "+380638661192" [ref=e2643] [cursor=pointer]:
+                - /url: "http://callto:+380638661192 "
+          - generic [ref=e2644]:
+            - paragraph [ref=e2646]:
+              - generic [ref=e2648]: PL
+            - paragraph [ref=e2650]:
+              - link "+48732225305" [ref=e2653] [cursor=pointer]:
+                - /url: http://callto:+48732225305
+        - generic [ref=e2656]:
+          - paragraph [ref=e2658]:
+            - generic [ref=e2660]: "Графік роботи: пн-пт 9:00-18:00"
+          - paragraph [ref=e2662]
+  - generic [ref=e2665]:
+    - img [ref=e2666]
+    - generic [ref=e2667]:
+      - text: Ми використовуємо файли cookie, щоб забезпечити найкращий досвід роботи з сайтом. Ознайомтеся з нашою
+      - link "Політикою конфіденційності" [ref=e2668] [cursor=pointer]:
+        - /url: https://ordage.com/privacy-notice-ua
+      - text: ", щоб дізнатися більше."
+    - generic [ref=e2669]:
+      - button "Відхилити" [ref=e2670] [cursor=pointer]
+      - button "Прийняти" [ref=e2671] [cursor=pointer]
+  - generic [ref=e2672]:
+    - generic [ref=e2673]: Made with
+    - link [ref=e2674] [cursor=pointer]:
+      - /url: https://weblium.com?utm_medium=madeonweblium&utm_source=ordage.com
+      - img [ref=e2675]
+  - generic [ref=e2677]:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: Online help
+            - generic:
+              - generic:
+                - button "EN":
+                  - generic: EN
+              - button
+          - generic:
+            - generic:
+              - generic:
+                - img "Call"
+              - generic: Call
+          - generic:
+            - link "Developed in UniTalk UniTalk":
+              - /url: https://unitalk.cloud
+              - text: Developed in
+              - img "UniTalk"
+              - text: UniTalk
+    - generic [ref=e2678] [cursor=pointer]:
+      - img

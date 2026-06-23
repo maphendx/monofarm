@@ -1,0 +1,610 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - link [ref=e10] [cursor=pointer]:
+        - /url: https://simplyprint.io/panel/
+        - img [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e30]: i
+              - generic [ref=e31]: m
+              - generic [ref=e32]: p
+              - generic [ref=e33]: l
+              - generic [ref=e34]: "y"
+            - generic [ref=e36]: P
+            - generic [ref=e37]:
+              - generic [ref=e38]: P
+              - generic [ref=e39]: r
+              - generic [ref=e40]: i
+              - generic [ref=e41]: "n"
+              - generic [ref=e42]: t
+            - generic [ref=e44]: S
+      - list [ref=e12]:
+        - listitem [ref=e49]:
+          - link "Printer icon" [ref=e50] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/printers
+            - img "Printer icon" [ref=e52]
+        - listitem [ref=e53]:
+          - link [ref=e54] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/files
+        - listitem [ref=e57]:
+          - link [ref=e58] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/queue
+        - listitem [ref=e61]:
+          - link [ref=e62] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/statistics
+        - listitem [ref=e65]:
+          - link "Print jobs icon (Benchy)" [ref=e66] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/jobs
+            - img "Print jobs icon (Benchy)" [ref=e68]
+        - listitem [ref=e69]:
+          - link "Filament icon" [ref=e70] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/filament
+            - img "Filament icon" [ref=e72]
+        - listitem [ref=e73]:
+          - link [ref=e74] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/slicer
+        - listitem [ref=e77]:
+          - link [ref=e78] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/maintenance
+          - button [ref=e81] [cursor=pointer]
+        - listitem [ref=e83]:
+          - link [ref=e84] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/academy
+        - listitem [ref=e87]:
+          - separator [ref=e89]
+        - listitem [ref=e90]:
+          - link [ref=e91] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/settings
+        - listitem [ref=e94]:
+          - link [ref=e95] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/users
+        - listitem [ref=e98]:
+          - link [ref=e99] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/integrations
+        - listitem [ref=e102]:
+          - link [ref=e103] [cursor=pointer]:
+            - /url: https://simplyprint.io/panel/refer-a-friend
+        - listitem [ref=e106]
+        - listitem [ref=e110]:
+          - separator [ref=e112]
+        - listitem [ref=e113]
+        - listitem [ref=e117]
+        - listitem [ref=e121]
+        - listitem [ref=e126]:
+          - button [ref=e127] [cursor=pointer]
+    - generic [ref=e13]:
+      - generic [ref=e15]:
+        - list [ref=e129]:
+          - listitem [ref=e130]
+        - list [ref=e133]:
+          - listitem [ref=e134]:
+            - link "7" [ref=e135] [cursor=pointer]:
+              - /url: https://simplyprint.io/panel/files
+              - generic [ref=e138]: "7"
+          - listitem [ref=e139]:
+            - link [ref=e140] [cursor=pointer]:
+              - /url: https://simplyprint.io/discord
+          - listitem [ref=e143]
+          - listitem [ref=e147]
+          - listitem [ref=e151]
+          - listitem [ref=e155]
+          - listitem [ref=e159]:
+            - generic [ref=e163] [cursor=pointer]: LEOCODE & OYTOY
+          - listitem [ref=e164]:
+            - generic [ref=e166] [cursor=pointer]:
+              - img "Олександр Яцишин avatar" [ref=e169]
+              - generic [ref=e171]: Олександр Яцишин
+      - main [ref=e16]:
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - heading "Print queue" [level=4] [ref=e178]: Print queue
+            - generic [ref=e180]:
+              - button "1-click print" [ref=e181] [cursor=pointer]:
+                - img [ref=e182]
+                - generic [ref=e192]: 1-click print
+              - button
+          - generic [ref=e194]:
+            - generic [ref=e196]:
+              - paragraph [ref=e198]: This feature requires the Pro plan. Upgrade to get instant access.
+              - button "Upgrade to gain access" [ref=e200] [cursor=pointer]
+            - generic:
+              - tablist:
+                - listitem:
+                  - generic: Add queue group
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic: "Jobs:"
+                      - text: "6"
+                    - generic:
+                      - generic: "Print time:"
+                      - text: 1mo 6d 20h 28m
+                    - generic:
+                      - generic: "Cost:"
+                      - text: $227
+                    - generic:
+                      - generic: "Material usage:"
+                      - text: 3.64 kg
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - textbox "Search":
+                                - /placeholder: Search all data...
+                            - generic:
+                              - button "Type": Type
+                      - generic:
+                        - generic:
+                          - button "View":
+                            - generic: View
+                    - generic:
+                      - generic:
+                        - generic:
+                          - table:
+                            - rowgroup:
+                              - 'row "File Tags: printer-matching Print cost Print time Material Printed Amount Added Printer"':
+                                - columnheader:
+                                  - generic:
+                                    - checkbox
+                                - columnheader
+                                - columnheader "File":
+                                  - generic: File
+                                - 'columnheader "Tags: printer-matching"':
+                                  - generic: "Tags: printer-matching"
+                                - columnheader "Print cost":
+                                  - generic: Print cost
+                                - columnheader "Print time":
+                                  - generic: Print time
+                                - columnheader "Material":
+                                  - generic: Material
+                                - columnheader "Printed":
+                                  - generic: Printed
+                                - columnheader "Amount":
+                                  - generic: Amount
+                                - columnheader "Added":
+                                  - generic: Added
+                                - columnheader "Printer":
+                                  - generic: Printer
+                                - columnheader
+                            - rowgroup:
+                              - row ". Benchy.gcode Gold $11 2h 54m 5.85 g 7 Today at 16:00 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "1"
+                                    - text: .
+                                - cell "Benchy.gcode":
+                                  - generic:
+                                    - button
+                                    - generic: Benchy.gcode
+                                - cell "Gold":
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic:
+                                            - generic:
+                                              - img
+                                            - text: Gold
+                                - cell "$11":
+                                  - generic:
+                                    - generic:
+                                      - generic: $11
+                                - cell "2h 54m"
+                                - cell "5.85 g":
+                                  - generic:
+                                    - generic: 5.85 g
+                                - cell "7"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "15"
+                                    - generic:
+                                      - button
+                                - cell "Today at 16:00"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                              - row ". Raspberry Pi Case.gcode Dark $11 1h 30m 14.54 g 68 Today at 15:31 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "2"
+                                    - text: .
+                                - cell "Raspberry Pi Case.gcode":
+                                  - generic:
+                                    - button
+                                    - generic: Raspberry Pi Case.gcode
+                                - cell "Dark":
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic:
+                                            - generic:
+                                              - img
+                                            - text: Dark
+                                - cell "$11":
+                                  - generic:
+                                    - generic:
+                                      - generic: $11
+                                - cell "1h 30m"
+                                - cell "14.54 g":
+                                  - generic:
+                                    - generic: 14.54 g
+                                - cell "68"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "4"
+                                    - generic:
+                                      - button
+                                - cell "Today at 15:31"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                              - row ". Camera Mount.stl ... ... ... 4 Today at 15:13 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "3"
+                                    - text: .
+                                - cell "Camera Mount.stl":
+                                  - generic:
+                                    - button
+                                    - generic: Camera Mount.stl
+                                - cell
+                                - cell "..."
+                                - cell "...": ...
+                                - cell "..."
+                                - cell "4"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "2"
+                                    - generic:
+                                      - button
+                                - cell "Today at 15:13"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                              - row ". Lightsaber.gcode $0 5h 7m 21.47 g 526 Today at 15:19 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "4"
+                                    - text: .
+                                - cell "Lightsaber.gcode":
+                                  - generic:
+                                    - button
+                                    - generic: Lightsaber.gcode
+                                - cell
+                                - cell "$0":
+                                  - generic:
+                                    - generic:
+                                      - generic: $0
+                                - cell "5h 7m"
+                                - cell "21.47 g":
+                                  - generic:
+                                    - generic: 21.47 g
+                                - cell "526"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "162"
+                                    - generic:
+                                      - button
+                                - cell "Today at 15:19"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                              - row ". Spool holder.gcode Red $9 2h 20m 9.63 g 8 Today at 15:58 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "5"
+                                    - text: .
+                                - cell "Spool holder.gcode":
+                                  - generic:
+                                    - button
+                                    - generic: Spool holder.gcode
+                                - cell "Red":
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic:
+                                            - generic:
+                                              - img
+                                            - text: Red
+                                - cell "$9":
+                                  - generic:
+                                    - generic:
+                                      - generic: $9
+                                - cell "2h 20m"
+                                - cell "9.63 g":
+                                  - generic:
+                                    - generic: 9.63 g
+                                - cell "8"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "2"
+                                    - generic:
+                                      - button
+                                - cell "Today at 15:58"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                              - row ". Unsliced file.stl ... ... ... 1 Today at 15:13 Printer image Row actions":
+                                - cell:
+                                  - checkbox
+                                - cell ".":
+                                  - generic:
+                                    - spinbutton "Queue item order": "6"
+                                    - text: .
+                                - cell "Unsliced file.stl":
+                                  - generic:
+                                    - button
+                                    - generic: Unsliced file.stl
+                                - cell
+                                - cell "..."
+                                - cell "...": ...
+                                - cell "..."
+                                - cell "1"
+                                - cell:
+                                  - generic:
+                                    - generic:
+                                      - button
+                                    - spinbutton "Times to print file": "419"
+                                    - generic:
+                                      - button
+                                - cell "Today at 15:13"
+                                - cell "Printer image":
+                                  - generic:
+                                    - generic:
+                                      - img "Printer image"
+                                - cell "Row actions":
+                                  - generic:
+                                    - group "Row actions":
+                                      - button
+                                      - button
+                                      - group:
+                                        - button
+                    - generic:
+                      - generic: 0 of 6 row(s) selected.
+      - contentinfo [ref=e17]:
+        - text: Copyright © 2026 SimplyPrint ApS, VAT no. DK41306505. All rights reserved.
+        - text: ® "SimplyPrint" is a registered trademark.
+        - generic [ref=e18]:
+          - link "Terms of trade and subscription" [ref=e19] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/tos
+          - text: "|"
+          - link "Privacy policy" [ref=e20] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy
+          - text: "|"
+          - link "Trademark rules" [ref=e21] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/trademark-rules
+          - text: "|"
+          - link "Service status" [ref=e22] [cursor=pointer]:
+            - /url: https://status.simplyprint.io/
+          - text: "|"
+          - link "Cookie Policy" [ref=e23] [cursor=pointer]:
+            - /url: https://simplyprint.io/legal/privacy/cookies
+          - text: "|"
+          - link "Cookie Settings" [ref=e24] [cursor=pointer]:
+            - /url: "#"
+  - log [ref=e25]
+  - generic [ref=e201]: giItT1WQy@!-/#
+  - generic [ref=e202]: giItT1WQy@!-/#
+  - button "Open chat" [ref=e203] [cursor=pointer]
+  - dialog [active] [ref=e207]:
+    - document:
+      - generic [ref=e209]:
+        - button "Close" [ref=e211] [cursor=pointer]: ×
+        - generic [ref=e212]:
+          - list [ref=e214]:
+            - listitem [ref=e215] [cursor=pointer]:
+              - generic [ref=e216]:
+                - generic [ref=e217]: "1"
+                - generic [ref=e218]: Pick plan
+            - listitem:
+              - generic:
+                - generic: "2"
+                - generic: Customize plan
+            - listitem:
+              - generic:
+                - generic: "3"
+                - generic: Address
+            - listitem:
+              - generic:
+                - generic: "4"
+                - generic: Payment
+          - generic [ref=e219]:
+            - status [ref=e220]:
+              - text: To unlock
+              - strong [ref=e222]: Print Queue
+              - text: ", upgrade to"
+              - strong [ref=e223]: Pro
+              - text: or any plan that includes it .
+            - generic [ref=e227]:
+              - navigation "Pricing categories" [ref=e228]:
+                - button "Personal & Business" [ref=e229] [cursor=pointer]
+                - button "Just one tool" [ref=e230] [cursor=pointer]: Just one tool
+                - button "Education" [ref=e232] [cursor=pointer]: Education
+              - generic [ref=e234]:
+                - button "Feature comparison" [ref=e236] [cursor=pointer]: Feature comparison
+                - generic [ref=e238]:
+                  - generic [ref=e239] [cursor=pointer]: Monthly
+                  - generic [ref=e243] [cursor=pointer]:
+                    - generic [ref=e244]: Save 15%
+                    - text: Yearly
+                - button "Calculate price" [ref=e246] [cursor=pointer]: Calculate price
+              - paragraph [ref=e248]:
+                - text: Prices shown in
+                - strong [ref=e249]: USD
+              - generic [ref=e251]:
+                - generic [ref=e252]:
+                  - article [ref=e253]:
+                    - generic [ref=e257]:
+                      - text: Doesn't include
+                      - strong [ref=e258]: Print Queue
+                    - generic [ref=e262]: Max 2 GB (you have 7)
+                    - generic [ref=e263]:
+                      - heading "Basic" [level=3] [ref=e264]
+                      - paragraph [ref=e265]: For hobbyists with a few printers
+                    - generic [ref=e266]:
+                      - generic [ref=e267]: $5.99
+                      - generic [ref=e268]: /mo
+                    - strong [ref=e270]: Up to 3 printers · 1 user
+                    - list [ref=e271]:
+                      - listitem [ref=e272]:
+                        - generic [ref=e274]: Unlimited cloud slicing
+                      - listitem [ref=e275]:
+                        - generic [ref=e277]: AI failure detection actions (auto-pause / auto-cancel)
+                      - listitem [ref=e278]:
+                        - generic [ref=e280]: Faster livestream
+                      - listitem [ref=e281]:
+                        - generic [ref=e283]: Smart rotate (auto-orient models when slicing)
+                      - listitem [ref=e284]:
+                        - generic [ref=e286]: Filament tools (weight, drying, label QR)
+                    - button "Choose Basic" [ref=e288] [cursor=pointer]
+                  - article [ref=e289]:
+                    - generic [ref=e293]:
+                      - text: Includes
+                      - strong [ref=e294]: Print Queue
+                    - generic [ref=e298]: Includes 5 GB · you use 7
+                    - generic [ref=e299]:
+                      - heading "Pro" [level=3] [ref=e300]
+                      - paragraph [ref=e301]: For running multiple printers efficiently
+                    - generic [ref=e302]:
+                      - generic [ref=e303]: $9.99
+                      - generic [ref=e304]: /mo
+                    - generic [ref=e305]:
+                      - strong [ref=e306]: Includes 5 printers · Scale up to 10
+                      - generic [ref=e307]: +price per extra printer
+                    - list [ref=e308]:
+                      - listitem [ref=e309]:
+                        - generic [ref=e311]: Print queue, multiprint & 1 AutoPrint license (add up to 5)
+                      - listitem [ref=e312]:
+                        - generic [ref=e314]: Statistics, SMS alerts and offline notifications
+                      - listitem [ref=e315]:
+                        - generic [ref=e317]: Multi-livestream view of every printer at once
+                      - listitem [ref=e318]:
+                        - generic [ref=e320]: API access
+                      - listitem [ref=e321]:
+                        - generic [ref=e323]: Smarter filament views, search & locations
+                    - button "Choose Pro" [ref=e325] [cursor=pointer]
+                  - article [ref=e326]:
+                    - generic [ref=e330]:
+                      - text: Includes
+                      - strong [ref=e331]: Print Queue
+                    - generic [ref=e332]:
+                      - heading "Print Farm" [level=3] [ref=e333]
+                      - paragraph [ref=e334]: For farms and businesses managing printers at scale
+                    - generic [ref=e335]:
+                      - generic [ref=e336]: $39.99
+                      - generic [ref=e337]: /mo
+                    - generic [ref=e338]:
+                      - strong [ref=e339]: Includes 10 printers · Scale higher
+                      - generic [ref=e340]: Extra printers get cheaper at scale
+                    - list [ref=e341]:
+                      - listitem [ref=e342]:
+                        - generic [ref=e344]: Unlimited AutoPrint licenses
+                      - listitem [ref=e345]:
+                        - generic [ref=e347]: Volume-priced extra printers as the farm scales
+                      - listitem [ref=e348]:
+                        - generic [ref=e350]: Enhanced API & webhooks for integrations
+                      - listitem [ref=e351]:
+                        - generic [ref=e353]: Maintenance dashboard, inventory and schedules
+                      - listitem [ref=e354]:
+                        - generic [ref=e356]: Shared files, slicer profiles and permissions for teams
+                    - button "Choose Print Farm" [ref=e358] [cursor=pointer]
+                  - article [ref=e359]:
+                    - generic [ref=e363]:
+                      - text: Includes
+                      - strong [ref=e364]: Print Queue
+                    - generic [ref=e365]:
+                      - heading "Enterprise" [level=3] [ref=e366]
+                      - paragraph [ref=e367]: For security, compliance and large organizations
+                    - generic [ref=e368]:
+                      - generic [ref=e369]: $299
+                      - generic [ref=e370]: /mo
+                    - generic [ref=e371]:
+                      - strong [ref=e372]: Includes 10 printers · 10 user seats
+                      - generic [ref=e373]: Scale higher · expandable for larger deployments
+                    - list [ref=e374]:
+                      - listitem [ref=e375]:
+                        - generic [ref=e377]: SSO and enforced 2FA across the organisation
+                      - listitem [ref=e378]:
+                        - generic [ref=e380]: IP whitelisting and usage policies
+                      - listitem [ref=e381]:
+                        - generic [ref=e383]: Full audit log with export
+                      - listitem [ref=e384]:
+                        - generic [ref=e386]: 1-click DPA signing inside the product
+                      - listitem [ref=e387]:
+                        - generic [ref=e389]: SLA with uptime guarantee
+                      - listitem [ref=e390]:
+                        - generic [ref=e392]: Dedicated support, phone support and Slack Connect
+                    - generic [ref=e393]:
+                      - button "Choose Enterprise" [ref=e394] [cursor=pointer]
+                      - button "Book a demo" [ref=e395] [cursor=pointer]
+                      - generic [ref=e396]: For procurement, IT and compliance requirements
+                - paragraph [ref=e397]:
+                  - text: Need a school, library or makerspace plan?
+                  - button "See Education plans" [ref=e399] [cursor=pointer]
+              - button "Compare all features" [ref=e403] [cursor=pointer]: Compare all features
