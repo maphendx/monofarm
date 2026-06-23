@@ -59,6 +59,23 @@ def test_inbound_lands_unassigned(setup, client, auth_headers):
     assert len(un) == 1 and float(un[0]["unassigned"]) == 100
 
 
+def test_product_update_persists_cell_limit(setup, client, auth_headers):
+    p = setup["product"]
+
+    response = client.patch(
+        f"/api/warehouse/products/{p['id']}",
+        json={"cell_limit": 24},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["cell_limit"] == 24
+
+    fetched = client.get(f"/api/warehouse/products/{p['id']}", headers=auth_headers)
+    assert fetched.status_code == 200, fetched.text
+    assert fetched.json()["cell_limit"] == 24
+
+
 def test_putaway_then_clamp_on_oversell(setup, client, auth_headers):
     wh, p, cells = setup["wh"], setup["product"], setup["cells"]
     _move(client, auth_headers, type="PURCHASE_IN", product_id=p["id"],

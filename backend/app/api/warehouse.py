@@ -1037,7 +1037,25 @@ def list_zones(
                .filter(WarehouseZone.warehouse_id == wh_id, WarehouseZone.organization_id == org.id)
                .order_by(WarehouseZone.sort_order, WarehouseZone.id)
                .all())
-    return [_zone_out(z, db) for z in zones]
+    zone_ids = [z.id for z in zones]
+    counts = dict(
+        db.query(WarehouseCell.zone_id, func.count(WarehouseCell.id))
+        .filter(WarehouseCell.zone_id.in_(zone_ids))
+        .group_by(WarehouseCell.zone_id)
+        .all()
+    ) if zone_ids else {}
+    return [
+        ZoneOut(
+            id=z.id,
+            name=z.name,
+            rows=z.rows,
+            cols=z.cols,
+            sort_order=z.sort_order,
+            cell_count=counts.get(z.id, 0),
+            created_at=z.created_at,
+        )
+        for z in zones
+    ]
 
 
 @_full.post("/warehouses/{wh_id}/zones", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
@@ -1688,22 +1706,30 @@ def product_locations(
         .order_by(Warehouse.name)
         .all()
     )
-    warehouses: list[ProductWarehouseLocationOut] = []
-    for e, wh in entries:
-        rows = (
+    wh_ids = [wh.id for _, wh in entries]
+    cells_by_warehouse: dict[int, list[ProductCellLocationOut]] = {wh_id: [] for wh_id in wh_ids}
+    if wh_ids:
+        cell_rows = (
             db.query(CellStock, WarehouseCell, WarehouseZone)
             .join(WarehouseCell, WarehouseCell.id == CellStock.cell_id)
             .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
-            .filter(WarehouseZone.warehouse_id == wh.id,
-                    CellStock.product_id == product_id,
-                    CellStock.quantity > 0)
+            .filter(
+                WarehouseZone.organization_id == org.id,
+                WarehouseZone.warehouse_id.in_(wh_ids),
+                CellStock.product_id == product_id,
+                CellStock.quantity > 0,
+            )
             .order_by(WarehouseZone.name, WarehouseCell.code)
             .all()
         )
-        cells = [
-            ProductCellLocationOut(cell_id=c.id, zone_name=z.name, code=c.code, quantity=cs.quantity)
-            for cs, c, z in rows
-        ]
+        for cs, c, z in cell_rows:
+            cells_by_warehouse.setdefault(z.warehouse_id, []).append(
+                ProductCellLocationOut(cell_id=c.id, zone_name=z.name, code=c.code, quantity=cs.quantity)
+            )
+
+    warehouses: list[ProductWarehouseLocationOut] = []
+    for e, wh in entries:
+        cells = cells_by_warehouse.get(wh.id, [])
         assigned = sum((c.quantity for c in cells), Decimal("0"))
         warehouses.append(ProductWarehouseLocationOut(
             warehouse_id=wh.id, warehouse_name=wh.name, cells=cells,
@@ -1729,21 +1755,24 @@ def product_cell_history(
         .all()
     )
 
-    def _label(cell_id: int | None) -> str | None:
-        if not cell_id:
-            return None
-        cell = db.get(WarehouseCell, cell_id)
-        if not cell:
-            return None
-        zone = db.get(WarehouseZone, cell.zone_id)
-        return f"{zone.name} {cell.code}" if zone else cell.code
+    cell_ids = {cid for r in rows for cid in (r.cell_from_id, r.cell_to_id) if cid}
+    labels: dict[int, str] = {}
+    if cell_ids:
+        for cell_id, zone_name, cell_code in (
+            db.query(WarehouseCell.id, WarehouseZone.name, WarehouseCell.code)
+            .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+            .filter(WarehouseCell.id.in_(cell_ids), WarehouseZone.organization_id == org.id)
+            .all()
+        ):
+            labels[cell_id] = f"{zone_name} {cell_code}"
 
-    p = db.get(Product, product_id)
+    p = _get_product(product_id, org, db)
     return [
         CellMovementOut(
-            id=r.id, product_id=r.product_id, product_name=p.name if p else "",
+            id=r.id, product_id=r.product_id, product_name=p.name,
             quantity=r.quantity, kind=r.kind.value,
-            cell_from=_label(r.cell_from_id), cell_to=_label(r.cell_to_id),
+            cell_from=labels.get(r.cell_from_id) if r.cell_from_id else None,
+            cell_to=labels.get(r.cell_to_id) if r.cell_to_id else None,
             created_at=r.created_at,
         )
         for r in rows
@@ -2232,7 +2261,10 @@ def update_product(
     _:   User         = Depends(require_roles(UserRole.admin)),
 ) -> ProductOut:
     p = _get_product(product_id, org, db)
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if "cell_limit" in data:
+        data["box_limit"] = data.pop("cell_limit")
+    for k, v in data.items():
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
@@ -4144,12 +4176,19 @@ def close_batch(
 
 # ── Assembly sessions ─────────────────────────────────────────────────────────
 
-def _session_to_out(s: AssemblySession, db: Session) -> AssemblySessionOut:
-    worker = db.get(User, s.worker_id)
-    batch  = db.get(ProductionBatch, s.batch_id)
+def _session_to_out(
+    s: AssemblySession,
+    db: Session,
+    *,
+    worker_map: dict[int, User] | None = None,
+    batch_map: dict[int, ProductionBatch] | None = None,
+    product_map: dict[int, Product] | None = None,
+) -> AssemblySessionOut:
+    worker = worker_map.get(s.worker_id) if worker_map is not None else db.get(User, s.worker_id)
+    batch = batch_map.get(s.batch_id) if batch_map is not None else db.get(ProductionBatch, s.batch_id)
     product_name = ""
     if batch:
-        p = db.get(Product, batch.product_id)
+        p = product_map.get(batch.product_id) if product_map is not None else db.get(Product, batch.product_id)
         product_name = p.name if p else ""
     duration: int | None = None
     if s.closed_at:
@@ -4326,7 +4365,25 @@ def list_sessions(
     if date_to:
         q = q.filter(func.date(AssemblySession.started_at) <= date_to)
     rows = q.order_by(AssemblySession.started_at.desc()).limit(200).all()
-    return [_session_to_out(s, db) for s in rows]
+    worker_ids = {s.worker_id for s in rows}
+    batch_ids = {s.batch_id for s in rows}
+    worker_map = {
+        u.id: u
+        for u in db.query(User).filter(User.organization_id == org.id, User.id.in_(worker_ids)).all()
+    } if worker_ids else {}
+    batch_map = {
+        b.id: b
+        for b in db.query(ProductionBatch).filter(ProductionBatch.organization_id == org.id, ProductionBatch.id.in_(batch_ids)).all()
+    } if batch_ids else {}
+    product_ids = {b.product_id for b in batch_map.values()}
+    product_map = {
+        p.id: p
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+    return [
+        _session_to_out(s, db, worker_map=worker_map, batch_map=batch_map, product_map=product_map)
+        for s in rows
+    ]
 
 
 @_full.get("/assembly/stats", response_model=list[WorkerStatsOut])
@@ -4353,9 +4410,25 @@ def assembly_stats(
     for s in sessions:
         by_worker[s.worker_id].append(s)
 
+    worker_ids = set(by_worker)
+    worker_map = {
+        u.id: u
+        for u in db.query(User).filter(User.organization_id == org.id, User.id.in_(worker_ids)).all()
+    } if worker_ids else {}
+    batch_ids = {s.batch_id for s in sessions}
+    batch_map = {
+        b.id: b
+        for b in db.query(ProductionBatch).filter(ProductionBatch.organization_id == org.id, ProductionBatch.id.in_(batch_ids)).all()
+    } if batch_ids else {}
+    product_ids = {b.product_id for b in batch_map.values()}
+    product_map = {
+        p.id: p
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+
     result: list[WorkerStatsOut] = []
     for wid, wss in by_worker.items():
-        worker = db.get(User, wid)
+        worker = worker_map.get(wid)
         if not worker:
             continue
         total_min = sum(
@@ -4370,13 +4443,13 @@ def assembly_stats(
         # per-product breakdown
         prod_counts: dict[int, int] = defaultdict(int)
         for s in wss:
-            b = db.get(ProductionBatch, s.batch_id)
+            b = batch_map.get(s.batch_id)
             if b:
                 prod_counts[b.product_id] += s.units_good
 
         products = []
         for pid, cnt in prod_counts.items():
-            p = db.get(Product, pid)
+            p = product_map.get(pid)
             products.append(WorkerProductStats(
                 product_id=pid,
                 product_name=p.name if p else f"#{pid}",
@@ -4888,35 +4961,39 @@ def delete_payment(
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
 
 def _tx_to_out(tx: CashTransaction, db: Session) -> CashTxOut:
-    cp_name: str | None = None
+    cp_map = {}
+    order_map = {}
+    bank_map = {}
     if tx.counterparty_id:
         cp = db.get(Counterparty, tx.counterparty_id)
-        if cp:
-            cp_name = cp.name
-
-    order_number: str | None = None
+        cp_map = {cp.id: cp.name} if cp else {}
     if tx.order_id:
-        o = db.get(Order, tx.order_id)
-        if o:
-            order_number = o.order_number
-
-    ba_name: str | None = None
+        order = db.get(Order, tx.order_id)
+        order_map = {order.id: order.order_number} if order else {}
     if tx.bank_account_id:
-        ba = db.get(BankAccount, tx.bank_account_id)
-        if ba:
-            ba_name = ba.name
+        bank = db.get(BankAccount, tx.bank_account_id)
+        bank_map = {bank.id: bank.name} if bank else {}
+    return _tx_to_out_from_maps(tx, cp_map=cp_map, order_map=order_map, bank_map=bank_map)
 
+
+def _tx_to_out_from_maps(
+    tx: CashTransaction,
+    *,
+    cp_map: dict[int, str],
+    order_map: dict[int, str],
+    bank_map: dict[int, str],
+) -> CashTxOut:
     return CashTxOut(
         id=tx.id,
         type=tx.type,
         category=tx.category,
         amount=tx.amount,
         counterparty_id=tx.counterparty_id,
-        counterparty_name=cp_name,
+        counterparty_name=cp_map.get(tx.counterparty_id) if tx.counterparty_id else None,
         order_id=tx.order_id,
-        order_number=order_number,
+        order_number=order_map.get(tx.order_id) if tx.order_id else None,
         bank_account_id=tx.bank_account_id,
-        bank_account_name=ba_name,
+        bank_account_name=bank_map.get(tx.bank_account_id) if tx.bank_account_id else None,
         description=tx.description,
         transaction_date=tx.transaction_date,
         created_at=tx.created_at,
@@ -4943,7 +5020,26 @@ def list_cashflow(
     if counterparty_id:
         q = q.filter(CashTransaction.counterparty_id == counterparty_id)
     rows = q.order_by(CashTransaction.transaction_date.desc(), CashTransaction.id.desc()).limit(limit).all()
-    return [_tx_to_out(tx, db) for tx in rows]
+
+    cp_ids = {tx.counterparty_id for tx in rows if tx.counterparty_id}
+    order_ids = {tx.order_id for tx in rows if tx.order_id}
+    bank_ids = {tx.bank_account_id for tx in rows if tx.bank_account_id}
+    cp_map = {
+        c.id: c.name
+        for c in db.query(Counterparty).filter(Counterparty.organization_id == org.id, Counterparty.id.in_(cp_ids)).all()
+    } if cp_ids else {}
+    order_map = {
+        o.id: o.order_number
+        for o in db.query(Order).filter(Order.organization_id == org.id, Order.id.in_(order_ids)).all()
+    } if order_ids else {}
+    bank_map = {
+        b.id: b.name
+        for b in db.query(BankAccount).filter(BankAccount.organization_id == org.id, BankAccount.id.in_(bank_ids)).all()
+    } if bank_ids else {}
+    return [
+        _tx_to_out_from_maps(tx, cp_map=cp_map, order_map=order_map, bank_map=bank_map)
+        for tx in rows
+    ]
 
 
 @_full.post("/cashflow", response_model=CashTxOut, status_code=status.HTTP_201_CREATED)
@@ -5001,20 +5097,18 @@ def cashflow_summary(
         q = q.filter(CashTransaction.transaction_date >= date_from)
     if date_to:
         q = q.filter(CashTransaction.transaction_date <= date_to)
-    txs = q.all()
 
-    total_income  = sum(tx.amount for tx in txs if tx.type == CashTxType.income)
-    total_expense = sum(tx.amount for tx in txs if tx.type == CashTxType.expense)
-
-    # Group by category
-    cat_totals: dict[tuple, Decimal] = {}
-    for tx in txs:
-        key = (tx.category.value, tx.type.value)
-        cat_totals[key] = cat_totals.get(key, Decimal("0")) + tx.amount
+    grouped = (
+        q.with_entities(CashTransaction.category, CashTransaction.type, func.sum(CashTransaction.amount))
+        .group_by(CashTransaction.category, CashTransaction.type)
+        .all()
+    )
+    total_income = sum((amount or Decimal("0")) for _, tx_type, amount in grouped if tx_type == CashTxType.income)
+    total_expense = sum((amount or Decimal("0")) for _, tx_type, amount in grouped if tx_type == CashTxType.expense)
 
     by_category = [
-        {"category": cat, "type": typ, "total": float(total)}
-        for (cat, typ), total in sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)
+        {"category": category.value, "type": tx_type.value, "total": float(amount or Decimal("0"))}
+        for category, tx_type, amount in sorted(grouped, key=lambda row: row[2] or Decimal("0"), reverse=True)
     ]
 
     return CashFlowSummary(
@@ -5074,70 +5168,97 @@ def get_analytics(
     org:    Organization = Depends(get_current_org),
 ) -> WarehouseAnalytics:
     start, end = _period_range(period)
+    start_dt = datetime.combine(start, datetime.min.time())
+    end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time())
 
-    def _mvmt(mtype: MovementType) -> list[WarehouseMovement]:
-        return (
-            db.query(WarehouseMovement)
-            .filter(
-                WarehouseMovement.organization_id == org.id,
-                WarehouseMovement.type == mtype,
-                func.date(WarehouseMovement.created_at) >= start,
-                func.date(WarehouseMovement.created_at) <= end,
-            )
-            .all()
+    money_zero = Decimal("0")
+    revenue_expr = func.coalesce(WarehouseMovement.total_revenue, WarehouseMovement.total_cost, money_zero)
+    cost_expr = func.coalesce(WarehouseMovement.total_cost, money_zero)
+
+    sales_rows = (
+        db.query(
+            WarehouseMovement.product_id,
+            func.sum(WarehouseMovement.quantity).label("units"),
+            func.sum(revenue_expr).label("revenue"),
+            func.sum(cost_expr).label("cogs"),
         )
+        .filter(
+            WarehouseMovement.organization_id == org.id,
+            WarehouseMovement.type == MovementType.SALE_OUT,
+            WarehouseMovement.created_at >= start_dt,
+            WarehouseMovement.created_at < end_dt,
+        )
+        .group_by(WarehouseMovement.product_id)
+        .all()
+    )
 
-    sales     = _mvmt(MovementType.SALE_OUT)
-    prod_out  = _mvmt(MovementType.PRODUCTION_OUT)
-    purchases = _mvmt(MovementType.PURCHASE_IN)
-
-    # Revenue = sum of sale prices (total_revenue); COGS = sum of cost prices (total_cost on SALE_OUT)
-    revenue      = sum((m.total_revenue or m.total_cost or Decimal("0")) for m in sales)
-    cogs         = sum((m.total_cost    or Decimal("0")) for m in sales)
+    revenue = sum((row.revenue or money_zero) for row in sales_rows)
+    cogs = sum((row.cogs or money_zero) for row in sales_rows)
     gross_profit = revenue - cogs
     margin_pct   = (gross_profit / revenue * 100) if revenue > 0 else Decimal("0")
 
-    batches_done = (
-        db.query(ProductionBatch)
+    produced_good, produced_defect = (
+        db.query(
+            func.coalesce(func.sum(ProductionBatch.good_qty), 0),
+            func.coalesce(func.sum(ProductionBatch.defect_qty), 0),
+        )
         .filter(
             ProductionBatch.organization_id == org.id,
             ProductionBatch.status == BatchStatus.done,
-            func.date(ProductionBatch.updated_at) >= start,
+            ProductionBatch.updated_at >= start_dt,
+            ProductionBatch.updated_at < end_dt,
         )
-        .all()
+        .one()
     )
-    total_printed  = sum(b.good_qty + b.defect_qty for b in batches_done)
-    units_produced = sum(b.good_qty for b in batches_done)
-    units_sold     = int(sum(m.quantity for m in sales))
+    units_produced = int(produced_good or 0)
+    total_printed = int((produced_good or 0) + (produced_defect or 0))
+    units_sold = int(sum((row.units or 0) for row in sales_rows))
     defect_rate    = (
-        Decimal(sum(b.defect_qty for b in batches_done)) / Decimal(total_printed) * 100
+        Decimal(produced_defect or 0) / Decimal(total_printed) * 100
         if total_printed > 0 else Decimal("0")
     )
 
-    rev_by: dict[int, Decimal] = {}
-    qty_by: dict[int, int]    = {}
-    for m in sales:
-        rev_by[m.product_id] = rev_by.get(m.product_id, Decimal("0")) + (m.total_cost or Decimal("0"))
-        qty_by[m.product_id] = qty_by.get(m.product_id, 0) + int(m.quantity)
+    top_sales = sorted(sales_rows, key=lambda row: row.revenue or money_zero, reverse=True)[:5]
+    top_product_ids = {row.product_id for row in top_sales}
+    product_names = {
+        p.id: p.name
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(top_product_ids)).all()
+    } if top_product_ids else {}
 
     top_products = [
         TopProduct(
-            product_id=pid,
-            product_name=(db.get(Product, pid).name if db.get(Product, pid) else f"#{pid}"),
-            revenue=rev,
-            units=qty_by.get(pid, 0),
+            product_id=row.product_id,
+            product_name=product_names.get(row.product_id, f"#{row.product_id}"),
+            revenue=row.revenue or money_zero,
+            units=int(row.units or 0),
         )
-        for pid, rev in sorted(rev_by.items(), key=lambda x: x[1], reverse=True)[:5]
+        for row in top_sales
     ]
 
-    mat: dict[str, Decimal] = {}
-    for m in purchases:
-        p = db.get(Product, m.product_id)
-        key = p.name if p else f"#{m.product_id}"
-        mat[key] = mat.get(key, Decimal("0")) + (m.total_cost or Decimal("0"))
+    purchase_rows = (
+        db.query(
+            WarehouseMovement.product_id,
+            func.sum(cost_expr).label("cost"),
+        )
+        .filter(
+            WarehouseMovement.organization_id == org.id,
+            WarehouseMovement.type == MovementType.PURCHASE_IN,
+            WarehouseMovement.created_at >= start_dt,
+            WarehouseMovement.created_at < end_dt,
+        )
+        .group_by(WarehouseMovement.product_id)
+        .order_by(func.sum(cost_expr).desc())
+        .limit(5)
+        .all()
+    )
+    material_product_ids = {row.product_id for row in purchase_rows}
+    material_names = {
+        p.id: p.name
+        for p in db.query(Product).filter(Product.organization_id == org.id, Product.id.in_(material_product_ids)).all()
+    } if material_product_ids else {}
     material_costs = [
-        MaterialCost(name=n, cost=c)
-        for n, c in sorted(mat.items(), key=lambda x: x[1], reverse=True)[:5]
+        MaterialCost(name=material_names.get(row.product_id, f"#{row.product_id}"), cost=row.cost or money_zero)
+        for row in purchase_rows
     ]
 
     # Explicit cash-flow direction per movement type:
@@ -5154,12 +5275,22 @@ def get_analytics(
         MovementType.DEFECT:         "ignore",
     }
 
-    def _cf_value(m: WarehouseMovement) -> Decimal:
-        if m.type == MovementType.SALE_OUT:
-            return m.total_revenue or m.total_cost or Decimal("0")
-        return m.total_cost or Decimal("0")
-
-    all_mvmts = sales + prod_out + purchases + _mvmt(MovementType.TRANSFER) + _mvmt(MovementType.ADJUSTMENT)
+    cf_rows = (
+        db.query(
+            func.date(WarehouseMovement.created_at).label("bucket_date"),
+            WarehouseMovement.type,
+            func.sum(revenue_expr).label("revenue"),
+            func.sum(cost_expr).label("cost"),
+        )
+        .filter(
+            WarehouseMovement.organization_id == org.id,
+            WarehouseMovement.type.in_([MovementType.SALE_OUT, MovementType.PURCHASE_IN, MovementType.PRODUCTION_OUT]),
+            WarehouseMovement.created_at >= start_dt,
+            WarehouseMovement.created_at < end_dt,
+        )
+        .group_by(func.date(WarehouseMovement.created_at), WarehouseMovement.type)
+        .all()
+    )
 
     month_names = ["Січ","Лют","Бер","Квіт","Трав","Черв","Лип","Серп","Вер","Жовт","Лист","Груд"]
     cash_flow: list[CashFlowBucket] = []
@@ -5170,29 +5301,29 @@ def get_analytics(
             w_end = min(week + timedelta(days=6), end)
             label = f"{week.day}–{w_end.day} {week.strftime('%b')}"
             inflow = outflow = Decimal("0")
-            for m in all_mvmts:
-                if not (week <= m.created_at.date() <= w_end):
+            for row in cf_rows:
+                bucket_date = row.bucket_date
+                if not (week <= bucket_date <= w_end):
                     continue
-                direction = _CF_DIRECTION.get(m.type, "ignore")
+                direction = _CF_DIRECTION.get(row.type, "ignore")
                 if direction == "inflow":
-                    inflow  += _cf_value(m)
+                    inflow += row.revenue or money_zero
                 elif direction == "outflow":
-                    outflow += _cf_value(m)
+                    outflow += row.cost or money_zero
             cash_flow.append(CashFlowBucket(label=label, inflow=inflow, outflow=outflow))
             week = w_end + timedelta(days=1)
     else:
         buckets: dict[str, tuple[Decimal, Decimal]] = {}
-        for m in all_mvmts:
-            direction = _CF_DIRECTION.get(m.type, "ignore")
+        for row in cf_rows:
+            direction = _CF_DIRECTION.get(row.type, "ignore")
             if direction == "ignore":
                 continue
-            k = m.created_at.strftime("%Y-%m")
+            k = row.bucket_date.strftime("%Y-%m")
             i, o_val = buckets.get(k, (Decimal("0"), Decimal("0")))
-            val = _cf_value(m)
             if direction == "inflow":
-                buckets[k] = (i + val, o_val)
+                buckets[k] = (i + (row.revenue or money_zero), o_val)
             else:
-                buckets[k] = (i, o_val + val)
+                buckets[k] = (i, o_val + (row.cost or money_zero))
         for k in sorted(buckets):
             mo = int(k[5:])
             i, o_val = buckets[k]
@@ -5605,6 +5736,23 @@ def _po_to_out(po: PurchaseOrder, product_map: dict, cp_map: dict, wh_map: dict)
     )
 
 
+def _po_lookup_maps(po: PurchaseOrder, org_id: int, db: Session) -> tuple[dict[int, Product], dict[int, Counterparty], dict[int, Warehouse]]:
+    product_ids = {it.product_id for it in po.items}
+    product_map = {
+        p.id: p
+        for p in db.query(Product).filter(Product.organization_id == org_id, Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+    cp_map = {}
+    if po.counterparty_id:
+        cp = db.query(Counterparty).filter_by(id=po.counterparty_id, organization_id=org_id).first()
+        cp_map = {cp.id: cp} if cp else {}
+    wh_map = {}
+    if po.warehouse_id:
+        wh = db.query(Warehouse).filter_by(id=po.warehouse_id, organization_id=org_id).first()
+        wh_map = {wh.id: wh} if wh else {}
+    return product_map, cp_map, wh_map
+
+
 @_full.get("/purchases", response_model=list[PurchaseOrderOut])
 def list_purchases(
     po_status: PurchaseOrderStatus | None = Query(None),
@@ -5683,9 +5831,7 @@ def create_purchase(
     db.commit()
     db.refresh(po)
 
-    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
-    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
-    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    product_map, cp_map, wh_map = _po_lookup_maps(po, org.id, db)
     return _po_to_out(po, product_map, cp_map, wh_map)
 
 
@@ -5699,9 +5845,7 @@ def get_purchase(
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found")
 
-    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
-    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
-    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    product_map, cp_map, wh_map = _po_lookup_maps(po, org.id, db)
     return _po_to_out(po, product_map, cp_map, wh_map)
 
 
@@ -5752,9 +5896,7 @@ def receive_purchase(
     bg.add_task(broadcast_warehouse, org.id, "stock")
     bg.add_task(broadcast_warehouse, org.id, "movements")
 
-    product_map = {it.product_id: db.query(Product).filter_by(id=it.product_id).first() for it in po.items}
-    cp_map = {po.counterparty_id: db.query(Counterparty).filter_by(id=po.counterparty_id).first()} if po.counterparty_id else {}
-    wh_map = {po.warehouse_id: db.query(Warehouse).filter_by(id=po.warehouse_id).first()} if po.warehouse_id else {}
+    product_map, cp_map, wh_map = _po_lookup_maps(po, org.id, db)
     return _po_to_out(po, product_map, cp_map, wh_map)
 
 
