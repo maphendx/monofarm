@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.organization import OrgPlan
 from app.models.user import UserRole
@@ -37,5 +37,4 @@ class UserOut(BaseModel):
     email_verified_at: datetime | None = None
     telegram_chat_id: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

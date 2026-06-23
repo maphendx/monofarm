@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.task import PrintTaskOut
 
@@ -58,8 +58,7 @@ class PlanEntryOut(BaseModel):
     conflict: bool = False
     end_time: time | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CalendarEntryOut(PlanEntryOut):

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field, computed_field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
 
 from app.models.user import UserRole
 
@@ -21,8 +21,7 @@ class CustomRoleOut(BaseModel):
     allowed_modules: list[str]
     created_at:      datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(BaseModel):
@@ -61,5 +60,4 @@ class UserAdminOut(BaseModel):
     def invite_pending(self) -> bool:
         return self.email_verified_at is None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

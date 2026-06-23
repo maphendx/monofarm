@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from app.models.tag import TagKind
 
 
@@ -11,8 +11,7 @@ class TagOut(BaseModel):
     meta: dict[str, Any] | None = None
     display: str = ""
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TagCreate(BaseModel):
@@ -68,8 +67,7 @@ class TagSettingsOut(BaseModel):
     material_clusters: list[list[str]] = []
     bed_type_map: dict[str, str] = {}
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class TagSettingsUpdate(BaseModel):

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org
@@ -33,8 +33,7 @@ class PrintHistoryOut(BaseModel):
     bambu_task_id: str | None = None
     bambu_project_id: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("", response_model=list[PrintHistoryOut])

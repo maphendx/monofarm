@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class OrgRegisterRequest(BaseModel):
@@ -15,8 +15,7 @@ class OrgOut(BaseModel):
     name: str
     slug: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrgSettingsUpdate(BaseModel):
@@ -42,5 +41,4 @@ class OrgSettingsOut(BaseModel):
     electricity_rate: Decimal
     labor_rate: Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

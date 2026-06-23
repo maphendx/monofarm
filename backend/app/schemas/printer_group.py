@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PrinterGroupCreate(BaseModel):
@@ -38,5 +38,4 @@ class PrinterGroupOut(BaseModel):
     build_z: int | None = None
     supported_materials: list[str] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

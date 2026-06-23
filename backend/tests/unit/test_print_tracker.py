@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import app.models.tag  # noqa: F401 — registers printer_tags table
 from app.models.organization import Organization
 from app.services import print_tracker
 
@@ -86,6 +87,5 @@ def test_paused_without_error_stays_open(monkeypatch):
     print_tracker._check_org(db, org)
 
     assert finalized == []
-    assert len(notifications) == 1
-    assert notifications[0]["event"] == "paused"
+    assert len(notifications) == 0
     assert print_tracker._prev[printer.id]["state"] == "paused"

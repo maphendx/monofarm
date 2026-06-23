@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.printer_slot import SlotEventType, SlotState
 
@@ -17,8 +17,7 @@ class PrinterSlotOut(BaseModel):
     state: SlotState
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SlotAssign(BaseModel):
@@ -35,5 +34,4 @@ class SlotEventOut(BaseModel):
     user_id: int | None = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

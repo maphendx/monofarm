@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.warehouse import (
     BatchPriority, BatchStatus, CashTxCategory, CashTxType, CounterpartyType,
@@ -31,8 +31,7 @@ class ProductCategoryOut(BaseModel):
     sort_order: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Warehouse ─────────────────────────────────────────────────────────────────
@@ -58,8 +57,7 @@ class WarehouseOut(BaseModel):
     is_active:  bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Counterparty ──────────────────────────────────────────────────────────────
@@ -97,8 +95,7 @@ class CounterpartyOut(BaseModel):
     external_id: str | None
     created_at:  datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CounterpartyBalanceAdjust(BaseModel):
@@ -161,8 +158,7 @@ class ProductOut(BaseModel):
             inst.cell_limit = obj.box_limit
         return inst
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductOptionOut(BaseModel):
@@ -174,8 +170,7 @@ class ProductOptionOut(BaseModel):
     cost_price:    Decimal | None
     desired_stock: int | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductImageOut(BaseModel):
@@ -184,8 +179,7 @@ class ProductImageOut(BaseModel):
     is_primary: bool
     sort_order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Specification ─────────────────────────────────────────────────────────────
@@ -213,8 +207,7 @@ class SpecComponentOut(BaseModel):
     waste_pct:    Decimal
     sort_order:   int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BatchComponentOut(BaseModel):
@@ -253,8 +246,7 @@ class SpecOperationOut(BaseModel):
     explicit_cost:       Decimal | None
     notes:               str | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SpecCreate(BaseModel):
@@ -274,8 +266,7 @@ class SpecOut(BaseModel):
     operations: list[SpecOperationOut] = []
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SpecDefaultSummaryOut(BaseModel):
@@ -328,8 +319,7 @@ class StockEntryOut(BaseModel):
     in_production_qty: int = 0    # сума (target_qty - good_qty) по відкритих партіях товару
     updated_at:     datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StockSummaryOut(BaseModel):
@@ -403,8 +393,7 @@ class MovementOut(BaseModel):
     order_id:          int | None
     created_at:        datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MovementListOut(BaseModel):
@@ -464,8 +453,7 @@ class BatchOut(BaseModel):
     created_at:        datetime
     updated_at:        datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Assembly sessions ─────────────────────────────────────────────────────────
@@ -489,8 +477,7 @@ class AssemblySessionOut(BaseModel):
     notes:           str | None
     duration_minutes: int | None = None   # computed
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkerProductStats(BaseModel):
@@ -560,8 +547,7 @@ class OrderPaymentOut(BaseModel):
     cashflow_id: int | None
     created_at:  datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderItemOut(BaseModel):
@@ -575,8 +561,7 @@ class OrderItemOut(BaseModel):
     unit_price:   Decimal
     total_price:  Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderOut(BaseModel):
@@ -603,8 +588,7 @@ class OrderOut(BaseModel):
     items:            list[OrderItemOut] = []
     created_at:       datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ReserveRequest(BaseModel):
@@ -638,8 +622,7 @@ class BankAccountOut(BaseModel):
     sort_order:           int
     created_at:           datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Cash Register ─────────────────────────────────────────────────────────────
@@ -700,8 +683,7 @@ class CashTxOut(BaseModel):
     transaction_date: date
     created_at:       datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CashFlowSummary(BaseModel):
@@ -745,8 +727,7 @@ class CellStockOut(BaseModel):
     quantity:     Decimal
     image_url:    str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CellDetailOut(BaseModel):
@@ -772,8 +753,7 @@ class CellOut(BaseModel):
     notes: str | None
     stock: list[CellStockOut] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ZoneOut(BaseModel):
@@ -785,8 +765,7 @@ class ZoneOut(BaseModel):
     cell_count: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ZoneWithCellsOut(ZoneOut):
@@ -890,8 +869,7 @@ class PurchaseOrderItemOut(BaseModel):
     unit_cost:    Decimal
     total_cost:   Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderOut(BaseModel):
@@ -907,8 +885,7 @@ class PurchaseOrderOut(BaseModel):
     received_at:       datetime | None
     created_at:        datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CellNotesUpdate(BaseModel):
@@ -935,5 +912,4 @@ class CellMovementOut(BaseModel):
     cell_to:       str | None
     created_at:    datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
