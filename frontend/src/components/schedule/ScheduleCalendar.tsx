@@ -202,8 +202,8 @@ function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; now
   const daysSuffix = overflowDays > 0 ? ` +${overflowDays}д` : "";
   return (
     <div
-      className="absolute top-4 flex items-center overflow-hidden rounded border border-[var(--state-print)]/30"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 36px)", minHeight: "20px", background: "rgba(59,130,246,.05)", zIndex: isOverflow ? 8 : 5 }}
+      className="absolute flex items-center overflow-hidden rounded border border-[var(--state-print)]/30"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "40%", height: "28%", minHeight: "18px", background: "rgba(59,130,246,.08)", zIndex: isOverflow ? 8 : 5 }}
       title={`${printer.job ?? "друк"}\n${startLabel} → ${endLabel}${daysSuffix}\n${Math.round(progressPct)}% · залишилось ${fmtDuration(remainMins)}`}
     >
       <div
@@ -272,8 +272,8 @@ function LiveStateBlock({ printer, now, nowMins, historyItems }: { printer: Prin
 
   return (
     <div
-      className="absolute top-0.5 z-[2] flex items-center overflow-hidden rounded border px-1.5"
-      style={{ left: `${leftPct}%`, width: `max(40px, ${widthPct}%)`, height: "calc(100% - 4px)", borderColor: color, background: bg, color, borderStyle: (isOffline || (!isError && !isPause)) ? "dashed" : "solid" }}
+      className="absolute z-[2] flex items-center overflow-hidden rounded border px-1.5"
+      style={{ left: `${leftPct}%`, width: `max(40px, ${widthPct}%)`, top: "70%", height: "28%", minHeight: "16px", borderColor: color, background: bg, color, borderStyle: (isOffline || (!isError && !isPause)) ? "dashed" : "solid" }}
       title={`${printer.name}: ${label} · ${fmtDuration(durationVal)}${printer.error_msg ? `\n${printer.error_msg}` : ""}`}
     >
       {isError && (
@@ -404,9 +404,8 @@ function HistoryBlock({
 
   const isFail = item.result === "failed";
   const isCancelled = item.result === "cancelled";
-  const isOk = !isFail && !isCancelled;
 
-  const bg = isFail ? "rgba(239,68,68,.08)" : isCancelled ? "rgba(239,68,68,.06)" : "rgba(34,197,94,.08)";
+  const bg = isFail ? "rgba(239,68,68,.10)" : isCancelled ? "rgba(239,68,68,.07)" : "rgba(34,197,94,.10)";
   const borderClr = isFail ? "rgba(239,68,68,.40)" : isCancelled ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.30)";
   const textClr = isFail ? "var(--state-error)" : isCancelled ? "var(--state-error)" : "var(--state-ok)";
   const icon = isFail ? "✕" : isCancelled ? "⊘" : "✓";
@@ -415,32 +414,23 @@ function HistoryBlock({
 
   return (
     <div
-      className="absolute top-0.5 z-[3] flex items-center overflow-hidden rounded border cursor-default hover:opacity-100 transition-opacity"
+      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-default opacity-65 hover:opacity-100 transition-opacity"
       style={{
         left: `${leftPct}%`,
-        width: `max(28px, ${widthPct}%)`,
-        height: "calc(100% - 4px)",
+        width: `max(24px, ${widthPct}%)`,
+        top: "1px",
+        height: "38%",
         background: bg,
         borderColor: borderClr,
         color: textClr,
-        opacity: isOk ? 0.55 : 0.7,
         zIndex: isOverflow ? 4 : 3,
       }}
       title={`${icon} ${item.file_name ?? "друк"}\n${startLabel} → ${endLabel} · ${fmtDuration(durationMins)}${item.result_reason ? `\n${item.result_reason}` : ""}`}
     >
-      {isFail && (
-        <div className="absolute inset-0 opacity-[0.05]" style={{
-          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 5px, currentColor 5px 6px)",
-        }} />
-      )}
-      <div className="relative z-10 flex min-w-0 items-center gap-1 px-1">
-        <span className="shrink-0 text-[9px] font-bold">{icon}</span>
-        <span className="truncate text-[8px] font-semibold leading-tight">
-          {startLabel}–{endLabel}
-        </span>
-        {durationMins > 0 && (
-          <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>
-        )}
+      <div className="flex min-w-0 items-center gap-0.5 px-1">
+        <span className="shrink-0 text-[8px] font-bold">{icon}</span>
+        <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
+        {durationMins > 0 && <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>}
       </div>
     </div>
   );
