@@ -194,8 +194,8 @@ function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: numb
   const endLabel = fmtTimeMins(endMins % 1440);
   return (
     <div
-      className="absolute top-0.5 z-[5] flex h-[calc(100%-4px)] items-center overflow-hidden rounded border border-[var(--state-print)]/40"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: "rgba(59,130,246,.06)" }}
+      className="absolute top-3.5 z-[5] flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)" }}
       title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
     >
       <div
@@ -348,25 +348,26 @@ function HistoryBlock({
   const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
 
   const isFail = item.result === "failed" || item.result === "cancelled";
-  const color = isFail ? "var(--state-error)" : "var(--state-ok)";
-  const bg = isFail ? "rgba(239,68,68,.07)" : "rgba(34,197,94,.07)";
-  const borderClr = isFail ? "rgba(239,68,68,.30)" : "rgba(34,197,94,.25)";
-  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "завершено";
+  const bg = isFail ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)";
+  const borderClr = isFail ? "rgba(239,68,68,.40)" : "rgba(34,197,94,.35)";
+  const topClr = isFail ? "var(--state-error)" : "var(--state-ok)";
+  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "✓";
 
   return (
     <div
-      className="absolute top-0.5 z-[3] flex h-[calc(100%-4px)] items-center overflow-hidden rounded border opacity-60 hover:opacity-90 transition-opacity"
-      style={{ left: `${leftPct}%`, width: `max(28px, ${widthPct}%)`, background: bg, borderColor: borderClr, color }}
+      className="absolute top-0 z-[3] flex h-3.5 items-center overflow-hidden rounded-b border-b border-x opacity-70 hover:opacity-100 transition-opacity"
+      style={{
+        left: `${leftPct}%`,
+        width: `max(20px, ${widthPct}%)`,
+        background: bg,
+        borderColor: borderClr,
+        borderTop: `2px solid ${topClr}`,
+        color: topClr,
+      }}
       title={`${item.file_name ?? "друк"} · ${resultLabel} · ${fmtDuration(durationMins)}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
     >
-      {isFail && (
-        <div className="absolute inset-0 opacity-10" style={{
-          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 4px, currentColor 4px 5px)",
-        }} />
-      )}
-      <span className="relative z-10 truncate px-1 text-[8px] font-medium leading-none">
-        {item.file_name ?? "друк"} · {resultLabel}
-        {item.result_reason ? ` · ${item.result_reason}` : ""}
+      <span className="truncate px-0.5 text-[7px] font-semibold leading-none">
+        {resultLabel} {item.file_name ?? "друк"}
       </span>
     </div>
   );
@@ -424,6 +425,7 @@ export function ScheduleCalendar({
     const map = new Map<string, PrintHistoryItem[]>();
     const weekStrs = weekDates.map(isoDateStr);
     for (const h of history) {
+      if (h.result === "in_progress") continue;
       const d = new Date(h.started_at);
       const dateStr = isoDateStr(d);
       const di = weekStrs.indexOf(dateStr);
