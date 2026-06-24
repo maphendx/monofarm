@@ -111,7 +111,7 @@ def _check_org(db, org: Organization) -> None:
 
         # printing → done: close history entry
         elif prev_state in PRINTING_STATES and state not in PRINTING_STATES:
-            result = "completed" if state == "operational" else ("failed" if state == "error" or error_msg else "cancelled")
+            result = "completed" if state in ("operational", "idle") else ("failed" if state == "error" or error_msg else "cancelled")
             _finalize_print(db, row, now, result)
             if result == "failed":
                 send_print_event_notification(
@@ -173,7 +173,7 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
     elif state in PRINTING_STATES and job.status == BambuCloudJobStatus.paused:
         target, reason = BambuCloudJobStatus.printing, "Printer reports print progress"
     elif state in DONE_STATES:
-        result = "completed" if state == "operational" else ("failed" if state == "error" else "cancelled")
+        result = "completed" if state in ("operational", "idle") else ("failed" if state == "error" else "cancelled")
         target = {
             "completed": BambuCloudJobStatus.completed,
             "failed": BambuCloudJobStatus.failed,
