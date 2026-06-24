@@ -1,16 +1,17 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CalendarEntry, CalendarLane, Printer } from "@/lib/types";
+import type { CalendarEntry, CalendarLane, Printer, PrintHistoryItem } from "@/lib/types";
 import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
 import { ScheduleWeekNav } from "./ScheduleWeekNav";
-import { ApiError, createPlanEntry, updatePlanEntry } from "@/lib/api";
+import { api, ApiError, createPlanEntry, updatePlanEntry } from "@/lib/api";
 import {
   buildCalendarBlocks,
   buildUntimedMap,
   fmtDuration,
+  fmtTimeMins,
   getWeekDates,
   isoDateStr,
 } from "./utils";
@@ -160,8 +161,8 @@ function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
 // ── Drop-time indicator overlay ───────────────────────────────────────────────
 
 function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
-  const mins = Math.min(Math.round(relX * 1440 / 15) * 15, 1410);
-  const label = `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+  const mins = Math.min(Math.round(relX * 1440), 1439);
+  const label = fmtTimeMins(mins);
   const color = incompat ? "var(--state-error)" : "var(--accent)";
   return (
     <div
@@ -178,28 +179,31 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-/** Running print bar — shows active job directly on the calendar grid. */
 function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: number }) {
   if (printer.state !== "printing" || !printer.eta_minutes) return null;
   const remainMins = printer.eta_minutes;
   if (remainMins <= 0) return null;
   const progressPct = Math.max(0, Math.min(100, printer.progress_pct ?? 0));
+  const totalEstimate = progressPct > 1 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
+  const elapsedMins = totalEstimate - remainMins;
+  const startMins = Math.max(0, nowMins - elapsedMins);
   const endMins = nowMins + remainMins;
-  const leftPct = (nowMins / 1440) * 100;
-  const widthPct = Math.max(0.6, Math.min((remainMins / 1440) * 100, 100 - leftPct));
-  const endLabel = `${String(Math.floor((endMins % 1440) / 60)).padStart(2, "0")}:${String(endMins % 60).padStart(2, "0")}`;
+  const leftPct = (startMins / 1440) * 100;
+  const widthPct = Math.max(1.5, Math.min(((endMins - startMins) / 1440) * 100, 100 - leftPct));
+  const startLabel = fmtTimeMins(startMins);
+  const endLabel = fmtTimeMins(endMins % 1440);
   return (
     <div
-      className="absolute top-0.5 z-[5] flex h-[calc(100%-4px)] items-center overflow-hidden rounded-sm border border-[var(--state-print)]/40"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: "rgba(59,130,246,.08)" }}
-      title={`${printer.job ?? "друк"} — зараз → ${endLabel}, залишилось ${remainMins}хв`}
+      className="absolute top-0.5 z-[5] flex h-[calc(100%-4px)] items-center overflow-hidden rounded border border-[var(--state-print)]/40"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: "rgba(59,130,246,.06)" }}
+      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
     >
       <div
-        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/15"
+        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/12"
         style={{ width: `${progressPct}%` }}
       />
-      <span className="relative z-10 truncate px-1 text-[8px] font-medium text-[var(--state-print)]">
-        {printer.job ?? "друк"} · до {endLabel} · {remainMins}хв
+      <span className="relative z-10 truncate px-1.5 text-[9px] font-semibold text-[var(--state-print)]">
+        {printer.job ?? "друк"} · {Math.round(progressPct)}% · {fmtDuration(remainMins)}
       </span>
     </div>
   );
@@ -239,12 +243,14 @@ function FarmStatusPanel({
   printers,
   lanes,
   entries,
+  history,
   filter,
   onFilterChange,
 }: {
   printers: Printer[];
   lanes: CalendarLane[];
   entries: CalendarEntry[];
+  history: PrintHistoryItem[];
   filter: StateFilter;
   onFilterChange: (filter: StateFilter) => void;
 }) {
@@ -259,6 +265,9 @@ function FarmStatusPanel({
   const done = entries.filter(e => e.task.status === "done").length;
   const cancelled = entries.filter(e => e.task.status === "cancelled").length;
   const plannedMinutes = entries.reduce((sum, e) => sum + (e.task.estimated_minutes ?? e.task.filament_meta?.estimated_minutes ?? 0), 0);
+  const histCompleted = history.filter(h => h.result === "completed").length;
+  const histFailed = history.filter(h => h.result === "failed" || h.result === "cancelled").length;
+  const histTotalMins = history.reduce((s, h) => s + (h.duration_minutes ?? 0), 0);
 
   const chips: { id: StateFilter; label: string; count: number; dot: string }[] = [
     { id: "all", label: "Усі", count: total, dot: "bg-[var(--text-faint)]" },
@@ -282,8 +291,15 @@ function FarmStatusPanel({
           {plannedMinutes > 0 && <span className="text-[var(--text-muted)]">план {fmtDuration(plannedMinutes)}</span>}
           {(done > 0 || cancelled > 0) && (
             <span className="text-[var(--text-muted)]">
-              <span className="text-[var(--state-ok)]">{done} заверш.</span>
+              <span className="text-[var(--state-ok)]">{done} заплан.</span>
               {cancelled > 0 && <span className="ml-2 text-[var(--state-error)]">{cancelled} скас.</span>}
+            </span>
+          )}
+          {(histCompleted > 0 || histFailed > 0) && (
+            <span className="text-[var(--text-muted)]">
+              друків: <span className="text-[var(--state-ok)]">{histCompleted} ✓</span>
+              {histFailed > 0 && <span className="ml-1 text-[var(--state-error)]">{histFailed} ✕</span>}
+              {histTotalMins > 0 && <span className="ml-1">{fmtDuration(histTotalMins)}</span>}
             </span>
           )}
         </div>
@@ -312,6 +328,50 @@ function FarmStatusPanel({
   );
 }
 
+function HistoryBlock({
+  item,
+  dayDate,
+}: {
+  item: PrintHistoryItem;
+  dayDate: string;
+}) {
+  const start = new Date(item.started_at);
+  const localDate = isoDateStr(start);
+  const startMins = localDate === dayDate
+    ? start.getHours() * 60 + start.getMinutes()
+    : 0;
+  const durationMins = item.duration_minutes ?? (item.finished_at
+    ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
+    : 30);
+  const endMins = startMins + Math.max(durationMins, 5);
+  const leftPct = (startMins / 1440) * 100;
+  const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
+
+  const isFail = item.result === "failed" || item.result === "cancelled";
+  const color = isFail ? "var(--state-error)" : "var(--state-ok)";
+  const bg = isFail ? "rgba(239,68,68,.07)" : "rgba(34,197,94,.07)";
+  const borderClr = isFail ? "rgba(239,68,68,.30)" : "rgba(34,197,94,.25)";
+  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "завершено";
+
+  return (
+    <div
+      className="absolute top-0.5 z-[3] flex h-[calc(100%-4px)] items-center overflow-hidden rounded border opacity-60 hover:opacity-90 transition-opacity"
+      style={{ left: `${leftPct}%`, width: `max(28px, ${widthPct}%)`, background: bg, borderColor: borderClr, color }}
+      title={`${item.file_name ?? "друк"} · ${resultLabel} · ${fmtDuration(durationMins)}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
+    >
+      {isFail && (
+        <div className="absolute inset-0 opacity-10" style={{
+          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 4px, currentColor 4px 5px)",
+        }} />
+      )}
+      <span className="relative z-10 truncate px-1 text-[8px] font-medium leading-none">
+        {item.file_name ?? "друк"} · {resultLabel}
+        {item.result_reason ? ` · ${item.result_reason}` : ""}
+      </span>
+    </div>
+  );
+}
+
 interface Props {
   lanes: CalendarLane[];
   weekStart: Date;
@@ -325,6 +385,7 @@ interface Props {
   onDateChange: (date: Date) => void;
   onOpenModal: (mode: ScheduleModalMode) => void;
   onRefresh: () => void;
+  onSendToPrint?: (entry: CalendarEntry) => void;
 }
 
 export function ScheduleCalendar({
@@ -340,6 +401,7 @@ export function ScheduleCalendar({
   onDateChange,
   onOpenModal,
   onRefresh,
+  onSendToPrint,
 }: Props) {
   const printerById = useMemo(() => {
     const map = new Map<number, Printer>();
@@ -348,6 +410,31 @@ export function ScheduleCalendar({
   }, [livePrinters]);
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
   const todayStr  = isoDateStr(new Date());
+
+  const [history, setHistory] = useState<PrintHistoryItem[]>([]);
+  useEffect(() => {
+    const startStr = isoDateStr(weekDates[0]);
+    const endStr = isoDateStr(weekDates[6]);
+    api<PrintHistoryItem[]>(`/api/history?start=${startStr}&end=${endStr}&limit=500`)
+      .then(setHistory)
+      .catch(() => {});
+  }, [weekDates]);
+
+  const historyByPrinterDay = useMemo(() => {
+    const map = new Map<string, PrintHistoryItem[]>();
+    const weekStrs = weekDates.map(isoDateStr);
+    for (const h of history) {
+      const d = new Date(h.started_at);
+      const dateStr = isoDateStr(d);
+      const di = weekStrs.indexOf(dateStr);
+      if (di === -1) continue;
+      const key = `${h.printer_id}-${di}`;
+      const arr = map.get(key) ?? [];
+      arr.push(h);
+      map.set(key, arr);
+    }
+    return map;
+  }, [history, weekDates]);
 
   const [zoom, setZoom] = useState<Zoom>(2);
   const step  = ZOOM_STEP[zoom];
@@ -465,7 +552,7 @@ export function ScheduleCalendar({
   function getDropMins(e: React.DragEvent<HTMLDivElement>): number {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = Math.max(0, Math.min(0.9999, (e.clientX - rect.left) / rect.width));
-    return Math.min(Math.round(relX * 1440 / 15) * 15, 1410);
+    return Math.min(Math.round(relX * 1440), 1439);
   }
 
   function minsToStartTime(mins: number): string {
@@ -653,6 +740,7 @@ export function ScheduleCalendar({
         printers={livePrinters ?? []}
         lanes={lanes}
         entries={allEntries}
+        history={history}
         filter={stateFilter}
         onFilterChange={setStateFilter}
       />
@@ -816,6 +904,7 @@ export function ScheduleCalendar({
                     const cellKey  = `${lane.printer_id}-${di}`;
                     const blocks   = blockMap.get(cellKey as `${number}-${number}`) ?? [];
                     const untimed  = untimedMap.get(cellKey as `${number}-${number}`) ?? [];
+                    const histItems = historyByPrinterDay.get(cellKey) ?? [];
                     const isDropTarget = dropCell === cellKey;
 
                     return (
@@ -832,22 +921,10 @@ export function ScheduleCalendar({
                         onDragOver={e => {
                           e.preventDefault();
                           const startMins = getDropMins(e);
-
-                          // Check compatibility from dragged data
-                          const incompat = false;
-                          try {
-                            const raw = e.dataTransfer.types.includes("text/plain") ? "" : "";
-                            // File type check based on lane kind
-                            const kind = lane.printer_kind;
-                            // We can't read dataTransfer during dragOver (security),
-                            // so we rely on the existing drop-time check
-                            void raw; void kind;
-                          } catch { /* ignore */ }
-
-                          setDropIncompat(incompat);
-                          e.dataTransfer.dropEffect = incompat ? "none" : "move";
+                          e.dataTransfer.dropEffect = "move";
                           setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
+                          setDropIncompat(false);
                         }}
                         onDragLeave={e => {
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -858,6 +935,11 @@ export function ScheduleCalendar({
                         onDrop={e => handleDrop(e, lane.printer_id, dateStr)}
                       >
                         <HourGrid step={step} />
+
+                        {/* History blocks (past prints) */}
+                        {histItems.map(h => (
+                          <HistoryBlock key={`h-${h.id}`} item={h} dayDate={dateStr} />
+                        ))}
 
                         {/* Running print bar (today only) */}
                         {isToday && printerById.get(lane.printer_id) && (
@@ -875,6 +957,7 @@ export function ScheduleCalendar({
                             key={`${block.entry.id}-${bi}`}
                             block={block}
                             onClick={() => handleEntryClick(block.entry)}
+                            onSend={onSendToPrint ? () => onSendToPrint(block.entry) : undefined}
                           />
                         ))}
 

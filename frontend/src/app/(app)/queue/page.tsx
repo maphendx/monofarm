@@ -785,6 +785,10 @@ function QueuePageInner() {
               }}
               onOpenModal={setScheduleModal}
               onRefresh={refreshQueueSurface}
+              onSendToPrint={entry => {
+                const task = tasks.find(t => t.id === entry.task_id) ?? entry.task;
+                if (task.gcode_file_id) setSendTask(task);
+              }}
             />
           </div>
           <div className="w-72 shrink-0 border-l border-[var(--border)] overflow-y-auto">

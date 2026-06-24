@@ -17,9 +17,11 @@ import { API_URL } from "@/lib/api";
 export function ScheduleJobBlock({
   block,
   onClick,
+  onSend,
 }: {
   block: CalendarBlock;
   onClick: () => void;
+  onSend?: () => void;
 }) {
   const { entry, startMins, endMins, isContinuation, totalDurationMins } = block;
   const isConflict = entry.conflict;
@@ -28,11 +30,10 @@ export function ScheduleJobBlock({
 
   const leftPct   = (startMins / 1440) * 100;
   const widthPct  = ((endMins - startMins) / 1440) * 100;
-  const minWidthPx = 36;
-  // Cross-midnight blocks overflow past the cell — need higher z-index
+  const minWidthPx = 48;
   const isOverflow = endMins > 1440;
 
-  const isCompact = widthPct < 8;
+  const isCompact = widthPct < 5;
 
   const startLabel = fmtTimeMins(startMins);
   const endLabel   = fmtTimeMins(endMins % 1440);
@@ -49,7 +50,7 @@ export function ScheduleJobBlock({
     : null;
 
   const base =
-    "absolute top-1 bottom-1 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
+    "absolute top-0.5 bottom-0.5 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
 
   const statusTone = status === "done"
     ? "done"
@@ -108,7 +109,7 @@ export function ScheduleJobBlock({
       onClick={onClick}
       title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}\n${statusLabel}`}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, zIndex: isOverflow ? 5 : undefined }}
-      className={`${base} ${colorCls} ${topBorder}`}
+      className={`group ${base} ${colorCls} ${topBorder}`}
     >
       <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
         {isCompact ? (
@@ -173,6 +174,17 @@ export function ScheduleJobBlock({
             </span>
           )}
         </div>}
+
+        {!isCompact && onSend && status === "queued" && entry.task.gcode_file_id && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onSend(); }}
+            className="ml-auto mr-1 mt-0.5 shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--accent)]/80"
+            title="Надіслати на принтер"
+          >
+            ▶
+          </button>
+        )}
       </div>
     </button>
   );

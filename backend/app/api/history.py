@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
@@ -40,6 +40,8 @@ class PrintHistoryOut(BaseModel):
 def list_history(
     printer_id: int | None = Query(None),
     result: str | None = Query(None),
+    start: date | None = Query(None),
+    end: date | None = Query(None),
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
@@ -53,4 +55,8 @@ def list_history(
         q = q.filter(PrintHistory.printer_id == printer_id)
     if result:
         q = q.filter(PrintHistory.result == result)
+    if start:
+        q = q.filter(PrintHistory.started_at >= datetime.combine(start, time.min, tzinfo=timezone.utc))
+    if end:
+        q = q.filter(PrintHistory.started_at < datetime.combine(end + timedelta(days=1), time.min, tzinfo=timezone.utc))
     return q.limit(limit).all()

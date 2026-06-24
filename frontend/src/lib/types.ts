@@ -392,3 +392,19 @@ export interface BambuHealthOut {
   printers: BambuHealthPrinters;
   jobs: BambuHealthJobs;
 }
+
+export interface PrintHistoryItem {
+  id: number;
+  printer_id: number;
+  printer_name: string;
+  printer_kind: string | null;
+  file_name: string | null;
+  started_at: string;
+  finished_at: string | null;
+  duration_minutes: number | null;
+  result: string;
+  result_reason: string | null;
+  filament_g: number | null;
+  material_cost: number | null;
+  source: string | null;
+}
