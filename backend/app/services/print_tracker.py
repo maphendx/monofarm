@@ -244,7 +244,7 @@ def _find_active_entry(db, printer_id: int):
 
 def _record_pause_start(db, printer_id: int, now: datetime) -> None:
     entry = _find_active_entry(db, printer_id)
-    if not entry:
+    if not entry or not hasattr(entry, "pauses"):
         return
     pauses = list(entry.pauses or [])
     if pauses and pauses[-1].get("resumed_at") is None:
@@ -256,7 +256,7 @@ def _record_pause_start(db, printer_id: int, now: datetime) -> None:
 
 def _record_pause_end(db, printer_id: int, now: datetime) -> None:
     entry = _find_active_entry(db, printer_id)
-    if not entry or not entry.pauses:
+    if not entry or not hasattr(entry, "pauses") or not entry.pauses:
         return
     pauses = list(entry.pauses)
     if not pauses or pauses[-1].get("resumed_at") is not None:
