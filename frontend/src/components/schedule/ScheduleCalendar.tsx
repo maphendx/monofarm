@@ -520,8 +520,7 @@ function SegmentPopoverContent({ seg, rect }: { seg: HistorySegment; rect: DOMRe
 }
 
 function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
-  const [hover, setHover] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   const leftPct = (seg.startMins / 1440) * 100;
   const widthPct = Math.max(1, ((seg.endMins - seg.startMins) / 1440) * 100);
   const bg = seg.hasFail ? "rgba(239,68,68,.08)" : "rgba(34,197,94,.10)";
@@ -533,8 +532,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
 
   return (
     <div
-      ref={ref}
-      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-default transition-opacity"
+      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-pointer transition-opacity"
       style={{
         left: `${leftPct}%`,
         width: `max(24px, ${widthPct}%)`,
@@ -543,11 +541,11 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
         background: bg,
         borderColor: borderClr,
         color: textClr,
-        opacity: hover ? 1 : 0.6,
-        zIndex: hover ? 40 : 3,
+        opacity: popoverRect ? 1 : 0.6,
+        zIndex: popoverRect ? 40 : 3,
       }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setPopoverRect(null)}
     >
       <div className="flex min-w-0 items-center gap-1 px-1">
         <span className="shrink-0 text-[8px] font-bold">{seg.hasFail ? "✕" : "✓"}</span>
@@ -557,7 +555,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
           {gramsLabel && ` ${gramsLabel}`}
         </span>
       </div>
-      {hover && ref.current && <SegmentPopoverContent seg={seg} rect={ref.current.getBoundingClientRect()} />}
+      {popoverRect && <SegmentPopoverContent seg={seg} rect={popoverRect} />}
     </div>
   );
 }
