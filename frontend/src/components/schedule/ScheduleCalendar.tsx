@@ -550,6 +550,7 @@ export function ScheduleCalendar({
     const weekStrs = weekDates.map(isoDateStr);
     for (const h of history) {
       if (h.result === "in_progress") continue;
+      if ((h.duration_minutes ?? 0) < 5 && h.result !== "failed") continue;
       const d = new Date(h.started_at);
       const dateStr = isoDateStr(d);
       const di = weekStrs.indexOf(dateStr);
