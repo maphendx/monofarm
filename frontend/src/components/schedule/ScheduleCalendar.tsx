@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CalendarEntry, CalendarLane, Printer, PrintHistoryItem } from "@/lib/types";
 import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
@@ -431,59 +432,74 @@ function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEnd
   return segments;
 }
 
-function SegmentPopover({ seg }: { seg: HistorySegment }) {
+function SegmentPopoverContent({ seg, rect }: { seg: HistorySegment; rect: DOMRect }) {
   const startLabel = fmtTimeMins(seg.startMins);
   const endLabel = fmtTimeMins(seg.endMins % 1440);
   const gramsLabel = seg.totalG > 0 ? (seg.totalG >= 1000 ? `${(seg.totalG / 1000).toFixed(2)} кг` : `${Math.round(seg.totalG)} г`) : null;
+  const totalCost = seg.items.reduce((s, h) => s + (h.material_cost ?? 0), 0);
 
-  return (
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 310);
+
+  return createPortal(
     <div
-      className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] shadow-lg"
-      style={{ maxHeight: 320, overflowY: "auto" }}
+      className="fixed z-[9999] w-[300px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-xl"
+      style={{ top, left, maxHeight: Math.min(380, window.innerHeight - top - 16), overflowY: "auto" }}
+      onMouseDown={e => e.stopPropagation()}
     >
-      <div className="border-b border-[var(--border)] px-3 py-2">
+      <div className="border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-[var(--text)]">{startLabel} → {endLabel}</span>
-          <span className="text-[10px] text-[var(--text-muted)]">{fmtDuration(seg.totalMins)}</span>
+          <span className="text-sm font-semibold text-[var(--text-hi)]">{startLabel} → {endLabel}</span>
+          <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{fmtDuration(seg.totalMins)}</span>
         </div>
-        <div className="mt-0.5 flex gap-3 text-[10px] text-[var(--text-faint)]">
-          <span>{seg.count} друків</span>
+        <div className="mt-1 flex gap-3 text-[11px] text-[var(--text-muted)]">
+          <span>{seg.count} {seg.count === 1 ? "друк" : "друків"}</span>
           {gramsLabel && <span>{gramsLabel}</span>}
+          {totalCost > 0 && <span>{totalCost.toFixed(0)} ₴</span>}
         </div>
       </div>
-      <div className="divide-y divide-[var(--border)]/60">
-        {seg.items.slice(0, 10).map(h => {
+      <div className="divide-y divide-[var(--border)]/50 py-0.5">
+        {seg.items.slice(0, 12).map(h => {
           const isFail = h.result === "failed" || h.result === "cancelled";
           const icon = h.result === "failed" ? "✕" : h.result === "cancelled" ? "⊘" : "✓";
-          const iconCls = isFail ? "text-[var(--state-error)]" : "text-[var(--state-ok)]";
+          const dotCls = isFail ? "bg-[var(--state-error)]" : "bg-[var(--state-ok)]";
           const totalPauseSec = (h.pauses ?? []).reduce((s, p) => s + (p.duration_sec ?? 0), 0);
           return (
-            <div key={h.id} className="px-3 py-1.5">
-              <div className="flex items-start gap-1.5">
-                <span className={`shrink-0 text-xs font-bold ${iconCls}`}>{icon}</span>
+            <div key={h.id} className="px-4 py-2">
+              <div className="flex items-start gap-2">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[11px] font-medium text-[var(--text)]">{h.file_name ?? "друк"}</p>
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0 text-[10px] text-[var(--text-muted)]">
-                    {h.duration_minutes != null && <span>{fmtDuration(h.duration_minutes)}</span>}
-                    {h.filament_g != null && <span>{Math.round(h.filament_g)}г</span>}
-                    {h.material_cost != null && <span>{h.material_cost.toFixed(0)}₴</span>}
+                  <p className="text-[12px] font-medium leading-tight text-[var(--text)]">{h.file_name ?? "друк"}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                    {h.duration_minutes != null && (
+                      <span className="text-[var(--text-muted)]">{fmtDuration(h.duration_minutes)}</span>
+                    )}
+                    {h.filament_g != null && (
+                      <span className="rounded bg-[var(--surface-hi)] px-1 py-px text-[10px] text-[var(--text-muted)]">{Math.round(h.filament_g)} г</span>
+                    )}
+                    {h.material_cost != null && (
+                      <span className="text-[var(--text-faint)]">{h.material_cost.toFixed(0)} ₴</span>
+                    )}
+                    <span className={`text-[10px] ${isFail ? "font-medium text-[var(--state-error)]" : "text-[var(--text-faint)]"}`}>
+                      {icon} {h.result === "failed" ? "збій" : h.result === "cancelled" ? "скасовано" : "завершено"}
+                    </span>
                   </div>
                   {h.result_reason && (
-                    <p className="mt-0.5 text-[10px] text-[var(--state-error)]">{h.result_reason}</p>
+                    <p className="mt-1 rounded bg-[var(--state-error)]/8 px-1.5 py-0.5 text-[10px] text-[var(--state-error)]">{h.result_reason}</p>
                   )}
                   {h.pauses && h.pauses.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <div className="mt-1.5 flex flex-wrap gap-1">
                       {h.pauses.map((p, pi) => {
                         const at = new Date(p.at);
                         const t = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
                         return (
-                          <span key={pi} className="inline-flex items-center gap-0.5 rounded bg-[var(--state-warn)]/10 px-1 py-px text-[9px] text-[var(--state-warn)]">
+                          <span key={pi} className="inline-flex items-center gap-0.5 rounded-full border border-[var(--state-warn)]/30 bg-[var(--state-warn)]/8 px-1.5 py-px text-[9px] font-medium text-[var(--state-warn)]">
                             ⏸ {t} {p.duration_sec ? fmtDuration(Math.ceil(p.duration_sec / 60)) : "…"}
                           </span>
                         );
                       })}
                       {totalPauseSec > 60 && (
-                        <span className="text-[9px] text-[var(--text-faint)]">Σ {fmtDuration(Math.ceil(totalPauseSec / 60))}</span>
+                        <span className="self-center text-[9px] text-[var(--text-faint)]">Σ {fmtDuration(Math.ceil(totalPauseSec / 60))}</span>
                       )}
                     </div>
                   )}
@@ -492,18 +508,20 @@ function SegmentPopover({ seg }: { seg: HistorySegment }) {
             </div>
           );
         })}
-        {seg.items.length > 10 && (
-          <div className="px-3 py-1.5 text-center text-[10px] text-[var(--text-faint)]">
-            …і ще {seg.items.length - 10}
+        {seg.items.length > 12 && (
+          <div className="px-4 py-2 text-center text-[10px] text-[var(--text-faint)]">
+            …і ще {seg.items.length - 12}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
   const [hover, setHover] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const leftPct = (seg.startMins / 1440) * 100;
   const widthPct = Math.max(1, ((seg.endMins - seg.startMins) / 1440) * 100);
   const bg = seg.hasFail ? "rgba(239,68,68,.08)" : "rgba(34,197,94,.10)";
@@ -515,6 +533,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
 
   return (
     <div
+      ref={ref}
       className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-default transition-opacity"
       style={{
         left: `${leftPct}%`,
@@ -538,7 +557,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
           {gramsLabel && ` ${gramsLabel}`}
         </span>
       </div>
-      {hover && <SegmentPopover seg={seg} />}
+      {hover && ref.current && <SegmentPopoverContent seg={seg} rect={ref.current.getBoundingClientRect()} />}
     </div>
   );
 }
