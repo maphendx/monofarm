@@ -107,7 +107,7 @@ export function ScheduleBacklog({
       {/* Panel header */}
       <div className="border-b border-[var(--border)] px-3 py-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs font-semibold text-[var(--text)]">Бекло</span>
+          <span className="text-xs font-semibold text-[var(--text)]">Беклог</span>
           <span className="text-[10px] text-[var(--text-faint)]">
             {tasks.length} незаплановано
           </span>
