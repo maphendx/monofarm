@@ -484,6 +484,17 @@ function SegmentPopoverContent({ seg, rect }: { seg: HistorySegment; rect: DOMRe
                       {icon} {h.result === "failed" ? "збій" : h.result === "cancelled" ? "скасовано" : "завершено"}
                     </span>
                   </div>
+                  {h.slots_used && h.slots_used.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {h.slots_used.map((s, si) => (
+                        <span key={si} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-px text-[9px] text-[var(--text-muted)]">
+                          {s.color_hex && <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" style={{ background: s.color_hex }} />}
+                          {s.type ?? s.color ?? `слот ${(s.slot ?? si) + 1}`}
+                          {s.grams != null && <span className="tabular-nums">{Math.round(s.grams)}г</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {h.result_reason && (
                     <p className="mt-1 rounded bg-[var(--state-error)]/8 px-1.5 py-0.5 text-[10px] text-[var(--state-error)]">{h.result_reason}</p>
                   )}

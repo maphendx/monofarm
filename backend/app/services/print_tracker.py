@@ -90,13 +90,21 @@ def _check_org(db, org: Organization) -> None:
         if state in PRINTING_STATES and prev_state not in PRINTING_STATES:
             # Close any stale in_progress entry first
             _close_stale(db, row.id, now, "cancelled")
+            filaments = None
+            if row.loaded_filaments:
+                try:
+                    filaments = [{"slot": i, "type": f.get("type"), "color": f.get("color"), "color_hex": f.get("color_hex")} for i, f in enumerate(row.loaded_filaments) if f]
+                except Exception:
+                    pass
             entry = PrintHistory(
                 organization_id=org.id,
                 printer_id=row.id,
                 printer_name=row.name,
+                printer_kind=row.kind.value if row.kind else None,
                 file_name=current.get("file"),
                 started_at=now,
                 result="in_progress",
+                slots_used=filaments,
             )
             db.add(entry)
             db.commit()

@@ -413,5 +413,6 @@ export interface PrintHistoryItem {
   filament_g: number | null;
   material_cost: number | null;
   pauses: PrintHistoryPause[] | null;
+  slots_used: { slot?: number; type?: string; color?: string; color_hex?: string; grams?: number }[] | null;
   source: string | null;
 }
