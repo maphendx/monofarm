@@ -554,21 +554,6 @@ function QueuePageInner() {
     [tasks, scheduledTaskIds],
   );
 
-  const loadCalendar = useCallback(async () => {
-    setCalendarLoading(true);
-    try {
-      const weekDates = getWeekDates(weekStart);
-      const start = isoDateStr(weekDates[0]);
-      const end   = isoDateStr(weekDates[6]);
-      const lanes = await getPlanCalendar(start, end);
-      setCalendarLanes(lanes);
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-    } finally { setCalendarLoading(false); }
-  }, [weekStart]);
-
-  // Silent refresh — updates calendar data without showing the loading skeleton.
-  // Used after drag-drop so the grid doesn't flicker.
   const loadCalendarSilent = useCallback(async () => {
     try {
       const weekDates = getWeekDates(weekStart);
@@ -584,19 +569,49 @@ function QueuePageInner() {
         api<PrintTask[]>("/api/queue"),
         api<Printer[]>("/api/printers"),
       ]);
-      setTasks(t); setPrinters(p);
+      setTasks(t);
+      setPrinters(p);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Initial: fetch queue+printers+calendar all at once
+  const initialRef = useRef(false);
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialRef.current) return;
+    initialRef.current = true;
+    const weekDates = getWeekDates(weekStart);
+    const startStr = isoDateStr(weekDates[0]);
+    const endStr = isoDateStr(weekDates[6]);
+    Promise.all([
+      api<PrintTask[]>("/api/queue"),
+      api<Printer[]>("/api/printers"),
+      view === "calendar" ? getPlanCalendar(startStr, endStr) : Promise.resolve(null),
+    ]).then(([t, p, lanes]) => {
+      setTasks(t);
+      setPrinters(p);
+      if (lanes) setCalendarLanes(lanes);
+    }).catch(err => {
+      if (err instanceof ApiError) setError(err.message);
+    }).finally(() => {
+      setLoading(false);
+      setCalendarLoading(false);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Week change or view switch: only re-fetch calendar
+  const prevWeekRef = useRef(weekStart);
   useEffect(() => {
-    if (view === "calendar") loadCalendar();
-  }, [view, loadCalendar]);
+    if (!initialRef.current) return;
+    const weekChanged = prevWeekRef.current !== weekStart;
+    prevWeekRef.current = weekStart;
+    if (view === "calendar" && (weekChanged || calendarLanes.length === 0)) {
+      loadCalendarSilent();
+    }
+  }, [view, weekStart, calendarLanes.length, loadCalendarSilent]);
 
   const refreshQueueSurface = useCallback(async () => {
     await Promise.all([load(), loadCalendarSilent()]);
