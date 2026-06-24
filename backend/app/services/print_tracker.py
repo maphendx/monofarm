@@ -237,7 +237,9 @@ def _find_active_entry(db, printer_id: int):
     )
     if not entries:
         return None
-    return max(entries, key=lambda e: e.started_at)
+    if len(entries) == 1:
+        return entries[0]
+    return max(entries, key=lambda e: getattr(e, "started_at", None) or datetime.min)
 
 
 def _record_pause_start(db, printer_id: int, now: datetime) -> None:
