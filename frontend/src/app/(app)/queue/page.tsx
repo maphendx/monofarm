@@ -694,7 +694,44 @@ function QueuePageInner() {
     finally { distributeRef.current = false; }
   }
 
-  if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
+  if (loading) {
+    if (view === "calendar") {
+      return (
+        <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
+            <div className="skeleton h-5 w-32 rounded" />
+            <div className="flex gap-2">
+              <div className="skeleton h-8 w-20 rounded" />
+              <div className="skeleton h-8 w-20 rounded" />
+            </div>
+          </div>
+          <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2">
+            <div className="flex gap-3">
+              <div className="skeleton h-4 w-24 rounded" />
+              <div className="skeleton h-4 w-20 rounded" />
+              <div className="skeleton h-4 w-32 rounded" />
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden p-0">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex border-b border-[var(--border)]" style={{ animationDelay: `${i * 60}ms` }}>
+                <div className="w-[152px] shrink-0 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-3">
+                  <div className="skeleton h-3 w-16 rounded" />
+                  <div className="skeleton mt-1.5 h-2 w-10 rounded" />
+                </div>
+                {Array.from({ length: 7 }).map((_, j) => (
+                  <div key={j} className="flex-1 border-r border-[var(--border)] bg-[var(--bg-elevated)]" style={{ minHeight: 80 }}>
+                    {j === 2 && i < 5 && <div className="skeleton mx-1 mt-4 h-4 rounded" style={{ width: `${30 + Math.random() * 40}%` }} />}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return <KanbanSkeleton columns={4} cardsPerCol={3} />;
+  }
 
   return (
     <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">

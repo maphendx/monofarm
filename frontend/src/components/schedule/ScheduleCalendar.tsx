@@ -136,24 +136,28 @@ function UntimedChips({
 function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
   const rowH = ZOOM_ROW_H[zoom];
   return (
-    <div className="animate-pulse space-y-px">
+    <div className="space-y-px">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex">
+        <div key={i} className="flex" style={{ animation: `skeletonFadeIn 0.3s ease-out ${i * 50}ms both` }}>
           <div
             style={{ width: ROW_LABEL_W, minWidth: ROW_LABEL_W }}
             className="shrink-0 border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
           >
-            <div className="h-3 w-24 rounded bg-[var(--surface-hi)]" />
+            <div className="skeleton h-3 w-16 rounded" />
+            <div className="skeleton mt-1.5 h-2 w-10 rounded" />
           </div>
           {Array.from({ length: 7 }).map((_, j) => (
             <div
               key={j}
               style={{ height: rowH }}
-              className="flex-1 border border-[var(--border)] bg-[var(--bg-elevated)]"
-            />
+              className="flex-1 border border-[var(--border)] bg-[var(--bg-elevated)] p-1"
+            >
+              {(i + j) % 3 === 0 && <div className="skeleton mt-4 h-4 rounded" style={{ width: `${30 + ((i * 7 + j) * 17) % 40}%` }} />}
+            </div>
           ))}
         </div>
       ))}
+      <style>{`@keyframes skeletonFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
