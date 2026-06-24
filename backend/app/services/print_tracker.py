@@ -104,8 +104,15 @@ def _check_org(db, org: Organization) -> None:
 
         error_msg = current.get("error_msg") or prev.get("error_msg")
 
-        # printing → paused without a visible error: keep the job open.
+        # printing → paused: record pause start
         if prev_state in PRINTING_STATES and state == "paused" and not error_msg:
+            _record_pause_start(db, row.id, now)
+            _prev[row.id] = current
+            continue
+
+        # paused → printing: record pause end
+        if prev_state == "paused" and state in PRINTING_STATES:
+            _record_pause_end(db, row.id, now)
             _prev[row.id] = current
             continue
 
@@ -214,6 +221,48 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
             _advance_queue(db, printer, now)
         _broadcast_completion(printer.organization_id, printer.id)
 
+    db.commit()
+
+
+def _get_active_entry(db, printer_id: int):
+    return (
+        db.query(PrintHistory)
+        .filter(
+            PrintHistory.printer_id == printer_id,
+            PrintHistory.result == "in_progress",
+            or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
+            PrintHistory.bambu_cloud_job_id.is_(None),
+        )
+        .order_by(PrintHistory.started_at.desc())
+        .first()
+    )
+
+
+def _record_pause_start(db, printer_id: int, now: datetime) -> None:
+    entry = _get_active_entry(db, printer_id)
+    if not entry:
+        return
+    pauses = list(entry.pauses or [])
+    if pauses and pauses[-1].get("resumed_at") is None:
+        return
+    pauses.append({"at": now.isoformat(), "resumed_at": None, "duration_sec": None})
+    entry.pauses = pauses
+    db.commit()
+
+
+def _record_pause_end(db, printer_id: int, now: datetime) -> None:
+    entry = _get_active_entry(db, printer_id)
+    if not entry or not entry.pauses:
+        return
+    pauses = list(entry.pauses)
+    if not pauses or pauses[-1].get("resumed_at") is not None:
+        return
+    last = dict(pauses[-1])
+    last["resumed_at"] = now.isoformat()
+    pause_start = datetime.fromisoformat(last["at"])
+    last["duration_sec"] = max(0, int((now - pause_start).total_seconds()))
+    pauses[-1] = last
+    entry.pauses = pauses
     db.commit()
 
 

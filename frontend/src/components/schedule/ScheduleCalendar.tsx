@@ -444,6 +444,17 @@ function buildSegmentTooltip(seg: HistorySegment): string {
     const cost = h.material_cost ? ` · ${h.material_cost.toFixed(0)}₴` : "";
     const reason = h.result_reason ? ` (${h.result_reason})` : "";
     lines.push(`${icon} ${h.file_name ?? "друк"} · ${dur}${grams}${cost}${reason}`);
+    if (h.pauses && h.pauses.length > 0) {
+      const totalPauseSec = h.pauses.reduce((s, p) => s + (p.duration_sec ?? 0), 0);
+      const pauseDetails = h.pauses.map(p => {
+        const at = new Date(p.at);
+        const start = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+        const durSec = p.duration_sec;
+        return `  ⏸ ${start} ${durSec ? fmtDuration(Math.ceil(durSec / 60)) : "→ зараз"}`;
+      });
+      lines.push(...pauseDetails);
+      if (totalPauseSec > 0) lines.push(`  Σ пауз: ${fmtDuration(Math.ceil(totalPauseSec / 60))}`);
+    }
   }
   if (seg.items.length > 8) lines.push(`…і ще ${seg.items.length - 8}`);
   return lines.join("\n");
@@ -696,6 +707,17 @@ export function ScheduleCalendar({
 
     const startMins = getDropMins(e);
     const startTime = minsToStartTime(startMins);
+
+    // Block drop on currently printing printer (today only)
+    const todayDate = isoDateStr(new Date());
+    if (planDate === todayDate && data.type === "backlog") {
+      const printer = printerById.get(printerId);
+      if (printer?.state === "printing") {
+        setDropError("Принтер зараз друкує — дочекайтесь завершення");
+        setTimeout(() => setDropError(null), 3500);
+        return;
+      }
+    }
 
     // --- Validation ---
     const fileName = data.type === "block" 

@@ -24,6 +24,7 @@ class PrintHistoryOut(BaseModel):
     result: str
     result_reason: str | None = None
     filament_g: float | None
+    pauses: list | None = None
     slots_used: list | None = None
     material_cost: float | None = None
     source: str | None = None
