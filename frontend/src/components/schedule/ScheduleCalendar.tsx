@@ -225,7 +225,7 @@ function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; now
   );
 }
 
-function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date; nowMins: number }) {
+function LiveStateBlock({ printer, now, nowMins, historyItems }: { printer: Printer; now: Date; nowMins: number; historyItems?: PrintHistoryItem[] }) {
   const state = printer.state ?? "unknown";
   if (state === "printing") return null;
 
@@ -233,9 +233,27 @@ function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date
   if (!relevant) return null;
 
   const since = minutesSince(printer.updated_at, now);
-  const startMins = since == null ? Math.max(0, nowMins - 30) : Math.max(0, nowMins - since);
+  let startMins: number;
+  if (since != null) {
+    startMins = Math.max(0, nowMins - since);
+  } else if (historyItems && historyItems.length > 0) {
+    const lastFinish = historyItems
+      .filter(h => h.finished_at && h.result !== "in_progress")
+      .map(h => new Date(h.finished_at!))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (lastFinish && isoDateStr(lastFinish) === isoDateStr(now)) {
+      startMins = lastFinish.getHours() * 60 + lastFinish.getMinutes();
+    } else {
+      startMins = 0;
+    }
+  } else {
+    startMins = 0;
+  }
+  if (startMins >= nowMins) return null;
+
   const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1.5, ((nowMins - startMins) / 1440) * 100);
+  const widthPct = Math.max(2, ((nowMins - startMins) / 1440) * 100);
+  const durationVal = nowMins - startMins;
 
   const isError = state === "error";
   const isPause = state === "paused";
@@ -245,29 +263,28 @@ function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date
     : isPause ? "var(--state-warn)"
     : isOffline ? "var(--state-offline)"
     : "var(--state-idle)";
-  const bg = isError ? "rgba(239,68,68,.12)"
-    : isPause ? "rgba(245,158,11,.12)"
-    : isOffline ? "rgba(113,113,122,.08)"
-    : "rgba(113,113,122,.06)";
+  const bg = isError ? "rgba(239,68,68,.10)"
+    : isPause ? "rgba(245,158,11,.10)"
+    : isOffline ? "rgba(113,113,122,.07)"
+    : "rgba(161,161,170,.05)";
   const icon = isError ? "✕" : isPause ? "⏸" : isOffline ? "◌" : "○";
   const label = isError ? "помилка" : isPause ? "пауза" : isOffline ? "офлайн" : "простій";
-  const durationLabel = since == null ? "" : fmtDuration(since);
 
   return (
     <div
-      className="absolute top-4 z-[6] flex items-center overflow-hidden rounded border px-1.5"
-      style={{ left: `${leftPct}%`, width: `max(48px, ${widthPct}%)`, height: "calc(100% - 36px)", minHeight: "20px", borderColor: color, background: bg, color }}
-      title={`${printer.name}: ${label}${durationLabel ? ` · ${durationLabel}` : ""}\n${printer.error_msg ?? ""}`}
+      className="absolute top-0.5 z-[2] flex items-center overflow-hidden rounded border px-1.5"
+      style={{ left: `${leftPct}%`, width: `max(40px, ${widthPct}%)`, height: "calc(100% - 4px)", borderColor: color, background: bg, color, borderStyle: (isOffline || (!isError && !isPause)) ? "dashed" : "solid" }}
+      title={`${printer.name}: ${label} · ${fmtDuration(durationVal)}${printer.error_msg ? `\n${printer.error_msg}` : ""}`}
     >
       {isError && (
         <div className="absolute inset-0 opacity-[0.06]" style={{
           backgroundImage: "repeating-linear-gradient(135deg, transparent 0 6px, currentColor 6px 7px)",
         }} />
       )}
-      <div className="relative z-10 flex min-w-0 items-center gap-1">
-        <span className="shrink-0 text-[9px] font-bold">{icon}</span>
-        <span className="truncate text-[8px] font-semibold">{label}</span>
-        {durationLabel && <span className="shrink-0 text-[8px] tabular-nums opacity-70">{durationLabel}</span>}
+      <div className="relative z-10 flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 text-[10px] font-bold">{icon}</span>
+        <span className="truncate text-[9px] font-semibold">{label}</span>
+        <span className="shrink-0 text-[8px] tabular-nums opacity-70">{fmtDuration(durationVal)}</span>
       </div>
     </div>
   );
@@ -1005,7 +1022,7 @@ export function ScheduleCalendar({
                         )}
 
                         {isToday && printerById.get(lane.printer_id) && (
-                          <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} />
+                          <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} historyItems={histItems} />
                         )}
 
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
