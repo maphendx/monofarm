@@ -379,122 +379,74 @@ function FarmStatusPanel({
   );
 }
 
-function HistoryBlock({
-  item,
-  dayDate,
-  daysLeft,
-  laneIndex = 0,
-  laneCount = 1,
-}: {
-  item: PrintHistoryItem;
-  dayDate: string;
-  daysLeft: number;
-  laneIndex?: number;
-  laneCount?: number;
-}) {
-  const start = new Date(item.started_at);
-  const localDate = isoDateStr(start);
-  const startMins = localDate === dayDate
-    ? start.getHours() * 60 + start.getMinutes()
-    : 0;
-  const durationMins = item.duration_minutes ?? (item.finished_at
-    ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
-    : 30);
-  const maxEndMins = (daysLeft + 1) * 1440;
-  const endMins = Math.min(startMins + Math.max(durationMins, 5), maxEndMins);
-  const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
-  const isOverflow = endMins > 1440;
+interface HistorySegment {
+  startMins: number;
+  endMins: number;
+  count: number;
+  totalMins: number;
+  hasFail: boolean;
+}
 
-  const isFail = item.result === "failed";
-  const isCancelled = item.result === "cancelled";
+function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEndMins: number): HistorySegment[] {
+  if (items.length === 0) return [];
+  const ranges = items.map(h => {
+    const start = new Date(h.started_at);
+    const localDate = isoDateStr(start);
+    const startMins = localDate === dayDate ? start.getHours() * 60 + start.getMinutes() : 0;
+    const dur = h.duration_minutes ?? (h.finished_at
+      ? Math.round((new Date(h.finished_at).getTime() - start.getTime()) / 60000)
+      : 30);
+    return { startMins, endMins: startMins + Math.max(dur, 5), dur, fail: h.result === "failed" || h.result === "cancelled" };
+  }).sort((a, b) => a.startMins - b.startMins);
 
-  const bg = isFail ? "rgba(239,68,68,.10)" : isCancelled ? "rgba(239,68,68,.07)" : "rgba(34,197,94,.10)";
-  const borderClr = isFail ? "rgba(239,68,68,.40)" : isCancelled ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.30)";
-  const textClr = isFail ? "var(--state-error)" : isCancelled ? "var(--state-error)" : "var(--state-ok)";
-  const icon = isFail ? "✕" : isCancelled ? "⊘" : "✓";
-  const startLabel = fmtTimeMins(startMins);
-  const endLabel = fmtTimeMins((startMins + durationMins) % 1440);
-  const stacked = laneCount > 1;
-  const stackTopPct = stacked ? (38 / laneCount) * laneIndex : 0;
-  const stackHeightPct = stacked ? 38 / laneCount : 38;
+  const segments: HistorySegment[] = [];
+  let cur = { startMins: ranges[0].startMins, endMins: ranges[0].endMins, count: 1, totalMins: ranges[0].dur, hasFail: ranges[0].fail };
+  for (let i = 1; i < ranges.length; i++) {
+    const r = ranges[i];
+    if (r.startMins <= cur.endMins + 15) {
+      cur.endMins = Math.max(cur.endMins, r.endMins);
+      cur.count++;
+      cur.totalMins += r.dur;
+      if (r.fail) cur.hasFail = true;
+    } else {
+      segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+      cur = { startMins: r.startMins, endMins: r.endMins, count: 1, totalMins: r.dur, hasFail: r.fail };
+    }
+  }
+  segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+  return segments;
+}
+
+function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
+  const leftPct = (seg.startMins / 1440) * 100;
+  const widthPct = Math.max(1, ((seg.endMins - seg.startMins) / 1440) * 100);
+  const bg = seg.hasFail ? "rgba(239,68,68,.08)" : "rgba(34,197,94,.10)";
+  const borderClr = seg.hasFail ? "rgba(239,68,68,.30)" : "rgba(34,197,94,.25)";
+  const textClr = seg.hasFail ? "var(--state-error)" : "var(--state-ok)";
+  const startLabel = fmtTimeMins(seg.startMins);
+  const endLabel = fmtTimeMins(seg.endMins % 1440);
 
   return (
     <div
-      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-default opacity-65 hover:opacity-100 transition-opacity"
+      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-default opacity-60 hover:opacity-100 transition-opacity"
       style={{
         left: `${leftPct}%`,
         width: `max(24px, ${widthPct}%)`,
-        top: stacked ? `calc(1px + ${stackTopPct}%)` : "1px",
-        height: stacked ? `calc(${stackHeightPct}% - 1px)` : "38%",
+        top: "1px",
+        height: "38%",
         background: bg,
         borderColor: borderClr,
         color: textClr,
-        zIndex: isOverflow ? 4 : 3,
       }}
-      title={`${icon} ${item.file_name ?? "друк"}\n${startLabel} → ${endLabel} · ${fmtDuration(durationMins)}${item.result_reason ? `\n${item.result_reason}` : ""}`}
+      title={`${seg.count} друків · ${startLabel}→${endLabel} · ${fmtDuration(seg.totalMins)}`}
     >
-      <div className="flex min-w-0 items-center gap-0.5 px-1">
-        <span className="shrink-0 text-[8px] font-bold">{icon}</span>
-        {laneCount <= 4 && (
-          <>
-            <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
-            {durationMins > 0 && <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>}
-          </>
-        )}
+      <div className="flex min-w-0 items-center gap-1 px-1">
+        <span className="shrink-0 text-[8px] font-bold">{seg.hasFail ? "✕" : "✓"}</span>
+        <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
+        <span className="shrink-0 text-[7px] tabular-nums opacity-70">{seg.count > 1 ? `×${seg.count}` : fmtDuration(seg.totalMins)}</span>
       </div>
     </div>
   );
-}
-
-interface PositionedHistoryItem {
-  item: PrintHistoryItem;
-  laneIndex: number;
-  laneCount: number;
-}
-
-function getHistoryRange(item: PrintHistoryItem, dayDate: string): { startMins: number; endMins: number } {
-  const start = new Date(item.started_at);
-  const localDate = isoDateStr(start);
-  const startMins = localDate === dayDate
-    ? start.getHours() * 60 + start.getMinutes()
-    : 0;
-  const durationMins = item.duration_minutes ?? (item.finished_at
-    ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
-    : 30);
-  return {
-    startMins,
-    endMins: startMins + Math.max(durationMins, 5),
-  };
-}
-
-function layoutHistoryItems(items: PrintHistoryItem[], dayDate: string): PositionedHistoryItem[] {
-  if (items.length <= 1) {
-    return items.map(item => ({ item, laneIndex: 0, laneCount: 1 }));
-  }
-
-  const sorted = [...items].sort((a, b) => {
-    const ar = getHistoryRange(a, dayDate);
-    const br = getHistoryRange(b, dayDate);
-    return ar.startMins - br.startMins || ar.endMins - br.endMins || a.id - b.id;
-  });
-  const laneEnds: number[] = [];
-  const positioned: Array<Omit<PositionedHistoryItem, "laneCount">> = [];
-
-  for (const item of sorted) {
-    const range = getHistoryRange(item, dayDate);
-    let laneIndex = laneEnds.findIndex(endMins => endMins <= range.startMins);
-    if (laneIndex === -1) {
-      laneIndex = laneEnds.length;
-      laneEnds.push(range.endMins);
-    } else {
-      laneEnds[laneIndex] = range.endMins;
-    }
-    positioned.push({ item, laneIndex });
-  }
-
-  const laneCount = Math.max(1, laneEnds.length);
-  return positioned.map(item => ({ ...item, laneCount }));
 }
 
 interface Props {
@@ -1032,7 +984,7 @@ export function ScheduleCalendar({
                     const blocks   = blockMap.get(cellKey as `${number}-${number}`) ?? [];
                     const untimed  = untimedMap.get(cellKey as `${number}-${number}`) ?? [];
                     const histItems = historyByPrinterDay.get(cellKey) ?? [];
-                    const historyLayout = layoutHistoryItems(histItems, dateStr);
+                    const histSegments = mergeHistorySegments(histItems, dateStr, (6 - di + 1) * 1440);
                     const isDropTarget = dropCell === cellKey;
 
                     return (
@@ -1065,15 +1017,8 @@ export function ScheduleCalendar({
                         <HourGrid step={step} />
 
                         {/* History blocks (past prints) */}
-                        {historyLayout.map(({ item, laneIndex, laneCount }) => (
-                          <HistoryBlock
-                            key={`h-${item.id}`}
-                            item={item}
-                            dayDate={dateStr}
-                            daysLeft={6 - di}
-                            laneIndex={laneIndex}
-                            laneCount={laneCount}
-                          />
+                        {histSegments.map((seg, si) => (
+                          <HistorySegmentBlock key={`hs-${si}`} seg={seg} />
                         ))}
 
                         {/* Running print bar (today only) */}
