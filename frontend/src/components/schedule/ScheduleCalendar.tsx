@@ -384,37 +384,69 @@ interface HistorySegment {
   endMins: number;
   count: number;
   totalMins: number;
+  totalG: number;
   hasFail: boolean;
+  items: PrintHistoryItem[];
 }
 
 function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEndMins: number): HistorySegment[] {
   if (items.length === 0) return [];
-  const ranges = items.map(h => {
+  const enriched = items.map(h => {
     const start = new Date(h.started_at);
     const localDate = isoDateStr(start);
     const startMins = localDate === dayDate ? start.getHours() * 60 + start.getMinutes() : 0;
     const dur = h.duration_minutes ?? (h.finished_at
       ? Math.round((new Date(h.finished_at).getTime() - start.getTime()) / 60000)
       : 30);
-    return { startMins, endMins: startMins + Math.max(dur, 5), dur, fail: h.result === "failed" || h.result === "cancelled" };
+    return { h, startMins, endMins: startMins + Math.max(dur, 5), dur };
   }).sort((a, b) => a.startMins - b.startMins);
 
   const segments: HistorySegment[] = [];
-  let cur = { startMins: ranges[0].startMins, endMins: ranges[0].endMins, count: 1, totalMins: ranges[0].dur, hasFail: ranges[0].fail };
-  for (let i = 1; i < ranges.length; i++) {
-    const r = ranges[i];
-    if (r.startMins <= cur.endMins + 15) {
-      cur.endMins = Math.max(cur.endMins, r.endMins);
+  let cur = {
+    startMins: enriched[0].startMins, endMins: enriched[0].endMins,
+    count: 1, totalMins: enriched[0].dur, totalG: enriched[0].h.filament_g ?? 0,
+    hasFail: enriched[0].h.result === "failed" || enriched[0].h.result === "cancelled",
+    items: [enriched[0].h],
+  };
+  for (let i = 1; i < enriched.length; i++) {
+    const e = enriched[i];
+    const isFail = e.h.result === "failed" || e.h.result === "cancelled";
+    if (e.startMins <= cur.endMins + 15) {
+      cur.endMins = Math.max(cur.endMins, e.endMins);
       cur.count++;
-      cur.totalMins += r.dur;
-      if (r.fail) cur.hasFail = true;
+      cur.totalMins += e.dur;
+      cur.totalG += e.h.filament_g ?? 0;
+      if (isFail) cur.hasFail = true;
+      cur.items.push(e.h);
     } else {
       segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
-      cur = { startMins: r.startMins, endMins: r.endMins, count: 1, totalMins: r.dur, hasFail: r.fail };
+      cur = {
+        startMins: e.startMins, endMins: e.endMins,
+        count: 1, totalMins: e.dur, totalG: e.h.filament_g ?? 0,
+        hasFail: isFail, items: [e.h],
+      };
     }
   }
   segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
   return segments;
+}
+
+function buildSegmentTooltip(seg: HistorySegment): string {
+  const startLabel = fmtTimeMins(seg.startMins);
+  const endLabel = fmtTimeMins(seg.endMins % 1440);
+  const lines: string[] = [`${startLabel} → ${endLabel} · ${fmtDuration(seg.totalMins)} · ${seg.count} друк.`];
+  if (seg.totalG > 0) lines[0] += ` · ${seg.totalG >= 1000 ? `${(seg.totalG / 1000).toFixed(2)} кг` : `${Math.round(seg.totalG)} г`}`;
+  lines.push("");
+  for (const h of seg.items.slice(0, 8)) {
+    const icon = h.result === "failed" ? "✕" : h.result === "cancelled" ? "⊘" : "✓";
+    const dur = h.duration_minutes ? fmtDuration(h.duration_minutes) : "";
+    const grams = h.filament_g ? ` · ${Math.round(h.filament_g)}г` : "";
+    const cost = h.material_cost ? ` · ${h.material_cost.toFixed(0)}₴` : "";
+    const reason = h.result_reason ? ` (${h.result_reason})` : "";
+    lines.push(`${icon} ${h.file_name ?? "друк"} · ${dur}${grams}${cost}${reason}`);
+  }
+  if (seg.items.length > 8) lines.push(`…і ще ${seg.items.length - 8}`);
+  return lines.join("\n");
 }
 
 function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
@@ -425,6 +457,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
   const textClr = seg.hasFail ? "var(--state-error)" : "var(--state-ok)";
   const startLabel = fmtTimeMins(seg.startMins);
   const endLabel = fmtTimeMins(seg.endMins % 1440);
+  const gramsLabel = seg.totalG > 0 ? (seg.totalG >= 1000 ? `${(seg.totalG / 1000).toFixed(1)}кг` : `${Math.round(seg.totalG)}г`) : "";
 
   return (
     <div
@@ -438,12 +471,15 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
         borderColor: borderClr,
         color: textClr,
       }}
-      title={`${seg.count} друків · ${startLabel}→${endLabel} · ${fmtDuration(seg.totalMins)}`}
+      title={buildSegmentTooltip(seg)}
     >
       <div className="flex min-w-0 items-center gap-1 px-1">
         <span className="shrink-0 text-[8px] font-bold">{seg.hasFail ? "✕" : "✓"}</span>
         <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
-        <span className="shrink-0 text-[7px] tabular-nums opacity-70">{seg.count > 1 ? `×${seg.count}` : fmtDuration(seg.totalMins)}</span>
+        <span className="shrink-0 text-[7px] tabular-nums opacity-70">
+          {seg.count > 1 ? `×${seg.count}` : fmtDuration(seg.totalMins)}
+          {gramsLabel && ` ${gramsLabel}`}
+        </span>
       </div>
     </div>
   );
