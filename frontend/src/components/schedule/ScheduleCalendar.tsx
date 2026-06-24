@@ -202,17 +202,25 @@ function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; now
   const daysSuffix = overflowDays > 0 ? ` +${overflowDays}д` : "";
   return (
     <div
-      className="absolute top-3.5 flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)", zIndex: isOverflow ? 8 : 5 }}
-      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel}${daysSuffix} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
+      className="absolute top-4 flex items-center overflow-hidden rounded border border-[var(--state-print)]/30"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 36px)", minHeight: "20px", background: "rgba(59,130,246,.05)", zIndex: isOverflow ? 8 : 5 }}
+      title={`${printer.job ?? "друк"}\n${startLabel} → ${endLabel}${daysSuffix}\n${Math.round(progressPct)}% · залишилось ${fmtDuration(remainMins)}`}
     >
       <div
-        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/12"
+        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/10"
         style={{ width: `${progressPct}%` }}
       />
-      <span className="relative z-10 truncate px-1.5 text-[9px] font-semibold text-[var(--state-print)]">
-        {printer.job ?? "друк"} · {Math.round(progressPct)}% · {fmtDuration(remainMins)}{daysSuffix}
-      </span>
+      <div className="relative z-10 flex min-w-0 items-center gap-1 px-1.5">
+        <span className="shrink-0 text-[9px] font-bold tabular-nums text-[var(--state-print)]">
+          {Math.round(progressPct)}%
+        </span>
+        <span className="truncate text-[8px] text-[var(--state-print)]/70">
+          {printer.job ?? "друк"}
+        </span>
+        <span className="ml-auto shrink-0 text-[8px] tabular-nums text-[var(--state-print)]/60">
+          {fmtDuration(remainMins)}{daysSuffix}
+        </span>
+      </div>
     </div>
   );
 }
@@ -359,26 +367,29 @@ function HistoryBlock({
   const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
 
   const isFail = item.result === "failed" || item.result === "cancelled";
-  const bg = isFail ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)";
-  const borderClr = isFail ? "rgba(239,68,68,.40)" : "rgba(34,197,94,.35)";
+  const bg = isFail ? "rgba(239,68,68,.10)" : "rgba(34,197,94,.10)";
+  const borderClr = isFail ? "rgba(239,68,68,.35)" : "rgba(34,197,94,.30)";
   const topClr = isFail ? "var(--state-error)" : "var(--state-ok)";
-  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "✓";
+  const icon = item.result === "failed" ? "✕" : item.result === "cancelled" ? "⊘" : "✓";
+  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "завершено";
+  const startLabel = fmtTimeMins(startMins);
+  const endLabel = fmtTimeMins((startMins + durationMins) % 1440);
 
   return (
     <div
-      className="absolute top-0 z-[3] flex h-3.5 items-center overflow-hidden rounded-b border-b border-x opacity-70 hover:opacity-100 transition-opacity"
+      className="absolute top-0 z-[3] flex h-4 items-center overflow-hidden rounded-b border-b border-x opacity-60 hover:opacity-100 transition-opacity cursor-default"
       style={{
         left: `${leftPct}%`,
-        width: `max(20px, ${widthPct}%)`,
+        width: `max(24px, ${widthPct}%)`,
         background: bg,
         borderColor: borderClr,
         borderTop: `2px solid ${topClr}`,
         color: topClr,
       }}
-      title={`${item.file_name ?? "друк"} · ${resultLabel} · ${fmtDuration(durationMins)}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
+      title={`${icon} ${item.file_name ?? "друк"}\n${startLabel}–${endLabel} · ${fmtDuration(durationMins)}\n${resultLabel}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
     >
-      <span className="truncate px-0.5 text-[7px] font-semibold leading-none">
-        {resultLabel} {item.file_name ?? "друк"}
+      <span className="truncate px-1 text-[8px] font-bold leading-none tracking-tight">
+        {icon} {fmtDuration(durationMins)} {item.file_name ?? "друк"}
       </span>
     </div>
   );

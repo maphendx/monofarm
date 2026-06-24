@@ -60,3 +60,27 @@ def list_history(
     if end:
         q = q.filter(PrintHistory.started_at < datetime.combine(end + timedelta(days=1), time.min, tzinfo=timezone.utc))
     return q.limit(limit).all()
+
+
+@router.post("/fix-cancelled", status_code=200)
+def fix_false_cancelled(
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    """One-time fix: reclassify cancelled prints that were misclassified by the idle-state bug."""
+    rows = (
+        db.query(PrintHistory)
+        .filter(
+            PrintHistory.organization_id == org.id,
+            PrintHistory.result == "cancelled",
+            PrintHistory.result_reason.is_(None),
+            PrintHistory.finished_at.is_not(None),
+        )
+        .all()
+    )
+    count = 0
+    for row in rows:
+        row.result = "completed"
+        count += 1
+    db.commit()
+    return {"fixed": count}
