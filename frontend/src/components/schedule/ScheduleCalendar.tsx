@@ -179,7 +179,7 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: number }) {
+function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; nowMins: number; daysLeft: number }) {
   if (printer.state !== "printing" || !printer.eta_minutes) return null;
   const remainMins = printer.eta_minutes;
   if (remainMins <= 0) return null;
@@ -187,24 +187,27 @@ function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: numb
   const totalEstimate = progressPct > 1 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
   const elapsedMins = totalEstimate - remainMins;
   const startMins = Math.max(0, nowMins - elapsedMins);
-  const endMins = nowMins + remainMins;
+  const maxEndMins = (daysLeft + 1) * 1440;
+  const endMins = Math.min(nowMins + remainMins, maxEndMins);
   const leftPct = (startMins / 1440) * 100;
   const widthPct = Math.max(1.5, ((endMins - startMins) / 1440) * 100);
   const isOverflow = endMins > 1440;
   const startLabel = fmtTimeMins(startMins);
-  const endLabel = fmtTimeMins(endMins % 1440);
+  const endLabel = fmtTimeMins((nowMins + remainMins) % 1440);
+  const overflowDays = Math.floor((nowMins + remainMins) / 1440);
+  const daysSuffix = overflowDays > 0 ? ` +${overflowDays}д` : "";
   return (
     <div
       className="absolute top-3.5 flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
       style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)", zIndex: isOverflow ? 8 : 5 }}
-      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel}${isOverflow ? " +1д" : ""} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
+      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel}${daysSuffix} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
     >
       <div
         className="absolute inset-y-0 left-0 bg-[var(--state-print)]/12"
         style={{ width: `${progressPct}%` }}
       />
       <span className="relative z-10 truncate px-1.5 text-[9px] font-semibold text-[var(--state-print)]">
-        {printer.job ?? "друк"} · {Math.round(progressPct)}% · {fmtDuration(remainMins)}
+        {printer.job ?? "друк"} · {Math.round(progressPct)}% · {fmtDuration(remainMins)}{daysSuffix}
       </span>
     </div>
   );
@@ -332,9 +335,11 @@ function FarmStatusPanel({
 function HistoryBlock({
   item,
   dayDate,
+  daysLeft,
 }: {
   item: PrintHistoryItem;
   dayDate: string;
+  daysLeft: number;
 }) {
   const start = new Date(item.started_at);
   const localDate = isoDateStr(start);
@@ -344,7 +349,8 @@ function HistoryBlock({
   const durationMins = item.duration_minutes ?? (item.finished_at
     ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
     : 30);
-  const endMins = startMins + Math.max(durationMins, 5);
+  const maxEndMins = (daysLeft + 1) * 1440;
+  const endMins = Math.min(startMins + Math.max(durationMins, 5), maxEndMins);
   const leftPct = (startMins / 1440) * 100;
   const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
 
@@ -941,12 +947,12 @@ export function ScheduleCalendar({
 
                         {/* History blocks (past prints) */}
                         {histItems.map(h => (
-                          <HistoryBlock key={`h-${h.id}`} item={h} dayDate={dateStr} />
+                          <HistoryBlock key={`h-${h.id}`} item={h} dayDate={dateStr} daysLeft={6 - di} />
                         ))}
 
                         {/* Running print bar (today only) */}
                         {isToday && printerById.get(lane.printer_id) && (
-                          <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} />
+                          <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} daysLeft={6 - di} />
                         )}
 
                         {isToday && printerById.get(lane.printer_id) && (
