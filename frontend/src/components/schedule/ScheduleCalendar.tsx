@@ -189,14 +189,15 @@ function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: numb
   const startMins = Math.max(0, nowMins - elapsedMins);
   const endMins = nowMins + remainMins;
   const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1.5, Math.min(((endMins - startMins) / 1440) * 100, 100 - leftPct));
+  const widthPct = Math.max(1.5, ((endMins - startMins) / 1440) * 100);
+  const isOverflow = endMins > 1440;
   const startLabel = fmtTimeMins(startMins);
   const endLabel = fmtTimeMins(endMins % 1440);
   return (
     <div
-      className="absolute top-3.5 z-[5] flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)" }}
-      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
+      className="absolute top-3.5 flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)", zIndex: isOverflow ? 8 : 5 }}
+      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel}${isOverflow ? " +1д" : ""} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
     >
       <div
         className="absolute inset-y-0 left-0 bg-[var(--state-print)]/12"
