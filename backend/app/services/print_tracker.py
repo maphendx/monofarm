@@ -224,8 +224,8 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
     db.commit()
 
 
-def _get_active_entry(db, printer_id: int):
-    return (
+def _find_active_entry(db, printer_id: int):
+    entries = (
         db.query(PrintHistory)
         .filter(
             PrintHistory.printer_id == printer_id,
@@ -233,13 +233,15 @@ def _get_active_entry(db, printer_id: int):
             or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
             PrintHistory.bambu_cloud_job_id.is_(None),
         )
-        .order_by(PrintHistory.started_at.desc())
-        .first()
+        .all()
     )
+    if not entries:
+        return None
+    return max(entries, key=lambda e: e.started_at)
 
 
 def _record_pause_start(db, printer_id: int, now: datetime) -> None:
-    entry = _get_active_entry(db, printer_id)
+    entry = _find_active_entry(db, printer_id)
     if not entry:
         return
     pauses = list(entry.pauses or [])
@@ -251,7 +253,7 @@ def _record_pause_start(db, printer_id: int, now: datetime) -> None:
 
 
 def _record_pause_end(db, printer_id: int, now: datetime) -> None:
-    entry = _get_active_entry(db, printer_id)
+    entry = _find_active_entry(db, printer_id)
     if not entry or not entry.pauses:
         return
     pauses = list(entry.pauses)
@@ -267,17 +269,7 @@ def _record_pause_end(db, printer_id: int, now: datetime) -> None:
 
 
 def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
-    entry = (
-        db.query(PrintHistory)
-        .filter(
-            PrintHistory.printer_id == printer_id,
-            PrintHistory.result == "in_progress",
-            or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
-            PrintHistory.bambu_cloud_job_id.is_(None),
-        )
-        .order_by(PrintHistory.started_at.desc())
-        .first()
-    )
+    entry = _find_active_entry(db, printer_id)
     if entry:
         entry.finished_at = now
         entry.result = result
