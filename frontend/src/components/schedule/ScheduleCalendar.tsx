@@ -229,28 +229,46 @@ function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date
   const state = printer.state ?? "unknown";
   if (state === "printing") return null;
 
-  const relevant = state === "error" || state === "paused" || state === "offline" || state === "not_connected" || state === "idle";
+  const relevant = state === "error" || state === "paused" || state === "offline" || state === "not_connected" || state === "idle" || state === "operational";
   if (!relevant) return null;
 
   const since = minutesSince(printer.updated_at, now);
   const startMins = since == null ? Math.max(0, nowMins - 30) : Math.max(0, nowMins - since);
   const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1.2, ((nowMins - startMins) / 1440) * 100);
-  const isBad = state === "error" || state === "offline" || state === "not_connected";
-  const color = isBad ? "var(--state-error)" : state === "paused" ? "var(--state-warn)" : "var(--state-idle)";
-  const bg = isBad ? "rgba(239,68,68,.10)" : state === "paused" ? "rgba(245,158,11,.10)" : "rgba(113,113,122,.09)";
-  const label = state === "idle" ? "простій" : stateLabel(state);
-  const duration = since == null ? "" : ` · ${fmtDuration(since)}`;
+  const widthPct = Math.max(1.5, ((nowMins - startMins) / 1440) * 100);
+
+  const isError = state === "error";
+  const isPause = state === "paused";
+  const isOffline = state === "offline" || state === "not_connected";
+
+  const color = isError ? "var(--state-error)"
+    : isPause ? "var(--state-warn)"
+    : isOffline ? "var(--state-offline)"
+    : "var(--state-idle)";
+  const bg = isError ? "rgba(239,68,68,.12)"
+    : isPause ? "rgba(245,158,11,.12)"
+    : isOffline ? "rgba(113,113,122,.08)"
+    : "rgba(113,113,122,.06)";
+  const icon = isError ? "✕" : isPause ? "⏸" : isOffline ? "◌" : "○";
+  const label = isError ? "помилка" : isPause ? "пауза" : isOffline ? "офлайн" : "простій";
+  const durationLabel = since == null ? "" : fmtDuration(since);
 
   return (
     <div
-      className="absolute bottom-1 z-[6] flex h-5 items-center overflow-hidden rounded-sm border px-1"
-      style={{ left: `${leftPct}%`, width: `max(42px, ${widthPct}%)`, borderColor: color, background: bg, color }}
-      title={`${printer.name}: ${label}${duration}`}
+      className="absolute top-4 z-[6] flex items-center overflow-hidden rounded border px-1.5"
+      style={{ left: `${leftPct}%`, width: `max(48px, ${widthPct}%)`, height: "calc(100% - 36px)", minHeight: "20px", borderColor: color, background: bg, color }}
+      title={`${printer.name}: ${label}${durationLabel ? ` · ${durationLabel}` : ""}\n${printer.error_msg ?? ""}`}
     >
-      <span className="truncate text-[8px] font-semibold leading-none">
-        {label}{duration}
-      </span>
+      {isError && (
+        <div className="absolute inset-0 opacity-[0.06]" style={{
+          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 6px, currentColor 6px 7px)",
+        }} />
+      )}
+      <div className="relative z-10 flex min-w-0 items-center gap-1">
+        <span className="shrink-0 text-[9px] font-bold">{icon}</span>
+        <span className="truncate text-[8px] font-semibold">{label}</span>
+        {durationLabel && <span className="shrink-0 text-[8px] tabular-nums opacity-70">{durationLabel}</span>}
+      </div>
     </div>
   );
 }
@@ -365,32 +383,48 @@ function HistoryBlock({
   const endMins = Math.min(startMins + Math.max(durationMins, 5), maxEndMins);
   const leftPct = (startMins / 1440) * 100;
   const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
+  const isOverflow = endMins > 1440;
 
-  const isFail = item.result === "failed" || item.result === "cancelled";
-  const bg = isFail ? "rgba(239,68,68,.10)" : "rgba(34,197,94,.10)";
-  const borderClr = isFail ? "rgba(239,68,68,.35)" : "rgba(34,197,94,.30)";
-  const topClr = isFail ? "var(--state-error)" : "var(--state-ok)";
-  const icon = item.result === "failed" ? "✕" : item.result === "cancelled" ? "⊘" : "✓";
-  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "завершено";
+  const isFail = item.result === "failed";
+  const isCancelled = item.result === "cancelled";
+  const isOk = !isFail && !isCancelled;
+
+  const bg = isFail ? "rgba(239,68,68,.08)" : isCancelled ? "rgba(239,68,68,.06)" : "rgba(34,197,94,.08)";
+  const borderClr = isFail ? "rgba(239,68,68,.40)" : isCancelled ? "rgba(239,68,68,.25)" : "rgba(34,197,94,.30)";
+  const textClr = isFail ? "var(--state-error)" : isCancelled ? "var(--state-error)" : "var(--state-ok)";
+  const icon = isFail ? "✕" : isCancelled ? "⊘" : "✓";
   const startLabel = fmtTimeMins(startMins);
   const endLabel = fmtTimeMins((startMins + durationMins) % 1440);
 
   return (
     <div
-      className="absolute top-0 z-[3] flex h-4 items-center overflow-hidden rounded-b border-b border-x opacity-60 hover:opacity-100 transition-opacity cursor-default"
+      className="absolute top-0.5 z-[3] flex items-center overflow-hidden rounded border cursor-default hover:opacity-100 transition-opacity"
       style={{
         left: `${leftPct}%`,
-        width: `max(24px, ${widthPct}%)`,
+        width: `max(28px, ${widthPct}%)`,
+        height: "calc(100% - 4px)",
         background: bg,
         borderColor: borderClr,
-        borderTop: `2px solid ${topClr}`,
-        color: topClr,
+        color: textClr,
+        opacity: isOk ? 0.55 : 0.7,
+        zIndex: isOverflow ? 4 : 3,
       }}
-      title={`${icon} ${item.file_name ?? "друк"}\n${startLabel}–${endLabel} · ${fmtDuration(durationMins)}\n${resultLabel}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
+      title={`${icon} ${item.file_name ?? "друк"}\n${startLabel} → ${endLabel} · ${fmtDuration(durationMins)}${item.result_reason ? `\n${item.result_reason}` : ""}`}
     >
-      <span className="truncate px-1 text-[8px] font-bold leading-none tracking-tight">
-        {icon} {fmtDuration(durationMins)} {item.file_name ?? "друк"}
-      </span>
+      {isFail && (
+        <div className="absolute inset-0 opacity-[0.05]" style={{
+          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 5px, currentColor 5px 6px)",
+        }} />
+      )}
+      <div className="relative z-10 flex min-w-0 items-center gap-1 px-1">
+        <span className="shrink-0 text-[9px] font-bold">{icon}</span>
+        <span className="truncate text-[8px] font-semibold leading-tight">
+          {startLabel}–{endLabel}
+        </span>
+        {durationMins > 0 && (
+          <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>
+        )}
+      </div>
     </div>
   );
 }
