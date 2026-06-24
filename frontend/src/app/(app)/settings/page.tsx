@@ -48,6 +48,8 @@ interface HoroshopSettings {
   configured: boolean;
   webhook_url: string;
   subscribed_events: Record<string, number>;
+  auto_sync_enabled: boolean;
+  auto_sync_interval_minutes: number;
   last_sync_at: string | null;
   orders_total: number;
   errors_total: number;
@@ -1284,6 +1286,7 @@ function HoroshopSection() {
             <span>Замовлень: <strong className="text-[var(--text-muted)]">{data.orders_total}</strong></span>
             <span>Помилок: <strong className="text-[var(--text-muted)]">{data.errors_total}</strong></span>
             <span>Останній sync: <strong className="text-[var(--text-muted)]">{data.last_sync_at ? new Date(data.last_sync_at).toLocaleString() : "ще не було"}</strong></span>
+            <span>Авто-sync: <strong className="text-[var(--text-muted)]">{data.auto_sync_enabled ? `кожні ${data.auto_sync_interval_minutes} хв` : "вимкнено"}</strong></span>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +15,7 @@ from app.core.db import SessionLocal, get_db
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import HoroshopSyncEvent
+from app.api.ws import broadcast_warehouse
 from app.services import horoshop
 from app.services.encryption import encrypt
 
@@ -29,6 +31,8 @@ class HoroshopSettingsOut(BaseModel):
     configured: bool
     webhook_url: str
     subscribed_events: dict[str, int]
+    auto_sync_enabled: bool
+    auto_sync_interval_minutes: int
     last_sync_at: datetime | None
     orders_total: int
     errors_total: int
@@ -57,22 +61,44 @@ def _webhook_url(org: Organization) -> str:
 
 def _settings_out(org: Organization, db: Session) -> HoroshopSettingsOut:
     stats = horoshop.sync_stats(org, db)
+    configured = horoshop.configured(org)
     return HoroshopSettingsOut(
         domain=org.horoshop_domain or "",
         login=org.horoshop_login or "",
         verify_ssl=bool(org.horoshop_verify_ssl),
-        configured=horoshop.configured(org),
+        configured=configured,
         webhook_url=_webhook_url(org),
         subscribed_events=org.horoshop_hook_ids or {},
+        auto_sync_enabled=configured,
+        auto_sync_interval_minutes=horoshop.AUTO_SYNC_INTERVAL_MINUTES,
         last_sync_at=org.horoshop_last_sync_at,
         **stats,
     )
 
 
+async def _broadcast_sync_entities(org_id: int) -> None:
+    await broadcast_warehouse(org_id, "orders")
+    await broadcast_warehouse(org_id, "cashflow")
+    await broadcast_warehouse(org_id, "counterparties")
+
+
+def _broadcast_sync_entities_now(org_id: int) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(_broadcast_sync_entities(org_id))
+    else:
+        loop.create_task(_broadcast_sync_entities(org_id))
+
+
 def _background_process_event(event_id: int) -> None:
     with SessionLocal() as db:
         try:
+            event = db.get(HoroshopSyncEvent, event_id)
+            org_id = event.organization_id if event else None
             horoshop.process_event(event_id, db)
+            if org_id:
+                _broadcast_sync_entities_now(org_id)
         except Exception:
             log.exception("Horoshop webhook event %s failed", event_id)
 
@@ -157,10 +183,13 @@ def sync_now(
 ) -> dict[str, Any]:
     try:
         if payload and payload.order_ids:
-            return horoshop.sync_orders(org, db, ids=payload.order_ids)
-        if payload and (payload.from_date or payload.to_date):
-            return horoshop.sync_orders(org, db, from_dt=payload.from_date, to_dt=payload.to_date, max_pages=10)
-        return horoshop.sync_recent(org, db)
+            result = horoshop.sync_orders(org, db, ids=payload.order_ids)
+        elif payload and (payload.from_date or payload.to_date):
+            result = horoshop.sync_orders(org, db, from_dt=payload.from_date, to_dt=payload.to_date, max_pages=10)
+        else:
+            result = horoshop.sync_recent(org, db)
+        _broadcast_sync_entities_now(org.id)
+        return result
     except horoshop.HoroshopError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

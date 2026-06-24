@@ -66,6 +66,17 @@ def start() -> None:
         coalesce=True,
     )
 
+    from app.services import horoshop
+    from app.workers.horoshop_sync import process_auto_horoshop_sync
+    _scheduler.add_job(
+        process_auto_horoshop_sync,
+        IntervalTrigger(minutes=horoshop.AUTO_SYNC_INTERVAL_MINUTES),
+        id="horoshop_auto_sync",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     _scheduler.start()
     log.info("Scheduler started (timezone=%s)", settings.TIMEZONE)
 

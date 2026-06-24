@@ -34,6 +34,7 @@ log = logging.getLogger("monofarm.horoshop")
 
 _TOKEN_CACHE: dict[int, tuple[str, float]] = {}
 _EVENTS = ("order_created", "order_paid", "order_update")
+AUTO_SYNC_INTERVAL_MINUTES = 5
 
 
 class HoroshopError(RuntimeError):
