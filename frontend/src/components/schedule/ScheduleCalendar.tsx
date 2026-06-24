@@ -383,10 +383,14 @@ function HistoryBlock({
   item,
   dayDate,
   daysLeft,
+  laneIndex = 0,
+  laneCount = 1,
 }: {
   item: PrintHistoryItem;
   dayDate: string;
   daysLeft: number;
+  laneIndex?: number;
+  laneCount?: number;
 }) {
   const start = new Date(item.started_at);
   const localDate = isoDateStr(start);
@@ -411,6 +415,9 @@ function HistoryBlock({
   const icon = isFail ? "✕" : isCancelled ? "⊘" : "✓";
   const startLabel = fmtTimeMins(startMins);
   const endLabel = fmtTimeMins((startMins + durationMins) % 1440);
+  const stacked = laneCount > 1;
+  const stackTopPct = stacked ? (38 / laneCount) * laneIndex : 0;
+  const stackHeightPct = stacked ? 38 / laneCount : 38;
 
   return (
     <div
@@ -418,8 +425,8 @@ function HistoryBlock({
       style={{
         left: `${leftPct}%`,
         width: `max(24px, ${widthPct}%)`,
-        top: "1px",
-        height: "38%",
+        top: stacked ? `calc(1px + ${stackTopPct}%)` : "1px",
+        height: stacked ? `calc(${stackHeightPct}% - 1px)` : "38%",
         background: bg,
         borderColor: borderClr,
         color: textClr,
@@ -429,11 +436,65 @@ function HistoryBlock({
     >
       <div className="flex min-w-0 items-center gap-0.5 px-1">
         <span className="shrink-0 text-[8px] font-bold">{icon}</span>
-        <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
-        {durationMins > 0 && <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>}
+        {laneCount <= 4 && (
+          <>
+            <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
+            {durationMins > 0 && <span className="shrink-0 text-[7px] tabular-nums opacity-70">{fmtDuration(durationMins)}</span>}
+          </>
+        )}
       </div>
     </div>
   );
+}
+
+interface PositionedHistoryItem {
+  item: PrintHistoryItem;
+  laneIndex: number;
+  laneCount: number;
+}
+
+function getHistoryRange(item: PrintHistoryItem, dayDate: string): { startMins: number; endMins: number } {
+  const start = new Date(item.started_at);
+  const localDate = isoDateStr(start);
+  const startMins = localDate === dayDate
+    ? start.getHours() * 60 + start.getMinutes()
+    : 0;
+  const durationMins = item.duration_minutes ?? (item.finished_at
+    ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
+    : 30);
+  return {
+    startMins,
+    endMins: startMins + Math.max(durationMins, 5),
+  };
+}
+
+function layoutHistoryItems(items: PrintHistoryItem[], dayDate: string): PositionedHistoryItem[] {
+  if (items.length <= 1) {
+    return items.map(item => ({ item, laneIndex: 0, laneCount: 1 }));
+  }
+
+  const sorted = [...items].sort((a, b) => {
+    const ar = getHistoryRange(a, dayDate);
+    const br = getHistoryRange(b, dayDate);
+    return ar.startMins - br.startMins || ar.endMins - br.endMins || a.id - b.id;
+  });
+  const laneEnds: number[] = [];
+  const positioned: Array<Omit<PositionedHistoryItem, "laneCount">> = [];
+
+  for (const item of sorted) {
+    const range = getHistoryRange(item, dayDate);
+    let laneIndex = laneEnds.findIndex(endMins => endMins <= range.startMins);
+    if (laneIndex === -1) {
+      laneIndex = laneEnds.length;
+      laneEnds.push(range.endMins);
+    } else {
+      laneEnds[laneIndex] = range.endMins;
+    }
+    positioned.push({ item, laneIndex });
+  }
+
+  const laneCount = Math.max(1, laneEnds.length);
+  return positioned.map(item => ({ ...item, laneCount }));
 }
 
 interface Props {
@@ -970,6 +1031,7 @@ export function ScheduleCalendar({
                     const blocks   = blockMap.get(cellKey as `${number}-${number}`) ?? [];
                     const untimed  = untimedMap.get(cellKey as `${number}-${number}`) ?? [];
                     const histItems = historyByPrinterDay.get(cellKey) ?? [];
+                    const historyLayout = layoutHistoryItems(histItems, dateStr);
                     const isDropTarget = dropCell === cellKey;
 
                     return (
@@ -1002,8 +1064,15 @@ export function ScheduleCalendar({
                         <HourGrid step={step} />
 
                         {/* History blocks (past prints) */}
-                        {histItems.map(h => (
-                          <HistoryBlock key={`h-${h.id}`} item={h} dayDate={dateStr} daysLeft={6 - di} />
+                        {historyLayout.map(({ item, laneIndex, laneCount }) => (
+                          <HistoryBlock
+                            key={`h-${item.id}`}
+                            item={item}
+                            dayDate={dateStr}
+                            daysLeft={6 - di}
+                            laneIndex={laneIndex}
+                            laneCount={laneCount}
+                          />
                         ))}
 
                         {/* Running print bar (today only) */}
