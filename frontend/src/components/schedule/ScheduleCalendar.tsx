@@ -817,16 +817,14 @@ export function ScheduleCalendar({
       return;
     }
 
-    // Snap to after current print end (today only)
-    if (planDate === todayDate && data.type === "backlog") {
-      const printer = printerById.get(printerId);
-      if (printer?.state === "printing" && printer.eta_minutes) {
-        const printEndMins = nowMins + printer.eta_minutes;
-        if (startMins < printEndMins) {
-          startMins = printEndMins;
-          startTime = minsToStartTime(startMins);
-        }
-      }
+    // Block drop on printing printer
+    const printer = printerById.get(printerId);
+    if (printer?.state === "printing") {
+      const eta = printer.eta_minutes ?? 0;
+      const endLabel = eta > 0 ? ` · звільниться ~${fmtTimeMins(nowMins + eta)}` : "";
+      setDropError(`Принтер друкує — дочекайтесь завершення${endLabel}`);
+      setTimeout(() => setDropError(null), 3500);
+      return;
     }
 
     // File type compatibility check
@@ -1155,7 +1153,7 @@ export function ScheduleCalendar({
 
                     const isPast = new Date(dateStr) < new Date(todayStr);
                     const printerLive = printerById.get(lane.printer_id);
-                    const isPrinting = isToday && printerLive?.state === "printing";
+                    const isPrinting = printerLive?.state === "printing";
 
                     return (
                       <div
@@ -1175,12 +1173,7 @@ export function ScheduleCalendar({
                           const is3mf = types.includes("application/x-3mf");
                           const isGcode = types.includes("application/x-gcode");
                           const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
-                          const incompat = isPast || fileIncompat;
-
-                          if (isPrinting && printerLive?.eta_minutes && isToday) {
-                            const printEndMins = nowMins + printerLive.eta_minutes;
-                            if (startMins < printEndMins) startMins = printEndMins;
-                          }
+                          const incompat = isPast || isPrinting || fileIncompat;
 
                           setDropIncompat(incompat);
                           e.dataTransfer.dropEffect = incompat ? "none" : "move";
