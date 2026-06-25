@@ -2,12 +2,26 @@ import enum
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.warehouse import (
     BatchPriority, BatchStatus, CashTxCategory, CashTxType, CounterpartyType,
     MovementType, OrderSource, OrderStatus, SpecOpType, WarehouseType,
 )
+
+
+# ── Warehouse notice ──────────────────────────────────────────────────────────
+
+class WarehouseNoticeUpdate(BaseModel):
+    text: str = Field(default="", max_length=2000)
+    ttl_seconds: int | None = Field(default=None, ge=1, le=86_400)
+
+
+class WarehouseNoticeOut(BaseModel):
+    text: str = ""
+    updated_at: str | None = None
+    expires_at: str | None = None
+    active: bool = False
 
 
 # ── Product category ──────────────────────────────────────────────────────────

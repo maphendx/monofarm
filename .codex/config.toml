@@ -1,0 +1,9 @@
+[mcp_servers.railway]
+url = "https://mcp.railway.com"
+
+[mcp_servers.railway-mcp-server]
+command = "npx"
+args = [
+    "-y",
+    "@railway/mcp-server",
+]
