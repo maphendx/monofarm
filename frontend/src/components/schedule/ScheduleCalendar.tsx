@@ -783,8 +783,15 @@ export function ScheduleCalendar({
     const startMins = getDropMins(e);
     const startTime = minsToStartTime(startMins);
 
-    // Block drop on currently printing printer (today only)
+    // Block drop on past days
     const todayDate = isoDateStr(new Date());
+    if (planDate < todayDate) {
+      setDropError("Не можна планувати на минулі дні");
+      setTimeout(() => setDropError(null), 3500);
+      return;
+    }
+
+    // Block drop on currently printing printer (today only)
     if (planDate === todayDate && data.type === "backlog") {
       const printer = printerById.get(printerId);
       if (printer?.state === "printing") {
@@ -1120,12 +1127,16 @@ export function ScheduleCalendar({
                     const histSegments = mergeHistorySegments(histItems, dateStr, (6 - di + 1) * 1440);
                     const isDropTarget = dropCell === cellKey;
 
+                    const isPast = new Date(dateStr) < new Date(todayStr);
+                    const printerLive = printerById.get(lane.printer_id);
+                    const isPrinting = isToday && printerLive?.state === "printing";
+
                     return (
                       <div
                         key={`cell-${lane.printer_id}-${di}`}
                         className={[
                           "relative overflow-visible border-b border-r border-[var(--border)] transition-colors",
-                          isToday ? "bg-[rgba(34,211,238,.03)]" : "bg-[var(--bg-elevated)]",
+                          isToday ? "bg-[rgba(34,211,238,.03)]" : isPast ? "bg-[var(--bg)]" : "bg-[var(--bg-elevated)]",
                           isDropTarget && !dropIncompat ? "bg-[rgba(34,211,238,.10)] ring-1 ring-inset ring-[var(--accent)]" : "",
                           isDropTarget && dropIncompat ? "bg-[rgba(239,68,68,.08)] ring-1 ring-inset ring-[var(--state-error)]" : "",
                           dropping ? "cursor-wait" : "",
@@ -1134,10 +1145,11 @@ export function ScheduleCalendar({
                         onDragOver={e => {
                           e.preventDefault();
                           const startMins = getDropMins(e);
-                          e.dataTransfer.dropEffect = "move";
+                          const incompat = isPast || isPrinting;
+                          setDropIncompat(incompat);
+                          e.dataTransfer.dropEffect = incompat ? "none" : "move";
                           setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
-                          setDropIncompat(false);
                         }}
                         onDragLeave={e => {
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
