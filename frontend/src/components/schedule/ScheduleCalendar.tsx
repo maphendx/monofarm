@@ -817,14 +817,14 @@ export function ScheduleCalendar({
       return;
     }
 
-    // Block drop on printing printer
+    // Snap to after current print end
     const printer = printerById.get(printerId);
-    if (printer?.state === "printing") {
-      const eta = printer.eta_minutes ?? 0;
-      const endLabel = eta > 0 ? ` · звільниться ~${fmtTimeMins(nowMins + eta)}` : "";
-      setDropError(`Принтер друкує — дочекайтесь завершення${endLabel}`);
-      setTimeout(() => setDropError(null), 3500);
-      return;
+    if (printer?.state === "printing" && printer.eta_minutes) {
+      const printEndMins = nowMins + printer.eta_minutes;
+      if (startMins < printEndMins) {
+        startMins = Math.min(printEndMins, 1439);
+        startTime = minsToStartTime(startMins);
+      }
     }
 
     // File type compatibility check
@@ -1173,7 +1173,12 @@ export function ScheduleCalendar({
                           const is3mf = types.includes("application/x-3mf");
                           const isGcode = types.includes("application/x-gcode");
                           const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
-                          const incompat = isPast || isPrinting || fileIncompat;
+                          const incompat = isPast || fileIncompat;
+
+                          if (isPrinting && printerLive?.eta_minutes) {
+                            const printEndMins = nowMins + printerLive.eta_minutes;
+                            if (startMins < printEndMins) startMins = Math.min(printEndMins, 1439);
+                          }
 
                           setDropIncompat(incompat);
                           e.dataTransfer.dropEffect = incompat ? "none" : "move";
