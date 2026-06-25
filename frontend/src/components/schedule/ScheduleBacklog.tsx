@@ -20,14 +20,17 @@ function BacklogItem({
     : null;
 
   function handleDragStart(e: React.DragEvent<HTMLButtonElement>) {
+    const fname = task.file_name ?? task.title ?? "";
     const duration = task.estimated_minutes ?? task.filament_meta?.estimated_minutes ?? 60;
     e.dataTransfer.setData("text/plain", JSON.stringify({
       type: "backlog",
       taskId: task.id,
-      fileName: task.file_name ?? task.title ?? "",
+      fileName: fname,
       quantity: Math.max(1, task.quantity),
       durationMins: duration > 0 ? duration : 60,
     }));
+    const is3mf = fname.toLowerCase().endsWith(".3mf");
+    e.dataTransfer.setData(is3mf ? "application/x-3mf" : "application/x-gcode", "1");
     e.dataTransfer.effectAllowed = "move";
   }
 

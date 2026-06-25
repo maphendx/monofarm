@@ -184,7 +184,38 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function RunningPrintPopover({ printer, rect, startLabel, endLabel, progressPct, remainMins, elapsedMins, daysSuffix }: {
+  printer: Printer; rect: DOMRect; startLabel: string; endLabel: string; progressPct: number; remainMins: number; elapsedMins: number; daysSuffix: string;
+}) {
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 290);
+  return createPortal(
+    <div className="fixed z-[9999] w-[280px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-xl" style={{ top, left }}>
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <p className="text-sm font-semibold text-[var(--text-hi)]">{printer.job ?? "друк"}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{printer.name}</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-2 rounded-full bg-[var(--surface-hi)] overflow-hidden">
+            <div className="h-full rounded-full bg-[var(--state-print)]" style={{ width: `${progressPct}%` }} />
+          </div>
+          <span className="text-xs font-bold tabular-nums text-[var(--state-print)]">{Math.round(progressPct)}%</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div><span className="text-[var(--text-faint)]">Старт</span> <span className="font-medium text-[var(--text)]">{startLabel}</span></div>
+          <div><span className="text-[var(--text-faint)]">Кінець</span> <span className="font-medium text-[var(--text)]">{endLabel}{daysSuffix}</span></div>
+          <div><span className="text-[var(--text-faint)]">Пройшло</span> <span className="font-medium text-[var(--text)]">{fmtDuration(elapsedMins)}</span></div>
+          <div><span className="text-[var(--text-faint)]">Залишилось</span> <span className="font-medium text-[var(--text)]">{fmtDuration(remainMins)}</span></div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; nowMins: number; daysLeft: number }) {
+  const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   if (printer.state !== "printing" || !printer.eta_minutes) return null;
   const remainMins = printer.eta_minutes;
   if (remainMins <= 0) return null;
@@ -203,25 +234,18 @@ function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; now
   const daysSuffix = overflowDays > 0 ? ` +${overflowDays}д` : "";
   return (
     <div
-      className="absolute flex items-center overflow-hidden rounded border border-[var(--state-print)]/30"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "40%", height: "28%", minHeight: "18px", background: "rgba(59,130,246,.08)", zIndex: isOverflow ? 8 : 5 }}
-      title={`${printer.job ?? "друк"}\n${startLabel} → ${endLabel}${daysSuffix}\n${Math.round(progressPct)}% · залишилось ${fmtDuration(remainMins)}`}
+      className="absolute flex items-center overflow-hidden rounded border border-[var(--state-print)]/30 cursor-pointer"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "40%", height: "28%", minHeight: "18px", background: "rgba(59,130,246,.08)", zIndex: popoverRect ? 40 : isOverflow ? 8 : 5 }}
+      onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setPopoverRect(null)}
     >
-      <div
-        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/10"
-        style={{ width: `${progressPct}%` }}
-      />
+      <div className="absolute inset-y-0 left-0 bg-[var(--state-print)]/10" style={{ width: `${progressPct}%` }} />
       <div className="relative z-10 flex min-w-0 items-center gap-1 px-1.5">
-        <span className="shrink-0 text-[9px] font-bold tabular-nums text-[var(--state-print)]">
-          {Math.round(progressPct)}%
-        </span>
-        <span className="truncate text-[8px] text-[var(--state-print)]/70">
-          {printer.job ?? "друк"}
-        </span>
-        <span className="ml-auto shrink-0 text-[8px] tabular-nums text-[var(--state-print)]/60">
-          {fmtDuration(remainMins)}{daysSuffix}
-        </span>
+        <span className="shrink-0 text-[9px] font-bold tabular-nums text-[var(--state-print)]">{Math.round(progressPct)}%</span>
+        <span className="truncate text-[8px] text-[var(--state-print)]/70">{printer.job ?? "друк"}</span>
+        <span className="ml-auto shrink-0 text-[8px] tabular-nums text-[var(--state-print)]/60">{fmtDuration(remainMins)}{daysSuffix}</span>
       </div>
+      {popoverRect && <RunningPrintPopover printer={printer} rect={popoverRect} startLabel={startLabel} endLabel={endLabel} progressPct={progressPct} remainMins={remainMins} elapsedMins={elapsedMins} daysSuffix={daysSuffix} />}
     </div>
   );
 }
@@ -780,8 +804,8 @@ export function ScheduleCalendar({
       return;
     }
 
-    const startMins = getDropMins(e);
-    const startTime = minsToStartTime(startMins);
+    let startMins = getDropMins(e);
+    let startTime = minsToStartTime(startMins);
 
     // Block drop on past days
     const todayDate = isoDateStr(new Date());
@@ -791,38 +815,38 @@ export function ScheduleCalendar({
       return;
     }
 
-    // Block drop on currently printing printer (today only)
+    // Snap to after current print end (today only)
     if (planDate === todayDate && data.type === "backlog") {
       const printer = printerById.get(printerId);
-      if (printer?.state === "printing") {
-        setDropError("Принтер зараз друкує — дочекайтесь завершення");
-        setTimeout(() => setDropError(null), 3500);
-        return;
+      if (printer?.state === "printing" && printer.eta_minutes) {
+        const printEndMins = nowMins + printer.eta_minutes;
+        if (startMins < printEndMins) {
+          startMins = printEndMins;
+          startTime = minsToStartTime(startMins);
+        }
       }
     }
 
-    // --- Validation ---
-    const fileName = data.type === "block" 
-       ? (findEntry(data.entryId)?.task.file_name || "") 
-       : (data.fileName || "");
-       
+    // File type compatibility check
+    const fileName = data.type === "block"
+      ? (findEntry(data.entryId)?.task.file_name || "")
+      : (data.fileName || "");
     if (fileName) {
-       const is3mf = fileName.toLowerCase().endsWith(".3mf");
-       const isGcode = fileName.toLowerCase().match(/\.(gcode|gco|g|bgcode)$/);
-       const lane = lanes.find(l => l.printer_id === printerId);
-       
-       if (lane) {
-         if (is3mf && lane.printer_kind !== "bambu") {
-           setDropError("Файли .3mf можна призначати тільки на принтери Bambu");
-           setTimeout(() => setDropError(null), 3500);
-           return;
-         }
-         if (isGcode && lane.printer_kind === "bambu") {
-           setDropError("Файли .gcode не можна призначати на принтери Bambu");
-           setTimeout(() => setDropError(null), 3500);
-           return;
-         }
-       }
+      const is3mf = fileName.toLowerCase().endsWith(".3mf");
+      const isGcode = !!fileName.toLowerCase().match(/\.(gcode|gco|g|bgcode)$/);
+      const lane = lanes.find(l => l.printer_id === printerId);
+      if (lane) {
+        if (is3mf && lane.printer_kind !== "bambu") {
+          setDropError("Файли .3mf можна тільки на Bambu принтери");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
+        if (isGcode && lane.printer_kind === "bambu") {
+          setDropError("Файли .gcode не можна на Bambu принтери");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
+      }
     }
 
     setDropping(true);
@@ -1144,8 +1168,18 @@ export function ScheduleCalendar({
                         style={{ minHeight: rowH }}
                         onDragOver={e => {
                           e.preventDefault();
-                          const startMins = getDropMins(e);
-                          const incompat = isPast || isPrinting;
+                          let startMins = getDropMins(e);
+                          const types = e.dataTransfer.types;
+                          const is3mf = types.includes("application/x-3mf");
+                          const isGcode = types.includes("application/x-gcode");
+                          const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
+                          const incompat = isPast || fileIncompat;
+
+                          if (isPrinting && printerLive?.eta_minutes && isToday) {
+                            const printEndMins = nowMins + printerLive.eta_minutes;
+                            if (startMins < printEndMins) startMins = printEndMins;
+                          }
+
                           setDropIncompat(incompat);
                           e.dataTransfer.dropEffect = incompat ? "none" : "move";
                           setDropRelX(startMins / 1440);
