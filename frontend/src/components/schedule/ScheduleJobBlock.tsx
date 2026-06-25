@@ -111,75 +111,34 @@ export function ScheduleJobBlock({
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, top: "40%", height: "28%", minHeight: "18px", zIndex: isOverflow ? 8 : 4, overflow: "hidden" }}
       className={`group ${base} ${colorCls} ${topBorder}`}
     >
-      <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
-        {isCompact ? (
-          <div className="flex h-full w-full items-center justify-center px-0.5 py-1">
+      <div className="flex h-full items-center gap-1 px-1">
+        {thumbSrc ? (
+          <img src={thumbSrc} alt="" draggable={false} className="h-full max-h-6 w-auto shrink-0 rounded object-cover" />
+        ) : (
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[7px] font-semibold uppercase text-[var(--text-faint)]">
+            {fileLabel.endsWith(".3mf") ? "3mf" : "gc"}
+          </div>
+        )}
+
+        {!isCompact && (
+          <div className="flex min-w-0 flex-1 flex-col">
             <span className={[
-              "max-h-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-semibold leading-none [text-orientation:mixed] [writing-mode:vertical-rl]",
+              "truncate text-[9px] font-semibold leading-tight",
               isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
             ].join(" ")}>
               {isContinuation ? `↩ ${fileLabel}` : fileLabel}
             </span>
+            <span className="truncate text-[8px] tabular-nums text-[var(--text-muted)]">
+              {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
+            </span>
           </div>
-        ) : (
-          <>
-            {thumbSrc ? (
-              <img
-                src={thumbSrc}
-                alt=""
-                draggable={false}
-                className="h-8 w-8 shrink-0 rounded object-cover"
-              />
-            ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[8px] font-semibold uppercase text-[var(--text-faint)]">
-                3mf
-              </div>
-            )}
-          </>
         )}
-
-        {!isCompact && <div className="flex min-w-0 flex-1 flex-col justify-start gap-0.5">
-          {/* File name line */}
-          <span className={[
-            "truncate text-[10px] font-semibold leading-tight",
-            isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
-          ].join(" ")}>
-            {isContinuation ? `↩ ${fileLabel}` : fileLabel}
-          </span>
-
-          {!isCompact && taskLabel && (
-            <span className="truncate text-[9px] leading-tight text-[var(--text-faint)]">
-              {taskLabel}
-            </span>
-          )}
-
-          {/* Time + duration */}
-          <span className="truncate text-[9px] tabular-nums text-[var(--text-muted)]">
-            {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
-          </span>
-
-          {/* Conflict / blocked indicators */}
-          {!isCompact && isConflict && (
-            <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
-          )}
-          {!isCompact && isBlocked && !isConflict && (
-            <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
-          )}
-          {!isCompact && !isConflict && !isBlocked && status !== "queued" && (
-            <span className={[
-              "text-[9px]",
-              statusTone === "done" ? "text-[var(--state-ok)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : "text-[var(--state-print)]",
-            ].join(" ")}>
-              {statusLabel}
-            </span>
-          )}
-        </div>}
 
         {!isCompact && onSend && status === "queued" && entry.task.gcode_file_id && (
           <button
             type="button"
             onClick={e => { e.stopPropagation(); onSend(); }}
-            className="ml-auto mr-1 mt-0.5 shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--accent)]/80"
+            className="ml-auto shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
             title="Надіслати на принтер"
           >
             ▶
