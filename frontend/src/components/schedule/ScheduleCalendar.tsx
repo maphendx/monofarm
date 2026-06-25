@@ -611,6 +611,8 @@ interface Props {
   onSendToPrint?: (entry: CalendarEntry) => void;
 }
 
+const DRAG_TRANSPARENT = "pointer-events-none";
+
 export function ScheduleCalendar({
   lanes,
   weekStart,
@@ -1195,19 +1197,20 @@ export function ScheduleCalendar({
                       >
                         <HourGrid step={step} />
 
-                        {/* History blocks (past prints) */}
-                        {histSegments.map((seg, si) => (
-                          <HistorySegmentBlock key={`hs-${si}`} seg={seg} />
-                        ))}
+                        {/* Overlay blocks — transparent to drag events */}
+                        <div className={dropCell ? DRAG_TRANSPARENT : ""}>
+                          {histSegments.map((seg, si) => (
+                            <HistorySegmentBlock key={`hs-${si}`} seg={seg} />
+                          ))}
 
-                        {/* Running print bar (today only) */}
-                        {isToday && printerById.get(lane.printer_id) && (
-                          <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} daysLeft={6 - di} />
-                        )}
+                          {isToday && printerById.get(lane.printer_id) && (
+                            <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} daysLeft={6 - di} />
+                          )}
 
-                        {isToday && printerById.get(lane.printer_id) && (
-                          <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} historyItems={histItems} />
-                        )}
+                          {isToday && printerById.get(lane.printer_id) && (
+                            <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} historyItems={histItems} />
+                          )}
+                        </div>
 
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
 
