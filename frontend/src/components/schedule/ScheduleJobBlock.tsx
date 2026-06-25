@@ -50,7 +50,7 @@ export function ScheduleJobBlock({
     : null;
 
   const base =
-    "absolute top-0.5 bottom-0.5 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
+    "absolute rounded cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
 
   const statusTone = status === "done"
     ? "done"
@@ -108,7 +108,7 @@ export function ScheduleJobBlock({
       onDragStart={onDragStart}
       onClick={onClick}
       title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}\n${statusLabel}`}
-      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, zIndex: isOverflow ? 5 : undefined }}
+      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, top: "40%", height: "28%", minHeight: "18px", zIndex: isOverflow ? 8 : 4, overflow: "hidden" }}
       className={`group ${base} ${colorCls} ${topBorder}`}
     >
       <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
