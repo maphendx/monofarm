@@ -475,6 +475,7 @@ export default function DashboardPage() {
   }, []);
   function handleGroupByChange(v: GroupBy) {
     setGroupBy(v);
+    setLocalOrder(null);
     try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}
   }
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -482,6 +483,9 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
   const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
+  const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [localOrder, setLocalOrder] = useState<number[] | null>(null);
   const [slicerFile, setSlicerFile] = useState<GcodeFile | null>(null);
   const [slicerError, setSlicerError] = useState<string | null>(null);
   const dismissedSlicerFileIdRef = useRef<number | null>(null);
@@ -533,16 +537,24 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, [slicerFileId]);
 
+  const displayPrinters = useMemo(() => {
+    if (!localOrder) return printers;
+    const byId = new Map(printers.map(p => [p.id, p]));
+    const ordered = localOrder.map(id => byId.get(id)).filter(Boolean) as Printer[];
+    const knownIds = new Set(localOrder);
+    return [...ordered, ...printers.filter(p => !knownIds.has(p.id))];
+  }, [localOrder, printers]);
+
   const filtered = useMemo(() => {
     let result: Printer[];
-    if (filter === "all") result = printers;
-    else if (filter === "printing") result = printers.filter((p) => p.state === "printing");
-    else if (filter === "attention") result = printers.filter((p) => p.state === "error");
-    else if (filter === "idle") result = printers.filter((p) => p.state === "idle" || p.state === "operational");
-    else if (filter === "paused") result = printers.filter((p) => p.state === "paused");
-    else if (filter === "awaiting") result = printers.filter((p) => p.state === "awaiting_bed_clear");
-    else if (filter === "offline") result = printers.filter((p) => p.state === "offline" || p.state === "unknown");
-    else result = printers;
+    if (filter === "all") result = displayPrinters;
+    else if (filter === "printing") result = displayPrinters.filter((p) => p.state === "printing");
+    else if (filter === "attention") result = displayPrinters.filter((p) => p.state === "error");
+    else if (filter === "idle") result = displayPrinters.filter((p) => p.state === "idle" || p.state === "operational");
+    else if (filter === "paused") result = displayPrinters.filter((p) => p.state === "paused");
+    else if (filter === "awaiting") result = displayPrinters.filter((p) => p.state === "awaiting_bed_clear");
+    else if (filter === "offline") result = displayPrinters.filter((p) => p.state === "offline" || p.state === "unknown");
+    else result = displayPrinters;
 
     if (filter === "printing") {
       return [...result].sort((a, b) => {
@@ -571,6 +583,36 @@ export default function DashboardPage() {
   }, [printers]);
 
   function upsertPrinter(_p: Printer) { /* WS pushes full state within 3 s */ }
+
+  async function handlePrinterDropInGroup(groupKey: string, targetId: number) {
+    if (!dragPrinterId || dragPrinterId === targetId) return;
+    const group = groups.find(g => g.key === groupKey);
+    if (!group) { setDragPrinterId(null); setDragOverId(null); return; }
+    const items = group.items;
+    const fromIdx = items.findIndex(p => p.id === dragPrinterId);
+    const toIdx = items.findIndex(p => p.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) { setDragPrinterId(null); setDragOverId(null); return; }
+    const next = [...items];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    const groupIdSet = new Set(items.map(p => p.id));
+    const cur = localOrder
+      ? (localOrder.map(id => printers.find(p => p.id === id)).filter(Boolean) as Printer[])
+      : printers;
+    let gi = 0;
+    const newFull = cur.map(p => groupIdSet.has(p.id) ? next[gi++] : p);
+    setDragPrinterId(null);
+    setDragOverId(null);
+    setLocalOrder(newFull.map(p => p.id));
+    try {
+      await api("/api/printers/reorder", {
+        method: "POST",
+        body: JSON.stringify(next.map((p, i) => ({ id: p.id, sort_order: i }))),
+      });
+    } catch {
+      setLocalOrder(null);
+    }
+  }
 
   const GRID = "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
   const isGrouped = groupBy !== "none";
@@ -746,7 +788,21 @@ export default function DashboardPage() {
                 </div>
                 <div className={GRID}>
                   {g.items.map((p) => (
-                    <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
+                    <div
+                      key={p.id}
+                      draggable={groupBy === "mygroup"}
+                      onDragStart={() => setDragPrinterId(p.id)}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverId(p.id); }}
+                      onDragEnd={() => { setDragPrinterId(null); setDragOverId(null); }}
+                      onDrop={(e) => { e.preventDefault(); handlePrinterDropInGroup(g.key, p.id); }}
+                      className={[
+                        "transition-opacity",
+                        dragPrinterId === p.id ? "opacity-40" : "",
+                        dragOverId === p.id && dragPrinterId !== p.id ? "ring-2 ring-[var(--accent)] rounded-xl" : "",
+                      ].join(" ")}
+                    >
+                      <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
+                    </div>
                   ))}
                 </div>
               </section>
