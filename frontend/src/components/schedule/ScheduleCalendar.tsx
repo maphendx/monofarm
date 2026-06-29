@@ -7,7 +7,7 @@ import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
 import { ScheduleWeekNav } from "./ScheduleWeekNav";
-import { api, ApiError, createPlanEntry, updatePlanEntry } from "@/lib/api";
+import { api, ApiError, createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
 import {
   buildCalendarBlocks,
   buildUntimedMap,
@@ -981,6 +981,17 @@ export function ScheduleCalendar({
     }
   }
 
+  async function handleDeleteEntry(entryId: number) {
+    try {
+      await deletePlanEntry(entryId);
+      onRefresh();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Помилка видалення";
+      setDropError(msg);
+      setTimeout(() => setDropError(null), 3500);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
 
@@ -1281,6 +1292,7 @@ export function ScheduleCalendar({
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                             setDropCell(null);
                             setDropIncompat(false);
+                            setDropIsSnapping(false);
                           }
                         }}
                         onDrop={e => handleDrop(e, lane.printer_id, dateStr)}
@@ -1302,15 +1314,16 @@ export function ScheduleCalendar({
                           )}
                         </div>
 
-                        <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
-
                         <div className={dropCell ? DRAG_TRANSPARENT : ""}>
+                          <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
+
                           {blocks.map((block, bi) => (
                             <ScheduleJobBlock
                               key={`${block.entry.id}-${bi}`}
                               block={block}
                               onClick={() => handleEntryClick(block.entry)}
                               onSend={onSendToPrint ? () => onSendToPrint(block.entry) : undefined}
+                              onDelete={() => handleDeleteEntry(block.entry.id)}
                             />
                           ))}
                         </div>

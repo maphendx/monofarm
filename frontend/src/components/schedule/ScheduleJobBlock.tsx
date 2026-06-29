@@ -90,10 +90,12 @@ export function ScheduleJobBlock({
   block,
   onClick,
   onSend,
+  onDelete,
 }: {
   block: CalendarBlock;
   onClick: () => void;
   onSend?: () => void;
+  onDelete?: () => void;
 }) {
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   const { entry, startMins, endMins, isContinuation, totalDurationMins } = block;
@@ -194,15 +196,29 @@ export function ScheduleJobBlock({
           </div>
         )}
 
-        {!isCompact && onSend && status === "queued" && entry.task.gcode_file_id && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onSend(); }}
-            className="ml-auto shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
-            title="Надіслати на принтер"
-          >
-            ▶
-          </button>
+        {!isCompact && (onSend || onDelete) && (
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {onSend && status === "queued" && entry.task.gcode_file_id && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onSend(); }}
+                className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white"
+                title="Надіслати на принтер"
+              >
+                ▶
+              </button>
+            )}
+            {onDelete && status === "queued" && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onDelete(); }}
+                className="rounded bg-[var(--state-error)]/15 px-1.5 py-0.5 text-[8px] font-bold text-[var(--state-error)]"
+                title="Видалити з розкладу"
+              >
+                ×
+              </button>
+            )}
+          </div>
         )}
       </div>
       {popoverRect && <JobPopover block={block} rect={popoverRect} />}
