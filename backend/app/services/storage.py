@@ -66,6 +66,22 @@ def put(stored_name: str, data: bytes, org_id: int, prefix: str = "gcodes") -> N
         (_local_dir(prefix) / stored_name).write_bytes(data)
 
 
+def put_file(stored_name: str, path: Path, org_id: int, prefix: str = "gcodes") -> None:
+    """Upload from a local file path.
+
+    Uses boto3 upload_file (multipart, streaming) for S3 — avoids loading the
+    entire file into RAM. Use instead of put() for files larger than ~20 MB.
+    """
+    if is_s3():
+        from app.core.config import settings
+        _client().upload_file(str(path), settings.S3_BUCKET, _s3_key(stored_name, org_id, prefix))
+    else:
+        dest = _local_dir(prefix) / stored_name
+        if path != dest:
+            import shutil
+            shutil.copy2(path, dest)
+
+
 def exists(stored_name: str, org_id: int, prefix: str = "gcodes") -> bool:
     if is_s3():
         from app.core.config import settings

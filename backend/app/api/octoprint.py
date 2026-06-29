@@ -166,13 +166,19 @@ async def _store_file(file: UploadFile, org_id: int, db: Session, uploaded_by_id
     if not any(ext.endswith(a) for a in ALLOWED_EXTS):
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
-    contents = await file.read()
-    if len(contents) > MAX_FILE_BYTES:
-        raise HTTPException(status_code=413, detail="File too large")
-
     stored_name = f"{uuid.uuid4().hex}{ext}"
     parse_path = GCODES_DIR / stored_name
-    parse_path.write_bytes(contents)
+
+    # Stream to disk in 1 MB chunks — avoids loading a 250 MB file into RAM
+    size_bytes = 0
+    with parse_path.open("wb") as fh:
+        while chunk := await file.read(1024 * 1024):
+            size_bytes += len(chunk)
+            if size_bytes > MAX_FILE_BYTES:
+                parse_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="File too large")
+            fh.write(chunk)
+
     filament_meta: dict | None = None
     try:
         parsed = parse_gcode(parse_path)
@@ -180,14 +186,15 @@ async def _store_file(file: UploadFile, org_id: int, db: Session, uploaded_by_id
     except Exception:
         pass
     # Slicer uploads (OrcaSlicer shim) get the same preview as browser uploads
-    thumb = extract_thumbnail(contents, ext)
+    thumb = extract_thumbnail(parse_path.read_bytes(), ext)
     if thumb:
         storage_svc.put(stored_name + ".thumb.png", thumb, org_id)
         filament_meta = filament_meta or {}
         filament_meta["has_thumbnail"] = True
     if storage_svc.is_s3():
         try:
-            storage_svc.put(stored_name, contents, org_id)
+            # put_file uses boto3 upload_file (multipart streaming) — no full-file RAM spike
+            await asyncio.to_thread(storage_svc.put_file, stored_name, parse_path, org_id)
         finally:
             parse_path.unlink(missing_ok=True)
 
@@ -195,7 +202,7 @@ async def _store_file(file: UploadFile, org_id: int, db: Session, uploaded_by_id
         organization_id=org_id,
         stored_name=stored_name,
         original_name=file.filename,
-        size_bytes=len(contents),
+        size_bytes=size_bytes,
         filament_meta=filament_meta,
         uploaded_by_id=uploaded_by_id,
     )
