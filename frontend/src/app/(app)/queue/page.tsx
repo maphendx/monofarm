@@ -536,6 +536,18 @@ function QueuePageInner() {
   const [calendarLanes, setCalendarLanes] = useState<CalendarLane[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [scheduleModal, setScheduleModal] = useState<ScheduleModalMode | null>(null);
+  type GroupBy = "mygroup" | "none" | "kind" | "state";
+  const [printerGroupBy, setPrinterGroupBy] = useState<GroupBy>(() => {
+    try {
+      const saved = localStorage.getItem("monofarm_printer_group_by") as GroupBy;
+      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) return saved;
+    } catch {}
+    return "mygroup";
+  });
+  function handlePrinterGroupByChange(v: GroupBy) {
+    setPrinterGroupBy(v);
+    try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}
+  }
 
   const scheduledTaskIds = useMemo<Set<number>>(() => {
     const ids = new Set<number>();
@@ -554,21 +566,6 @@ function QueuePageInner() {
     [tasks, scheduledTaskIds],
   );
 
-  const loadCalendar = useCallback(async () => {
-    setCalendarLoading(true);
-    try {
-      const weekDates = getWeekDates(weekStart);
-      const start = isoDateStr(weekDates[0]);
-      const end   = isoDateStr(weekDates[6]);
-      const lanes = await getPlanCalendar(start, end);
-      setCalendarLanes(lanes);
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-    } finally { setCalendarLoading(false); }
-  }, [weekStart]);
-
-  // Silent refresh — updates calendar data without showing the loading skeleton.
-  // Used after drag-drop so the grid doesn't flicker.
   const loadCalendarSilent = useCallback(async () => {
     try {
       const weekDates = getWeekDates(weekStart);
@@ -584,19 +581,49 @@ function QueuePageInner() {
         api<PrintTask[]>("/api/queue"),
         api<Printer[]>("/api/printers"),
       ]);
-      setTasks(t); setPrinters(p);
+      setTasks(t);
+      setPrinters(p);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  // Initial: fetch queue+printers+calendar all at once
+  const initialRef = useRef(false);
   useEffect(() => {
-    load();
-  }, [load]);
+    if (initialRef.current) return;
+    initialRef.current = true;
+    const weekDates = getWeekDates(weekStart);
+    const startStr = isoDateStr(weekDates[0]);
+    const endStr = isoDateStr(weekDates[6]);
+    Promise.all([
+      api<PrintTask[]>("/api/queue"),
+      api<Printer[]>("/api/printers"),
+      view === "calendar" ? getPlanCalendar(startStr, endStr) : Promise.resolve(null),
+    ]).then(([t, p, lanes]) => {
+      setTasks(t);
+      setPrinters(p);
+      if (lanes) setCalendarLanes(lanes);
+    }).catch(err => {
+      if (err instanceof ApiError) setError(err.message);
+    }).finally(() => {
+      setLoading(false);
+      setCalendarLoading(false);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Week change or view switch: only re-fetch calendar
+  const prevWeekRef = useRef(weekStart);
   useEffect(() => {
-    if (view === "calendar") loadCalendar();
-  }, [view, loadCalendar]);
+    if (!initialRef.current) return;
+    const weekChanged = prevWeekRef.current !== weekStart;
+    prevWeekRef.current = weekStart;
+    if (view === "calendar" && (weekChanged || calendarLanes.length === 0)) {
+      loadCalendarSilent();
+    }
+  }, [view, weekStart, calendarLanes.length, loadCalendarSilent]);
 
   const refreshQueueSurface = useCallback(async () => {
     await Promise.all([load(), loadCalendarSilent()]);
@@ -694,7 +721,44 @@ function QueuePageInner() {
     finally { distributeRef.current = false; }
   }
 
-  if (loading) return <KanbanSkeleton columns={4} cardsPerCol={3} />;
+  if (loading) {
+    if (view === "calendar") {
+      return (
+        <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-elevated)] px-6 py-3">
+            <div className="skeleton h-5 w-32 rounded" />
+            <div className="flex gap-2">
+              <div className="skeleton h-8 w-20 rounded" />
+              <div className="skeleton h-8 w-20 rounded" />
+            </div>
+          </div>
+          <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2">
+            <div className="flex gap-3">
+              <div className="skeleton h-4 w-24 rounded" />
+              <div className="skeleton h-4 w-20 rounded" />
+              <div className="skeleton h-4 w-32 rounded" />
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden p-0">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex border-b border-[var(--border)]" style={{ animationDelay: `${i * 60}ms` }}>
+                <div className="w-[152px] shrink-0 border-r border-[var(--border)] bg-[var(--bg-elevated)] p-3">
+                  <div className="skeleton h-3 w-16 rounded" />
+                  <div className="skeleton mt-1.5 h-2 w-10 rounded" />
+                </div>
+                {Array.from({ length: 7 }).map((_, j) => (
+                  <div key={j} className="flex-1 border-r border-[var(--border)] bg-[var(--bg-elevated)]" style={{ minHeight: 80 }}>
+                    {j === 2 && i < 5 && <div className="skeleton mx-1 mt-4 h-4 rounded" style={{ width: `${30 + Math.random() * 40}%` }} />}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return <KanbanSkeleton columns={4} cardsPerCol={3} />;
+  }
 
   return (
     <div className="-mx-6 -mt-6 -mb-6 flex flex-col h-dvh">
@@ -785,6 +849,8 @@ function QueuePageInner() {
               }}
               onOpenModal={setScheduleModal}
               onRefresh={refreshQueueSurface}
+              groupBy={printerGroupBy}
+              onGroupByChange={handlePrinterGroupByChange}
               onSendToPrint={entry => {
                 const task = tasks.find(t => t.id === entry.task_id) ?? entry.task;
                 if (task.gcode_file_id) setSendTask(task);

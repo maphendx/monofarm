@@ -1,19 +1,91 @@
 "use client";
 
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { CalendarBlock } from "./utils";
 import { fmtTimeMins, fmtDuration } from "./utils";
 import { API_URL } from "@/lib/api";
 
-/**
- * A single timed block on the calendar timeline.
- *
- * Position is controlled by the parent cell via absolute CSS:
- *   left: (startMins / 1440) * 100%
- *   width: ((endMins - startMins) / 1440) * 100%
- *
- * Continuation blocks (overflow from previous day) use a dashed left border
- * and a "↩ continued" label instead of the job title.
- */
+function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
+  const { entry, startMins, endMins, totalDurationMins } = block;
+  const task = entry.task;
+  const startLabel = fmtTimeMins(startMins);
+  const endLabel = fmtTimeMins(endMins % 1440);
+  const thumbSrc = task.has_thumbnail && task.gcode_file_id
+    ? `${API_URL}/api/files/${task.gcode_file_id}/thumbnail` : null;
+  const meta = task.filament_meta;
+  const statusLabel = task.status === "done" ? "✓ Завершено"
+    : task.status === "cancelled" ? "⊘ Скасовано"
+    : task.status === "in_progress" ? "● Друкується"
+    : "○ Заплановано";
+  const statusCls = task.status === "done" ? "text-[var(--state-ok)]"
+    : task.status === "cancelled" ? "text-[var(--state-error)]"
+    : task.status === "in_progress" ? "text-[var(--state-print)]"
+    : "text-[var(--accent)]";
+
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 300);
+
+  return createPortal(
+    <div
+      className="fixed z-[9999] w-[290px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-xl"
+      style={{ top, left, maxHeight: 360, overflowY: "auto" }}
+      onMouseDown={e => e.stopPropagation()}
+    >
+      <div className="flex gap-3 border-b border-[var(--border)] px-4 py-3">
+        {thumbSrc ? (
+          <img src={thumbSrc} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+        ) : (
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-hi)] text-xs font-bold text-[var(--text-faint)]">
+            {(task.file_name ?? "").endsWith(".3mf") ? "3MF" : "GC"}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-semibold leading-tight text-[var(--text-hi)]">{task.file_name ?? task.title}</p>
+          {task.title !== (task.file_name ?? task.title) && (
+            <p className="mt-0.5 truncate text-[10px] text-[var(--text-faint)]">{task.title}</p>
+          )}
+          <p className={`mt-1 text-[10px] font-medium ${statusCls}`}>{statusLabel}</p>
+        </div>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div><span className="text-[var(--text-faint)]">Час</span> <span className="font-medium text-[var(--text)]">{startLabel} → {endLabel}</span></div>
+          <div><span className="text-[var(--text-faint)]">Тривалість</span> <span className="font-medium text-[var(--text)]">{fmtDuration(totalDurationMins)}</span></div>
+          {task.quantity > 1 && (
+            <div><span className="text-[var(--text-faint)]">Кількість</span> <span className="font-medium text-[var(--text)]">×{task.quantity}</span></div>
+          )}
+          {task.estimated_minutes && (
+            <div><span className="text-[var(--text-faint)]">Оцінка</span> <span className="font-medium text-[var(--text)]">{fmtDuration(task.estimated_minutes)}</span></div>
+          )}
+        </div>
+        {meta && (meta.types?.length || meta.colors?.length) && (
+          <div className="flex flex-wrap gap-1 pt-1 border-t border-[var(--border)]/50">
+            {(meta.colors ?? []).map((c: string, i: number) => (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-px text-[9px] text-[var(--text-muted)]">
+                <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" style={{ background: c }} />
+                {meta.types?.[i] ?? ""}
+              </span>
+            ))}
+            {meta.used_g && meta.used_g.length > 0 && (
+              <span className="self-center text-[9px] text-[var(--text-faint)]">
+                {Math.round(meta.used_g.reduce((s: number, g: number) => s + g, 0))} г
+              </span>
+            )}
+          </div>
+        )}
+        {entry.conflict && (
+          <div className="rounded bg-[var(--state-warn)]/10 px-2 py-1 text-[10px] font-medium text-[var(--state-warn)]">⚠ Конфлікт з іншим друком</div>
+        )}
+        {entry.blocked_reason && (
+          <div className="rounded bg-[var(--state-idle)]/10 px-2 py-1 text-[10px] text-[var(--text-muted)]">⊘ {entry.blocked_reason}</div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function ScheduleJobBlock({
   block,
   onClick,
@@ -23,6 +95,7 @@ export function ScheduleJobBlock({
   onClick: () => void;
   onSend?: () => void;
 }) {
+  const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   const { entry, startMins, endMins, isContinuation, totalDurationMins } = block;
   const isConflict = entry.conflict;
   const isBlocked  = !!entry.blocked_reason && entry.schedule_mode !== "asap";
@@ -44,20 +117,16 @@ export function ScheduleJobBlock({
     : startLabel;
   const durationLabel = fmtDuration(totalDurationMins);
   const fileLabel  = entry.task.file_name ?? entry.task.title;
-  const taskLabel  = entry.task.title !== fileLabel ? entry.task.title : null;
   const thumbSrc   = entry.task.has_thumbnail && entry.task.gcode_file_id
     ? `${API_URL}/api/files/${entry.task.gcode_file_id}/thumbnail`
     : null;
 
   const base =
-    "absolute top-0.5 bottom-0.5 rounded overflow-hidden cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
+    "absolute rounded cursor-pointer select-none transition-opacity hover:opacity-90 active:opacity-75";
 
-  const statusTone = status === "done"
-    ? "done"
-    : status === "cancelled"
-    ? "cancelled"
-    : status === "in_progress"
-    ? "printing"
+  const statusTone = status === "done" ? "done"
+    : status === "cancelled" ? "cancelled"
+    : status === "in_progress" ? "printing"
     : "queued";
 
   const colorCls = isConflict
@@ -75,29 +144,19 @@ export function ScheduleJobBlock({
     : "bg-[var(--accent-soft)] border border-[var(--accent)]";
 
   const topBorder = !isContinuation
-    ? isConflict
-      ? "border-t-[3px] border-t-[var(--state-warn)]"
-      : isBlocked
-      ? "border-t-[3px] border-t-[var(--state-idle)]"
-      : statusTone === "done"
-      ? "border-t-[3px] border-t-[var(--state-ok)]"
-      : statusTone === "cancelled"
-      ? "border-t-[3px] border-t-[var(--state-error)]"
-      : statusTone === "printing"
-      ? "border-t-[3px] border-t-[var(--state-print)]"
+    ? isConflict ? "border-t-[3px] border-t-[var(--state-warn)]"
+      : isBlocked ? "border-t-[3px] border-t-[var(--state-idle)]"
+      : statusTone === "done" ? "border-t-[3px] border-t-[var(--state-ok)]"
+      : statusTone === "cancelled" ? "border-t-[3px] border-t-[var(--state-error)]"
+      : statusTone === "printing" ? "border-t-[3px] border-t-[var(--state-print)]"
       : "border-t-[3px] border-t-[var(--accent)]"
     : "";
 
-  const statusLabel = status === "done"
-    ? "завершено"
-    : status === "cancelled"
-    ? "скасовано"
-    : status === "in_progress"
-    ? "друкується"
-    : "у плані";
-
   function onDragStart(e: React.DragEvent<HTMLButtonElement>) {
     e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id }));
+    const fname = entry.task.file_name ?? "";
+    const is3mf = fname.toLowerCase().endsWith(".3mf");
+    e.dataTransfer.setData(is3mf ? "application/x-3mf" : "application/x-gcode", "1");
     e.dataTransfer.effectAllowed = "move";
   }
 
@@ -107,85 +166,46 @@ export function ScheduleJobBlock({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      title={`${fileLabel}${taskLabel ? `\n${taskLabel}` : ""}\n${timeLabel}${durationLabel ? ` · ${durationLabel}` : ""}\n${statusLabel}`}
-      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, zIndex: isOverflow ? 5 : undefined }}
+      style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, top: "40%", height: "28%", minHeight: "18px", zIndex: popoverRect ? 40 : isOverflow ? 8 : 4, overflow: "hidden" }}
       className={`group ${base} ${colorCls} ${topBorder}`}
+      onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setPopoverRect(null)}
     >
-      <div className="flex h-full items-start gap-1.5 px-1.5 pt-1">
-        {isCompact ? (
-          <div className="flex h-full w-full items-center justify-center px-0.5 py-1">
+      <div className="flex h-full items-center gap-1 px-1">
+        {thumbSrc ? (
+          <img src={thumbSrc} alt="" draggable={false} className="h-full max-h-6 w-auto shrink-0 rounded object-cover" />
+        ) : (
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[7px] font-semibold uppercase text-[var(--text-faint)]">
+            {fileLabel.endsWith(".3mf") ? "3mf" : "gc"}
+          </div>
+        )}
+
+        {!isCompact && (
+          <div className="flex min-w-0 flex-1 flex-col">
             <span className={[
-              "max-h-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-semibold leading-none [text-orientation:mixed] [writing-mode:vertical-rl]",
+              "truncate text-[9px] font-semibold leading-tight",
               isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
             ].join(" ")}>
               {isContinuation ? `↩ ${fileLabel}` : fileLabel}
             </span>
+            <span className="truncate text-[8px] tabular-nums text-[var(--text-muted)]">
+              {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
+            </span>
           </div>
-        ) : (
-          <>
-            {thumbSrc ? (
-              <img
-                src={thumbSrc}
-                alt=""
-                draggable={false}
-                className="h-8 w-8 shrink-0 rounded object-cover"
-              />
-            ) : (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[8px] font-semibold uppercase text-[var(--text-faint)]">
-                3mf
-              </div>
-            )}
-          </>
         )}
-
-        {!isCompact && <div className="flex min-w-0 flex-1 flex-col justify-start gap-0.5">
-          {/* File name line */}
-          <span className={[
-            "truncate text-[10px] font-semibold leading-tight",
-            isConflict ? "text-[var(--state-warn)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : statusTone === "done" ? "text-[var(--state-ok)]" : "text-[var(--text)]",
-          ].join(" ")}>
-            {isContinuation ? `↩ ${fileLabel}` : fileLabel}
-          </span>
-
-          {!isCompact && taskLabel && (
-            <span className="truncate text-[9px] leading-tight text-[var(--text-faint)]">
-              {taskLabel}
-            </span>
-          )}
-
-          {/* Time + duration */}
-          <span className="truncate text-[9px] tabular-nums text-[var(--text-muted)]">
-            {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
-          </span>
-
-          {/* Conflict / blocked indicators */}
-          {!isCompact && isConflict && (
-            <span className="text-[9px] text-[var(--state-warn)]">⚠ конфлікт</span>
-          )}
-          {!isCompact && isBlocked && !isConflict && (
-            <span className="text-[9px] text-[var(--state-idle)]">⊘ заблоковано</span>
-          )}
-          {!isCompact && !isConflict && !isBlocked && status !== "queued" && (
-            <span className={[
-              "text-[9px]",
-              statusTone === "done" ? "text-[var(--state-ok)]" : statusTone === "cancelled" ? "text-[var(--state-error)]" : "text-[var(--state-print)]",
-            ].join(" ")}>
-              {statusLabel}
-            </span>
-          )}
-        </div>}
 
         {!isCompact && onSend && status === "queued" && entry.task.gcode_file_id && (
           <button
             type="button"
             onClick={e => { e.stopPropagation(); onSend(); }}
-            className="ml-auto mr-1 mt-0.5 shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[var(--accent)]/80"
+            className="ml-auto shrink-0 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
             title="Надіслати на принтер"
           >
             ▶
           </button>
         )}
       </div>
+      {popoverRect && <JobPopover block={block} rect={popoverRect} />}
     </button>
   );
 }

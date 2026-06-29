@@ -393,6 +393,12 @@ export interface BambuHealthOut {
   jobs: BambuHealthJobs;
 }
 
+export interface PrintHistoryPause {
+  at: string;
+  resumed_at: string | null;
+  duration_sec: number | null;
+}
+
 export interface PrintHistoryItem {
   id: number;
   printer_id: number;
@@ -406,5 +412,7 @@ export interface PrintHistoryItem {
   result_reason: string | null;
   filament_g: number | null;
   material_cost: number | null;
+  pauses: PrintHistoryPause[] | null;
+  slots_used: { slot?: number; type?: string; color?: string; color_hex?: string; grams?: number }[] | null;
   source: string | null;
 }

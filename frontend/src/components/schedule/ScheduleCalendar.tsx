@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CalendarEntry, CalendarLane, Printer, PrintHistoryItem } from "@/lib/types";
 import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
@@ -27,6 +28,21 @@ const UA_DAY = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"] as const;
 const UA_MON = ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"] as const;
 const ROW_LABEL_W = "152px";
 type StateFilter = "all" | "attention" | "printing" | "idle" | "paused" | "offline";
+type GroupBy = "mygroup" | "none" | "kind" | "state";
+
+const KIND_ORDER_CAL = ["bambu", "snapmaker_u1", "other"] as const;
+const KIND_LABELS: Record<string, string> = { bambu: "Bambu", snapmaker_u1: "Snapmaker U1", other: "Інші" };
+const STATE_ORDER_CAL = [
+  "printing", "paused", "error", "awaiting_bed_clear",
+  "in_maintenance", "operational", "online", "print_pending",
+  "idle", "not_connected", "offline", "unknown",
+];
+const GROUP_BY_OPTS: { id: GroupBy; label: string }[] = [
+  { id: "mygroup", label: "По групах" },
+  { id: "none",    label: "Без груп" },
+  { id: "kind",    label: "По типу" },
+  { id: "state",   label: "По стану" },
+];
 
 const ATTENTION_STATES = new Set(["error", "paused", "offline", "not_connected", "awaiting_bed_clear", "in_maintenance"]);
 
@@ -136,24 +152,28 @@ function UntimedChips({
 function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
   const rowH = ZOOM_ROW_H[zoom];
   return (
-    <div className="animate-pulse space-y-px">
+    <div className="space-y-px">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex">
+        <div key={i} className="flex" style={{ animation: `skeletonFadeIn 0.3s ease-out ${i * 50}ms both` }}>
           <div
             style={{ width: ROW_LABEL_W, minWidth: ROW_LABEL_W }}
             className="shrink-0 border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2"
           >
-            <div className="h-3 w-24 rounded bg-[var(--surface-hi)]" />
+            <div className="skeleton h-3 w-16 rounded" />
+            <div className="skeleton mt-1.5 h-2 w-10 rounded" />
           </div>
           {Array.from({ length: 7 }).map((_, j) => (
             <div
               key={j}
               style={{ height: rowH }}
-              className="flex-1 border border-[var(--border)] bg-[var(--bg-elevated)]"
-            />
+              className="flex-1 border border-[var(--border)] bg-[var(--bg-elevated)] p-1"
+            >
+              {(i + j) % 3 === 0 && <div className="skeleton mt-4 h-4 rounded" style={{ width: `${30 + ((i * 7 + j) * 17) % 40}%` }} />}
+            </div>
           ))}
         </div>
       ))}
+      <style>{`@keyframes skeletonFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
 }
@@ -179,7 +199,38 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: number }) {
+function RunningPrintPopover({ printer, rect, startLabel, endLabel, progressPct, remainMins, elapsedMins, daysSuffix }: {
+  printer: Printer; rect: DOMRect; startLabel: string; endLabel: string; progressPct: number; remainMins: number; elapsedMins: number; daysSuffix: string;
+}) {
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 290);
+  return createPortal(
+    <div className="fixed z-[9999] w-[280px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-xl" style={{ top, left }}>
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <p className="text-sm font-semibold text-[var(--text-hi)]">{printer.job ?? "друк"}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{printer.name}</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-2 rounded-full bg-[var(--surface-hi)] overflow-hidden">
+            <div className="h-full rounded-full bg-[var(--state-print)]" style={{ width: `${progressPct}%` }} />
+          </div>
+          <span className="text-xs font-bold tabular-nums text-[var(--state-print)]">{Math.round(progressPct)}%</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <div><span className="text-[var(--text-faint)]">Старт</span> <span className="font-medium text-[var(--text)]">{startLabel}</span></div>
+          <div><span className="text-[var(--text-faint)]">Кінець</span> <span className="font-medium text-[var(--text)]">{endLabel}{daysSuffix}</span></div>
+          <div><span className="text-[var(--text-faint)]">Пройшло</span> <span className="font-medium text-[var(--text)]">{fmtDuration(elapsedMins)}</span></div>
+          <div><span className="text-[var(--text-faint)]">Залишилось</span> <span className="font-medium text-[var(--text)]">{fmtDuration(remainMins)}</span></div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; nowMins: number; daysLeft: number }) {
+  const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
   if (printer.state !== "printing" || !printer.eta_minutes) return null;
   const remainMins = printer.eta_minutes;
   if (remainMins <= 0) return null;
@@ -187,55 +238,94 @@ function RunningPrintBar({ printer, nowMins }: { printer: Printer; nowMins: numb
   const totalEstimate = progressPct > 1 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
   const elapsedMins = totalEstimate - remainMins;
   const startMins = Math.max(0, nowMins - elapsedMins);
-  const endMins = nowMins + remainMins;
+  const maxEndMins = (daysLeft + 1) * 1440;
+  const endMins = Math.min(nowMins + remainMins, maxEndMins);
   const leftPct = (startMins / 1440) * 100;
   const widthPct = Math.max(1.5, ((endMins - startMins) / 1440) * 100);
   const isOverflow = endMins > 1440;
   const startLabel = fmtTimeMins(startMins);
-  const endLabel = fmtTimeMins(endMins % 1440);
+  const endLabel = fmtTimeMins((nowMins + remainMins) % 1440);
+  const overflowDays = Math.floor((nowMins + remainMins) / 1440);
+  const daysSuffix = overflowDays > 0 ? ` +${overflowDays}д` : "";
   return (
     <div
-      className="absolute top-3.5 flex items-center overflow-hidden rounded border border-[var(--state-print)]/40"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, height: "calc(100% - 38px)", minHeight: "18px", background: "rgba(59,130,246,.06)", zIndex: isOverflow ? 8 : 5 }}
-      title={`${printer.job ?? "друк"} · ${startLabel}→${endLabel}${isOverflow ? " +1д" : ""} · ${Math.round(progressPct)}% · зал. ${remainMins}хв`}
+      className="absolute flex items-center overflow-hidden rounded border border-[var(--state-print)]/30 cursor-pointer"
+      style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "40%", height: "28%", minHeight: "18px", background: "rgba(59,130,246,.08)", zIndex: popoverRect ? 40 : isOverflow ? 8 : 5 }}
+      onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setPopoverRect(null)}
     >
-      <div
-        className="absolute inset-y-0 left-0 bg-[var(--state-print)]/12"
-        style={{ width: `${progressPct}%` }}
-      />
-      <span className="relative z-10 truncate px-1.5 text-[9px] font-semibold text-[var(--state-print)]">
-        {printer.job ?? "друк"} · {Math.round(progressPct)}% · {fmtDuration(remainMins)}
-      </span>
+      <div className="absolute inset-y-0 left-0 bg-[var(--state-print)]/10" style={{ width: `${progressPct}%` }} />
+      <div className="relative z-10 flex min-w-0 items-center gap-1 px-1.5">
+        <span className="shrink-0 text-[9px] font-bold tabular-nums text-[var(--state-print)]">{Math.round(progressPct)}%</span>
+        <span className="truncate text-[8px] text-[var(--state-print)]/70">{printer.job ?? "друк"}</span>
+        <span className="ml-auto shrink-0 text-[8px] tabular-nums text-[var(--state-print)]/60">{fmtDuration(remainMins)}{daysSuffix}</span>
+      </div>
+      {popoverRect && <RunningPrintPopover printer={printer} rect={popoverRect} startLabel={startLabel} endLabel={endLabel} progressPct={progressPct} remainMins={remainMins} elapsedMins={elapsedMins} daysSuffix={daysSuffix} />}
     </div>
   );
 }
 
-function LiveStateBlock({ printer, now, nowMins }: { printer: Printer; now: Date; nowMins: number }) {
+function LiveStateBlock({ printer, now, nowMins, historyItems }: { printer: Printer; now: Date; nowMins: number; historyItems?: PrintHistoryItem[] }) {
   const state = printer.state ?? "unknown";
   if (state === "printing") return null;
 
-  const relevant = state === "error" || state === "paused" || state === "offline" || state === "not_connected" || state === "idle";
+  const relevant = state === "error" || state === "paused" || state === "offline" || state === "not_connected" || state === "idle" || state === "operational";
   if (!relevant) return null;
 
   const since = minutesSince(printer.updated_at, now);
-  const startMins = since == null ? Math.max(0, nowMins - 30) : Math.max(0, nowMins - since);
+  let startMins: number;
+  if (since != null) {
+    startMins = Math.max(0, nowMins - since);
+  } else if (historyItems && historyItems.length > 0) {
+    const lastFinish = historyItems
+      .filter(h => h.finished_at && h.result !== "in_progress")
+      .map(h => new Date(h.finished_at!))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (lastFinish && isoDateStr(lastFinish) === isoDateStr(now)) {
+      startMins = lastFinish.getHours() * 60 + lastFinish.getMinutes();
+    } else {
+      startMins = 0;
+    }
+  } else {
+    startMins = 0;
+  }
+  if (startMins >= nowMins) return null;
+
   const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1.2, ((nowMins - startMins) / 1440) * 100);
-  const isBad = state === "error" || state === "offline" || state === "not_connected";
-  const color = isBad ? "var(--state-error)" : state === "paused" ? "var(--state-warn)" : "var(--state-idle)";
-  const bg = isBad ? "rgba(239,68,68,.10)" : state === "paused" ? "rgba(245,158,11,.10)" : "rgba(113,113,122,.09)";
-  const label = state === "idle" ? "простій" : stateLabel(state);
-  const duration = since == null ? "" : ` · ${fmtDuration(since)}`;
+  const widthPct = Math.max(2, ((nowMins - startMins) / 1440) * 100);
+  const durationVal = nowMins - startMins;
+
+  const isError = state === "error";
+  const isPause = state === "paused";
+  const isOffline = state === "offline" || state === "not_connected";
+
+  const color = isError ? "var(--state-error)"
+    : isPause ? "var(--state-warn)"
+    : isOffline ? "var(--state-offline)"
+    : "var(--state-idle)";
+  const bg = isError ? "rgba(239,68,68,.10)"
+    : isPause ? "rgba(245,158,11,.10)"
+    : isOffline ? "rgba(113,113,122,.07)"
+    : "rgba(161,161,170,.05)";
+  const icon = isError ? "✕" : isPause ? "⏸" : isOffline ? "◌" : "○";
+  const label = isError ? "помилка" : isPause ? "пауза" : isOffline ? "офлайн" : "простій";
 
   return (
     <div
-      className="absolute bottom-1 z-[6] flex h-5 items-center overflow-hidden rounded-sm border px-1"
-      style={{ left: `${leftPct}%`, width: `max(42px, ${widthPct}%)`, borderColor: color, background: bg, color }}
-      title={`${printer.name}: ${label}${duration}`}
+      className="absolute z-[2] flex items-center overflow-hidden rounded border px-1.5"
+      style={{ left: `${leftPct}%`, width: `max(40px, ${widthPct}%)`, top: "70%", height: "28%", minHeight: "16px", borderColor: color, background: bg, color, borderStyle: (isOffline || (!isError && !isPause)) ? "dashed" : "solid" }}
+      title={`${printer.name}: ${label} · ${fmtDuration(durationVal)}${printer.error_msg ? `\n${printer.error_msg}` : ""}`}
     >
-      <span className="truncate text-[8px] font-semibold leading-none">
-        {label}{duration}
-      </span>
+      {isError && (
+        <div className="absolute inset-0 opacity-[0.06]" style={{
+          backgroundImage: "repeating-linear-gradient(135deg, transparent 0 6px, currentColor 6px 7px)",
+        }} />
+      )}
+      <div className="relative z-10 flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 text-[10px] font-bold">{icon}</span>
+        <span className="truncate text-[9px] font-semibold">{label}</span>
+        <span className="shrink-0 text-[8px] tabular-nums opacity-70">{fmtDuration(durationVal)}</span>
+      </div>
     </div>
   );
 }
@@ -329,47 +419,193 @@ function FarmStatusPanel({
   );
 }
 
-function HistoryBlock({
-  item,
-  dayDate,
-}: {
-  item: PrintHistoryItem;
-  dayDate: string;
-}) {
-  const start = new Date(item.started_at);
-  const localDate = isoDateStr(start);
-  const startMins = localDate === dayDate
-    ? start.getHours() * 60 + start.getMinutes()
-    : 0;
-  const durationMins = item.duration_minutes ?? (item.finished_at
-    ? Math.round((new Date(item.finished_at).getTime() - start.getTime()) / 60000)
-    : 30);
-  const endMins = startMins + Math.max(durationMins, 5);
-  const leftPct = (startMins / 1440) * 100;
-  const widthPct = Math.max(1, ((endMins - startMins) / 1440) * 100);
+interface HistorySegment {
+  startMins: number;
+  endMins: number;
+  count: number;
+  totalMins: number;
+  totalG: number;
+  hasFail: boolean;
+  items: PrintHistoryItem[];
+}
 
-  const isFail = item.result === "failed" || item.result === "cancelled";
-  const bg = isFail ? "rgba(239,68,68,.12)" : "rgba(34,197,94,.12)";
-  const borderClr = isFail ? "rgba(239,68,68,.40)" : "rgba(34,197,94,.35)";
-  const topClr = isFail ? "var(--state-error)" : "var(--state-ok)";
-  const resultLabel = item.result === "failed" ? "збій" : item.result === "cancelled" ? "скасовано" : "✓";
+function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEndMins: number): HistorySegment[] {
+  if (items.length === 0) return [];
+  const enriched = items.map(h => {
+    const start = new Date(h.started_at);
+    const localDate = isoDateStr(start);
+    const startMins = localDate === dayDate ? start.getHours() * 60 + start.getMinutes() : 0;
+    const dur = h.duration_minutes ?? (h.finished_at
+      ? Math.round((new Date(h.finished_at).getTime() - start.getTime()) / 60000)
+      : 30);
+    return { h, startMins, endMins: startMins + Math.max(dur, 5), dur };
+  }).sort((a, b) => a.startMins - b.startMins);
+
+  const segments: HistorySegment[] = [];
+  let cur = {
+    startMins: enriched[0].startMins, endMins: enriched[0].endMins,
+    count: 1, totalMins: enriched[0].dur, totalG: enriched[0].h.filament_g ?? 0,
+    hasFail: enriched[0].h.result === "failed" || enriched[0].h.result === "cancelled",
+    items: [enriched[0].h],
+  };
+  for (let i = 1; i < enriched.length; i++) {
+    const e = enriched[i];
+    const isFail = e.h.result === "failed" || e.h.result === "cancelled";
+    if (e.startMins <= cur.endMins + 15) {
+      cur.endMins = Math.max(cur.endMins, e.endMins);
+      cur.count++;
+      cur.totalMins += e.dur;
+      cur.totalG += e.h.filament_g ?? 0;
+      if (isFail) cur.hasFail = true;
+      cur.items.push(e.h);
+    } else {
+      segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+      cur = {
+        startMins: e.startMins, endMins: e.endMins,
+        count: 1, totalMins: e.dur, totalG: e.h.filament_g ?? 0,
+        hasFail: isFail, items: [e.h],
+      };
+    }
+  }
+  segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+  return segments;
+}
+
+function SegmentPopoverContent({ seg, rect }: { seg: HistorySegment; rect: DOMRect }) {
+  const startLabel = fmtTimeMins(seg.startMins);
+  const endLabel = fmtTimeMins(seg.endMins % 1440);
+  const gramsLabel = seg.totalG > 0 ? (seg.totalG >= 1000 ? `${(seg.totalG / 1000).toFixed(2)} кг` : `${Math.round(seg.totalG)} г`) : null;
+  const totalCost = seg.items.reduce((s, h) => s + (h.material_cost ?? 0), 0);
+
+  const top = rect.bottom + 6;
+  const left = Math.min(rect.left, window.innerWidth - 310);
+
+  return createPortal(
+    <div
+      className="fixed z-[9999] w-[300px] rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] shadow-xl"
+      style={{ top, left, maxHeight: Math.min(380, window.innerHeight - top - 16), overflowY: "auto" }}
+      onMouseDown={e => e.stopPropagation()}
+    >
+      <div className="border-b border-[var(--border)] px-4 py-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-[var(--text-hi)]">{startLabel} → {endLabel}</span>
+          <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">{fmtDuration(seg.totalMins)}</span>
+        </div>
+        <div className="mt-1 flex gap-3 text-[11px] text-[var(--text-muted)]">
+          <span>{seg.count} {seg.count === 1 ? "друк" : "друків"}</span>
+          {gramsLabel && <span>{gramsLabel}</span>}
+          {totalCost > 0 && <span>{totalCost.toFixed(0)} ₴</span>}
+        </div>
+      </div>
+      <div className="divide-y divide-[var(--border)]/50 py-0.5">
+        {seg.items.slice(0, 12).map(h => {
+          const isFail = h.result === "failed" || h.result === "cancelled";
+          const icon = h.result === "failed" ? "✕" : h.result === "cancelled" ? "⊘" : "✓";
+          const dotCls = isFail ? "bg-[var(--state-error)]" : "bg-[var(--state-ok)]";
+          const totalPauseSec = (h.pauses ?? []).reduce((s, p) => s + (p.duration_sec ?? 0), 0);
+          return (
+            <div key={h.id} className="px-4 py-2">
+              <div className="flex items-start gap-2">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dotCls}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-medium leading-tight text-[var(--text)]">{h.file_name ?? "друк"}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                    {h.duration_minutes != null && (
+                      <span className="text-[var(--text-muted)]">{fmtDuration(h.duration_minutes)}</span>
+                    )}
+                    {h.filament_g != null && (
+                      <span className="rounded bg-[var(--surface-hi)] px-1 py-px text-[10px] text-[var(--text-muted)]">{Math.round(h.filament_g)} г</span>
+                    )}
+                    {h.material_cost != null && (
+                      <span className="text-[var(--text-faint)]">{h.material_cost.toFixed(0)} ₴</span>
+                    )}
+                    <span className={`text-[10px] ${isFail ? "font-medium text-[var(--state-error)]" : "text-[var(--text-faint)]"}`}>
+                      {icon} {h.result === "failed" ? "збій" : h.result === "cancelled" ? "скасовано" : "завершено"}
+                    </span>
+                  </div>
+                  {h.slots_used && h.slots_used.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {h.slots_used.map((s, si) => (
+                        <span key={si} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-px text-[9px] text-[var(--text-muted)]">
+                          {s.color_hex && <span className="h-2 w-2 shrink-0 rounded-full border border-white/20" style={{ background: s.color_hex }} />}
+                          {s.type ?? s.color ?? `слот ${(s.slot ?? si) + 1}`}
+                          {s.grams != null && <span className="tabular-nums">{Math.round(s.grams)}г</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {h.result_reason && (
+                    <p className="mt-1 rounded bg-[var(--state-error)]/8 px-1.5 py-0.5 text-[10px] text-[var(--state-error)]">{h.result_reason}</p>
+                  )}
+                  {h.pauses && h.pauses.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {h.pauses.map((p, pi) => {
+                        const at = new Date(p.at);
+                        const t = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+                        return (
+                          <span key={pi} className="inline-flex items-center gap-0.5 rounded-full border border-[var(--state-warn)]/30 bg-[var(--state-warn)]/8 px-1.5 py-px text-[9px] font-medium text-[var(--state-warn)]">
+                            ⏸ {t} {p.duration_sec ? fmtDuration(Math.ceil(p.duration_sec / 60)) : "…"}
+                          </span>
+                        );
+                      })}
+                      {totalPauseSec > 60 && (
+                        <span className="self-center text-[9px] text-[var(--text-faint)]">Σ {fmtDuration(Math.ceil(totalPauseSec / 60))}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {seg.items.length > 12 && (
+          <div className="px-4 py-2 text-center text-[10px] text-[var(--text-faint)]">
+            …і ще {seg.items.length - 12}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
+  const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
+  const leftPct = (seg.startMins / 1440) * 100;
+  const widthPct = Math.max(1, ((seg.endMins - seg.startMins) / 1440) * 100);
+  const bg = seg.hasFail ? "rgba(239,68,68,.08)" : "rgba(34,197,94,.10)";
+  const borderClr = seg.hasFail ? "rgba(239,68,68,.30)" : "rgba(34,197,94,.25)";
+  const textClr = seg.hasFail ? "var(--state-error)" : "var(--state-ok)";
+  const startLabel = fmtTimeMins(seg.startMins);
+  const endLabel = fmtTimeMins(seg.endMins % 1440);
+  const gramsLabel = seg.totalG > 0 ? (seg.totalG >= 1000 ? `${(seg.totalG / 1000).toFixed(1)}кг` : `${Math.round(seg.totalG)}г`) : "";
 
   return (
     <div
-      className="absolute top-0 z-[3] flex h-3.5 items-center overflow-hidden rounded-b border-b border-x opacity-70 hover:opacity-100 transition-opacity"
+      className="absolute z-[3] flex items-center overflow-hidden rounded border cursor-pointer transition-opacity"
       style={{
         left: `${leftPct}%`,
-        width: `max(20px, ${widthPct}%)`,
+        width: `max(24px, ${widthPct}%)`,
+        top: "1px",
+        height: "38%",
         background: bg,
         borderColor: borderClr,
-        borderTop: `2px solid ${topClr}`,
-        color: topClr,
+        color: textClr,
+        opacity: popoverRect ? 1 : 0.6,
+        zIndex: popoverRect ? 40 : 3,
       }}
-      title={`${item.file_name ?? "друк"} · ${resultLabel} · ${fmtDuration(durationMins)}${item.result_reason ? ` · ${item.result_reason}` : ""}`}
+      onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setPopoverRect(null)}
     >
-      <span className="truncate px-0.5 text-[7px] font-semibold leading-none">
-        {resultLabel} {item.file_name ?? "друк"}
-      </span>
+      <div className="flex min-w-0 items-center gap-1 px-1">
+        <span className="shrink-0 text-[8px] font-bold">{seg.hasFail ? "✕" : "✓"}</span>
+        <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
+        <span className="shrink-0 text-[7px] tabular-nums opacity-70">
+          {seg.count > 1 ? `×${seg.count}` : fmtDuration(seg.totalMins)}
+          {gramsLabel && ` ${gramsLabel}`}
+        </span>
+      </div>
+      {popoverRect && <SegmentPopoverContent seg={seg} rect={popoverRect} />}
     </div>
   );
 }
@@ -388,7 +624,11 @@ interface Props {
   onOpenModal: (mode: ScheduleModalMode) => void;
   onRefresh: () => void;
   onSendToPrint?: (entry: CalendarEntry) => void;
+  groupBy?: GroupBy;
+  onGroupByChange?: (v: GroupBy) => void;
 }
+
+const DRAG_TRANSPARENT = "pointer-events-none";
 
 export function ScheduleCalendar({
   lanes,
@@ -404,6 +644,8 @@ export function ScheduleCalendar({
   onOpenModal,
   onRefresh,
   onSendToPrint,
+  groupBy = "mygroup",
+  onGroupByChange,
 }: Props) {
   const printerById = useMemo(() => {
     const map = new Map<number, Printer>();
@@ -427,6 +669,7 @@ export function ScheduleCalendar({
     const weekStrs = weekDates.map(isoDateStr);
     for (const h of history) {
       if (h.result === "in_progress") continue;
+      if ((h.duration_minutes ?? 0) < 5 && h.result !== "failed") continue;
       const d = new Date(h.started_at);
       const dateStr = isoDateStr(d);
       const di = weekStrs.indexOf(dateStr);
@@ -521,22 +764,53 @@ export function ScheduleCalendar({
   );
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
 
-  // Group lanes by group_id, preserving server sort order
   const grouped = useMemo(() => {
-    const groups: { groupId: number | null; groupName: string | null; groupColor: string | null; lanes: CalendarLane[] }[] = [];
-    const seen = new Map<number | null, typeof groups[0]>();
-    for (const lane of lanes) {
-      if (!printerMatchesFilter(printerById.get(lane.printer_id), stateFilter)) continue;
-      const key = lane.group_id ?? null;
-      if (!seen.has(key)) {
-        const g = { groupId: key, groupName: lane.group_name ?? null, groupColor: lane.group_color ?? null, lanes: [] as CalendarLane[] };
-        groups.push(g);
-        seen.set(key, g);
-      }
-      seen.get(key)!.lanes.push(lane);
+    type Group = { groupId: number | null; groupName: string | null; groupColor: string | null; lanes: CalendarLane[] };
+    const filtered = lanes.filter(lane => printerMatchesFilter(printerById.get(lane.printer_id), stateFilter));
+
+    if (groupBy === "none") {
+      return [{ groupId: null, groupName: null, groupColor: null, lanes: filtered }] as Group[];
     }
-    return groups;
-  }, [lanes, printerById, stateFilter]);
+
+    if (groupBy === "mygroup") {
+      const groups: Group[] = [];
+      const seen = new Map<number | null, Group>();
+      for (const lane of filtered) {
+        const key = lane.group_id ?? null;
+        if (!seen.has(key)) {
+          const g: Group = { groupId: key, groupName: lane.group_name ?? null, groupColor: lane.group_color ?? null, lanes: [] };
+          groups.push(g);
+          seen.set(key, g);
+        }
+        seen.get(key)!.lanes.push(lane);
+      }
+      return groups;
+    }
+
+    if (groupBy === "kind") {
+      const byKind = new Map<string, CalendarLane[]>();
+      for (const lane of filtered) {
+        if (!byKind.has(lane.printer_kind)) byKind.set(lane.printer_kind, []);
+        byKind.get(lane.printer_kind)!.push(lane);
+      }
+      return KIND_ORDER_CAL.filter(k => byKind.has(k)).map(k => ({
+        groupId: null, groupName: KIND_LABELS[k] ?? k, groupColor: null, lanes: byKind.get(k)!,
+      })) as Group[];
+    }
+
+    // groupBy === "state"
+    const byState = new Map<string, CalendarLane[]>();
+    for (const lane of filtered) {
+      const state = printerById.get(lane.printer_id)?.state ?? "unknown";
+      if (!byState.has(state)) byState.set(state, []);
+      byState.get(state)!.push(lane);
+    }
+    const orderedStates = STATE_ORDER_CAL.filter(s => byState.has(s));
+    for (const s of byState.keys()) if (!orderedStates.includes(s)) orderedStates.push(s);
+    return orderedStates.map(s => ({
+      groupId: null, groupName: stateLabel(s), groupColor: null, lanes: byState.get(s)!,
+    })) as Group[];
+  }, [lanes, printerById, stateFilter, groupBy]);
 
   function handleEntryClick(entry: CalendarEntry) {
     onOpenModal({ type: "edit", entry });
@@ -582,31 +856,47 @@ export function ScheduleCalendar({
       return;
     }
 
-    const startMins = getDropMins(e);
-    const startTime = minsToStartTime(startMins);
+    let startMins = getDropMins(e);
+    let startTime = minsToStartTime(startMins);
 
-    // --- Validation ---
-    const fileName = data.type === "block" 
-       ? (findEntry(data.entryId)?.task.file_name || "") 
-       : (data.fileName || "");
-       
+    // Block drop on past days
+    const todayDate = isoDateStr(new Date());
+    if (planDate < todayDate) {
+      setDropError("Не можна планувати на минулі дні");
+      setTimeout(() => setDropError(null), 3500);
+      return;
+    }
+
+    // Snap to after current print end
+    const printer = printerById.get(printerId);
+    if (printer?.state === "printing" && printer.eta_minutes) {
+      const printEndMins = nowMins + printer.eta_minutes;
+      if (startMins < printEndMins) {
+        startMins = Math.min(printEndMins, 1439);
+        startTime = minsToStartTime(startMins);
+      }
+    }
+
+    // File type compatibility check
+    const fileName = data.type === "block"
+      ? (findEntry(data.entryId)?.task.file_name || "")
+      : (data.fileName || "");
     if (fileName) {
-       const is3mf = fileName.toLowerCase().endsWith(".3mf");
-       const isGcode = fileName.toLowerCase().match(/\.(gcode|gco|g|bgcode)$/);
-       const lane = lanes.find(l => l.printer_id === printerId);
-       
-       if (lane) {
-         if (is3mf && lane.printer_kind !== "bambu") {
-           setDropError("Файли .3mf можна призначати тільки на принтери Bambu");
-           setTimeout(() => setDropError(null), 3500);
-           return;
-         }
-         if (isGcode && lane.printer_kind === "bambu") {
-           setDropError("Файли .gcode не можна призначати на принтери Bambu");
-           setTimeout(() => setDropError(null), 3500);
-           return;
-         }
-       }
+      const is3mf = fileName.toLowerCase().endsWith(".3mf");
+      const isGcode = !!fileName.toLowerCase().match(/\.(gcode|gco|g|bgcode)$/);
+      const lane = lanes.find(l => l.printer_id === printerId);
+      if (lane) {
+        if (is3mf && lane.printer_kind !== "bambu") {
+          setDropError("Файли .3mf можна тільки на Bambu принтери");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
+        if (isGcode && lane.printer_kind === "bambu") {
+          setDropError("Файли .gcode не можна на Bambu принтери");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
+      }
     }
 
     setDropping(true);
@@ -729,6 +1019,17 @@ export function ScheduleCalendar({
               +
             </button>
           </div>
+
+          {/* Group-by selector */}
+          <select
+            value={groupBy}
+            onChange={e => onGroupByChange?.(e.target.value as GroupBy)}
+            className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-xs text-[var(--text)] outline-none hover:border-[var(--border-strong)]"
+          >
+            {GROUP_BY_OPTS.map(o => (
+              <option key={o.id} value={o.id}>{o.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -908,14 +1209,19 @@ export function ScheduleCalendar({
                     const blocks   = blockMap.get(cellKey as `${number}-${number}`) ?? [];
                     const untimed  = untimedMap.get(cellKey as `${number}-${number}`) ?? [];
                     const histItems = historyByPrinterDay.get(cellKey) ?? [];
+                    const histSegments = mergeHistorySegments(histItems, dateStr, (6 - di + 1) * 1440);
                     const isDropTarget = dropCell === cellKey;
+
+                    const isPast = new Date(dateStr) < new Date(todayStr);
+                    const printerLive = printerById.get(lane.printer_id);
+                    const isPrinting = printerLive?.state === "printing";
 
                     return (
                       <div
                         key={`cell-${lane.printer_id}-${di}`}
                         className={[
                           "relative overflow-visible border-b border-r border-[var(--border)] transition-colors",
-                          isToday ? "bg-[rgba(34,211,238,.03)]" : "bg-[var(--bg-elevated)]",
+                          isToday ? "bg-[rgba(34,211,238,.03)]" : isPast ? "bg-[var(--bg)]" : "bg-[var(--bg-elevated)]",
                           isDropTarget && !dropIncompat ? "bg-[rgba(34,211,238,.10)] ring-1 ring-inset ring-[var(--accent)]" : "",
                           isDropTarget && dropIncompat ? "bg-[rgba(239,68,68,.08)] ring-1 ring-inset ring-[var(--state-error)]" : "",
                           dropping ? "cursor-wait" : "",
@@ -923,11 +1229,22 @@ export function ScheduleCalendar({
                         style={{ minHeight: rowH }}
                         onDragOver={e => {
                           e.preventDefault();
-                          const startMins = getDropMins(e);
-                          e.dataTransfer.dropEffect = "move";
+                          let startMins = getDropMins(e);
+                          const types = e.dataTransfer.types;
+                          const is3mf = types.includes("application/x-3mf");
+                          const isGcode = types.includes("application/x-gcode");
+                          const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
+                          const incompat = isPast || fileIncompat;
+
+                          if (isPrinting && printerLive?.eta_minutes) {
+                            const printEndMins = nowMins + printerLive.eta_minutes;
+                            if (startMins < printEndMins) startMins = Math.min(printEndMins, 1439);
+                          }
+
+                          setDropIncompat(incompat);
+                          e.dataTransfer.dropEffect = incompat ? "none" : "move";
                           setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
-                          setDropIncompat(false);
                         }}
                         onDragLeave={e => {
                           if (!e.currentTarget.contains(e.relatedTarget as Node)) {
@@ -939,19 +1256,20 @@ export function ScheduleCalendar({
                       >
                         <HourGrid step={step} />
 
-                        {/* History blocks (past prints) */}
-                        {histItems.map(h => (
-                          <HistoryBlock key={`h-${h.id}`} item={h} dayDate={dateStr} />
-                        ))}
+                        {/* Overlay blocks — transparent to drag events */}
+                        <div className={dropCell ? DRAG_TRANSPARENT : ""}>
+                          {histSegments.map((seg, si) => (
+                            <HistorySegmentBlock key={`hs-${si}`} seg={seg} />
+                          ))}
 
-                        {/* Running print bar (today only) */}
-                        {isToday && printerById.get(lane.printer_id) && (
-                          <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} />
-                        )}
+                          {isToday && printerById.get(lane.printer_id) && (
+                            <RunningPrintBar printer={printerById.get(lane.printer_id)!} nowMins={nowMins} daysLeft={6 - di} />
+                          )}
 
-                        {isToday && printerById.get(lane.printer_id) && (
-                          <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} />
-                        )}
+                          {isToday && printerById.get(lane.printer_id) && (
+                            <LiveStateBlock printer={printerById.get(lane.printer_id)!} now={now} nowMins={nowMins} historyItems={histItems} />
+                          )}
+                        </div>
 
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
 

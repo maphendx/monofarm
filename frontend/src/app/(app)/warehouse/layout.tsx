@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ScannerModal } from "@/components/warehouse/ScannerModal";
+import { WarehouseNoticeOverlay } from "@/components/warehouse/WarehouseNoticeOverlay";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { useUser } from "@/lib/auth-context";
 
@@ -131,6 +132,7 @@ export default function WarehouseLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="-mx-6 -mt-6">
+      <WarehouseNoticeOverlay />
 
       {/* ── Sticky nav header ─────────────────────────────────────────────── */}
       <div className="sticky top-0 z-20 bg-[var(--bg-elevated)]">

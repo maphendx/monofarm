@@ -25,6 +25,8 @@ class PrintHistory(Base):
     result_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     filament_g: Mapped[float | None]
 
+    pauses: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     # Per-slot consumption breakdown: [{slot_index, filament_id, grams, length_mm}]
     slots_used: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Sum of (grams/1000 * cost_per_kg) across all slots

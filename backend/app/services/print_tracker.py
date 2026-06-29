@@ -90,13 +90,21 @@ def _check_org(db, org: Organization) -> None:
         if state in PRINTING_STATES and prev_state not in PRINTING_STATES:
             # Close any stale in_progress entry first
             _close_stale(db, row.id, now, "cancelled")
+            filaments = None
+            if row.loaded_filaments:
+                try:
+                    filaments = [{"slot": i, "type": f.get("type"), "color": f.get("color"), "color_hex": f.get("color_hex")} for i, f in enumerate(row.loaded_filaments) if f]
+                except Exception:
+                    pass
             entry = PrintHistory(
                 organization_id=org.id,
                 printer_id=row.id,
                 printer_name=row.name,
+                printer_kind=row.kind.value if row.kind else None,
                 file_name=current.get("file"),
                 started_at=now,
                 result="in_progress",
+                slots_used=filaments,
             )
             db.add(entry)
             db.commit()
@@ -104,8 +112,15 @@ def _check_org(db, org: Organization) -> None:
 
         error_msg = current.get("error_msg") or prev.get("error_msg")
 
-        # printing → paused without a visible error: keep the job open.
+        # printing → paused: record pause start
         if prev_state in PRINTING_STATES and state == "paused" and not error_msg:
+            _record_pause_start(db, row.id, now)
+            _prev[row.id] = current
+            continue
+
+        # paused → printing: record pause end
+        if prev_state == "paused" and state in PRINTING_STATES:
+            _record_pause_end(db, row.id, now)
             _prev[row.id] = current
             continue
 
@@ -217,8 +232,8 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
     db.commit()
 
 
-def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
-    entry = (
+def _find_active_entry(db, printer_id: int):
+    entries = (
         db.query(PrintHistory)
         .filter(
             PrintHistory.printer_id == printer_id,
@@ -226,9 +241,45 @@ def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
             or_(PrintHistory.source.is_(None), PrintHistory.source != "cloud"),
             PrintHistory.bambu_cloud_job_id.is_(None),
         )
-        .order_by(PrintHistory.started_at.desc())
-        .first()
+        .all()
     )
+    if not entries:
+        return None
+    if len(entries) == 1:
+        return entries[0]
+    return max(entries, key=lambda e: getattr(e, "started_at", None) or datetime.min)
+
+
+def _record_pause_start(db, printer_id: int, now: datetime) -> None:
+    entry = _find_active_entry(db, printer_id)
+    if not entry or not hasattr(entry, "pauses"):
+        return
+    pauses = list(entry.pauses or [])
+    if pauses and pauses[-1].get("resumed_at") is None:
+        return
+    pauses.append({"at": now.isoformat(), "resumed_at": None, "duration_sec": None})
+    entry.pauses = pauses
+    db.commit()
+
+
+def _record_pause_end(db, printer_id: int, now: datetime) -> None:
+    entry = _find_active_entry(db, printer_id)
+    if not entry or not hasattr(entry, "pauses") or not entry.pauses:
+        return
+    pauses = list(entry.pauses)
+    if not pauses or pauses[-1].get("resumed_at") is not None:
+        return
+    last = dict(pauses[-1])
+    last["resumed_at"] = now.isoformat()
+    pause_start = datetime.fromisoformat(last["at"])
+    last["duration_sec"] = max(0, int((now - pause_start).total_seconds()))
+    pauses[-1] = last
+    entry.pauses = pauses
+    db.commit()
+
+
+def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
+    entry = _find_active_entry(db, printer_id)
     if entry:
         entry.finished_at = now
         entry.result = result

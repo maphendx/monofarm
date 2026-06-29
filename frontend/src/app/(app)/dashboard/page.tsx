@@ -466,7 +466,17 @@ export default function DashboardPage() {
 
   const { printers, connected, loading, reload } = usePrinterStream();
   const [filter, setFilter] = useState<Filter>("all");
-  const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+    try {
+      const saved = localStorage.getItem("monofarm_printer_group_by") as GroupBy;
+      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) return saved;
+    } catch {}
+    return "mygroup";
+  });
+  function handleGroupByChange(v: GroupBy) {
+    setGroupBy(v);
+    try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}
+  }
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [autoDispatchOpen, setAutoDispatchOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
@@ -618,7 +628,7 @@ export default function DashboardPage() {
               ? `${filtered.length} з ${counts.all}`
               : counts.all}
           </span>
-          <CompactSelect value={groupBy} onChange={setGroupBy} options={GROUP_OPTS} />
+          <CompactSelect value={groupBy} onChange={handleGroupByChange} options={GROUP_OPTS} />
         </div>
 
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
