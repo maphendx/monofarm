@@ -537,13 +537,13 @@ function QueuePageInner() {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [scheduleModal, setScheduleModal] = useState<ScheduleModalMode | null>(null);
   type GroupBy = "mygroup" | "none" | "kind" | "state";
-  const [printerGroupBy, setPrinterGroupBy] = useState<GroupBy>(() => {
+  const [printerGroupBy, setPrinterGroupBy] = useState<GroupBy>("mygroup");
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("monofarm_printer_group_by") as GroupBy;
-      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) return saved;
+      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) setPrinterGroupBy(saved);
     } catch {}
-    return "mygroup";
-  });
+  }, []);
   function handlePrinterGroupByChange(v: GroupBy) {
     setPrinterGroupBy(v);
     try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}

@@ -466,13 +466,13 @@ export default function DashboardPage() {
 
   const { printers, connected, loading, reload } = usePrinterStream();
   const [filter, setFilter] = useState<Filter>("all");
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => {
+  const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("monofarm_printer_group_by") as GroupBy;
-      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) return saved;
+      if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) setGroupBy(saved);
     } catch {}
-    return "mygroup";
-  });
+  }, []);
   function handleGroupByChange(v: GroupBy) {
     setGroupBy(v);
     try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}
