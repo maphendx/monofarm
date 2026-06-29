@@ -180,10 +180,10 @@ function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
 
 // ── Drop-time indicator overlay ───────────────────────────────────────────────
 
-function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
+function DropOverlay({ relX, incompat, snapping }: { relX: number; incompat?: boolean; snapping?: boolean }) {
   const mins = Math.min(Math.round(relX * 1440), 1439);
   const label = fmtTimeMins(mins);
-  const color = incompat ? "var(--state-error)" : "var(--accent)";
+  const color = incompat ? "var(--state-error)" : snapping ? "var(--state-ok)" : "var(--accent)";
   return (
     <div
       className="pointer-events-none absolute inset-y-0 z-30 flex items-center"
@@ -191,10 +191,27 @@ function DropOverlay({ relX, incompat }: { relX: number; incompat?: boolean }) {
     >
       <div className="h-full w-0.5" style={{ background: color }} />
       <span className="ml-1 rounded px-1 py-px text-[9px] font-bold text-white" style={{ background: color }}>
-        {incompat ? "✕" : label}
+        {incompat ? "✕" : snapping ? `⊢${label}` : label}
       </span>
     </div>
   );
+}
+
+const SNAP_THRESHOLD_MINS = 20;
+
+function snapToBlockEnd(rawMins: number, cellBlocks: { endMins: number }[]): number {
+  let best = rawMins;
+  let bestDist = SNAP_THRESHOLD_MINS + 1;
+  for (const b of cellBlocks) {
+    if (b.endMins > 1440) continue;
+    const blockEnd = Math.min(b.endMins, 1439);
+    const dist = Math.abs(rawMins - blockEnd);
+    if (dist <= SNAP_THRESHOLD_MINS && dist < bestDist) {
+      bestDist = dist;
+      best = blockEnd;
+    }
+  }
+  return best;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -733,6 +750,7 @@ export function ScheduleCalendar({
   const [dropping, setDropping]       = useState(false);
   const [dropError, setDropError]     = useState<string | null>(null);
   const [dropIncompat, setDropIncompat] = useState(false);
+  const [dropIsSnapping, setDropIsSnapping] = useState(false);
 
   // Scroll to a specific day column
   const scrollToDay = useCallback((dayIndex: number) => {
@@ -865,6 +883,14 @@ export function ScheduleCalendar({
       setDropError("Не можна планувати на минулі дні");
       setTimeout(() => setDropError(null), 3500);
       return;
+    }
+
+    // Snap to nearest scheduled block end within threshold
+    const di = weekDates.findIndex(d => isoDateStr(d) === planDate);
+    if (di >= 0) {
+      const cellBlocks = blockMap.get(`${printerId}-${di}` as `${number}-${number}`) ?? [];
+      startMins = snapToBlockEnd(startMins, cellBlocks);
+      startTime = minsToStartTime(startMins);
     }
 
     // Snap to after current print end
@@ -1236,12 +1262,17 @@ export function ScheduleCalendar({
                           const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
                           const incompat = isPast || fileIncompat;
 
+                          const snapped = snapToBlockEnd(startMins, blocks);
+                          const isSnapping = snapped !== startMins;
+                          startMins = snapped;
+
                           if (isPrinting && printerLive?.eta_minutes) {
                             const printEndMins = nowMins + printerLive.eta_minutes;
                             if (startMins < printEndMins) startMins = Math.min(printEndMins, 1439);
                           }
 
                           setDropIncompat(incompat);
+                          setDropIsSnapping(isSnapping && !incompat);
                           e.dataTransfer.dropEffect = incompat ? "none" : "move";
                           setDropRelX(startMins / 1440);
                           setDropCell(cellKey);
@@ -1273,17 +1304,19 @@ export function ScheduleCalendar({
 
                         <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
 
-                        {blocks.map((block, bi) => (
-                          <ScheduleJobBlock
-                            key={`${block.entry.id}-${bi}`}
-                            block={block}
-                            onClick={() => handleEntryClick(block.entry)}
-                            onSend={onSendToPrint ? () => onSendToPrint(block.entry) : undefined}
-                          />
-                        ))}
+                        <div className={dropCell ? DRAG_TRANSPARENT : ""}>
+                          {blocks.map((block, bi) => (
+                            <ScheduleJobBlock
+                              key={`${block.entry.id}-${bi}`}
+                              block={block}
+                              onClick={() => handleEntryClick(block.entry)}
+                              onSend={onSendToPrint ? () => onSendToPrint(block.entry) : undefined}
+                            />
+                          ))}
+                        </div>
 
                         {/* Drop position indicator */}
-                        {isDropTarget && <DropOverlay relX={dropRelX} incompat={dropIncompat} />}
+                        {isDropTarget && <DropOverlay relX={dropRelX} incompat={dropIncompat} snapping={dropIsSnapping} />}
 
                         {/* Current time line */}
                         {isToday && (

@@ -861,6 +861,7 @@ function QueuePageInner() {
             <ScheduleBacklog
               tasks={backlogTasks}
               onSchedule={task => setScheduleModal({ type: "schedule", task })}
+              onDelete={handleDelete}
             />
           </div>
         </div>

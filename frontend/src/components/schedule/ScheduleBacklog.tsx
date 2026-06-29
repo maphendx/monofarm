@@ -8,9 +8,11 @@ import { API_URL } from "@/lib/api";
 function BacklogItem({
   task,
   onSchedule,
+  onDelete,
 }: {
   task: PrintTask;
   onSchedule: (t: PrintTask) => void;
+  onDelete?: (taskId: number) => void;
 }) {
   const duration = task.estimated_minutes;
   const material = [task.filament_type, task.filament_color].filter(Boolean).join(" · ");
@@ -35,12 +37,23 @@ function BacklogItem({
   }
 
   return (
+    <div className="group relative">
+      {onDelete && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onDelete(task.id); }}
+          className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:!bg-[rgba(239,68,68,.15)] hover:!text-[var(--state-error)]"
+          title="Видалити"
+        >
+          ×
+        </button>
+      )}
     <button
       type="button"
       draggable
       onDragStart={handleDragStart}
       onClick={() => onSchedule(task)}
-      className="group w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] cursor-grab active:cursor-grabbing"
+      className="group/btn w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-start gap-2">
         {thumbSrc ? (
@@ -57,10 +70,10 @@ function BacklogItem({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <span className="truncate text-xs font-medium text-[var(--text)] group-hover:text-[var(--accent)]">
+            <span className="truncate text-xs font-medium text-[var(--text)] group-hover/btn:text-[var(--accent)]">
               {fileLabel}
             </span>
-            <span className="mt-px shrink-0 text-[10px] text-[var(--text-faint)] opacity-40 group-hover:opacity-70">⠿</span>
+            <span className="mt-px shrink-0 text-[10px] text-[var(--text-faint)] opacity-40 group-hover/btn:opacity-70">⠿</span>
           </div>
           {task.title !== fileLabel && (
             <span className="mt-0.5 block truncate text-[10px] text-[var(--text-faint)]">
@@ -78,19 +91,22 @@ function BacklogItem({
         {task.quantity > 1 && <span>×{task.quantity}</span>}
       </div>
 
-      <div className="mt-1.5 text-[9px] text-[var(--accent)] opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="mt-1.5 text-[9px] text-[var(--accent)] opacity-0 transition-opacity group-hover/btn:opacity-100">
         Перетягни на календар або натисни →
       </div>
     </button>
+    </div>
   );
 }
 
 export function ScheduleBacklog({
   tasks,
   onSchedule,
+  onDelete,
 }: {
   tasks: PrintTask[];
   onSchedule: (task: PrintTask) => void;
+  onDelete?: (taskId: number) => void;
 }) {
   const [search, setSearch] = useState("");
 
@@ -142,7 +158,7 @@ export function ScheduleBacklog({
         ) : (
           <div className="flex flex-col gap-1.5">
             {filtered.map(task => (
-              <BacklogItem key={task.id} task={task} onSchedule={onSchedule} />
+              <BacklogItem key={task.id} task={task} onSchedule={onSchedule} onDelete={onDelete} />
             ))}
           </div>
         )}
