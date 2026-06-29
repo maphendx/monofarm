@@ -83,6 +83,11 @@ function taskToGcodeFile(task: PrintTask): GcodeFile {
   };
 }
 
+type SendRequest = {
+  task: PrintTask;
+  lockedPrinterId?: number;
+};
+
 function FilamentChips({ meta }: { meta: PrintTask["filament_meta"] }) {
   if (!meta) return null;
   const types = meta.types ?? [];
@@ -522,7 +527,7 @@ function QueuePageInner() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [sendTask, setSendTask] = useState<PrintTask | null>(null);
+  const [sendRequest, setSendRequest] = useState<SendRequest | null>(null);
   const [completeTask, setCompleteTask] = useState<PrintTask | null>(null);
 
   const distributeRef = useRef(false);
@@ -853,7 +858,9 @@ function QueuePageInner() {
               onGroupByChange={handlePrinterGroupByChange}
               onSendToPrint={entry => {
                 const task = tasks.find(t => t.id === entry.task_id) ?? entry.task;
-                if (task.gcode_file_id) setSendTask(task);
+                if (task.gcode_file_id) {
+                  setSendRequest({ task, lockedPrinterId: entry.printer_id });
+                }
               }}
             />
           </div>
@@ -924,7 +931,7 @@ function QueuePageInner() {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {activePrinters.map(p => (
                     <PrinterSlot key={p.id} printer={p} task={printerTaskMap.get(p.id) ?? null}
-                      onSend={setSendTask} onComplete={setCompleteTask} canEdit={canEdit} />
+                      onSend={task => setSendRequest({ task })} onComplete={setCompleteTask} canEdit={canEdit} />
                   ))}
                   {/* unassigned in_progress tasks */}
                   {visible.filter(t => !t.assigned_printer_id).map(t => (
@@ -976,7 +983,7 @@ function QueuePageInner() {
                           key={task.id} index={idx + 1} task={task} status={activeTab}
                           selected={selected.has(task.id)} onToggle={() => toggleOne(task.id)}
                           onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
-                          onSend={() => setSendTask(task)} onComplete={() => setCompleteTask(task)}
+                          onSend={() => setSendRequest({ task })} onComplete={() => setCompleteTask(task)}
                           onRestore={() => handleRestore(task.id)} canEdit={canEdit}
                         />
                       ))}
@@ -995,9 +1002,14 @@ function QueuePageInner() {
       {/* ── Modals ── */}
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={t => { setTasks(prev => [t, ...prev]); if (view === "calendar") loadCalendarSilent(); }} />
 
-      {sendTask && sendTask.gcode_file_id && (
-        <SendModal file={taskToGcodeFile(sendTask)} printers={printers} defaultPrinterId={sendTask.assigned_printer_id ?? undefined}
-          onClose={() => { setSendTask(null); load(); }} />
+      {sendRequest && sendRequest.task.gcode_file_id && (
+        <SendModal
+          file={taskToGcodeFile(sendRequest.task)}
+          printers={printers}
+          defaultPrinterId={sendRequest.lockedPrinterId ?? sendRequest.task.assigned_printer_id ?? undefined}
+          lockedPrinterId={sendRequest.lockedPrinterId}
+          onClose={() => { setSendRequest(null); load(); }}
+        />
       )}
 
       <CompleteModal task={completeTask} onClose={() => setCompleteTask(null)}

@@ -10,9 +10,13 @@ import { ScheduleWeekNav } from "./ScheduleWeekNav";
 import { api, ApiError, createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
 import {
   buildCalendarBlocks,
+  buildPrinterScheduleIntervals,
   buildUntimedMap,
+  findAvailableStart,
+  findSequentialStarts,
   fmtDuration,
   fmtTimeMins,
+  getEntryDurationMins,
   getWeekDates,
   isoDateStr,
 } from "./utils";
@@ -180,9 +184,9 @@ function CalendarSkeleton({ rows = 3, zoom }: { rows?: number; zoom: Zoom }) {
 
 // ── Drop-time indicator overlay ───────────────────────────────────────────────
 
-function DropOverlay({ relX, incompat, snapping }: { relX: number; incompat?: boolean; snapping?: boolean }) {
+function DropOverlay({ relX, incompat, snapping, label }: { relX: number; incompat?: boolean; snapping?: boolean; label?: string | null }) {
   const mins = Math.min(Math.round(relX * 1440), 1439);
-  const label = fmtTimeMins(mins);
+  const timeLabel = label ?? fmtTimeMins(mins);
   const color = incompat ? "var(--state-error)" : snapping ? "var(--state-ok)" : "var(--accent)";
   return (
     <div
@@ -191,27 +195,10 @@ function DropOverlay({ relX, incompat, snapping }: { relX: number; incompat?: bo
     >
       <div className="h-full w-0.5" style={{ background: color }} />
       <span className="ml-1 rounded px-1 py-px text-[9px] font-bold text-white" style={{ background: color }}>
-        {incompat ? "✕" : snapping ? `⊢${label}` : label}
+        {incompat ? "✕" : snapping ? `⊢${timeLabel}` : timeLabel}
       </span>
     </div>
   );
-}
-
-const SNAP_THRESHOLD_MINS = 20;
-
-function snapToBlockEnd(rawMins: number, cellBlocks: { endMins: number }[]): number {
-  let best = rawMins;
-  let bestDist = SNAP_THRESHOLD_MINS + 1;
-  for (const b of cellBlocks) {
-    if (b.endMins > 1440) continue;
-    const blockEnd = Math.min(b.endMins, 1439);
-    const dist = Math.abs(rawMins - blockEnd);
-    if (dist <= SNAP_THRESHOLD_MINS && dist < bestDist) {
-      bestDist = dist;
-      best = blockEnd;
-    }
-  }
-  return best;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -751,6 +738,7 @@ export function ScheduleCalendar({
   const [dropError, setDropError]     = useState<string | null>(null);
   const [dropIncompat, setDropIncompat] = useState(false);
   const [dropIsSnapping, setDropIsSnapping] = useState(false);
+  const [dropTimeLabel, setDropTimeLabel] = useState<string | null>(null);
 
   // Scroll to a specific day column
   const scrollToDay = useCallback((dayIndex: number) => {
@@ -776,10 +764,35 @@ export function ScheduleCalendar({
 
   const blockMap   = useMemo(() => buildCalendarBlocks(lanes, weekDates), [lanes, weekDates]);
   const untimedMap = useMemo(() => buildUntimedMap(lanes, weekDates), [lanes, weekDates]);
+  const intervalsByPrinter = useMemo(() => {
+    const map = new Map<number, ReturnType<typeof buildPrinterScheduleIntervals>>();
+    for (const lane of lanes) {
+      map.set(
+        lane.printer_id,
+        buildPrinterScheduleIntervals(lanes, weekDates, lane.printer_id),
+      );
+    }
+    return map;
+  }, [lanes, weekDates]);
   const allEntries = useMemo(
     () => lanes.flatMap(lane => lane.days.flatMap(day => day.entries)),
     [lanes],
   );
+  const nextEntryIdByPrinter = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const lane of lanes) {
+      const next = lane.days
+        .flatMap(day => day.entries)
+        .filter(entry => !entry.done && entry.task.status === "queued")
+        .toSorted((a, b) =>
+          a.plan_date.localeCompare(b.plan_date) ||
+          (a.start_time ?? "00:00:00").localeCompare(b.start_time ?? "00:00:00") ||
+          a.sequence - b.sequence
+        )[0];
+      if (next) map.set(lane.printer_id, next.id);
+    }
+    return map;
+  }, [lanes]);
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
 
   const grouped = useMemo(() => {
@@ -856,6 +869,33 @@ export function ScheduleCalendar({
     return `${hh}:${mm}:00`;
   }
 
+  function splitAbsoluteStart(absoluteMins: number): {
+    planDate: string;
+    startTime: string;
+  } {
+    const dayOffset = Math.floor(absoluteMins / 1440);
+    const localMins = ((absoluteMins % 1440) + 1440) % 1440;
+    const date = new Date(weekDates[0]);
+    date.setDate(date.getDate() + dayOffset);
+    return {
+      planDate: isoDateStr(date),
+      startTime: minsToStartTime(localMins),
+    };
+  }
+
+  function occupiedIntervals(printerId: number) {
+    const intervals = [...(intervalsByPrinter.get(printerId) ?? [])];
+    const todayIndex = weekDates.findIndex(d => isoDateStr(d) === todayStr);
+    const printer = printerById.get(printerId);
+    if (todayIndex >= 0 && printer?.state === "printing" && printer.eta_minutes) {
+      intervals.push({
+        startMins: todayIndex * 1440,
+        endMins: todayIndex * 1440 + nowMins + printer.eta_minutes,
+      });
+    }
+    return intervals;
+  }
+
   // ── drop handler ────────────────────────────────────────────────────────────
 
   async function handleDrop(
@@ -866,6 +906,7 @@ export function ScheduleCalendar({
     e.preventDefault();
     setDropCell(null);
     setDropIncompat(false);
+    setDropTimeLabel(null);
 
     let data: { type: "block"; entryId: number } | { type: "backlog"; taskId: number; fileName?: string; quantity?: number; durationMins?: number };
     try {
@@ -874,8 +915,9 @@ export function ScheduleCalendar({
       return;
     }
 
-    let startMins = getDropMins(e);
-    let startTime = minsToStartTime(startMins);
+    const dayIndex = weekDates.findIndex(d => isoDateStr(d) === planDate);
+    if (dayIndex < 0) return;
+    const rawStartMins = getDropMins(e);
 
     // Block drop on past days
     const todayDate = isoDateStr(new Date());
@@ -883,24 +925,6 @@ export function ScheduleCalendar({
       setDropError("Не можна планувати на минулі дні");
       setTimeout(() => setDropError(null), 3500);
       return;
-    }
-
-    // Snap to nearest scheduled block end within threshold
-    const di = weekDates.findIndex(d => isoDateStr(d) === planDate);
-    if (di >= 0) {
-      const cellBlocks = blockMap.get(`${printerId}-${di}` as `${number}-${number}`) ?? [];
-      startMins = snapToBlockEnd(startMins, cellBlocks);
-      startTime = minsToStartTime(startMins);
-    }
-
-    // Snap to after current print end
-    const printer = printerById.get(printerId);
-    if (printer?.state === "printing" && printer.eta_minutes) {
-      const printEndMins = nowMins + printer.eta_minutes;
-      if (startMins < printEndMins) {
-        startMins = Math.min(printEndMins, 1439);
-        startTime = minsToStartTime(startMins);
-      }
     }
 
     // File type compatibility check
@@ -929,46 +953,48 @@ export function ScheduleCalendar({
     try {
       if (data.type === "block") {
         const current = findEntry(data.entryId);
+        if (!current) return;
+        const duration = Math.max(1, getEntryDurationMins(current));
+        const absoluteStart = findAvailableStart(
+          dayIndex * 1440 + rawStartMins,
+          duration,
+          occupiedIntervals(printerId),
+          current.id,
+        );
+        const target = splitAbsoluteStart(absoluteStart);
         if (
-          current &&
           current.printer_id === printerId &&
-          current.plan_date === planDate &&
-          current.start_time === startTime &&
+          current.plan_date === target.planDate &&
+          current.start_time === target.startTime &&
           current.schedule_mode === "exact_time"
         ) {
           return;
         }
         await updatePlanEntry(data.entryId, {
-          plan_date: planDate,
-          start_time: startTime,
+          plan_date: target.planDate,
+          start_time: target.startTime,
           schedule_mode: "exact_time",
           printer_id: printerId,
         });
       } else {
         const qty = data.quantity || 1;
         const dur = data.durationMins || 60;
-        
-        let currMins = startMins;
-        const [y, m, d] = planDate.split("-").map(Number);
-        const currDate = new Date(y, (m || 1) - 1, d || 1);
-        
-        for (let i = 0; i < qty; i++) {
-          const t = minsToStartTime(currMins % 1440);
-          const pDateStr = isoDateStr(currDate);
-          
+        const starts = findSequentialStarts(
+          dayIndex * 1440 + rawStartMins,
+          dur,
+          qty,
+          occupiedIntervals(printerId),
+        );
+
+        for (const absoluteStart of starts) {
+          const target = splitAbsoluteStart(absoluteStart);
           await createPlanEntry({
             printer_id: printerId,
-            plan_date: pDateStr,
+            plan_date: target.planDate,
             task_id: data.taskId,
-            start_time: t,
+            start_time: target.startTime,
             schedule_mode: "exact_time",
           });
-          
-          currMins += dur;
-          while (currMins >= 1440) {
-            currMins -= 1440;
-            currDate.setDate(currDate.getDate() + 1);
-          }
         }
       }
       onRefresh();
@@ -1250,8 +1276,6 @@ export function ScheduleCalendar({
                     const isDropTarget = dropCell === cellKey;
 
                     const isPast = new Date(dateStr) < new Date(todayStr);
-                    const printerLive = printerById.get(lane.printer_id);
-                    const isPrinting = printerLive?.state === "printing";
 
                     return (
                       <div
@@ -1272,20 +1296,35 @@ export function ScheduleCalendar({
                           const isGcode = types.includes("application/x-gcode");
                           const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
                           const incompat = isPast || fileIncompat;
-
-                          const snapped = snapToBlockEnd(startMins, blocks);
-                          const isSnapping = snapped !== startMins;
-                          startMins = snapped;
-
-                          if (isPrinting && printerLive?.eta_minutes) {
-                            const printEndMins = nowMins + printerLive.eta_minutes;
-                            if (startMins < printEndMins) startMins = Math.min(printEndMins, 1439);
-                          }
+                          const durationType = types.find(type => type.startsWith("application/x-duration-"));
+                          const duration = durationType
+                            ? Number(durationType.slice("application/x-duration-".length))
+                            : 1;
+                          const entryType = types.find(type => type.startsWith("application/x-entry-"));
+                          const ignoredEntryId = entryType
+                            ? Number(entryType.slice("application/x-entry-".length))
+                            : undefined;
+                          const absoluteRaw = di * 1440 + startMins;
+                          const absoluteStart = findAvailableStart(
+                            absoluteRaw,
+                            Number.isFinite(duration) && duration > 0 ? duration : 1,
+                            occupiedIntervals(lane.printer_id),
+                            ignoredEntryId,
+                          );
+                          const isSnapping = absoluteStart !== absoluteRaw;
+                          startMins = absoluteStart - di * 1440;
+                          const preview = splitAbsoluteStart(absoluteStart);
+                          const previewDayOffset = Math.floor(absoluteStart / 1440) - di;
 
                           setDropIncompat(incompat);
                           setDropIsSnapping(isSnapping && !incompat);
+                          setDropTimeLabel(
+                            previewDayOffset > 0
+                              ? `${preview.startTime.slice(0, 5)} +${previewDayOffset}д`
+                              : preview.startTime.slice(0, 5),
+                          );
                           e.dataTransfer.dropEffect = incompat ? "none" : "move";
-                          setDropRelX(startMins / 1440);
+                          setDropRelX(Math.max(0, Math.min(0.9999, startMins / 1440)));
                           setDropCell(cellKey);
                         }}
                         onDragLeave={e => {
@@ -1293,6 +1332,7 @@ export function ScheduleCalendar({
                             setDropCell(null);
                             setDropIncompat(false);
                             setDropIsSnapping(false);
+                            setDropTimeLabel(null);
                           }
                         }}
                         onDrop={e => handleDrop(e, lane.printer_id, dateStr)}
@@ -1317,19 +1357,30 @@ export function ScheduleCalendar({
                         <div className={dropCell ? DRAG_TRANSPARENT : ""}>
                           <UntimedChips entries={untimed} onEntryClick={handleEntryClick} />
 
-                          {blocks.map((block, bi) => (
-                            <ScheduleJobBlock
-                              key={`${block.entry.id}-${bi}`}
-                              block={block}
-                              onClick={() => handleEntryClick(block.entry)}
-                              onSend={onSendToPrint ? () => onSendToPrint(block.entry) : undefined}
-                              onDelete={() => handleDeleteEntry(block.entry.id)}
-                            />
-                          ))}
+                          {blocks.map((block, bi) => {
+                            const liveState = printerById.get(lane.printer_id)?.state ?? "unknown";
+                            const printerReady = ["idle", "operational", "online"].includes(liveState);
+                            const isNext = nextEntryIdByPrinter.get(lane.printer_id) === block.entry.id;
+                            const sendDisabledReason = !printerReady
+                              ? `Принтер зараз: ${stateLabel(liveState)}`
+                              : !isNext
+                                ? "Спочатку запустіть попередній блок"
+                                : undefined;
+                            return (
+                              <ScheduleJobBlock
+                                key={`${block.entry.id}-${bi}`}
+                                block={block}
+                                onClick={() => handleEntryClick(block.entry)}
+                                onSend={onSendToPrint && !sendDisabledReason ? () => onSendToPrint(block.entry) : undefined}
+                                sendDisabledReason={onSendToPrint ? sendDisabledReason : undefined}
+                                onDelete={() => handleDeleteEntry(block.entry.id)}
+                              />
+                            );
+                          })}
                         </div>
 
                         {/* Drop position indicator */}
-                        {isDropTarget && <DropOverlay relX={dropRelX} incompat={dropIncompat} snapping={dropIsSnapping} />}
+                        {isDropTarget && <DropOverlay relX={dropRelX} incompat={dropIncompat} snapping={dropIsSnapping} label={dropTimeLabel} />}
 
                         {/* Current time line */}
                         {isToday && (

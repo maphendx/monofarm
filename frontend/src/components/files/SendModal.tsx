@@ -398,6 +398,7 @@ export function SendModal({
   printers,
   onClose,
   defaultPrinterId,
+  lockedPrinterId,
   askMode = false,
   deleteOnCancel = false,
 }: {
@@ -405,6 +406,7 @@ export function SendModal({
   printers: PrinterType[];
   onClose: () => void;
   defaultPrinterId?: number;
+  lockedPrinterId?: number;
   askMode?: boolean;
   deleteOnCancel?: boolean;
 }) {
@@ -450,19 +452,27 @@ export function SendModal({
   const [quantity, setQuantity] = useState(1);
 
   // ── derived printer values ──
-  const numSelected = selectedIds.size;
   const sendablePrinters = useMemo(
-    () => printers.filter((p) => p.is_active && (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id))),
-    [printers],
+    () => printers.filter((p) =>
+      p.is_active &&
+      (lockedPrinterId === undefined || p.id === lockedPrinterId) &&
+      (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id))
+    ),
+    [printers, lockedPrinterId],
   );
   const fileHasDimensions = !!(file?.filament_meta?.print_size_x || file?.filament_meta?.print_size_y || file?.filament_meta?.print_size_z);
   const compatiblePrinters = useMemo(
     () => fileHasDimensions ? sendablePrinters.filter((p) => fitCheck(file?.filament_meta ?? null, p) !== "oversize") : sendablePrinters,
     [sendablePrinters, fileHasDimensions, file?.filament_meta],
   );
+  const selectedPrinters = useMemo(
+    () => compatiblePrinters.filter((p) => selectedIds.has(p.id)),
+    [compatiblePrinters, selectedIds],
+  );
+  const numSelected = selectedPrinters.length;
   const primaryPrinter = useMemo(
-    () => numSelected >= 1 ? (compatiblePrinters.find((p) => selectedIds.has(p.id)) ?? null) : null,
-    [compatiblePrinters, selectedIds, numSelected],
+    () => selectedPrinters[0] ?? null,
+    [selectedPrinters],
   );
   const usedSlots = useMemo(() => usedSlotIndices(file?.filament_meta ?? null), [file?.filament_meta]);
   const isMoonraker = numSelected === 1 && !!primaryPrinter?.moonraker_url;
@@ -551,6 +561,7 @@ export function SendModal({
   }
 
   function togglePrinter(id: number) {
+    if (lockedPrinterId !== undefined) return;
     if (multiSendResults) { setMultiSendResults(null); setResult(null); }
     setSelectedIds((prev) => {
       const n = new Set(prev);
@@ -566,7 +577,7 @@ export function SendModal({
     setMultiSendResults(null);
     setQueuedJob(null);
 
-    const targets = compatiblePrinters.filter((p) => selectedIds.has(p.id));
+    const targets = selectedPrinters;
 
     if (targets.length === 1) {
       const p = targets[0];
@@ -658,7 +669,7 @@ export function SendModal({
   const modalWidth = showFilePicker
     ? "max-w-lg"
     : choosing ? "max-w-3xl"
-    : isPrintSplit ? "max-w-7xl"
+    : isPrintSplit ? (lockedPrinterId !== undefined ? "max-w-3xl" : "max-w-7xl")
     : "max-w-sm";
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -1030,13 +1041,17 @@ export function SendModal({
                     </p>
                   ) : (
                     <div className="space-y-5">
-                      <p className="text-[11px] text-[var(--text-faint)]">Клікни щоб вибрати один або декілька принтерів</p>
+                      <p className="text-[11px] text-[var(--text-faint)]">
+                        {lockedPrinterId !== undefined
+                          ? "Запланований принтер"
+                          : "Клікни щоб вибрати один або декілька принтерів"}
+                      </p>
                       {[...printerGroups.entries()].map(([groupName, groupPrinters]) => (
                         <div key={groupName}>
                           {printerGroups.size > 1 && (
                             <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">{groupName}</p>
                           )}
-                          <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                          <div className={lockedPrinterId !== undefined ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3 xl:grid-cols-3"}>
                             {groupPrinters.map((p) => {
                               const slots    = checkSlots(file?.filament_meta ?? null, p);
                               const compat   = compatBadge(slots);
@@ -1050,12 +1065,17 @@ export function SendModal({
                               const res      = multiSendResults?.find((r) => r.printerId === p.id);
                               const isOffline = p.state === "offline" || p.state === "unknown";
                               return (
-                                <button key={p.id} onClick={() => togglePrinter(p.id)}
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => togglePrinter(p.id)}
+                                  disabled={lockedPrinterId !== undefined}
                                   className={[
                                     "relative flex flex-col overflow-hidden rounded-xl border text-left transition",
                                     isSelected
                                       ? "border-[var(--accent)] shadow-md ring-1 ring-[var(--accent)]"
                                       : "border-[var(--border)] hover:border-[var(--border-strong)] hover:shadow-sm",
+                                    lockedPrinterId !== undefined ? "cursor-default" : "",
                                   ].join(" ")}
                                 >
                                   {/* Photo */}

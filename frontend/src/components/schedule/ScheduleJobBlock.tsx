@@ -90,11 +90,13 @@ export function ScheduleJobBlock({
   block,
   onClick,
   onSend,
+  sendDisabledReason,
   onDelete,
 }: {
   block: CalendarBlock;
   onClick: () => void;
   onSend?: () => void;
+  sendDisabledReason?: string;
   onDelete?: () => void;
 }) {
   const [popoverRect, setPopoverRect] = useState<DOMRect | null>(null);
@@ -154,20 +156,29 @@ export function ScheduleJobBlock({
       : "border-t-[3px] border-t-[var(--accent)]"
     : "";
 
-  function onDragStart(e: React.DragEvent<HTMLButtonElement>) {
+  function onDragStart(e: React.DragEvent<HTMLDivElement>) {
     e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id }));
     const fname = entry.task.file_name ?? "";
     const is3mf = fname.toLowerCase().endsWith(".3mf");
     e.dataTransfer.setData(is3mf ? "application/x-3mf" : "application/x-gcode", "1");
+    e.dataTransfer.setData(`application/x-duration-${Math.max(1, totalDurationMins)}`, "1");
+    e.dataTransfer.setData(`application/x-entry-${entry.id}`, "1");
     e.dataTransfer.effectAllowed = "move";
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
+      onKeyDown={e => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       style={{ left: `${leftPct}%`, width: `max(${minWidthPx}px, ${widthPct}%)`, top: "40%", height: "28%", minHeight: "18px", zIndex: popoverRect ? 40 : isOverflow ? 8 : 4, overflow: "hidden" }}
       className={`group ${base} ${colorCls} ${topBorder}`}
       onMouseEnter={e => setPopoverRect(e.currentTarget.getBoundingClientRect())}
@@ -196,23 +207,31 @@ export function ScheduleJobBlock({
           </div>
         )}
 
-        {!isCompact && (onSend || onDelete) && (
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            {onSend && status === "queued" && entry.task.gcode_file_id && (
+        {(onSend || onDelete) && (
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            {(onSend || sendDisabledReason) && status === "queued" && entry.task.gcode_file_id && (
               <button
                 type="button"
-                onClick={e => { e.stopPropagation(); onSend(); }}
-                className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-bold text-white"
-                title="Надіслати на принтер"
+                disabled={!onSend}
+                onClick={e => {
+                  e.stopPropagation();
+                  onSend?.();
+                }}
+                className={[
+                  "rounded px-1.5 py-0.5 text-[8px] font-bold text-white",
+                  onSend ? "bg-[var(--accent)]" : "cursor-not-allowed bg-[var(--state-idle)] opacity-60",
+                ].join(" ")}
+                title={sendDisabledReason ?? "Надіслати на принтер"}
+                aria-label={`Запустити ${fileLabel} на запланованому принтері`}
               >
                 ▶
               </button>
             )}
-            {onDelete && status === "queued" && (
+            {!isCompact && onDelete && status === "queued" && (
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); onDelete(); }}
-                className="rounded bg-[var(--state-error)]/15 px-1.5 py-0.5 text-[8px] font-bold text-[var(--state-error)]"
+                className="rounded bg-[var(--state-error)]/15 px-1.5 py-0.5 text-[8px] font-bold text-[var(--state-error)] opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                 title="Видалити з розкладу"
               >
                 ×
@@ -222,6 +241,6 @@ export function ScheduleJobBlock({
         )}
       </div>
       {popoverRect && <JobPopover block={block} rect={popoverRect} />}
-    </button>
+    </div>
   );
 }

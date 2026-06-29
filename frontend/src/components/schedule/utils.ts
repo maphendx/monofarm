@@ -113,6 +113,116 @@ export interface CalendarBlock {
 
 type BlockMapKey = `${number}-${number}`; // `${printerId}-${dayIndex}`
 
+export interface ScheduleInterval {
+  startMins: number;
+  endMins: number;
+  entryId?: number;
+}
+
+const SNAP_THRESHOLD_MINS = 20;
+
+/**
+ * Find the first non-overlapping start at or after the requested position.
+ *
+ * Dropping inside an existing block means "append after this block". A nearby
+ * block end is also magnetic so operators do not need pixel-perfect dragging.
+ */
+export function findAvailableStart(
+  requestedStartMins: number,
+  durationMins: number,
+  intervals: ScheduleInterval[],
+  ignoredEntryId?: number,
+): number {
+  const duration = Math.max(1, durationMins);
+  const occupied = intervals
+    .filter((interval) =>
+      (ignoredEntryId === undefined || interval.entryId !== ignoredEntryId) &&
+      interval.endMins > interval.startMins
+    )
+    .toSorted((a, b) => a.startMins - b.startMins);
+
+  let candidate = Math.max(0, requestedStartMins);
+  const containing = occupied.find(
+    (interval) => candidate >= interval.startMins && candidate < interval.endMins,
+  );
+  if (containing) {
+    candidate = containing.endMins;
+  } else {
+    let nearestEnd: number | null = null;
+    let nearestDistance = SNAP_THRESHOLD_MINS + 1;
+    for (const interval of occupied) {
+      const distance = Math.abs(candidate - interval.endMins);
+      if (distance <= SNAP_THRESHOLD_MINS && distance < nearestDistance) {
+        nearestEnd = interval.endMins;
+        nearestDistance = distance;
+      }
+    }
+    if (nearestEnd !== null) candidate = nearestEnd;
+  }
+
+  while (true) {
+    const conflict = occupied.find(
+      (interval) =>
+        candidate < interval.endMins &&
+        candidate + duration > interval.startMins,
+    );
+    if (!conflict) return candidate;
+    candidate = conflict.endMins;
+  }
+}
+
+/** Lay out repeated copies back-to-back while skipping existing work. */
+export function findSequentialStarts(
+  requestedStartMins: number,
+  durationMins: number,
+  quantity: number,
+  intervals: ScheduleInterval[],
+): number[] {
+  const duration = Math.max(1, durationMins);
+  const occupied = [...intervals];
+  const starts: number[] = [];
+  let cursor = requestedStartMins;
+
+  for (let i = 0; i < Math.max(1, quantity); i += 1) {
+    const start = findAvailableStart(cursor, duration, occupied);
+    starts.push(start);
+    occupied.push({ startMins: start, endMins: start + duration });
+    cursor = start + duration;
+  }
+
+  return starts;
+}
+
+/** Convert one printer's calendar rows into week-relative occupied intervals. */
+export function buildPrinterScheduleIntervals(
+  lanes: CalendarLane[],
+  weekDates: Date[],
+  printerId: number,
+): ScheduleInterval[] {
+  const weekStrs = weekDates.map(isoDateStr);
+  const lane = lanes.find((item) => item.printer_id === printerId);
+  if (!lane) return [];
+
+  const intervals: ScheduleInterval[] = [];
+  for (const day of lane.days) {
+    const dayIndex = weekStrs.indexOf(day.plan_date);
+    if (dayIndex === -1) continue;
+
+    for (const entry of day.entries) {
+      if (!entry.start_time) continue;
+      const localStart = parseTimeMins(entry.start_time);
+      const duration = Math.max(1, getEntryDurationMins(entry));
+      intervals.push({
+        startMins: dayIndex * 1440 + localStart,
+        endMins: dayIndex * 1440 + localStart + duration,
+        entryId: entry.id,
+      });
+    }
+  }
+
+  return intervals;
+}
+
 /**
  * Pre-process lanes into positioned blocks for the calendar grid.
  *
