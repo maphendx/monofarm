@@ -66,7 +66,9 @@ function BacklogItem({
           />
         ) : (
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[9px] font-semibold uppercase text-[var(--text-faint)]">
-            3mf
+            {fileLabel.toLowerCase().endsWith(".3mf") ? "3mf"
+              : fileLabel.match(/\.(gcode|gco|bgcode)$/i) ? "gc"
+              : "?"}
           </div>
         )}
         <div className="min-w-0 flex-1">

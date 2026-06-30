@@ -355,3 +355,96 @@ def _broadcast_completion(org_id: int, printer_id: int) -> None:
         )
     except RuntimeError:
         pass
+
+
+_MOONRAKER_RESULT_MAP = {
+    "completed": "completed",
+    "cancelled": "cancelled",
+    "error": "failed",
+    "klippy_disconnect": "failed",
+    "klippy_shutdown": "failed",
+    "server_exit": "failed",
+}
+
+
+async def backfill_moonraker_history(
+    org_id: int,
+    printer_id: int,
+    printer_name: str,
+    printer_kind: str,
+    moonraker_url: str,
+) -> None:
+    """Import completed jobs from Moonraker /server/history/list into PrintHistory.
+
+    Called once when the farm agent connects so the calendar shows past U1 prints.
+    Deduplicates via (printer_id, started_at ±60 s) — no migration needed.
+    """
+    from datetime import timedelta
+
+    from app.services import tunnel as _tunnel
+    from app.services.moonraker import _api_base
+
+    try:
+        base = _api_base(moonraker_url)
+    except Exception:
+        return
+
+    history_url = f"{base}/server/history/list?limit=200&order=desc"
+
+    try:
+        if _tunnel.has_tunnel(org_id):
+            resp = await _tunnel.proxy_request(org_id, "GET", history_url, timeout=15.0)
+            jobs = (resp.get("body") or {}).get("result", {}).get("jobs", [])
+        else:
+            import requests as _req
+            r = _req.get(history_url, timeout=10)
+            r.raise_for_status()
+            jobs = r.json().get("result", {}).get("jobs", [])
+    except Exception:
+        log.debug("backfill_moonraker_history: could not reach printer %s", printer_id)
+        return
+
+    if not jobs:
+        return
+
+    with SessionLocal() as db:
+        imported = 0
+        for job in jobs:
+            start_ts = job.get("start_time")
+            if not start_ts:
+                continue
+
+            started_at = datetime.fromtimestamp(float(start_ts), tz=timezone.utc)
+
+            already = db.query(PrintHistory).filter(
+                PrintHistory.printer_id == printer_id,
+                PrintHistory.started_at >= started_at - timedelta(seconds=60),
+                PrintHistory.started_at <= started_at + timedelta(seconds=60),
+            ).first()
+            if already:
+                continue
+
+            status = job.get("status", "completed")
+            end_ts = job.get("end_time")
+            finished_at = datetime.fromtimestamp(float(end_ts), tz=timezone.utc) if end_ts else None
+            print_dur = job.get("print_duration") or job.get("total_duration")
+            duration_minutes = max(1, int(print_dur / 60)) if print_dur else None
+
+            db.add(PrintHistory(
+                organization_id=org_id,
+                printer_id=printer_id,
+                printer_name=printer_name,
+                printer_kind=printer_kind,
+                file_name=job.get("filename"),
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_minutes=duration_minutes,
+                result=_MOONRAKER_RESULT_MAP.get(status, "completed"),
+                filament_g=job.get("filament_used"),
+                source="moonraker",
+            ))
+            imported += 1
+
+        if imported:
+            db.commit()
+            log.info("backfill_moonraker_history: imported %d jobs for printer %s", imported, printer_id)

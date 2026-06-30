@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import type { CalendarEntry, PrintTask, Printer, ScheduleMode } from "@/lib/types";
 import { Modal } from "@/components/ui/Modal";
-import { createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
-import { ApiError } from "@/lib/api";
+import { api, ApiError, createPlanEntry, updatePlanEntry, deletePlanEntry } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { fmtDuration } from "./utils";
 
@@ -42,11 +41,10 @@ function addMinutesToTime(value: string, minutes: number | null | undefined): st
   return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}${daySuffix}`;
 }
 
-const MODE_LABELS: Record<ScheduleMode, string> = {
+const MODE_LABELS: Partial<Record<ScheduleMode, string>> = {
   asap: "ASAP — без конкретного часу",
   not_before: "Не раніше ніж",
   exact_time: "Точний час",
-  window: "Часове вікно",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,7 +163,6 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
     setDeleting(true);
     setError(null);
     try {
-      const { api } = await import("@/lib/api");
       await api(`/api/queue/${task.id}`, { method: "DELETE" });
       onSaved();
       onClose();
@@ -286,6 +283,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
             <input
               type="date"
               value={planDate}
+              min={todayIso()}
               onChange={e => setPlanDate(e.target.value)}
               className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
             />

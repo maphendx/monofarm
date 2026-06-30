@@ -81,6 +81,7 @@ async def register(org_id: int, ws: WebSocket) -> None:
     _tunnels[org_id] = ws
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
     asyncio.create_task(_subscribe_org_printers(org_id))
+    asyncio.create_task(_backfill_org_history(org_id))
 
 
 async def _subscribe_org_printers(org_id: int) -> None:
@@ -113,6 +114,35 @@ async def _subscribe_org_printers(org_id: int) -> None:
         except Exception as e:
             log.debug("_subscribe_org_printers: send failed for %s: %s", p.moonraker_url, e)
             break
+
+
+async def _backfill_org_history(org_id: int) -> None:
+    """Backfill Moonraker print history for all printers when the agent connects."""
+    await asyncio.sleep(3)  # let subscriptions settle first
+    try:
+        from app.core.db import SessionLocal
+        from app.models.printer import Printer
+        from app.services.print_tracker import backfill_moonraker_history
+
+        with SessionLocal() as db:
+            printers = (
+                db.query(Printer)
+                .filter_by(organization_id=org_id, is_active=True)
+                .filter(Printer.moonraker_url.isnot(None))
+                .all()
+            )
+            rows = [(p.id, p.name, p.kind.value, p.moonraker_url) for p in printers]
+
+        for pid, pname, pkind, purl in rows:
+            await backfill_moonraker_history(
+                org_id=org_id,
+                printer_id=pid,
+                printer_name=pname,
+                printer_kind=pkind,
+                moonraker_url=purl,
+            )
+    except Exception:
+        log.exception("_backfill_org_history failed for org %s", org_id)
 
 
 async def unregister(org_id: int) -> None:

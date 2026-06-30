@@ -888,8 +888,9 @@ export function ScheduleCalendar({
     const todayIndex = weekDates.findIndex(d => isoDateStr(d) === todayStr);
     const printer = printerById.get(printerId);
     if (todayIndex >= 0 && printer?.state === "printing" && printer.eta_minutes) {
+      // Block from NOW until ETA — not from midnight
       intervals.push({
-        startMins: todayIndex * 1440,
+        startMins: todayIndex * 1440 + nowMins,
         endMins: todayIndex * 1440 + nowMins + printer.eta_minutes,
       });
     }
@@ -961,6 +962,11 @@ export function ScheduleCalendar({
           occupiedIntervals(printerId),
           current.id,
         );
+        if (absoluteStart >= weekDates.length * 1440) {
+          setDropError("Принтер зайнятий до кінця тижня — оберіть інший день або тиждень");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
         const target = splitAbsoluteStart(absoluteStart);
         if (
           current.printer_id === printerId &&
@@ -985,6 +991,11 @@ export function ScheduleCalendar({
           qty,
           occupiedIntervals(printerId),
         );
+        if (starts.some(s => s >= weekDates.length * 1440)) {
+          setDropError("Не вистачає місця в тижні для всіх копій — зменшіть кількість або оберіть інший день");
+          setTimeout(() => setDropError(null), 3500);
+          return;
+        }
 
         for (const absoluteStart of starts) {
           const target = splitAbsoluteStart(absoluteStart);
