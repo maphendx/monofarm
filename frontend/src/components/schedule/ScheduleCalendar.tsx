@@ -239,7 +239,8 @@ function RunningPrintBar({ printer, nowMins, daysLeft }: { printer: Printer; now
   const remainMins = printer.eta_minutes;
   if (remainMins <= 0) return null;
   const progressPct = Math.max(0, Math.min(100, printer.progress_pct ?? 0));
-  const totalEstimate = progressPct > 1 ? Math.round(remainMins / (1 - progressPct / 100)) : remainMins;
+  const divisor = 1 - progressPct / 100;
+  const totalEstimate = progressPct > 1 && divisor > 0.01 ? Math.round(remainMins / divisor) : remainMins;
   const elapsedMins = totalEstimate - remainMins;
   const startMins = Math.max(0, nowMins - elapsedMins);
   const maxEndMins = (daysLeft + 1) * 1440;

@@ -389,7 +389,7 @@ async def backfill_moonraker_history(
     except Exception:
         return
 
-    history_url = f"{base}/server/history/list?limit=200&order=desc"
+    history_url = f"{base}/server/history/list?limit=200"
 
     try:
         if _tunnel.has_tunnel(org_id):
