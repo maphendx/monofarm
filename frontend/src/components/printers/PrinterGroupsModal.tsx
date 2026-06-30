@@ -171,10 +171,12 @@ export function PrinterGroupsModal({
   open,
   onClose,
   onChange,
+  externalPrinters,
 }: {
   open: boolean;
   onClose: () => void;
   onChange: () => void;
+  externalPrinters?: Printer[];
 }) {
   const t = useT();
   const { confirm, dialog } = useConfirm();
@@ -209,6 +211,17 @@ export function PrinterGroupsModal({
     }
   }, []);
 
+  // Silent group-only refresh — no spinner, used after create/save/delete group
+  const loadGroups = useCallback(async () => {
+    try {
+      const groupData = await api<PrinterGroup[]>("/api/printer-groups");
+      setGroups(groupData);
+      setProfiles(Object.fromEntries(groupData.map(g => [g.id, groupToProfile(g)])));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Error");
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setNewName("");
@@ -216,6 +229,13 @@ export function PrinterGroupsModal({
     setEditingGroupId(null);
     void load();
   }, [open, load]);
+
+  // Sync printers from WS stream when provided
+  useEffect(() => {
+    if (externalPrinters && open) {
+      setPrinters(externalPrinters);
+    }
+  }, [externalPrinters, open]);
 
   const printersByGroup = useMemo(() => {
     const map: Record<string, Printer[]> = {};
@@ -257,7 +277,7 @@ export function PrinterGroupsModal({
         body: JSON.stringify({ name, color: PALETTE[groups.length % PALETTE.length] }),
       });
       setNewName("");
-      await load();
+      await loadGroups();
       setEditingGroupId(created.id);
       onChange();
     } catch (err) {
@@ -285,7 +305,7 @@ export function PrinterGroupsModal({
           supported_materials: profile.supported_materials,
         }),
       });
-      await load();
+      await loadGroups();
       setEditingGroupId(null);
       onChange();
     } catch (err) {
@@ -304,7 +324,7 @@ export function PrinterGroupsModal({
     try {
       await api(`/api/printer-groups/${group.id}`, { method: "DELETE" });
       if (editingGroupId === group.id) setEditingGroupId(null);
-      await load();
+      await loadGroups();
       onChange();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error");
@@ -377,7 +397,6 @@ export function PrinterGroupsModal({
         method: "POST",
         body: JSON.stringify({ group_id: groupId }),
       });
-      await load();
       onChange();
     } catch (err) {
       setPrinters(previous);
@@ -564,6 +583,7 @@ export function PrinterGroupsModal({
                       className="flex cursor-grab items-center rounded-t-lg border border-[var(--border)] bg-[var(--surface-hi)] px-4 py-2.5"
                       draggable
                       onDragStart={() => setDragGroupId(group.id)}
+                      onDragEnd={() => setDragGroupId(null)}
                       onDragOver={e => e.preventDefault()}
                       onDrop={e => { e.stopPropagation(); dropGroup(group.id); }}
                     >

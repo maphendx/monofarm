@@ -815,6 +815,7 @@ export default function DashboardPage() {
         open={groupsOpen}
         onClose={() => setGroupsOpen(false)}
         onChange={reload}
+        externalPrinters={printers}
       />
 
       {autoDispatchOpen && (
