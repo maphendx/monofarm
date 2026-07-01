@@ -54,11 +54,17 @@ def _build_snapshot(org_id: int) -> list[dict]:
         if not rows:
             return []
 
-        groups_by_id = {
-            g.id: g.name
-            for g in db.query(PrinterGroup)
-            .filter(PrinterGroup.organization_id == org_id).all()
-        }
+        all_groups = db.query(PrinterGroup).filter(PrinterGroup.organization_id == org_id).all()
+        groups_by_id = {g.id: g.name for g in all_groups}
+        groups_order = {g.id: g.sort_order for g in all_groups}
+
+        from app.api.printers import _natural_key
+        rows.sort(key=lambda p: (
+            p.group_id is None,
+            groups_order.get(p.group_id, 0) if p.group_id is not None else 0,
+            p.sort_order,
+            _natural_key(p.name),
+        ))
         slot_rows = (
             db.query(_Slot)
             .filter(_Slot.printer_id.in_([r.id for r in rows]))
