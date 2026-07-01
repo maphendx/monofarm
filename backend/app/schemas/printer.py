@@ -124,6 +124,13 @@ class PrinterOut(BaseModel):
     # Last file sent via monofarm (for reprint)
     last_gcode_file_id: int | None = None
 
+    autoprint_mode: str = "off"
+    autoprint_plates_remaining: int = 0
+    autoprint_cooldown_temp_c: int = 40
+    autoprint_delay_seconds: int = 0
+    autoprint_eject_last_plate: bool = True
+    autoprint_error: str | None = None
+
     # Tags
     tags: list[TagOut] = Field(default_factory=list)
 

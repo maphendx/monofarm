@@ -64,6 +64,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
   const [planDate,     setPlanDate]     = useState(todayIso());
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("asap");
   const [startTime,    setStartTime]    = useState("");
+  const [runsTotal,    setRunsTotal]    = useState(1);
 
   const [saving,  setSaving]  = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -78,12 +79,14 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
       setPlanDate(entry.plan_date);
       setScheduleMode((entry.schedule_mode as ScheduleMode) ?? "asap");
       setStartTime(entry.start_time ? entry.start_time.slice(0, 5) : "");
+      setRunsTotal(entry.runs_total ?? 1);
     } else {
       // New schedule: default to first printer, today, asap
       setPrinterId(printers[0]?.id ?? "");
       setPlanDate(todayIso());
       setScheduleMode("asap");
       setStartTime("");
+      setRunsTotal(1);
     }
     setError(null);
   }, [isOpen, isEdit, entry, printers]);
@@ -106,6 +109,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
           printer_id: Number(printerId),
           start_time: startTimeVal,
           schedule_mode: scheduleMode,
+          runs_total: runsTotal,
         });
       } else if (task) {
         await createPlanEntry({
@@ -114,6 +118,7 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
           task_id: task.id,
           start_time: startTimeVal,
           schedule_mode: scheduleMode,
+          runs_total: runsTotal,
         });
       }
       onSaved();
@@ -174,7 +179,8 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
   }
 
   const title = isEdit ? "Змінити розклад" : "Запланувати друк";
-  const duration = task.estimated_minutes ?? task.filament_meta?.estimated_minutes ?? null;
+  const singleRunDuration = task.estimated_minutes ?? task.filament_meta?.estimated_minutes ?? null;
+  const duration = singleRunDuration ? singleRunDuration * runsTotal : null;
   const finishTime = scheduleMode !== "asap" ? addMinutesToTime(startTime, duration) : null;
 
   return (
@@ -289,6 +295,29 @@ export function ScheduleModal({ mode, printers, onClose, onSaved }: Props) {
             />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-muted)]">
+            Кількість запусків
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={runsTotal}
+            onChange={event => setRunsTotal(Number(event.target.value))}
+            className="h-8 rounded border border-[var(--border-strong)] bg-[var(--bg)] px-2 text-xs text-[var(--text)] outline-none focus:border-[var(--accent)]"
+          />
+          {entry?.runs_completed ? (
+            <span className="text-[10px] text-[var(--text-faint)]">
+              Уже завершено: {entry.runs_completed}
+            </span>
+          ) : (
+            <span className="text-[10px] text-[var(--text-faint)]">
+              AutoPrint виконає файл стільки разів, доки вистачає завантажених столів.
+            </span>
+          )}
+        </label>
 
         {/* Schedule mode */}
         <label className="flex flex-col gap-1">

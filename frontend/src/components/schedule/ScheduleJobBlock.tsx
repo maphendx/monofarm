@@ -55,6 +55,9 @@ function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
           {task.quantity > 1 && (
             <div><span className="text-[var(--text-faint)]">Кількість</span> <span className="font-medium text-[var(--text)]">×{task.quantity}</span></div>
           )}
+          {entry.runs_total > 1 && (
+            <div><span className="text-[var(--text-faint)]">AutoPrint</span> <span className="font-medium text-[var(--text)]">{entry.runs_completed}/{entry.runs_total}</span></div>
+          )}
           {task.estimated_minutes && (
             <div><span className="text-[var(--text-faint)]">Оцінка</span> <span className="font-medium text-[var(--text)]">{fmtDuration(task.estimated_minutes)}</span></div>
           )}
@@ -203,6 +206,7 @@ export function ScheduleJobBlock({
             </span>
             <span className="truncate text-[8px] tabular-nums text-[var(--text-muted)]">
               {timeLabel}{durationLabel ? ` · ${durationLabel}` : ""}
+              {entry.runs_total > 1 ? ` · ${entry.runs_completed}/${entry.runs_total}` : ""}
             </span>
           </div>
         )}

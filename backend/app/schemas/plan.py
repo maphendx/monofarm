@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.task import PrintTaskOut
 
@@ -19,6 +19,7 @@ class PlanEntryCreate(BaseModel):
     window_start_at: datetime | None = None
     window_end_at: datetime | None = None
     priority: int = 0
+    runs_total: int = Field(default=1, ge=1, le=100)
 
 
 class PlanEntryUpdate(BaseModel):
@@ -34,6 +35,7 @@ class PlanEntryUpdate(BaseModel):
     # DnD rescheduling — validated in the router
     plan_date: date | None = None
     printer_id: int | None = None
+    runs_total: int | None = Field(default=None, ge=1, le=100)
 
 
 class PlanEntryOut(BaseModel):
@@ -54,6 +56,8 @@ class PlanEntryOut(BaseModel):
     window_end_at: datetime | None = None
     priority: int = 0
     blocked_reason: str | None = None
+    runs_total: int = 1
+    runs_completed: int = 0
     # Computed by router
     conflict: bool = False
     end_time: time | None = None

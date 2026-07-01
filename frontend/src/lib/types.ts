@@ -129,6 +129,12 @@ export interface Printer {
   nozzle_diameter: number | null;
   bed_type: string | null;
   last_gcode_file_id: number | null;
+  autoprint_mode: string;
+  autoprint_plates_remaining: number;
+  autoprint_cooldown_temp_c: number;
+  autoprint_delay_seconds: number;
+  autoprint_eject_last_plate: boolean;
+  autoprint_error: string | null;
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 
@@ -258,6 +264,8 @@ export interface PlanEntry {
   window_end_at: string | null;
   priority: number;
   blocked_reason: string | null;
+  runs_total: number;
+  runs_completed: number;
   conflict: boolean;
 }
 

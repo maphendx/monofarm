@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import httpx
 import requests as _requests
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -39,6 +39,14 @@ log = logging.getLogger(__name__)
 
 class ClearBedPayload(BaseModel):
     success: bool = True
+
+
+class AutoPrintSettings(BaseModel):
+    enabled: bool
+    plates_loaded: int = 1
+    cooldown_temp_c: int = 40
+    delay_seconds: int = 0
+    eject_last_plate: bool = True
 
 
 class SendGcodePayload(BaseModel):
@@ -221,6 +229,12 @@ def _to_dto(
         nozzle_diameter=printer.nozzle_diameter,
         bed_type=printer.bed_type,
         last_gcode_file_id=printer.last_gcode_file_id,
+        autoprint_mode=printer.autoprint_mode,
+        autoprint_plates_remaining=printer.autoprint_plates_remaining,
+        autoprint_cooldown_temp_c=printer.autoprint_cooldown_temp_c,
+        autoprint_delay_seconds=printer.autoprint_delay_seconds,
+        autoprint_eject_last_plate=printer.autoprint_eject_last_plate,
+        autoprint_error=printer.autoprint_error,
         tags=printer.tags or [],
     )
 
@@ -1321,6 +1335,50 @@ async def cancel_print(
 
 
 # ── Unified print controls (dispatches to Moonraker or Bambu) ────────────────
+
+
+@router.patch("/{printer_id}/autoprint", response_model=PrinterOut)
+def update_autoprint(
+    printer_id: int,
+    payload: AutoPrintSettings,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> PrinterOut:
+    row = _require_printer(printer_id, db, org.id)
+    if payload.enabled:
+        from app.services.autoprint import is_a1_mini
+
+        if row.kind != PrinterKind.bambu or not is_a1_mini(row.bambu_model):
+            raise HTTPException(status_code=400, detail="AutoPrint PlateCycler підтримує лише Bambu A1 Mini")
+        if not row.bambu_lan_mode or not row.bambu_dev_ip or not row.bambu_access_code:
+            raise HTTPException(
+                status_code=400,
+                detail="Для AutoPrint потрібні Bambu LAN-only/Developer Mode, IP та Access Code",
+            )
+        if not 1 <= payload.plates_loaded <= 10:
+            raise HTTPException(status_code=422, detail="Кількість пластин має бути від 1 до 10")
+        if not 20 <= payload.cooldown_temp_c <= 80:
+            raise HTTPException(status_code=422, detail="Cooling temperature має бути від 20 до 80°C")
+        if not 0 <= payload.delay_seconds <= 3600:
+            raise HTTPException(status_code=422, detail="Delay має бути від 0 до 3600 секунд")
+        row.autoprint_mode = "platecycler"
+        row.autoprint_plates_remaining = payload.plates_loaded
+        row.autoprint_cooldown_temp_c = payload.cooldown_temp_c
+        row.autoprint_delay_seconds = payload.delay_seconds
+        row.autoprint_eject_last_plate = payload.eject_last_plate
+        row.autoprint_error = None
+    else:
+        row.autoprint_mode = "off"
+        row.autoprint_error = None
+    db.commit()
+    db.refresh(row)
+    if row.autoprint_mode == "platecycler":
+        from app.services.autoprint import start_next_for_printer
+
+        background_tasks.add_task(start_next_for_printer, row.id)
+    return _to_dto(row, db)
 
 
 def _require_printer(printer_id: int, db: Session, org_id: int) -> Printer:

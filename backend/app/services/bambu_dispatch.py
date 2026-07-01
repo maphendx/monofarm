@@ -220,6 +220,7 @@ def create_cloud_job(
     created_by_user_id: int | None = None,
     request_payload: dict[str, Any] | None = None,
     dispatch_mode: str = "cloud",
+    idempotency_key: str | None = None,
 ) -> BambuCloudJob:
     """Create (or replay) a `BambuCloudJob` for this dispatch request.
 
@@ -227,7 +228,12 @@ def create_cloud_job(
     instead of creating a duplicate, so a double-click / retried HTTP request
     can't trigger a double print (`bambu.cloud.job.replay`).
     """
-    idempotency_key = build_idempotency_key(org_id, printer_id, gcode_file_id, file_sha256)
+    idempotency_key = idempotency_key or build_idempotency_key(
+        org_id,
+        printer_id,
+        gcode_file_id,
+        file_sha256,
+    )
 
     existing = (
         db.query(BambuCloudJob)

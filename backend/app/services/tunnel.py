@@ -27,6 +27,8 @@ from collections.abc import AsyncGenerator
 
 from fastapi import WebSocket
 
+from app.models.bambu_cloud_job import BambuCloudJobStatus
+
 log = logging.getLogger(__name__)
 
 # org_id → active WebSocket
@@ -220,6 +222,9 @@ def _handle_status_push(data: dict) -> None:
     log.debug("STATUS_PUSH: cached %s state=%s", url, status.get("state"))
 
 
+_autoprint_idle_kicks: dict[str, float] = {}
+
+
 def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     """Cache a Bambu LAN MQTT report pushed by the agent."""
     dev_id = (data.get("dev_id") or "").strip()
@@ -227,7 +232,30 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     if not dev_id or not isinstance(payload, dict):
         return
     from app.services import bambu
-    bambu.handle_agent_report(org_id, dev_id, payload)
+    job = bambu.handle_agent_report(org_id, dev_id, payload)
+    if job is not None and job.plan_entry_id is not None and job.status in {
+        BambuCloudJobStatus.completed,
+        BambuCloudJobStatus.failed,
+        BambuCloudJobStatus.cancelled,
+        BambuCloudJobStatus.lost,
+    }:
+        from app.services.autoprint import handle_terminal_job
+
+        asyncio.create_task(handle_terminal_job(job.id))
+    else:
+        raw_state = str((payload.get("print") or {}).get("gcode_state") or "")
+        now = time.monotonic()
+        if raw_state in {"IDLE", "FINISH"} and now - _autoprint_idle_kicks.get(dev_id, 0.0) >= 30:
+            _autoprint_idle_kicks[dev_id] = now
+            from app.services.autoprint import start_next_for_device
+
+            asyncio.create_task(
+                start_next_for_device(
+                    org_id,
+                    dev_id,
+                    allow_finished_state=raw_state == "FINISH",
+                )
+            )
     log.debug("BAMBU_STATUS_PUSH: cached %s", dev_id)
 
 

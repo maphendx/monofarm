@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { FilamentSwatches } from "@/components/filament/FilamentSwatches";
+import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { SlotStrip } from "@/components/printers/SlotStrip";
 import { CreateTagModal } from "@/components/ui/CreateTagModal";
 import { Modal } from "@/components/ui/Modal";
@@ -355,6 +356,10 @@ export function PrinterDetailModal({
               onCreateTag={() => setShowCreateTag(true)}
             />
           </div>
+        )}
+
+        {canEdit && (
+          <AutoPrintCard printer={printer} onUpdated={onUpdated} compact />
         )}
 
         {canEdit && (printer.kind === "bambu" || printer.moonraker_url) &&

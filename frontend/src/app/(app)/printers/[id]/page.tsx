@@ -15,6 +15,7 @@ import {
 } from "@/lib/printerLabels";
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
+import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
@@ -2450,6 +2451,7 @@ export default function PrinterPage() {
           <TemperaturesCard printer={printer} />
           <SpeedCard printer={printer} />
           <ConnectionCard printer={printer} />
+          <AutoPrintCard printer={printer} onUpdated={() => void reload()} />
           {((isBambu && printer.bambu_dev_id) || !!printer.moonraker_url) && <BambuJobsCard printer={printer} />}
           <PrintHistoryCard printer={printer} />
         </div>

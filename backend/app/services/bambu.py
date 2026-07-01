@@ -418,7 +418,7 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
     _handle_report_payload(dev_id, payload)
 
 
-def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> None:
+def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> BambuCloudJob | None:
     """Ingest a Bambu LAN MQTT report forwarded by monofarm-agent.
 
     The agent owns LAN connectivity when the backend runs in the cloud. Once a
@@ -426,15 +426,15 @@ def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> No
     path as cloud MQTT so the rest of the app sees one live-state source.
     """
     if not dev_id:
-        return
+        return None
     _dev_to_org[dev_id] = org_id
-    _handle_report_payload(dev_id, payload)
+    return _handle_report_payload(dev_id, payload)
 
 
-def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
+def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJob | None:
     print_data = payload.get("print", {})
     if not print_data:
-        return
+        return None
 
     raw_state = print_data.get("gcode_state", "")
 
@@ -564,8 +564,8 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> None:
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
         _last_state_redis_write[dev_id] = now_mono
     if cleared_terminal:
-        return
-    _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
+        return None
+    return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
 
 
 def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]:

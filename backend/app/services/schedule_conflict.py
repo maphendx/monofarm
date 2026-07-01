@@ -20,6 +20,7 @@ def entry_end_time(entry: "PlanEntry") -> time | None:
     duration_minutes: int = 0
     if entry.task and entry.task.estimated_minutes:
         duration_minutes = entry.task.estimated_minutes
+    duration_minutes *= max(1, getattr(entry, "runs_total", 1))
     if duration_minutes <= 0:
         return None
     start_dt = datetime.combine(date.today(), entry.start_time)

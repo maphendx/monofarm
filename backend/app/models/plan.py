@@ -33,6 +33,8 @@ class PlanEntry(Base):
     window_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)
     blocked_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    runs_total: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    runs_completed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     printer = relationship("Printer", foreign_keys=[printer_id])
     task = relationship("PrintTask", foreign_keys=[task_id])

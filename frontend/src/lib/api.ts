@@ -76,6 +76,7 @@ export async function createPlanEntry(payload: {
   window_end_at?: string | null;
   priority?: number;
   note?: string | null;
+  runs_total?: number;
 }): Promise<PlanEntry> {
   return api<PlanEntry>("/api/plan", { method: "POST", body: JSON.stringify(payload) });
 }
@@ -93,6 +94,7 @@ export async function updatePlanEntry(
     note: string | null;
     plan_date: string | null;
     printer_id: number | null;
+    runs_total: number;
   }>,
 ): Promise<PlanEntry> {
   return api<PlanEntry>(`/api/plan/${id}`, { method: "PATCH", body: JSON.stringify(patch) });

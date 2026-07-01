@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -68,6 +68,15 @@ class Printer(Base):
 
     # Last file sent via monofarm (for reprint)
     last_gcode_file_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Chitu C1M PlateCycler AutoPrint configuration and persisted runtime state.
+    autoprint_mode: Mapped[str] = mapped_column(String(20), default="off", server_default="off")
+    bed_clear_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    autoprint_plates_remaining: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    autoprint_cooldown_temp_c: Mapped[int] = mapped_column(Integer, default=40, server_default="40")
+    autoprint_delay_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    autoprint_eject_last_plate: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    autoprint_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Tags
     tags: Mapped[list] = relationship(

@@ -48,13 +48,14 @@ function parseDurationFromText(text: string | null | undefined): number | null {
 }
 
 export function getEntryDurationMins(entry: CalendarEntry): number {
+  const runs = Math.max(1, entry.runs_total ?? 1);
   if (entry.task.estimated_minutes && entry.task.estimated_minutes > 0) {
-    return entry.task.estimated_minutes;
+    return entry.task.estimated_minutes * runs;
   }
   if (entry.task.filament_meta?.estimated_minutes && entry.task.filament_meta.estimated_minutes > 0) {
-    return entry.task.filament_meta.estimated_minutes;
+    return entry.task.filament_meta.estimated_minutes * runs;
   }
-  return (
+  return runs * (
     parseDurationFromText(entry.task.file_name) ??
     parseDurationFromText(entry.task.title) ??
     0

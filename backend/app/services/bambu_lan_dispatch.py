@@ -98,6 +98,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
 
         lan_filename = Path(file_name).name
         has_tunnel = _tunnel.has_tunnel(org_id)
+        platecycler = payload.get("platecycler")
 
         # ── validating ───────────────────────────────────────────────────────
         try:
@@ -106,6 +107,24 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл відсутній у сховищі", retryable=False)
         if not file_bytes:
             return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл порожній", retryable=False)
+        if isinstance(platecycler, dict):
+            from app.services.platecycler_3mf import PlateCycler3MFError, build_platecycler_3mf
+
+            try:
+                file_bytes = build_platecycler_3mf(
+                    file_bytes,
+                    cooldown_temp_c=int(platecycler.get("cooldown_temp_c", 40)),
+                    delay_seconds=int(platecycler.get("delay_seconds", 0)),
+                    eject_after_print=bool(platecycler.get("eject_after_print", True)),
+                )
+            except (PlateCycler3MFError, TypeError, ValueError) as exc:
+                return fail_job(
+                    job_id,
+                    BambuErrorCode.INVALID_3MF,
+                    f"Не вдалося підготувати 3MF для PlateCycler: {exc}",
+                    retryable=False,
+                )
+            lan_filename = f"autoprint-{job_id}.3mf"
         advance_job_status(
             job_id,
             BambuCloudJobStatus.validating,
@@ -117,7 +136,9 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         advance_job_status(job_id, BambuCloudJobStatus.uploading)
         try:
             if has_tunnel:
-                presigned = storage_svc.presigned_url(stored_name, org_id, expires=900)
+                presigned = None
+                if not isinstance(platecycler, dict):
+                    presigned = storage_svc.presigned_url(stored_name, org_id, expires=900)
                 remote_path = await _tunnel.send_bambu_upload(
                     org_id,
                     dev_ip,
@@ -127,6 +148,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                     presigned_url=presigned,
                     target_dir=upload_target_dir,
                 )
+            elif isinstance(platecycler, dict):
+                raise RuntimeError("PlateCycler AutoPrint потребує підключений monofarm-agent")
             else:
                 with storage_svc.local_path_for(stored_name, org_id) as src:
                     remote_path = await asyncio.to_thread(

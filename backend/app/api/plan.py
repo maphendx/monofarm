@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
@@ -66,6 +66,8 @@ def _to_out(
         window_end_at=entry.window_end_at,
         priority=entry.priority,
         blocked_reason=entry.blocked_reason,
+        runs_total=entry.runs_total,
+        runs_completed=entry.runs_completed,
         conflict=conflict,
         end_time=entry_end_time(entry),
     )
@@ -198,6 +200,7 @@ def get_plan(
 @router.post("", response_model=PlanEntryOut, status_code=status.HTTP_201_CREATED)
 def create_entry(
     payload: PlanEntryCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -230,6 +233,7 @@ def create_entry(
         window_start_at=payload.window_start_at,
         window_end_at=payload.window_end_at,
         priority=payload.priority,
+        runs_total=max(1, payload.runs_total),
     )
     db.add(entry)
     db.commit()
@@ -240,6 +244,10 @@ def create_entry(
         .filter(PlanEntry.id == entry.id)
         .one()
     )
+    if printer.autoprint_mode == "platecycler":
+        from app.services.autoprint import start_next_for_printer
+
+        background_tasks.add_task(start_next_for_printer, printer.id)
     return _to_out(entry, db, org.id)
 
 
@@ -247,6 +255,7 @@ def create_entry(
 def update_entry(
     entry_id: int,
     payload: PlanEntryUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user=Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -261,6 +270,8 @@ def update_entry(
         raise HTTPException(status_code=404, detail="Plan entry not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("runs_total") is not None:
+        updates["runs_total"] = max(entry.runs_completed, max(1, updates["runs_total"]))
 
     # printer_id change requires org-scoped validation
     if "printer_id" in updates and updates["printer_id"] is not None:
@@ -276,6 +287,11 @@ def update_entry(
 
     db.commit()
     db.refresh(entry)
+    target_printer = db.get(Printer, entry.printer_id)
+    if target_printer and target_printer.autoprint_mode == "platecycler":
+        from app.services.autoprint import start_next_for_printer
+
+        background_tasks.add_task(start_next_for_printer, entry.printer_id)
     return _to_out(entry, db, org.id)
 
 

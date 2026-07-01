@@ -40,6 +40,10 @@ class BambuCloudJob(Base):
     gcode_file_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("gcode_files.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    plan_entry_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("plan_entries.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    autoprint_run_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

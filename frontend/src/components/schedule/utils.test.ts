@@ -93,6 +93,18 @@ describe("time and date helpers", () => {
     }))).toBe(18 * 60 + 9);
   });
 
+  test("reserves calendar time for every AutoPrint run", () => {
+    const entry = makeEntry({
+      runs_total: 4,
+      task: {
+        ...makeEntry().task,
+        estimated_minutes: 30,
+      },
+    });
+
+    expect(getEntryDurationMins(entry)).toBe(120);
+  });
+
   test("builds stable local calendar dates", () => {
     const monday = new Date(2026, 5, 29, 12);
     expect(isoDateStr(monday)).toBe("2026-06-29");
