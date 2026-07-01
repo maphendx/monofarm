@@ -335,8 +335,8 @@ function ProductModal({
         : await api<Product>("/api/warehouse/products", { method: "POST", body: JSON.stringify(body) });
       onSaved(p);
       onClose();
-    } catch {
-      setErr("Помилка збереження. Перевірте поля.");
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Помилка збереження. Перевірте поля.");
     } finally {
       setBusy(false);
     }

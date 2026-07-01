@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from app.api.ws import broadcast_warehouse
 from pydantic import BaseModel
 from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles, require_warehouse_full
@@ -2057,7 +2058,11 @@ def create_product(
         data["box_limit"] = data.pop("cell_limit")
     p = Product(**data, organization_id=org.id, created_by_id=user.id)
     db.add(p)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Номенклатура з таким SKU вже існує: {data.get('sku')}")
     db.refresh(p)
     return ProductOut.model_validate(p)
 
@@ -2391,7 +2396,11 @@ def update_product(
         data["box_limit"] = data.pop("cell_limit")
     for k, v in data.items():
         setattr(p, k, v)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Номенклатура з таким SKU вже існує: {p.sku}")
     db.refresh(p)
     return _make_product_out(p, org.id)
 
