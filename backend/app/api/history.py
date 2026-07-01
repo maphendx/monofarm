@@ -43,7 +43,7 @@ def list_history(
     result: str | None = Query(None),
     start: date | None = Query(None),
     end: date | None = Query(None),
-    limit: int = Query(100, le=500),
+    limit: int = Query(100, le=5000),
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[PrintHistory]:

@@ -670,7 +670,7 @@ export function ScheduleCalendar({
   useEffect(() => {
     const startStr = isoDateStr(weekDates[0]);
     const endStr = isoDateStr(weekDates[6]);
-    api<PrintHistoryItem[]>(`/api/history?start=${startStr}&end=${endStr}&limit=500`)
+    api<PrintHistoryItem[]>(`/api/history?start=${startStr}&end=${endStr}&limit=2000`)
       .then(setHistory)
       .catch(() => {});
   }, [weekDates]);
