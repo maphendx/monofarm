@@ -362,7 +362,7 @@ function FarmStatusPanel({
   const cancelled = entries.filter(e => e.task.status === "cancelled").length;
   const plannedMinutes = entries.reduce((sum, e) => sum + (e.task.estimated_minutes ?? e.task.filament_meta?.estimated_minutes ?? 0), 0);
   const histCompleted = history.filter(h => h.result === "completed").length;
-  const histFailed = history.filter(h => h.result === "failed").length;
+  const histFailed = history.filter(h => h.result === "failed" && (h.duration_minutes ?? 0) >= 1).length;
   const histTotalMins = history.filter(h => h.result === "completed").reduce((s, h) => s + (h.duration_minutes ?? 0), 0);
 
   const chips: { id: StateFilter; label: string; count: number; dot: string }[] = [
