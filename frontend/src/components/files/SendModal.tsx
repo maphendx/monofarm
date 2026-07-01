@@ -1110,7 +1110,7 @@ export function SendModal({
                                     </span>
                                     {/* Checkbox */}
                                     <span className={[
-                                      "absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded border-2 shadow transition-all",
+                                      "absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded border-2 shadow transition",
                                       isSelected ? "border-[var(--accent)] bg-[var(--accent)] text-white" : "border-white/50 bg-black/25",
                                     ].join(" ")}>
                                       {isSelected && <Check size={10} strokeWidth={3.5} />}
