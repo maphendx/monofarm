@@ -362,8 +362,8 @@ function FarmStatusPanel({
   const cancelled = entries.filter(e => e.task.status === "cancelled").length;
   const plannedMinutes = entries.reduce((sum, e) => sum + (e.task.estimated_minutes ?? e.task.filament_meta?.estimated_minutes ?? 0), 0);
   const histCompleted = history.filter(h => h.result === "completed").length;
-  const histFailed = history.filter(h => h.result === "failed" || h.result === "cancelled").length;
-  const histTotalMins = history.reduce((s, h) => s + (h.duration_minutes ?? 0), 0);
+  const histFailed = history.filter(h => h.result === "failed").length;
+  const histTotalMins = history.filter(h => h.result === "completed").reduce((s, h) => s + (h.duration_minutes ?? 0), 0);
 
   const chips: { id: StateFilter; label: string; count: number; dot: string }[] = [
     { id: "all", label: "Усі", count: total, dot: "bg-[var(--text-faint)]" },
@@ -428,6 +428,7 @@ interface HistorySegment {
   startMins: number;
   endMins: number;
   count: number;
+  completedCount: number;
   totalMins: number;
   totalG: number;
   hasFail: boolean;
@@ -447,28 +448,33 @@ function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEnd
   }).sort((a, b) => a.startMins - b.startMins);
 
   const segments: HistorySegment[] = [];
+  const isCompleted = (r: string) => r === "completed";
+  const isFailed = (r: string) => r === "failed" || r === "cancelled";
   let cur = {
     startMins: enriched[0].startMins, endMins: enriched[0].endMins,
-    count: 1, totalMins: enriched[0].dur, totalG: enriched[0].h.filament_g ?? 0,
-    hasFail: enriched[0].h.result === "failed" || enriched[0].h.result === "cancelled",
+    count: 1, completedCount: isCompleted(enriched[0].h.result) ? 1 : 0,
+    totalMins: enriched[0].dur, totalG: enriched[0].h.filament_g ?? 0,
+    hasFail: isFailed(enriched[0].h.result),
     items: [enriched[0].h],
   };
   for (let i = 1; i < enriched.length; i++) {
     const e = enriched[i];
-    const isFail = e.h.result === "failed" || e.h.result === "cancelled";
+    const fail = isFailed(e.h.result);
     if (e.startMins <= cur.endMins + 15) {
       cur.endMins = Math.max(cur.endMins, e.endMins);
       cur.count++;
+      if (isCompleted(e.h.result)) cur.completedCount++;
       cur.totalMins += e.dur;
       cur.totalG += e.h.filament_g ?? 0;
-      if (isFail) cur.hasFail = true;
+      if (fail) cur.hasFail = true;
       cur.items.push(e.h);
     } else {
       segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
       cur = {
         startMins: e.startMins, endMins: e.endMins,
-        count: 1, totalMins: e.dur, totalG: e.h.filament_g ?? 0,
-        hasFail: isFail, items: [e.h],
+        count: 1, completedCount: isCompleted(e.h.result) ? 1 : 0,
+        totalMins: e.dur, totalG: e.h.filament_g ?? 0,
+        hasFail: fail, items: [e.h],
       };
     }
   }
@@ -606,7 +612,7 @@ function HistorySegmentBlock({ seg }: { seg: HistorySegment }) {
         <span className="shrink-0 text-[8px] font-bold">{seg.hasFail ? "✕" : "✓"}</span>
         <span className="truncate text-[7px] font-semibold">{startLabel}–{endLabel}</span>
         <span className="shrink-0 text-[7px] tabular-nums opacity-70">
-          {seg.count > 1 ? `×${seg.count}` : fmtDuration(seg.totalMins)}
+          {seg.completedCount > 1 ? `×${seg.completedCount}` : fmtDuration(seg.totalMins)}
           {gramsLabel && ` ${gramsLabel}`}
         </span>
       </div>
