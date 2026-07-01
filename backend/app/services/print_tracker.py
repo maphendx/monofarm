@@ -141,6 +141,12 @@ def _check_org(db, org: Organization) -> None:
                 )
             log.info("PrintHistory: %s on %s", result, row.name)
 
+        # Restart recovery: if worker restarted while printer was printing, _prev
+        # was cleared so the printing→done transition never fires. Close any stale
+        # in_progress entry when we see the printer is now idle/operational.
+        elif state in ("operational", "idle") and prev_state not in PRINTING_STATES:
+            _close_stale(db, row.id, now, "completed")
+
         _prev[row.id] = current
 
 
