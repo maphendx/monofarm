@@ -449,36 +449,33 @@ function mergeHistorySegments(items: PrintHistoryItem[], dayDate: string, maxEnd
 
   const segments: HistorySegment[] = [];
   const isCompleted = (r: string) => r === "completed";
-  const isFailed = (r: string) => r === "failed" || r === "cancelled";
   let cur = {
     startMins: enriched[0].startMins, endMins: enriched[0].endMins,
     count: 1, completedCount: isCompleted(enriched[0].h.result) ? 1 : 0,
     totalMins: enriched[0].dur, totalG: enriched[0].h.filament_g ?? 0,
-    hasFail: isFailed(enriched[0].h.result),
+    hasFail: !isCompleted(enriched[0].h.result),
     items: [enriched[0].h],
   };
   for (let i = 1; i < enriched.length; i++) {
     const e = enriched[i];
-    const fail = isFailed(e.h.result);
     if (e.startMins <= cur.endMins + 15) {
       cur.endMins = Math.max(cur.endMins, e.endMins);
       cur.count++;
       if (isCompleted(e.h.result)) cur.completedCount++;
       cur.totalMins += e.dur;
       cur.totalG += e.h.filament_g ?? 0;
-      if (fail) cur.hasFail = true;
       cur.items.push(e.h);
     } else {
-      segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+      segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins), hasFail: cur.completedCount === 0 });
       cur = {
         startMins: e.startMins, endMins: e.endMins,
         count: 1, completedCount: isCompleted(e.h.result) ? 1 : 0,
         totalMins: e.dur, totalG: e.h.filament_g ?? 0,
-        hasFail: fail, items: [e.h],
+        hasFail: !isCompleted(e.h.result), items: [e.h],
       };
     }
   }
-  segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins) });
+  segments.push({ ...cur, endMins: Math.min(cur.endMins, maxEndMins), hasFail: cur.completedCount === 0 });
   return segments;
 }
 
