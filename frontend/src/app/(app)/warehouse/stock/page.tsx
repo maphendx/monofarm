@@ -173,7 +173,7 @@ function StockBar({ avail, min, desired, inProduction = false }: { avail: number
     : "var(--state-ok)";
   return (
     <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-[var(--surface-hi)]">
-      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+      <div className="h-full rounded-full transition-[width,background-color]" style={{ width: `${pct}%`, background: color }} />
     </div>
   );
 }

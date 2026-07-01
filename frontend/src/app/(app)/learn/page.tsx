@@ -68,7 +68,7 @@ export default function LearnPage() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           {TOPICS.map(topic => (
             <div key={topic.title}
-              className="group cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 transition-all hover:border-[var(--border-strong)] hover:shadow-sm">
+              className="group cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 transition hover:border-[var(--border-strong)] hover:shadow-sm">
               <div className="mb-3 flex items-center gap-3">
                 <span className="text-2xl">{topic.icon}</span>
                 <div className="h-1 flex-1 rounded-full opacity-30" style={{ background: topic.color }} />

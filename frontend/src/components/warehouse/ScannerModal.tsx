@@ -242,7 +242,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8vh]" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="overlay-in absolute inset-0 bg-black/60" />
       <div
         className="relative w-full max-w-[1040px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}

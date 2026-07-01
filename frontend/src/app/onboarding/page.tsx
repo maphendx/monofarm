@@ -96,7 +96,7 @@ export default function OnboardingPage() {
           {/* Step dots */}
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
-              <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${
+              <div key={i} className={`h-1.5 rounded-full transition-[width,background-color] duration-300 ${
                 i === stepIndex ? "w-5 bg-[var(--surface)] "
                 : i < stepIndex ? "w-1.5 bg-[var(--state-idle)]"
                                 : "w-1.5 bg-[var(--surface-hi)] "

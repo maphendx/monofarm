@@ -136,7 +136,7 @@ function FilamentCard({
         <div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
             <div
-              className="h-full rounded-full transition-all"
+              className="h-full rounded-full transition-[width,background-color]"
               style={{ width: `${pct}%`, background: barColor }}
             />
           </div>

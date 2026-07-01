@@ -275,7 +275,7 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={[
-        "group relative flex cursor-pointer select-none flex-col items-center gap-3 rounded-xl border p-4 transition-all duration-150",
+        "group relative flex cursor-pointer select-none flex-col items-center gap-3 rounded-xl border p-4 transition duration-150",
         isDragOver
           ? "scale-105 border-accent bg-accent/10 shadow-lg shadow-accent/20"
           : "border-[var(--border-strong)]/60 bg-[var(--surface-2)]/50 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
@@ -375,7 +375,7 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150",
+        "group relative flex flex-col gap-2 rounded-xl border p-3 transition duration-150",
         canEdit ? "cursor-grab active:cursor-grabbing" : "",
         isDragging
           ? "scale-95 opacity-40 border-[var(--border-strong)] bg-[var(--surface-2)]"
@@ -481,7 +481,7 @@ function RootDropZone({ isDragOver, onDragOver, onDragLeave, onDrop }: {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={[
-        "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 px-4 text-sm transition-all duration-150",
+        "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 px-4 text-sm transition duration-150",
         isDragOver
           ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] text-[var(--accent)] scale-[1.02]"
           : "border-[var(--border-strong)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-muted)]",
@@ -819,7 +819,7 @@ export default function FilesPage() {
                 onDragLeave={onFolderDragLeave}
                 onDrop={e => onFolderDrop(e, null)}
                 className={[
-                  "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition-all duration-150 cursor-default",
+                  "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 transition duration-150 cursor-default",
                   dragOverTarget === "root"
                     ? "border-[var(--accent)] bg-[rgba(56,189,248,.08)] scale-105"
                     : "border-[var(--border-strong)] opacity-60",
@@ -846,7 +846,7 @@ export default function FilesPage() {
                 onDragLeave={onFolderDragLeave}
                 onDrop={e => onFolderDrop(e, folder.id)}
                 className={[
-                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all duration-150 cursor-default select-none",
+                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition duration-150 cursor-default select-none",
                   dragOverTarget === folder.id
                     ? "scale-105 border-accent bg-accent/10 text-accent"
                     : "border-[var(--border-strong)] text-[var(--text-faint)] hover:border-[var(--border-strong)]",
@@ -912,7 +912,7 @@ export default function FilesPage() {
           onDragLeave={() => setDragOverTarget(null)}
           onDrop={e => onFolderDrop(e, currentFolderId)}
           className={[
-            "mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition-all",
+            "mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-16 transition",
             dragOverTarget === currentFolderId
               ? "border-accent bg-accent/10 text-accent"
               : "border-[var(--border-strong)] text-[var(--text-muted)]",

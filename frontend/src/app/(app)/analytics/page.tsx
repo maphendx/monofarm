@@ -224,7 +224,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
-                        className="h-full rounded-full bg-[var(--surface)]  transition-all"
+                        className="h-full rounded-full bg-[var(--surface)]  transition-[width]"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -264,7 +264,7 @@ export default function AnalyticsPage() {
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-hi)] ">
                       <div
-                        className="h-full rounded-full transition-all"
+                        className="h-full rounded-full transition-[width,background-color]"
                         style={{ width: `${pct}%`, background: color }}
                       />
                     </div>

@@ -364,7 +364,7 @@ export default function CashRegisterPage() {
                     onClick={() => addToCart(p)}
                     disabled={outOfStock}
                     className={[
-                      "relative flex flex-col rounded-xl border p-3 text-left transition-all active:scale-95 disabled:opacity-40",
+                      "relative flex flex-col rounded-xl border p-3 text-left transition active:scale-95 disabled:opacity-40",
                       inCart
                         ? "border-[var(--accent)] bg-[var(--accent)]/8"
                         : "border-[var(--border)] bg-[var(--bg-elevated)] hover:border-[var(--accent)]/40",

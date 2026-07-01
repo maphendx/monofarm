@@ -67,7 +67,7 @@ function ProgressBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.round(value));
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
-      <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${pct}%` }} />
+      <div className="h-full rounded-full bg-[var(--accent)] transition-[width]" style={{ width: `${pct}%` }} />
     </div>
   );
 }

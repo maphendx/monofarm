@@ -194,7 +194,7 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
       </div>
       <div className="h-1.5 rounded-full bg-[var(--surface-hi)] ">
         <div
-          className={`h-1.5 rounded-full transition-all ${warn ? "bg-[var(--state-warn)]" : "bg-[var(--surface)] "}`}
+          className={`h-1.5 rounded-full transition-[width,background-color] ${warn ? "bg-[var(--state-warn)]" : "bg-[var(--surface)] "}`}
           style={{ width: `${pct}%` }}
         />
       </div>

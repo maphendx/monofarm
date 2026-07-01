@@ -730,7 +730,7 @@ function ZoneAccordion({
           {/* fill bar + stat */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <div className="w-20 h-[5px] rounded-full bg-[var(--surface-hi)] overflow-hidden">
-              <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${fillPct}%` }} />
+              <div className="h-full rounded-full bg-[var(--accent)] transition-[width]" style={{ width: `${fillPct}%` }} />
             </div>
             <span className="font-mono text-[10.5px] text-[var(--text-faint)] whitespace-nowrap">
               <b className="text-[var(--text-hi)]">{filledCount}</b>/{zone.cell_count} · {fillPct}%
@@ -849,7 +849,7 @@ function ZoneAccordion({
                         onClick={() => setActiveCell(cell)}
                         title={title}
                         className={[
-                          "group relative flex flex-col justify-between rounded-lg border text-left transition-all overflow-hidden",
+                          "group relative flex flex-col justify-between rounded-lg border text-left transition overflow-hidden",
                           density === "compact" ? "min-h-[62px] p-2" : "min-h-[80px] p-2",
                           matched
                             ? "border-[var(--state-ok)] bg-[rgba(34,197,94,.12)] ring-1 ring-[var(--state-ok)]"
@@ -907,7 +907,7 @@ function ZoneAccordion({
                         {/* fill bar at bottom */}
                         {filled && totalQty > 0 && (
                           <div className="absolute bottom-0 left-0 right-0 h-[2.5px]" style={{ background: "rgba(255,255,255,.05)" }}>
-                            <div className="h-full transition-all" style={{ width: `${barW}%`, background: FILL_BAR_COLOR[String(lvl)] }} />
+                            <div className="h-full transition-[width]" style={{ width: `${barW}%`, background: FILL_BAR_COLOR[String(lvl)] }} />
                           </div>
                         )}
                       </button>

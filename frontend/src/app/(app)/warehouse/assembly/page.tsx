@@ -197,7 +197,7 @@ function BatchCard({ batch, activeSession, onStart, onSessionClose }: {
           <span className="font-mono"><b className="text-[var(--text-hi)]">{batch.good_qty}</b> / {batch.target_qty} · {pct}%</span>
         </div>
         <div className="h-2 rounded-full bg-[var(--surface-hi)] overflow-hidden">
-          <div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-[var(--accent)] transition-[width]" style={{ width: `${pct}%` }} />
         </div>
         {batch.defect_qty > 0 && <p className="text-[10.5px] text-[var(--state-warn)] mt-1">Брак: {batch.defect_qty}</p>}
       </div>
