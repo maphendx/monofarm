@@ -1350,7 +1350,7 @@ def update_autoprint(
     if payload.enabled:
         from app.services.autoprint import is_a1_mini
 
-        if row.kind != PrinterKind.bambu or not is_a1_mini(row.bambu_model):
+        if row.kind != PrinterKind.bambu or not is_a1_mini(row.bambu_model, row.bambu_dev_id):
             raise HTTPException(status_code=400, detail="AutoPrint PlateCycler підтримує лише Bambu A1 Mini")
         if not row.bambu_lan_mode or not row.bambu_dev_ip or not row.bambu_access_code:
             raise HTTPException(

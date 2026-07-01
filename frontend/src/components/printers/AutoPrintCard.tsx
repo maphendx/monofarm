@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import type { Printer } from "@/lib/types";
 
-function isA1Mini(model: string | null): boolean {
-  const normalized = (model ?? "").toLowerCase().replaceAll("-", " ").replaceAll("_", " ");
-  return normalized.includes("a1") && normalized.includes("mini");
+function isA1Mini(model: string | null, devId: string | null): boolean {
+  const normalized = (model ?? "").toLowerCase().replaceAll("-", "").replaceAll("_", "").replaceAll(" ", "");
+  return normalized === "n1"
+    || (normalized.includes("a1") && normalized.includes("mini"))
+    || (devId ?? "").toUpperCase().startsWith("030");
 }
 
 export function AutoPrintCard({
@@ -35,7 +37,7 @@ export function AutoPrintCard({
     setEjectLast(printer.autoprint_eject_last_plate);
   }, [printer]);
 
-  if (printer.kind !== "bambu" || !isA1Mini(printer.bambu_model)) return null;
+  if (printer.kind !== "bambu" || !isA1Mini(printer.bambu_model, printer.bambu_dev_id)) return null;
 
   async function save() {
     setSaving(true);

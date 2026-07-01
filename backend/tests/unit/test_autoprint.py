@@ -4,6 +4,8 @@ from app.services.autoprint import _file_safety_error, is_a1_mini
 def test_a1_mini_model_detection_is_normalized() -> None:
     assert is_a1_mini("Bambu Lab A1 mini")
     assert is_a1_mini("A1-MINI")
+    assert is_a1_mini("N1")
+    assert is_a1_mini(None, "030ABC123")
     assert not is_a1_mini("Bambu Lab A1")
     assert not is_a1_mini("P1S")
 

@@ -16,9 +16,13 @@ from app.services.bambu_job_state import ACTIVE_STATUSES, TERMINAL_STATUSES
 _printer_locks: dict[int, asyncio.Lock] = {}
 
 
-def is_a1_mini(model: str | None) -> bool:
-    normalized = (model or "").lower().replace("-", " ").replace("_", " ")
-    return "a1" in normalized and "mini" in normalized
+def is_a1_mini(model: str | None, dev_id: str | None = None) -> bool:
+    normalized = (model or "").lower().replace("-", "").replace("_", "").replace(" ", "")
+    return (
+        normalized == "n1"
+        or ("a1" in normalized and "mini" in normalized)
+        or (dev_id or "").upper().startswith("030")
+    )
 
 
 def record_completed_run(db: Session, job: BambuCloudJob) -> bool:

@@ -23,6 +23,8 @@ def test_root_path_uses_sdcard_url():
 def test_a1_uploads_to_sdcard_root():
     assert _bambu_upload_target_dir("A1") == "sdcard"
     assert _bambu_upload_target_dir("A1 mini") == "sdcard"
+    assert _bambu_upload_target_dir("N1") == "sdcard"
+    assert _bambu_upload_target_dir(None, "030ABC123") == "sdcard"
 
 
 def test_p_and_x_series_upload_to_cache():

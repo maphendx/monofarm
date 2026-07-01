@@ -35,9 +35,10 @@ _inflight: set[int] = set()
 _inflight_guard = threading.Lock()
 
 
-def _bambu_upload_target_dir(model: str | None) -> str:
+def _bambu_upload_target_dir(model: str | None, dev_id: str | None = None) -> str:
     """A1 firmware reads project_file from SD root; P/X printers use cache."""
-    return "sdcard" if is_a1_series(model) else "cache"
+    is_a1 = is_a1_series(model) or (dev_id or "").upper().startswith(("030", "039"))
+    return "sdcard" if is_a1 else "cache"
 
 
 def has_agent_tunnel(org_id: int) -> bool:
@@ -77,7 +78,10 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             dev_id = (printer.bambu_dev_id or "").strip() if printer else ""
             dev_ip = (printer.bambu_dev_ip or "").strip() if printer else ""
             access_code = (printer.bambu_access_code or "").strip() if printer else ""
-            upload_target_dir = _bambu_upload_target_dir(printer.bambu_model if printer else None)
+            upload_target_dir = _bambu_upload_target_dir(
+                printer.bambu_model if printer else None,
+                dev_id,
+            )
             start_via = (payload.get("start_via") or "lan").strip().lower()
             stored_name = gcode.stored_name if gcode else None
 

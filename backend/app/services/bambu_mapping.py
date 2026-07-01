@@ -144,5 +144,5 @@ def build_ams_mapping(
 
 
 def is_a1_series(model: str | None) -> bool:
-    normalized = (model or "").upper().replace("-", " ")
-    return "A1" in normalized
+    normalized = (model or "").upper().replace("-", "").replace("_", "").replace(" ", "")
+    return normalized in {"N1", "N2S"} or "A1" in normalized
