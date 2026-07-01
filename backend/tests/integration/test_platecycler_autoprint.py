@@ -132,3 +132,51 @@ def test_record_completed_run_is_idempotent(db_session, test_org, admin_user) ->
     assert record_completed_run(db_session, job) is False
     assert entry.runs_completed == 1
     assert printer.autoprint_plates_remaining == 2
+
+
+def _plan_entry(db, org_id: int, printer_id: int, runs_total: int = 1) -> PlanEntry:
+    task = PrintTask(organization_id=org_id, title="Part")
+    db.add(task)
+    db.flush()
+    entry = PlanEntry(
+        organization_id=org_id,
+        plan_date=date.today(),
+        printer_id=printer_id,
+        task_id=task.id,
+        runs_total=runs_total,
+    )
+    db.add(entry)
+    db.commit()
+    return entry
+
+
+def test_advance_queue_counts_runs_before_marking_done(db_session, test_org) -> None:
+    from datetime import datetime, timezone
+
+    from app.services.print_tracker import _advance_queue
+
+    printer = _printer(db_session, test_org.id, autoprint_mode="off")
+    entry = _plan_entry(db_session, test_org.id, printer.id, runs_total=3)
+
+    now = datetime.now(timezone.utc)
+    _advance_queue(db_session, printer, now)
+    assert entry.runs_completed == 1
+    assert entry.done is False
+
+    _advance_queue(db_session, printer, now)
+    _advance_queue(db_session, printer, now)
+    assert entry.runs_completed == 3
+    assert entry.done is True
+
+
+def test_advance_queue_skips_platecycler_printers(db_session, test_org) -> None:
+    from datetime import datetime, timezone
+
+    from app.services.print_tracker import _advance_queue
+
+    printer = _printer(db_session, test_org.id)  # autoprint_mode="platecycler"
+    entry = _plan_entry(db_session, test_org.id, printer.id, runs_total=2)
+
+    _advance_queue(db_session, printer, datetime.now(timezone.utc))
+    assert entry.runs_completed == 0
+    assert entry.done is False

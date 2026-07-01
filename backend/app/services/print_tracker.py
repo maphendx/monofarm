@@ -325,8 +325,13 @@ def _finalize_print(db, printer: Printer, now: datetime, result: str) -> None:
 
 
 def _advance_queue(db, printer: Printer, now: datetime) -> None:
-    """Mark today's first undone PlanEntry for this printer as done."""
+    """Advance today's first undone PlanEntry for this printer by one run."""
     from datetime import date as date_cls
+
+    # PlateCycler AutoPrint owns run accounting via autoprint.record_completed_run
+    # (keyed by autoprint_run_index) — advancing here as well would double-count.
+    if printer.autoprint_mode == "platecycler":
+        return
 
     entry = (
         db.query(PlanEntry)
@@ -342,10 +347,11 @@ def _advance_queue(db, printer: Printer, now: datetime) -> None:
     if not entry:
         return
 
-    entry.done = True
+    entry.runs_completed = min(entry.runs_total, entry.runs_completed + 1)
+    entry.done = entry.runs_completed >= entry.runs_total
     log.info(
-        "queue advance: printer=%s entry=%d marked done",
-        printer.name, entry.id,
+        "queue advance: printer=%s entry=%d runs=%d/%d done=%s",
+        printer.name, entry.id, entry.runs_completed, entry.runs_total, entry.done,
     )
 
 

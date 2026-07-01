@@ -1,8 +1,13 @@
 """GET /agent/monofarm-agent.exe — redirect to the R2-hosted agent binary."""
 
 
-def test_agent_exe_404_without_object_storage(client):
-    # Test env has no S3 bucket → presigned_url_raw returns None → 404.
+def test_agent_exe_404_without_object_storage(client, monkeypatch):
+    # No S3 bucket → presigned_url_raw returns None → 404. Patched so the test
+    # doesn't depend on whether the local .env has S3 configured.
+    monkeypatch.setattr(
+        "app.services.storage.presigned_url_raw",
+        lambda key, expires=3600: None,
+    )
     resp = client.get("/agent/monofarm-agent.exe", follow_redirects=False)
     assert resp.status_code == 404
 
