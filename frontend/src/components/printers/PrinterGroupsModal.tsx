@@ -230,11 +230,19 @@ export function PrinterGroupsModal({
     void load();
   }, [open, load]);
 
-  // Sync printers from WS stream when provided
+  // Sync live status from WS stream, but preserve local structural state (sort_order, group_id)
+  // to avoid reverting drag-and-drop changes before the backend WS push catches up.
   useEffect(() => {
-    if (externalPrinters && open) {
-      setPrinters(externalPrinters);
-    }
+    if (!externalPrinters || !open) return;
+    setPrinters(prev => {
+      if (prev.length === 0) return externalPrinters;
+      const structMap = new Map(prev.map(p => [p.id, {
+        sort_order: p.sort_order,
+        group_id: p.group_id,
+        group_name: p.group_name,
+      }]));
+      return externalPrinters.map(p => ({ ...p, ...(structMap.get(p.id) ?? {}) }));
+    });
   }, [externalPrinters, open]);
 
   const printersByGroup = useMemo(() => {
@@ -391,11 +399,21 @@ export function PrinterGroupsModal({
   async function assignPrinter(printer: Printer, groupId: number | null) {
     setError(null);
     const previous = printers;
-    setPrinters(prev => prev.map(p => p.id === printer.id ? { ...p, group_id: groupId, group_name: groups.find(g => g.id === groupId)?.name ?? null } : p));
+    // Place at end of target group
+    const targetGroupSize = printers.filter(p => p.id !== printer.id && p.group_id === groupId).length;
+    const targetGroupName = groups.find(g => g.id === groupId)?.name ?? null;
+    setPrinters(prev => prev.map(p => p.id === printer.id
+      ? { ...p, group_id: groupId, group_name: targetGroupName, sort_order: targetGroupSize }
+      : p
+    ));
     try {
       await api(`/api/printers/${printer.id}/group`, {
         method: "POST",
         body: JSON.stringify({ group_id: groupId }),
+      });
+      await api("/api/printers/reorder", {
+        method: "POST",
+        body: JSON.stringify([{ id: printer.id, sort_order: targetGroupSize }]),
       });
       onChange();
     } catch (err) {
@@ -406,14 +424,19 @@ export function PrinterGroupsModal({
 
   function handleGroupDrop(groupKey: string, e: React.DragEvent) {
     e.preventDefault();
-    if (dragPrinterId == null) return;
-    const printer = printers.find(p => p.id === dragPrinterId);
-    if (!printer) return;
-    const targetGroupId = groupKey === "ungrouped" ? null : Number(groupKey);
-    if (printer.group_id !== targetGroupId) {
-      assignPrinter(printer, targetGroupId);
+    if (dragPrinterId != null) {
+      const printer = printers.find(p => p.id === dragPrinterId);
+      if (printer) {
+        const targetGroupId = groupKey === "ungrouped" ? null : Number(groupKey);
+        if (printer.group_id !== targetGroupId) {
+          assignPrinter(printer, targetGroupId);
+        }
+      }
+      setDragPrinterId(null);
+    } else if (dragGroupId != null && groupKey !== "ungrouped") {
+      // Group dropped on the body of another group card (not the header)
+      void dropGroup(Number(groupKey));
     }
-    setDragPrinterId(null);
     setDragOverGroup(null);
   }
 
