@@ -814,7 +814,7 @@ export default function DashboardPage() {
       <PrinterGroupsModal
         open={groupsOpen}
         onClose={() => setGroupsOpen(false)}
-        onChange={reload}
+        onChange={() => { setLocalOrder(null); reload(); }}
         externalPrinters={printers}
       />
 
