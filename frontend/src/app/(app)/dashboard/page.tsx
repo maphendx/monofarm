@@ -565,7 +565,7 @@ export default function DashboardPage() {
       });
     }
     return result;
-  }, [printers, filter]);
+  }, [displayPrinters, filter]);
 
   const groups = useMemo(
     () => groupPrinters(filtered, groupBy),
