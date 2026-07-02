@@ -466,6 +466,7 @@ export default function DashboardPage() {
 
   const { printers, connected, loading, reload } = usePrinterStream();
   const [filter, setFilter] = useState<Filter>("all");
+  const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
   useEffect(() => {
     try {
@@ -556,6 +557,10 @@ export default function DashboardPage() {
     else if (filter === "offline") result = displayPrinters.filter((p) => p.state === "offline" || p.state === "unknown");
     else result = displayPrinters;
 
+    if (tagFilter.length > 0) {
+      result = result.filter((p) => tagFilter.every((id) => p.tags?.some((t) => t.id === id)));
+    }
+
     if (filter === "printing") {
       return [...result].sort((a, b) => {
         if (a.eta_minutes == null && b.eta_minutes == null) return 0;
@@ -565,7 +570,14 @@ export default function DashboardPage() {
       });
     }
     return result;
-  }, [displayPrinters, filter]);
+  }, [displayPrinters, filter, tagFilter]);
+
+  // All tags currently assigned to at least one printer (for the filter chips)
+  const availableTags = useMemo(() => {
+    const byId = new Map<number, Printer["tags"][number]>();
+    for (const p of printers) for (const t of p.tags ?? []) byId.set(t.id, t);
+    return [...byId.values()].sort((a, b) => (a.display || "").localeCompare(b.display || ""));
+  }, [printers]);
 
   const groups = useMemo(
     () => groupPrinters(filtered, groupBy),
@@ -671,6 +683,43 @@ export default function DashboardPage() {
               : counts.all}
           </span>
           <CompactSelect value={groupBy} onChange={handleGroupByChange} options={GROUP_OPTS} />
+          {availableTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1">
+              {availableTags.map((t) => {
+                const active = tagFilter.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() =>
+                      setTagFilter(active ? tagFilter.filter((id) => id !== t.id) : [...tagFilter, t.id])
+                    }
+                    className={[
+                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition",
+                      active
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-hi)]"
+                        : "border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]",
+                    ].join(" ")}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: t.color ?? "var(--text-faint)" }}
+                    />
+                    {t.display || t.label}
+                  </button>
+                );
+              })}
+              {tagFilter.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTagFilter([])}
+                  className="rounded-full px-1.5 py-0.5 text-[11px] text-[var(--text-faint)] hover:text-[var(--text)]"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
@@ -769,7 +818,7 @@ export default function DashboardPage() {
       ) : !isGrouped ? (
         <div className={GRID}>
           {filtered.map((p) => (
-            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
+            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
           ))}
         </div>
       ) : (
@@ -801,7 +850,7 @@ export default function DashboardPage() {
                         dragOverId === p.id && dragPrinterId !== p.id ? "ring-2 ring-[var(--accent)] rounded-xl" : "",
                       ].join(" ")}
                     >
-                      <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
+                      <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
                     </div>
                   ))}
                 </div>

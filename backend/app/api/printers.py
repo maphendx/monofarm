@@ -215,6 +215,7 @@ def _to_dto(
         bambu_model=printer.bambu_model,
         bambu_lan_mode=printer.bambu_lan_mode,
         is_active=printer.is_active,
+        is_out_of_order=printer.is_out_of_order,
         sort_order=printer.sort_order,
         group_id=printer.group_id,
         group_name=group_name,
@@ -1113,6 +1114,8 @@ def update_printer(
         row.name = payload.name
     if payload.is_active is not None:
         row.is_active = payload.is_active
+    if payload.is_out_of_order is not None:
+        row.is_out_of_order = payload.is_out_of_order
     if payload.moonraker_url is not None:
         row.moonraker_url = payload.moonraker_url.strip() or None
     if payload.bambu_dev_id is not None:

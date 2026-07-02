@@ -37,6 +37,7 @@ class PrinterCreate(BaseModel):
 class PrinterUpdate(BaseModel):
     name: str | None = None
     is_active: bool | None = None
+    is_out_of_order: bool | None = None
     moonraker_url: str | None = None
     bambu_dev_id: str | None = None
     bambu_access_code: str | None = None
@@ -77,6 +78,7 @@ class PrinterOut(BaseModel):
     bambu_model: str | None = None
     bambu_lan_mode: bool = False
     is_active: bool
+    is_out_of_order: bool = False
     sort_order: int = 0
     group_id: int | None = None
     group_name: str | None = None

@@ -101,6 +101,7 @@ export interface Printer {
   bambu_model: string | null;
   bambu_lan_mode: boolean;
   is_active: boolean;
+  is_out_of_order: boolean;
   sort_order: number;
   group_id: number | null;
   group_name: string | null;

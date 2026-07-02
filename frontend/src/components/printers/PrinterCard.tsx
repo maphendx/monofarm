@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { SlotStrip } from "@/components/printers/SlotStrip";
+import { PrinterQuickMenu, type QuickMenuPos } from "@/components/printers/PrinterQuickMenu";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import {
@@ -39,12 +40,14 @@ export function PrinterCard({
   onSettings,
   onUpdated,
   onPrint,
+  onDeleted,
 }: {
   printer: Printer;
   onClick?: (p: Printer) => void;
   onSettings?: (p: Printer) => void;
   onUpdated?: (p: Printer) => void;
   onPrint?: (p: Printer) => void;
+  onDeleted?: (id: number) => void;
 }) {
   const user = useUser();
   const tone = printerTone(printer);
@@ -56,7 +59,7 @@ export function PrinterCard({
   const isError = printer.state === "error";
   const needsClearBed = printer.state === "awaiting_bed_clear" ||
     (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
-  const canStartPrint = (isIdle || printer.state === "operational") && !needsClearBed;
+  const canStartPrint = (isIdle || printer.state === "operational") && !needsClearBed && !printer.is_out_of_order;
   const hasMoonraker = !!printer.moonraker_url;
   const canEdit = user.role === "admin" || user.role === "operator";
   const isActionable = (isPrinting || isPaused || isError || needsClearBed || canStartPrint) && canEdit;
@@ -65,6 +68,7 @@ export function PrinterCard({
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmClearBed, setConfirmClearBed] = useState(false);
+  const [menuPos, setMenuPos] = useState<QuickMenuPos | null>(null);
 
   async function act(e: React.MouseEvent, action: string) {
     e.stopPropagation();
@@ -92,6 +96,11 @@ export function PrinterCard({
       role="button"
       tabIndex={0}
       onClick={() => onClick?.(printer)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMenuPos({ x: e.clientX, y: e.clientY });
+      }}
       onKeyDown={(e) => e.key === "Enter" && onClick?.(printer)}
       className={["printer-card group cursor-pointer text-left", toneClass, tone === "muted" ? "opacity-60" : ""].join(" ")}
     >
@@ -102,6 +111,21 @@ export function PrinterCard({
           <div className="pc-model">{kindLabel(printer.kind)}</div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuPos({ x: r.right - 248, y: r.bottom + 4 });
+            }}
+            title="Швидке меню"
+            className="rounded p-0.5 text-[var(--text-muted)] opacity-0 transition hover:text-[var(--text)] group-hover:opacity-100"
+            tabIndex={-1}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+            </svg>
+          </button>
           {onSettings && (
             <button
               type="button"
@@ -168,6 +192,31 @@ export function PrinterCard({
           })}
         </div>
       ) : null}
+
+      {/* Out of order */}
+      {printer.is_out_of_order && (
+        <div className="rounded px-1.5 py-0.5 text-xs bg-[rgba(239,68,68,.10)] text-[var(--state-error)]">
+          ⛔ Не працює
+        </div>
+      )}
+
+      {/* Tags */}
+      {printer.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {printer.tags.map((t) => (
+            <span
+              key={t.id}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-px text-[10px] text-[var(--text-muted)]"
+            >
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: t.color ?? "var(--text-faint)" }}
+              />
+              {t.display || t.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Flags */}
       {printer.flags?.length > 0 && (
@@ -362,6 +411,21 @@ export function PrinterCard({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Quick menu (⋯ button or right-click) */}
+      {menuPos && (
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <PrinterQuickMenu
+            printer={printer}
+            pos={menuPos}
+            onClose={() => setMenuPos(null)}
+            onUpdated={onUpdated}
+            onDeleted={onDeleted}
+            onOpenSettings={onSettings}
+            onOpenInfo={onClick}
+          />
         </div>
       )}
     </div>

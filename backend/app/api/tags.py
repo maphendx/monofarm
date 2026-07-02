@@ -250,6 +250,9 @@ def get_matching_printers(
     results = []
     for p in printers:
         matches, reasons = _task_matches_printer(task, p)
+        if p.is_out_of_order:
+            matches = False
+            reasons = [*reasons, "Printer is marked out of order"]
         results.append(
             TagsMatchResult(
                 printer_id=p.id,
