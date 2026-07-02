@@ -38,6 +38,33 @@ type OrderInfo  = {
   total_amount: string | null; currency: string; items: OrderItem[];
 };
 
+type PickLocation = { warehouse_name: string; zone_name: string; cell_code: string; quantity: string };
+type PickItem     = { product_id: number; product_name: string; sku: string | null; qty_needed: number; available: string; locations: PickLocation[] };
+type PickList     = { order_id: number; order_number: string; items: PickItem[] };
+
+// Keyboard-wedge scanners fire fast; short square-wave beeps confirm each scan
+// without looking at the screen. High = ok, low+long = error.
+function beep(ok: boolean) {
+  try {
+    type AudioWindow = Window & { webkitAudioContext?: typeof AudioContext };
+    const Ctor = window.AudioContext ?? (window as AudioWindow).webkitAudioContext;
+    if (!Ctor) return;
+    const ctx = new Ctor();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "square";
+    osc.frequency.value = ok ? 1318 : 220;
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    osc.start();
+    osc.stop(ctx.currentTime + (ok ? 0.09 : 0.3));
+    osc.onended = () => { void ctx.close(); };
+  } catch {
+    // audio unavailable (no user gesture yet / permissions) — stay silent
+  }
+}
+
 const SHIPPABLE = new Set(["confirmed", "ready"]);
 const ORDER_STATUS_LABEL: Record<string, string> = {
   new: "Новий", confirmed: "Підтверджено", in_production: "Виробництво",
@@ -91,7 +118,7 @@ function ScanRow({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function ScannerModal({ onClose }: { onClose: () => void }) {
+export function ScannerModal({ onClose, fullscreen = false }: { onClose: () => void; fullscreen?: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const qtyRef   = useRef<HTMLInputElement>(null);
   const [value,        setValue]        = useState("");
@@ -101,8 +128,11 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [toCell,  setToCell]  = useState<CellDetail | null>(null);
   const [order,   setOrder]   = useState<OrderInfo | null>(null);
+  const [pick,    setPick]    = useState<PickList | null>(null);
   const [qty,     setQty]     = useState("0");
   const [price,   setPrice]   = useState("");
+  const [plusOne, setPlusOne] = useState(false);
+  const [lastOp,  setLastOp]  = useState<{ id: number; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy,    setBusy]    = useState(false);
   const [done,    setDone]    = useState(false);
@@ -115,7 +145,36 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
   const needsTo = !!meta?.needsTo;
   const ready   = !!product && !!cell && (!needsTo || !!toCell);
 
-  function clearContext() { setCell(null); setProduct(null); setToCell(null); setOrder(null); setQty("1"); setPrice(""); setDone(false); }
+  function clearContext() { setCell(null); setProduct(null); setToCell(null); setOrder(null); setPick(null); setQty("1"); setPrice(""); setDone(false); }
+
+  // Core action runner — used by the confirm button and by "+1 за скан".
+  async function runAction(prod: Product, srcCell: CellDetail, quantity: number) {
+    const body: Record<string, unknown> = { action, product_id: prod.id, quantity, cell_id: srcCell.cell_id };
+    if (needsTo && toCell) body.to_cell_id = toCell.cell_id;
+    if (meta?.priceField && price.trim()) body[meta.priceField] = parseFloat(price);
+    const r = await api<{ message: string; movement_id: number | null }>(
+      `/api/warehouse/scan-action`, { method: "POST", body: JSON.stringify(body) });
+    if (r.movement_id) setLastOp({ id: r.movement_id, message: r.message });
+    return r;
+  }
+
+  async function undoLast() {
+    if (!lastOp || busy) return;
+    setBusy(true);
+    try {
+      const r = await api<{ message: string }>(`/api/warehouse/movements/${lastOp.id}/reverse`, { method: "POST" });
+      toast.success(r.message);
+      beep(true);
+      setLastOp(null);
+      new BroadcastChannel("wh_cell_updated").postMessage(1);
+    } catch (e: unknown) {
+      beep(false);
+      toast.error(e instanceof Error ? e.message : "Помилка сторно");
+    } finally {
+      setBusy(false);
+      refocus();
+    }
+  }
 
   async function scan(raw: string) {
     const q = raw.trim();
@@ -134,9 +193,15 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
       if (!id) { setErr("Невірний QR замовлення"); refocus(); return; }
       setLoading(true);
       try {
-        const o = await api<OrderInfo>(`/api/warehouse/orders/${id}`);
-        setAction(null); setCell(null); setProduct(null); setToCell(null); setOrder(o);
+        const [o, pl] = await Promise.all([
+          api<OrderInfo>(`/api/warehouse/orders/${id}`),
+          api<PickList>(`/api/warehouse/orders/${id}/pick-list`).catch(() => null),
+        ]);
+        setAction(null); setCell(null); setProduct(null); setToCell(null);
+        setOrder(o); setPick(pl);
+        beep(true);
       } catch (e: unknown) {
+        beep(false);
         setErr(e instanceof Error ? e.message : "Замовлення не знайдено");
       } finally { setLoading(false); refocus(); }
       return;
@@ -148,8 +213,27 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
       const res = await api<ScanResult>(`/api/warehouse/scan?q=${encodeURIComponent(q)}`);
       if (res.type === "product" && res.product) {
         setProduct(res.product);
-        focusQty = !!cell && (!needsTo || !!toCell);
+        beep(true);
+        // "+1 за скан": with an active action + source cell, every product scan
+        // immediately executes the operation with qty 1 — no confirm needed.
+        if (plusOne && action && cell && !needsTo && !busy) {
+          setBusy(true);
+          try {
+            const r = await runAction(res.product, cell, 1);
+            toast.success(r.message);
+            beep(true);
+            new BroadcastChannel("wh_cell_updated").postMessage(1);
+          } catch (e: unknown) {
+            beep(false);
+            toast.error(e instanceof Error ? e.message : "Помилка");
+          } finally {
+            setBusy(false);
+          }
+        } else {
+          focusQty = !!cell && (!needsTo || !!toCell);
+        }
       } else if (res.type === "cell" && res.cell) {
+        beep(true);
         if (action === "transfer" && cell && res.cell.cell_id !== cell.cell_id) {
           setToCell(res.cell);
           focusQty = !!product;
@@ -160,6 +244,7 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         }
       }
     } catch (e: unknown) {
+      beep(false);
       setErr(e instanceof Error ? e.message : "Не знайдено");
     } finally {
       setLoading(false);
@@ -183,16 +268,15 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         });
         toast.success(`✓ ${product.name} → ${cell.cell_code}`);
       } else {
-        const body: Record<string, unknown> = { action, product_id: product.id, quantity, cell_id: cell.cell_id };
-        if (needsTo && toCell) body.to_cell_id = toCell.cell_id;
-        if (meta?.priceField && price.trim()) body[meta.priceField] = parseFloat(price);
-        const r = await api<{ message: string }>(`/api/warehouse/scan-action`, { method: "POST", body: JSON.stringify(body) });
+        const r = await runAction(product, cell, quantity);
         toast.success(r.message);
       }
+      beep(true);
       setDone(true);
       new BroadcastChannel("wh_cell_updated").postMessage(1);
       setTimeout(() => { clearContext(); refocus(); }, 1200);   // keep action for repeats
     } catch (e: unknown) {
+      beep(false);
       toast.error(e instanceof Error ? e.message : "Помилка");
     } finally {
       setBusy(false);
@@ -241,10 +325,17 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8vh]" onClick={onClose}>
+    <div
+      className={fullscreen
+        ? "fixed inset-0 z-50 flex items-stretch justify-center"
+        : "fixed inset-0 z-50 flex items-start justify-center px-4 pt-[8vh]"}
+      onClick={fullscreen ? undefined : onClose}
+    >
       <div className="overlay-in absolute inset-0 bg-black/60" />
       <div
-        className="relative w-full max-w-[1040px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"
+        className={fullscreen
+          ? "relative flex w-full flex-col overflow-hidden bg-[var(--bg-elevated)]"
+          : "relative w-full max-w-[1040px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl"}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Input row */}
@@ -283,7 +374,14 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         {action && meta && (
           <div className="flex items-center gap-3 border-b border-[var(--border)] bg-[var(--accent-soft)] px-7 py-2.5">
             <span className="text-sm font-medium text-[var(--accent)]">Режим: {meta.label}</span>
-            <button onClick={() => { setAction(null); clearContext(); refocus(); }}
+            {!needsTo && (
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-muted)]"
+                title="Кожен скан товару одразу виконує операцію з кількістю 1">
+                <input type="checkbox" checked={plusOne} onChange={(e) => { setPlusOne(e.target.checked); refocus(); }} />
+                +1 за скан
+              </label>
+            )}
+            <button onClick={() => { setAction(null); setPlusOne(false); clearContext(); refocus(); }}
               className="ml-auto text-sm text-[var(--text-faint)] hover:text-[var(--state-error)]">вийти з режиму ×</button>
           </div>
         )}
@@ -302,14 +400,46 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
                   <span className="truncate text-[var(--text-faint)]">{customer}</span>
                   <span className="ml-auto text-base text-[var(--text-muted)]">{ORDER_STATUS_LABEL[order.status] || order.status}</span>
                 </div>
-                <div className="mt-3 max-h-[220px] overflow-y-auto rounded-xl border border-[var(--border)]">
-                  {order.items.map((it, i) => (
-                    <div key={i} className="flex items-center gap-4 border-b border-[var(--border)] px-4 py-2.5 last:border-0">
-                      <span className="truncate">{it.product_name}</span>
-                      <span className="ml-auto font-mono text-lg font-semibold">×{it.quantity}</span>
-                    </div>
-                  ))}
-                  {order.items.length === 0 && <div className="px-4 py-3 text-[var(--text-faint)]">Немає позицій</div>}
+                <div className={`mt-3 overflow-y-auto rounded-xl border border-[var(--border)] ${fullscreen ? "max-h-[46vh]" : "max-h-[260px]"}`}>
+                  {pick && pick.items.length > 0 ? (
+                    /* Pick-list: what to take and from which cells */
+                    pick.items.map((it) => {
+                      const short = parseFloat(it.available) < it.qty_needed;
+                      return (
+                        <div key={it.product_id} className="border-b border-[var(--border)] px-4 py-2.5 last:border-0">
+                          <div className="flex items-center gap-4">
+                            <span className="truncate">{it.product_name}</span>
+                            {it.sku && <span className="shrink-0 font-mono text-sm text-[var(--text-faint)]">{it.sku}</span>}
+                            <span className={`ml-auto font-mono text-lg font-semibold ${short ? "text-[var(--state-error)]" : ""}`}>
+                              ×{it.qty_needed}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {it.locations.length === 0 ? (
+                              <span className="text-sm text-[var(--state-warn)]">не розкладено по комірках</span>
+                            ) : it.locations.map((loc, j) => (
+                              <span key={j}
+                                className="rounded-md bg-[var(--surface-hi)] px-2 py-0.5 font-mono text-sm text-[var(--accent)]"
+                                title={`${loc.warehouse_name} · ${loc.zone_name}`}>
+                                {loc.cell_code} · {parseFloat(loc.quantity)}
+                              </span>
+                            ))}
+                            {short && <span className="text-sm text-[var(--state-error)]">не вистачає (є {parseFloat(it.available)})</span>}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <>
+                      {order.items.map((it, i) => (
+                        <div key={i} className="flex items-center gap-4 border-b border-[var(--border)] px-4 py-2.5 last:border-0">
+                          <span className="truncate">{it.product_name}</span>
+                          <span className="ml-auto font-mono text-lg font-semibold">×{it.quantity}</span>
+                        </div>
+                      ))}
+                      {order.items.length === 0 && <div className="px-4 py-3 text-[var(--text-faint)]">Немає позицій</div>}
+                    </>
+                  )}
                 </div>
                 <div className="mt-4 flex items-center gap-4">
                   {order.total_amount && (
@@ -400,8 +530,15 @@ export function ScannerModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-6 border-t border-[var(--border)] px-7 py-3 text-sm text-[var(--text-faint)]">
+        <div className={`flex items-center gap-6 border-t border-[var(--border)] px-7 py-3 text-sm text-[var(--text-faint)] ${fullscreen ? "mt-auto" : ""}`}>
           <button onClick={() => setActionLabelOpen(true)} className="hover:text-[var(--text)] transition-colors">🏷 Мітки QR дій</button>
+          {lastOp && (
+            <button onClick={undoLast} disabled={busy}
+              title={lastOp.message}
+              className="rounded-md border border-[var(--border-strong)] px-2.5 py-1 text-[var(--state-warn)] hover:bg-[var(--surface-hi)] transition-colors disabled:opacity-50">
+              ↩ Сторно останньої
+            </button>
+          )}
           <span className="ml-auto"><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">↵</kbd> підтвердити</span>
           <span><kbd className="rounded border border-[var(--border)] px-1.5 py-0.5">esc</kbd> закрити</span>
           <span className="opacity-60">монофарм · сканер</span>
