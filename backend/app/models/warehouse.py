@@ -535,3 +535,50 @@ class LabelTemplate(Base):
     elements:        Mapped[list]        = mapped_column(JSONB, nullable=False, default=list)
     is_default:      Mapped[bool]        = mapped_column(Boolean, nullable=False, default=False)
     created_at:      Mapped[datetime]    = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ── Stocktake (інвентаризація) ────────────────────────────────────────────────
+
+class StocktakeStatus(str, enum.Enum):
+    open      = "open"        # counting in progress
+    confirmed = "confirmed"   # diffs written to the ledger, session frozen
+    cancelled = "cancelled"
+
+
+class StocktakeScope(str, enum.Enum):
+    full    = "full"      # every product with a stock entry in the warehouse
+    partial = "partial"   # explicit product list / category subset
+
+
+class StocktakeSession(Base):
+    """One inventory count of one warehouse.
+
+    Lines snapshot expected_qty at creation for reference; while the session
+    is open the UI shows live expected from StockEntry. On confirm the live
+    quantity is frozen into expected_qty and the diff (counted - expected)
+    is written to the ledger as ADJUSTMENT (surplus) / WRITE_OFF (shortage).
+    """
+    __tablename__ = "wh_stocktake_sessions"
+
+    id:              Mapped[int]             = mapped_column(primary_key=True)
+    organization_id: Mapped[int]             = mapped_column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    warehouse_id:    Mapped[int]             = mapped_column(Integer, ForeignKey("wh_warehouses.id", ondelete="CASCADE"), nullable=False, index=True)
+    status:          Mapped[StocktakeStatus] = mapped_column(Enum(StocktakeStatus), default=StocktakeStatus.open, nullable=False, index=True)
+    scope:           Mapped[StocktakeScope]  = mapped_column(Enum(StocktakeScope), default=StocktakeScope.full, nullable=False)
+    note:            Mapped[str | None]      = mapped_column(Text, nullable=True)
+    created_by_id:   Mapped[int | None]      = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at:      Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
+    confirmed_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StocktakeLine(Base):
+    __tablename__ = "wh_stocktake_lines"
+    __table_args__ = (UniqueConstraint("session_id", "product_id", name="uq_stocktake_line"),)
+
+    id:            Mapped[int]             = mapped_column(primary_key=True)
+    session_id:    Mapped[int]             = mapped_column(Integer, ForeignKey("wh_stocktake_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id:    Mapped[int]             = mapped_column(Integer, ForeignKey("wh_products.id", ondelete="CASCADE"), nullable=False, index=True)
+    expected_qty:  Mapped[Decimal]         = mapped_column(Numeric(12, 3), default=0, nullable=False)
+    counted_qty:   Mapped[Decimal | None]  = mapped_column(Numeric(12, 3), nullable=True)
+    counted_by_id: Mapped[int | None]      = mapped_column(ForeignKey("users.id"), nullable=True)
+    counted_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

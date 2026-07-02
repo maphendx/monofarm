@@ -830,6 +830,7 @@ class ScanActionRequest(BaseModel):
 
 class ScanActionResult(BaseModel):
     message: str
+    movement_id: int | None = None   # ledger movement for instant undo (сторно)
 
 
 class UnassignedItemOut(BaseModel):
@@ -927,3 +928,143 @@ class CellMovementOut(BaseModel):
     created_at:    datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ── Stocktake (інвентаризація) ────────────────────────────────────────────────
+
+class StocktakeCreate(BaseModel):
+    warehouse_id: int
+    scope:        str = "full"                 # full | partial
+    category_id:  int | None = None            # partial: limit to a category
+    product_ids:  list[int] = []               # partial: explicit products
+    note:         str | None = None
+
+
+class StocktakeLineOut(BaseModel):
+    id:            int
+    product_id:    int
+    product_name:  str
+    product_sku:   str | None
+    barcode:       str | None
+    unit:          str
+    image_url:     str | None = None
+    expected_qty:  Decimal                     # live while open, frozen on confirm
+    counted_qty:   Decimal | None
+    diff:          Decimal | None              # counted - expected (None until counted)
+    diff_value:    Decimal | None              # diff × cost_price
+    counted_at:    datetime | None
+
+
+class StocktakeOut(BaseModel):
+    id:             int
+    warehouse_id:   int
+    warehouse_name: str
+    status:         str
+    scope:          str
+    note:           str | None
+    lines_total:    int
+    lines_counted:  int
+    diff_lines:     int                         # counted lines where diff != 0
+    surplus_value:  Decimal
+    shortage_value: Decimal
+    created_at:     datetime
+    confirmed_at:   datetime | None
+
+
+class StocktakeDetailOut(StocktakeOut):
+    lines: list[StocktakeLineOut] = []
+
+
+class StocktakeCountIn(BaseModel):
+    product_id: int | None = None
+    code:       str | None = None              # barcode or SKU (scanner input)
+    quantity:   Decimal
+    mode:       str = "set"                    # set | add
+
+
+class StocktakeLineUpdate(BaseModel):
+    counted_qty: Decimal | None                # None clears the count
+
+
+class StocktakeConfirmIn(BaseModel):
+    uncounted: str = "skip"                    # skip | zero
+
+
+# ── Reports (оборотність, прибутковість клієнтів, динаміка маржі/запасу) ──────
+
+class TurnoverRow(BaseModel):
+    product_id:    int
+    product_name:  str
+    sku:           str | None
+    sold_qty:      Decimal
+    revenue:       Decimal
+    cogs:          Decimal
+    current_stock: Decimal
+    avg_stock:     Decimal
+    turnover:      Decimal | None    # sold / avg stock за період
+    days_of_stock: Decimal | None    # запасу лишилось на N днів за темпом продажів
+
+
+class CustomerProfitRow(BaseModel):
+    counterparty_id: int | None
+    name:            str
+    orders:          int
+    revenue:         Decimal
+    cogs:            Decimal
+    margin:          Decimal
+    margin_pct:      Decimal | None
+
+
+class MarginSeriesPoint(BaseModel):
+    day:         date
+    revenue:     Decimal
+    cogs:        Decimal
+    margin:      Decimal
+    stock_value: Decimal
+
+
+# ── Reconciliation act (акт звірки з контрагентом) ────────────────────────────
+
+class ReconciliationEntry(BaseModel):
+    doc_date: date
+    doc:      str
+    debit:    Decimal = Decimal("0")   # збільшує борг контрагента перед нами
+    credit:   Decimal = Decimal("0")   # зменшує борг (оплати, поставки)
+
+
+class ReconciliationOut(BaseModel):
+    counterparty_id: int
+    name:            str
+    date_from:       date
+    date_to:         date
+    opening_balance: Decimal
+    debit_total:     Decimal
+    credit_total:    Decimal
+    closing_balance: Decimal
+    entries:         list[ReconciliationEntry] = []
+
+
+# ── Pick list (збірка замовлення по комірках) ─────────────────────────────────
+
+class PickLocation(BaseModel):
+    warehouse_name: str
+    zone_name:      str
+    cell_code:      str
+    quantity:       Decimal
+
+
+class PickItem(BaseModel):
+    product_id:   int
+    product_name: str
+    sku:          str | None
+    barcode:      str | None
+    image_url:    str | None = None
+    qty_needed:   int
+    available:    Decimal
+    locations:    list[PickLocation] = []
+
+
+class PickListOut(BaseModel):
+    order_id:     int
+    order_number: str
+    items:        list[PickItem] = []

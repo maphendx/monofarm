@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from fastapi.responses import StreamingResponse
 from app.api.ws import broadcast_warehouse
 from pydantic import BaseModel
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ from app.models.warehouse import (
     SpecOpType, Specification, StockEntry, Warehouse, WarehouseCell, WarehouseMovement,
     WarehouseType, WarehouseZone, Product,
     PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus,
+    StocktakeLine, StocktakeScope, StocktakeSession, StocktakeStatus,
 )
 from app.services.label_templates import BUILTIN_TEMPLATES
 from app.schemas.warehouse import (
@@ -59,6 +60,11 @@ from app.schemas.warehouse import (
     ZoneCreate, ZoneOut, ZoneOverviewOut, ZoneUpdate, ZoneWithCellsOut,
     PurchaseOrderCreate, PurchaseOrderItemOut, PurchaseOrderOut,
     WarehouseNoticeOut, WarehouseNoticeUpdate,
+    StocktakeConfirmIn, StocktakeCountIn, StocktakeCreate, StocktakeDetailOut,
+    StocktakeLineOut, StocktakeLineUpdate, StocktakeOut,
+    CustomerProfitRow, MarginSeriesPoint, TurnoverRow,
+    ReconciliationEntry, ReconciliationOut,
+    PickItem, PickListOut, PickLocation,
 )
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
@@ -1649,7 +1655,7 @@ def scan_action(
     _lock_stock_row(payload.product_id, wh_id, org.id, db)
 
     def _outbound(mtype: MovementType, reason: str, *,
-                  unit_price: Decimal | None = None, replenish: bool = False) -> None:
+                  unit_price: Decimal | None = None, replenish: bool = False) -> int:
         """Pick qty from the cell and decrement the warehouse via an outbound ledger move."""
         cs   = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
         have = cs.quantity if cs else Decimal("0")
@@ -1671,8 +1677,9 @@ def scan_action(
         if replenish:
             _check_and_auto_replenish(payload.product_id, org.id, db)
         db.commit()
+        return m.id
 
-    def _inbound(mtype: MovementType, reason: str, *, unit_cost: Decimal | None = None) -> None:
+    def _inbound(mtype: MovementType, reason: str, *, unit_cost: Decimal | None = None) -> int:
         """Add qty to the warehouse via an inbound ledger move and put it away into the cell."""
         total = (payload.quantity * unit_cost) if unit_cost else None
         m = WarehouseMovement(
@@ -1688,6 +1695,7 @@ def scan_action(
         _putaway(cell, payload.product_id, min(payload.quantity, avail), org.id, db,
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
+        return m.id
 
     # ── Переміщення: cell → cell (relocate), or warehouse → warehouse (TRANSFER) ─
     if payload.action == ScanAction.transfer:
@@ -1737,44 +1745,44 @@ def scan_action(
                  movement_id=m.id, created_by_id=user.id)
         db.commit()
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Переміщено між складами {payload.quantity} {product.unit}: {cell.code} → {dst.code}")
+        return ScanActionResult(message=f"Переміщено між складами {payload.quantity} {product.unit}: {cell.code} → {dst.code}", movement_id=m.id)
 
     # ── Списання (WRITE_OFF) ───────────────────────────────────────────────────
     if payload.action == ScanAction.write_off:
-        _outbound(MovementType.WRITE_OFF, f"Списання (скан) з {cell.code}")
+        mid = _outbound(MovementType.WRITE_OFF, f"Списання (скан) з {cell.code}")
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Списано {payload.quantity} {product.unit} з {cell.code}")
+        return ScanActionResult(message=f"Списано {payload.quantity} {product.unit} з {cell.code}", movement_id=mid)
 
     # ── Відвантаження (SALE_OUT); unit_price optional → revenue ────────────────
     if payload.action == ScanAction.sale_out:
-        _outbound(MovementType.SALE_OUT, f"Відвантаження (скан) з {cell.code}",
-                  unit_price=payload.unit_price, replenish=True)
+        mid = _outbound(MovementType.SALE_OUT, f"Відвантаження (скан) з {cell.code}",
+                        unit_price=payload.unit_price, replenish=True)
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Відвантажено {payload.quantity} {product.unit} з {cell.code}")
+        return ScanActionResult(message=f"Відвантажено {payload.quantity} {product.unit} з {cell.code}", movement_id=mid)
 
     # ── Брак (DEFECT) ──────────────────────────────────────────────────────────
     if payload.action == ScanAction.defect:
-        _outbound(MovementType.DEFECT, f"Брак (скан) з {cell.code}", replenish=True)
+        mid = _outbound(MovementType.DEFECT, f"Брак (скан) з {cell.code}", replenish=True)
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Брак {payload.quantity} {product.unit} з {cell.code}")
+        return ScanActionResult(message=f"Брак {payload.quantity} {product.unit} з {cell.code}", movement_id=mid)
 
     # ── Видача у виробництво (PRODUCTION_OUT) ──────────────────────────────────
     if payload.action == ScanAction.production_out:
-        _outbound(MovementType.PRODUCTION_OUT, f"Видача у виробництво (скан) з {cell.code}", replenish=True)
+        mid = _outbound(MovementType.PRODUCTION_OUT, f"Видача у виробництво (скан) з {cell.code}", replenish=True)
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Видано у виробництво {payload.quantity} {product.unit} з {cell.code}")
+        return ScanActionResult(message=f"Видано у виробництво {payload.quantity} {product.unit} з {cell.code}", movement_id=mid)
 
     # ── Прийом (PURCHASE_IN); unit_cost optional → AVCO ────────────────────────
     if payload.action == ScanAction.receive:
-        _inbound(MovementType.PURCHASE_IN, f"Прийом (скан) у {cell.code}", unit_cost=payload.unit_cost)
+        mid = _inbound(MovementType.PURCHASE_IN, f"Прийом (скан) у {cell.code}", unit_cost=payload.unit_cost)
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Прийнято {payload.quantity} {product.unit} у {cell.code}")
+        return ScanActionResult(message=f"Прийнято {payload.quantity} {product.unit} у {cell.code}", movement_id=mid)
 
     # ── Оприбуткування з виробництва (PRODUCTION_IN) ───────────────────────────
     if payload.action == ScanAction.production_in:
-        _inbound(MovementType.PRODUCTION_IN, f"Оприбуткування з виробництва (скан) у {cell.code}")
+        mid = _inbound(MovementType.PRODUCTION_IN, f"Оприбуткування з виробництва (скан) у {cell.code}")
         bg.add_task(broadcast_warehouse, org.id, "stock")
-        return ScanActionResult(message=f"Оприбутковано {payload.quantity} {product.unit} у {cell.code}")
+        return ScanActionResult(message=f"Оприбутковано {payload.quantity} {product.unit} у {cell.code}", movement_id=mid)
 
     # ── Інвентаризація: set cell to counted qty, correct warehouse total ───────
     cs      = db.query(CellStock).filter_by(cell_id=cell.id, product_id=payload.product_id).first()
@@ -1812,7 +1820,7 @@ def scan_action(
         _apply_movement(m, db)   # total -= short
     db.commit()
     bg.add_task(broadcast_warehouse, org.id, "stock")
-    return ScanActionResult(message=f"Інвентаризація {cell.code}: {current} → {payload.quantity} {product.unit}")
+    return ScanActionResult(message=f"Інвентаризація {cell.code}: {current} → {payload.quantity} {product.unit}", movement_id=m.id)
 
 
 @_full.get("/products/{product_id}/locations", response_model=ProductLocationsOut)
@@ -6148,6 +6156,739 @@ def order_invoice(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── Stocktake (інвентаризація) ────────────────────────────────────────────────
+
+def _get_stocktake(st_id: int, org: Organization, db: Session) -> StocktakeSession:
+    st = db.query(StocktakeSession).filter_by(id=st_id, organization_id=org.id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail="Інвентаризацію не знайдено")
+    return st
+
+
+def _stocktake_expected_map(st: StocktakeSession, db: Session) -> dict[int, Decimal]:
+    """Live on-hand quantities for the session's warehouse (open sessions only)."""
+    return dict(
+        db.query(StockEntry.product_id, StockEntry.quantity)
+        .filter_by(organization_id=st.organization_id, warehouse_id=st.warehouse_id)
+        .all()
+    )
+
+
+def _stocktake_line_out(ln: StocktakeLine, p: Product, expected: Decimal, org_id: int) -> StocktakeLineOut:
+    diff = diff_value = None
+    if ln.counted_qty is not None:
+        diff = ln.counted_qty - expected
+        diff_value = diff * (p.cost_price or Decimal("0"))
+    return StocktakeLineOut(
+        id=ln.id, product_id=p.id, product_name=p.name, product_sku=p.sku,
+        barcode=p.barcode, unit=p.unit, image_url=_product_image_url(p, org_id),
+        expected_qty=expected, counted_qty=ln.counted_qty,
+        diff=diff, diff_value=diff_value, counted_at=ln.counted_at,
+    )
+
+
+def _stocktake_out(st: StocktakeSession, db: Session, org_id: int, *, with_lines: bool = False) -> StocktakeDetailOut:
+    wh = db.get(Warehouse, st.warehouse_id)
+    rows = (
+        db.query(StocktakeLine, Product)
+        .join(Product, Product.id == StocktakeLine.product_id)
+        .filter(StocktakeLine.session_id == st.id)
+        .order_by(Product.name)
+        .all()
+    )
+    live = _stocktake_expected_map(st, db) if st.status == StocktakeStatus.open else {}
+    lines: list[StocktakeLineOut] = []
+    counted = diff_lines = 0
+    surplus_value = shortage_value = Decimal("0")
+    for ln, p in rows:
+        expected = live.get(ln.product_id, Decimal("0")) if st.status == StocktakeStatus.open else ln.expected_qty
+        out = _stocktake_line_out(ln, p, expected, org_id)
+        if out.counted_qty is not None:
+            counted += 1
+            if out.diff:
+                diff_lines += 1
+                if out.diff_value and out.diff_value > 0:
+                    surplus_value += out.diff_value
+                elif out.diff_value:
+                    shortage_value += -out.diff_value
+        lines.append(out)
+    return StocktakeDetailOut(
+        id=st.id, warehouse_id=st.warehouse_id,
+        warehouse_name=wh.name if wh else "—",
+        status=st.status.value, scope=st.scope.value, note=st.note,
+        lines_total=len(rows), lines_counted=counted, diff_lines=diff_lines,
+        surplus_value=surplus_value, shortage_value=shortage_value,
+        created_at=st.created_at, confirmed_at=st.confirmed_at,
+        lines=lines if with_lines else [],
+    )
+
+
+@_full.get("/stocktakes", response_model=list[StocktakeOut])
+def list_stocktakes(
+    warehouse_id: int | None = None,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> list[StocktakeOut]:
+    q = db.query(StocktakeSession).filter_by(organization_id=org.id)
+    if warehouse_id:
+        q = q.filter_by(warehouse_id=warehouse_id)
+    sessions = q.order_by(StocktakeSession.created_at.desc()).limit(100).all()
+    return [_stocktake_out(st, db, org.id) for st in sessions]
+
+
+@_full.post("/stocktakes", response_model=StocktakeDetailOut, status_code=status.HTTP_201_CREATED)
+def create_stocktake(
+    payload: StocktakeCreate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> StocktakeDetailOut:
+    wh = _get_warehouse(payload.warehouse_id, org, db)
+    if payload.scope not in (StocktakeScope.full.value, StocktakeScope.partial.value):
+        raise HTTPException(status_code=400, detail="scope: full або partial")
+    existing = db.query(StocktakeSession).filter_by(
+        organization_id=org.id, warehouse_id=wh.id, status=StocktakeStatus.open,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Уже є відкрита інвентаризація №{existing.id} для цього складу")
+
+    stock = dict(
+        db.query(StockEntry.product_id, StockEntry.quantity)
+        .filter_by(organization_id=org.id, warehouse_id=wh.id)
+        .all()
+    )
+    if payload.scope == StocktakeScope.full.value:
+        product_ids = list(stock.keys())
+    else:
+        product_ids = list(payload.product_ids)
+        if payload.category_id:
+            cat_ids = [pid for (pid,) in db.query(Product.id).filter(
+                Product.organization_id == org.id,
+                Product.is_active.is_(True),
+                Product.categories.contains([payload.category_id]))]
+            product_ids.extend(cat_ids)
+        product_ids = list(dict.fromkeys(product_ids))
+        if not product_ids:
+            raise HTTPException(status_code=400, detail="Часткова інвентаризація: вкажіть товари або категорію")
+        owned = {pid for (pid,) in db.query(Product.id).filter(
+            Product.organization_id == org.id, Product.id.in_(product_ids))}
+        product_ids = [pid for pid in product_ids if pid in owned]
+
+    st = StocktakeSession(
+        organization_id=org.id, warehouse_id=wh.id,
+        scope=StocktakeScope(payload.scope), note=(payload.note or "").strip() or None,
+        created_by_id=user.id,
+    )
+    db.add(st)
+    db.flush()
+
+    for pid in product_ids:
+        db.add(StocktakeLine(session_id=st.id, product_id=pid, expected_qty=stock.get(pid, Decimal("0"))))
+    db.commit()
+    return _stocktake_out(st, db, org.id, with_lines=True)
+
+
+@_full.get("/stocktakes/{st_id}", response_model=StocktakeDetailOut)
+def get_stocktake(
+    st_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> StocktakeDetailOut:
+    st = _get_stocktake(st_id, org, db)
+    return _stocktake_out(st, db, org.id, with_lines=True)
+
+
+@_full.post("/stocktakes/{st_id}/count", response_model=StocktakeLineOut)
+def stocktake_count(
+    st_id: int,
+    payload: StocktakeCountIn,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> StocktakeLineOut:
+    """Scanner-friendly count: resolve product by id / barcode / SKU, set or add qty."""
+    st = _get_stocktake(st_id, org, db)
+    if st.status != StocktakeStatus.open:
+        raise HTTPException(status_code=400, detail="Інвентаризацію вже закрито")
+    if payload.quantity < 0:
+        raise HTTPException(status_code=400, detail="Кількість має бути ≥ 0")
+    if payload.mode not in ("set", "add"):
+        raise HTTPException(status_code=400, detail="mode: set або add")
+
+    product: Product | None = None
+    if payload.product_id:
+        product = db.query(Product).filter_by(id=payload.product_id, organization_id=org.id).first()
+    elif payload.code:
+        code = payload.code.strip()
+        product = db.query(Product).filter(
+            Product.organization_id == org.id,
+            or_(Product.barcode == code, Product.sku == code),
+        ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не знайдено")
+
+    line = db.query(StocktakeLine).filter_by(session_id=st.id, product_id=product.id).first()
+    if not line:
+        expected = _stocktake_expected_map(st, db).get(product.id, Decimal("0"))
+        line = StocktakeLine(session_id=st.id, product_id=product.id, expected_qty=expected)
+        db.add(line)
+        db.flush()
+    if payload.mode == "add" and line.counted_qty is not None:
+        line.counted_qty += payload.quantity
+    else:
+        line.counted_qty = payload.quantity
+    line.counted_by_id = user.id
+    line.counted_at = datetime.utcnow()
+    db.commit()
+    expected = _stocktake_expected_map(st, db).get(product.id, Decimal("0"))
+    return _stocktake_line_out(line, product, expected, org.id)
+
+
+@_full.patch("/stocktakes/{st_id}/lines/{line_id}", response_model=StocktakeLineOut)
+def update_stocktake_line(
+    st_id: int,
+    line_id: int,
+    payload: StocktakeLineUpdate,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> StocktakeLineOut:
+    st = _get_stocktake(st_id, org, db)
+    if st.status != StocktakeStatus.open:
+        raise HTTPException(status_code=400, detail="Інвентаризацію вже закрито")
+    line = db.query(StocktakeLine).filter_by(id=line_id, session_id=st.id).first()
+    if not line:
+        raise HTTPException(status_code=404, detail="Рядок не знайдено")
+    if payload.counted_qty is not None and payload.counted_qty < 0:
+        raise HTTPException(status_code=400, detail="Кількість має бути ≥ 0")
+    line.counted_qty = payload.counted_qty
+    line.counted_by_id = user.id if payload.counted_qty is not None else None
+    line.counted_at = datetime.utcnow() if payload.counted_qty is not None else None
+    db.commit()
+    product = db.get(Product, line.product_id)
+    expected = _stocktake_expected_map(st, db).get(line.product_id, Decimal("0"))
+    return _stocktake_line_out(line, product, expected, org.id)
+
+
+@_full.post("/stocktakes/{st_id}/confirm", response_model=StocktakeDetailOut)
+def confirm_stocktake(
+    st_id: int,
+    payload: StocktakeConfirmIn,
+    bg:   BackgroundTasks,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> StocktakeDetailOut:
+    """Freeze the count and write diffs to the ledger.
+
+    Surplus → ADJUSTMENT (in), shortage → WRITE_OFF. Expected is re-read from
+    live stock under a row lock, so sales during the count don't corrupt totals.
+    Uncounted lines: skip (leave as-is) or zero (treat as counted 0).
+    """
+    st = _get_stocktake(st_id, org, db)
+    if st.status != StocktakeStatus.open:
+        raise HTTPException(status_code=400, detail="Інвентаризацію вже закрито")
+    if payload.uncounted not in ("skip", "zero"):
+        raise HTTPException(status_code=400, detail="uncounted: skip або zero")
+
+    lines = db.query(StocktakeLine).filter_by(session_id=st.id).all()
+    for ln in lines:
+        _lock_stock_row(ln.product_id, st.warehouse_id, org.id, db)
+        entry = db.query(StockEntry).filter_by(
+            organization_id=org.id, product_id=ln.product_id, warehouse_id=st.warehouse_id,
+        ).first()
+        live = entry.quantity if entry else Decimal("0")
+        counted = ln.counted_qty
+        if counted is None:
+            if payload.uncounted == "skip":
+                ln.expected_qty = live
+                continue
+            counted = Decimal("0")
+            ln.counted_qty = counted
+            ln.counted_by_id = user.id
+            ln.counted_at = datetime.utcnow()
+        ln.expected_qty = live
+        diff = counted - live
+        if diff == 0:
+            continue
+        if diff > 0:
+            m = WarehouseMovement(
+                organization_id=org.id, type=MovementType.ADJUSTMENT,
+                product_id=ln.product_id, warehouse_to_id=st.warehouse_id,
+                quantity=diff, reason=f"Інвентаризація №{st.id} (надлишок)",
+                created_by_id=user.id,
+            )
+        else:
+            m = WarehouseMovement(
+                organization_id=org.id, type=MovementType.WRITE_OFF,
+                product_id=ln.product_id, warehouse_from_id=st.warehouse_id,
+                quantity=-diff, reason=f"Інвентаризація №{st.id} (нестача)",
+                created_by_id=user.id,
+            )
+        db.add(m)
+        db.flush()
+        _apply_movement(m, db)
+
+    st.status = StocktakeStatus.confirmed
+    st.confirmed_at = datetime.utcnow()
+    db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "stock")
+    return _stocktake_out(st, db, org.id, with_lines=True)
+
+
+@_full.post("/stocktakes/{st_id}/cancel", response_model=StocktakeOut)
+def cancel_stocktake(
+    st_id: int,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    _user: User        = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> StocktakeOut:
+    st = _get_stocktake(st_id, org, db)
+    if st.status != StocktakeStatus.open:
+        raise HTTPException(status_code=400, detail="Інвентаризацію вже закрито")
+    st.status = StocktakeStatus.cancelled
+    db.commit()
+    return _stocktake_out(st, db, org.id)
+
+
+# ── Movement reverse (сторно) ─────────────────────────────────────────────────
+
+_REVERSE_IN  = {MovementType.PURCHASE_IN, MovementType.PRODUCTION_IN, MovementType.RETURN_IN}
+_REVERSE_OUT = {MovementType.SALE_OUT, MovementType.PRODUCTION_OUT,
+                MovementType.WRITE_OFF, MovementType.DEFECT}
+
+
+@_full.post("/movements/{movement_id}/reverse", response_model=ScanActionResult)
+def reverse_movement(
+    movement_id: int,
+    bg:   BackgroundTasks,
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+    user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> ScanActionResult:
+    """Сторно: компенсуючий рух у зворотному напрямку (помилковий скан)."""
+    m = db.query(WarehouseMovement).filter_by(id=movement_id, organization_id=org.id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Рух не знайдено")
+    marker = f"Сторно руху №{m.id}"
+    already = db.query(WarehouseMovement).filter_by(
+        organization_id=org.id, reason=marker).first()
+    if already:
+        raise HTTPException(status_code=400, detail="Цей рух уже сторновано")
+    if m.reason and m.reason.startswith("Сторно руху"):
+        raise HTTPException(status_code=400, detail="Не можна сторнувати сторно")
+
+    if m.type in _REVERSE_IN or (m.type == MovementType.ADJUSTMENT and m.warehouse_to_id):
+        wh_id = m.warehouse_to_id
+        rev = WarehouseMovement(
+            organization_id=org.id, type=MovementType.ADJUSTMENT,
+            product_id=m.product_id, warehouse_from_id=wh_id,
+            quantity=m.quantity, reason=marker, created_by_id=user.id)
+    elif m.type in _REVERSE_OUT or (m.type == MovementType.ADJUSTMENT and m.warehouse_from_id):
+        wh_id = m.warehouse_from_id
+        rev = WarehouseMovement(
+            organization_id=org.id, type=MovementType.ADJUSTMENT,
+            product_id=m.product_id, warehouse_to_id=wh_id,
+            quantity=m.quantity, reason=marker, created_by_id=user.id)
+    elif m.type == MovementType.TRANSFER and m.warehouse_from_id and m.warehouse_to_id:
+        rev = WarehouseMovement(
+            organization_id=org.id, type=MovementType.TRANSFER,
+            product_id=m.product_id,
+            warehouse_from_id=m.warehouse_to_id, warehouse_to_id=m.warehouse_from_id,
+            quantity=m.quantity, reason=marker, created_by_id=user.id)
+    else:
+        raise HTTPException(status_code=400, detail="Цей тип руху не підтримує сторно")
+
+    for wid in {rev.warehouse_from_id, rev.warehouse_to_id}:
+        if wid:
+            _lock_stock_row(m.product_id, wid, org.id, db)
+    db.add(rev)
+    db.flush()
+    _apply_movement(rev, db)
+    db.commit()
+    bg.add_task(broadcast_warehouse, org.id, "stock")
+    return ScanActionResult(message=f"↩ {marker}: {m.quantity} повернуто", movement_id=rev.id)
+
+
+# ── Pick list (збірка замовлення) ─────────────────────────────────────────────
+
+@_full.get("/orders/{order_id}/pick-list", response_model=PickListOut)
+def order_pick_list(
+    order_id: int,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> PickListOut:
+    """Де фізично лежить кожна позиція замовлення: комірки + кількості."""
+    order = db.query(Order).filter_by(id=order_id, organization_id=org.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Замовлення не знайдено")
+    items = db.query(OrderItem).filter_by(order_id=order.id).all()
+    pids = [i.product_id for i in items]
+    products = {p.id: p for p in db.query(Product).filter(
+        Product.organization_id == org.id, Product.id.in_(pids)).all()} if pids else {}
+
+    # All cell allocations for these products in one query.
+    loc_rows = (
+        db.query(CellStock, WarehouseCell, WarehouseZone, Warehouse)
+        .join(WarehouseCell, WarehouseCell.id == CellStock.cell_id)
+        .join(WarehouseZone, WarehouseZone.id == WarehouseCell.zone_id)
+        .join(Warehouse, Warehouse.id == WarehouseZone.warehouse_id)
+        .filter(Warehouse.organization_id == org.id,
+                CellStock.product_id.in_(pids),
+                CellStock.quantity > 0)
+        .order_by(Warehouse.name, WarehouseCell.code)
+        .all()
+    ) if pids else []
+    locs: dict[int, list[PickLocation]] = {}
+    for cs, cell, zone, wh in loc_rows:
+        locs.setdefault(cs.product_id, []).append(PickLocation(
+            warehouse_name=wh.name, zone_name=zone.name,
+            cell_code=cell.code, quantity=cs.quantity))
+
+    avail = dict(
+        db.query(StockEntry.product_id, func.sum(StockEntry.quantity))
+        .filter(StockEntry.organization_id == org.id, StockEntry.product_id.in_(pids))
+        .group_by(StockEntry.product_id)
+        .all()
+    ) if pids else {}
+
+    out_items = []
+    for it in items:
+        p = products.get(it.product_id)
+        if not p:
+            continue
+        out_items.append(PickItem(
+            product_id=p.id, product_name=p.name, sku=p.sku, barcode=p.barcode,
+            image_url=_product_image_url(p, org.id),
+            qty_needed=it.quantity, available=avail.get(p.id) or Decimal("0"),
+            locations=locs.get(p.id, []),
+        ))
+    return PickListOut(order_id=order.id, order_number=order.order_number, items=out_items)
+
+
+# ── Reconciliation act (акт звірки) ───────────────────────────────────────────
+
+@_full.get("/counterparties/{cp_id}/reconciliation", response_model=ReconciliationOut)
+def counterparty_reconciliation(
+    cp_id: int,
+    date_from: date | None = None,
+    date_to:   date | None = None,
+    db:  Session      = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> ReconciliationOut:
+    """Акт звірки: документи за період + сальдо.
+
+    Debit — відвантаження (борг контрагента росте), credit — оплати й
+    отримані поставки. Closing = поточний баланс; opening відновлюється
+    як closing мінус чистий рух за період.
+    """
+    cp = db.query(Counterparty).filter_by(id=cp_id, organization_id=org.id).first()
+    if not cp:
+        raise HTTPException(status_code=404, detail="Контрагента не знайдено")
+    d_to = date_to or date.today()
+    d_from = date_from or (d_to - timedelta(days=90))
+    if d_from > d_to:
+        raise HTTPException(status_code=400, detail="date_from пізніше за date_to")
+    start_dt = datetime.combine(d_from, datetime.min.time())
+    end_dt = datetime.combine(d_to + timedelta(days=1), datetime.min.time())
+
+    entries: list[ReconciliationEntry] = []
+
+    # Відвантаження: перший SALE_OUT рух кожного замовлення = дата відвантаження.
+    ship_dates = dict(
+        db.query(WarehouseMovement.order_id, func.min(WarehouseMovement.created_at))
+        .join(Order, Order.id == WarehouseMovement.order_id)
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == MovementType.SALE_OUT,
+                Order.counterparty_id == cp.id)
+        .group_by(WarehouseMovement.order_id)
+        .all()
+    )
+    orders = {o.id: o for o in db.query(Order).filter(
+        Order.organization_id == org.id, Order.id.in_(ship_dates.keys())).all()} if ship_dates else {}
+    for oid, shipped_at in ship_dates.items():
+        if not (start_dt <= shipped_at < end_dt):
+            continue
+        o = orders.get(oid)
+        if o and o.total_amount:
+            entries.append(ReconciliationEntry(
+                doc_date=shipped_at.date(), doc=f"Відвантаження {o.order_number}",
+                debit=o.total_amount))
+
+    # Оплати замовлень.
+    pay_rows = (
+        db.query(OrderPayment, Order)
+        .join(Order, Order.id == OrderPayment.order_id)
+        .filter(OrderPayment.organization_id == org.id,
+                Order.counterparty_id == cp.id,
+                OrderPayment.paid_at >= d_from, OrderPayment.paid_at <= d_to)
+        .all()
+    )
+    for p, o in pay_rows:
+        entries.append(ReconciliationEntry(
+            doc_date=p.paid_at, doc=f"Оплата {o.order_number}", credit=p.amount))
+
+    # Отримані поставки (для постачальників).
+    po_rows = (
+        db.query(PurchaseOrder)
+        .filter(PurchaseOrder.organization_id == org.id,
+                PurchaseOrder.counterparty_id == cp.id,
+                PurchaseOrder.status == PurchaseOrderStatus.received,
+                PurchaseOrder.received_at >= start_dt, PurchaseOrder.received_at < end_dt)
+        .all()
+    )
+    for po in po_rows:
+        total = sum((i.quantity * i.unit_cost for i in po.items), Decimal("0"))
+        if total:
+            entries.append(ReconciliationEntry(
+                doc_date=po.received_at.date(), doc=f"Поставка №{po.id}", credit=total))
+
+    # Ручні касові операції по контрагенту (без замовлення — оплати замовлень уже враховано).
+    cash_rows = (
+        db.query(CashTransaction)
+        .filter(CashTransaction.organization_id == org.id,
+                CashTransaction.counterparty_id == cp.id,
+                CashTransaction.order_id.is_(None),
+                CashTransaction.transaction_date >= d_from,
+                CashTransaction.transaction_date <= d_to)
+        .all()
+    )
+    for tx in cash_rows:
+        label = tx.description or ("Оплата від контрагента" if tx.type == CashTxType.income else "Виплата контрагенту")
+        if tx.type == CashTxType.income:
+            entries.append(ReconciliationEntry(doc_date=tx.transaction_date, doc=label, credit=tx.amount))
+        else:
+            entries.append(ReconciliationEntry(doc_date=tx.transaction_date, doc=label, debit=tx.amount))
+
+    entries.sort(key=lambda e: e.doc_date)
+    debit_total = sum((e.debit for e in entries), Decimal("0"))
+    credit_total = sum((e.credit for e in entries), Decimal("0"))
+    closing = cp.balance or Decimal("0")
+    opening = closing - (debit_total - credit_total)
+    return ReconciliationOut(
+        counterparty_id=cp.id, name=cp.name, date_from=d_from, date_to=d_to,
+        opening_balance=opening.quantize(Decimal("0.01")),
+        debit_total=debit_total.quantize(Decimal("0.01")),
+        credit_total=credit_total.quantize(Decimal("0.01")),
+        closing_balance=closing.quantize(Decimal("0.01")),
+        entries=entries,
+    )
+
+
+# ── Reports: turnover, customer profitability, margin/stock dynamics ──────────
+
+_QTY_IN  = (MovementType.PURCHASE_IN, MovementType.PRODUCTION_IN, MovementType.RETURN_IN)
+_QTY_OUT = (MovementType.SALE_OUT, MovementType.PRODUCTION_OUT,
+            MovementType.WRITE_OFF, MovementType.DEFECT)
+
+
+def _net_qty_expr():
+    """Org-level signed quantity of a movement (TRANSFER nets to zero)."""
+    return case(
+        (WarehouseMovement.type.in_(_QTY_IN), WarehouseMovement.quantity),
+        (WarehouseMovement.type.in_(_QTY_OUT), -WarehouseMovement.quantity),
+        (WarehouseMovement.type == MovementType.ADJUSTMENT,
+         case((WarehouseMovement.warehouse_to_id.isnot(None), WarehouseMovement.quantity),
+              else_=-WarehouseMovement.quantity)),
+        else_=Decimal("0"),
+    )
+
+
+@_full.get("/reports/turnover", response_model=list[TurnoverRow])
+def report_turnover(
+    days: int = Query(90, ge=7, le=365),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+) -> list[TurnoverRow]:
+    """Product turnover: sold qty vs average stock over the window."""
+    since = datetime.utcnow() - timedelta(days=days)
+
+    sold = dict()
+    revenue = dict()
+    rows = (
+        db.query(
+            WarehouseMovement.product_id,
+            func.sum(WarehouseMovement.quantity),
+            func.sum(func.coalesce(WarehouseMovement.total_revenue,
+                                   WarehouseMovement.quantity * func.coalesce(WarehouseMovement.unit_price, 0))),
+        )
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == MovementType.SALE_OUT,
+                WarehouseMovement.created_at >= since)
+        .group_by(WarehouseMovement.product_id)
+        .all()
+    )
+    for pid, qty, rev in rows:
+        sold[pid] = qty or Decimal("0")
+        revenue[pid] = rev or Decimal("0")
+
+    # Net stock change inside the window → start_stock = current − net.
+    net = dict(
+        db.query(WarehouseMovement.product_id, func.sum(_net_qty_expr()))
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.created_at >= since)
+        .group_by(WarehouseMovement.product_id)
+        .all()
+    )
+    current = dict(
+        db.query(StockEntry.product_id, func.sum(StockEntry.quantity))
+        .filter(StockEntry.organization_id == org.id)
+        .group_by(StockEntry.product_id)
+        .all()
+    )
+
+    pids = set(sold) | {pid for pid, q in current.items() if q}
+    products = {p.id: p for p in db.query(Product).filter(
+        Product.organization_id == org.id, Product.id.in_(pids)).all()} if pids else {}
+
+    out: list[TurnoverRow] = []
+    for pid in pids:
+        p = products.get(pid)
+        if not p:
+            continue
+        cur = current.get(pid) or Decimal("0")
+        start = max(cur - (net.get(pid) or Decimal("0")), Decimal("0"))
+        avg = (start + cur) / 2
+        s = sold.get(pid, Decimal("0"))
+        cost = p.cost_price or Decimal("0")
+        turnover = (s / avg).quantize(Decimal("0.01")) if avg > 0 else None
+        days_of_stock = (cur / (s / days)).quantize(Decimal("0.1")) if s > 0 else None
+        out.append(TurnoverRow(
+            product_id=pid, product_name=p.name, sku=p.sku,
+            sold_qty=s, revenue=revenue.get(pid, Decimal("0")),
+            cogs=(s * cost).quantize(Decimal("0.01")),
+            current_stock=cur, avg_stock=avg.quantize(Decimal("0.01")),
+            turnover=turnover, days_of_stock=days_of_stock,
+        ))
+    out.sort(key=lambda r: r.sold_qty, reverse=True)
+    return out
+
+
+@_full.get("/reports/customers", response_model=list[CustomerProfitRow])
+def report_customers(
+    days: int = Query(90, ge=7, le=365),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+) -> list[CustomerProfitRow]:
+    """Profitability per customer from shipped SALE_OUT movements; POS sales grouped separately."""
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = (
+        db.query(WarehouseMovement, Order, Product)
+        .outerjoin(Order, Order.id == WarehouseMovement.order_id)
+        .join(Product, Product.id == WarehouseMovement.product_id)
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == MovementType.SALE_OUT,
+                WarehouseMovement.created_at >= since)
+        .all()
+    )
+    cp_names = {c.id: c.name for c in db.query(Counterparty).filter_by(organization_id=org.id).all()}
+
+    acc: dict[object, dict] = {}
+    for m, o, p in rows:
+        if o and o.counterparty_id:
+            key: object = ("cp", o.counterparty_id)
+            name = cp_names.get(o.counterparty_id, f"Контрагент #{o.counterparty_id}")
+        elif o and o.customer_name:
+            key = ("name", o.customer_name)
+            name = o.customer_name
+        else:
+            key = ("pos", None)
+            name = "Роздріб (POS / скан)"
+        a = acc.setdefault(key, {"name": name, "orders": set(), "revenue": Decimal("0"), "cogs": Decimal("0"),
+                                 "cp_id": o.counterparty_id if o else None})
+        if o:
+            a["orders"].add(o.id)
+        rev = m.total_revenue if m.total_revenue is not None else (m.quantity * (m.unit_price or Decimal("0")))
+        a["revenue"] += rev or Decimal("0")
+        a["cogs"] += m.quantity * (p.cost_price or Decimal("0"))
+
+    out: list[CustomerProfitRow] = []
+    for a in acc.values():
+        margin = a["revenue"] - a["cogs"]
+        pct = (margin / a["revenue"] * 100).quantize(Decimal("0.1")) if a["revenue"] else None
+        out.append(CustomerProfitRow(
+            counterparty_id=a["cp_id"], name=a["name"], orders=len(a["orders"]),
+            revenue=a["revenue"].quantize(Decimal("0.01")),
+            cogs=a["cogs"].quantize(Decimal("0.01")),
+            margin=margin.quantize(Decimal("0.01")), margin_pct=pct,
+        ))
+    out.sort(key=lambda r: r.margin, reverse=True)
+    return out
+
+
+@_full.get("/reports/margin-series", response_model=list[MarginSeriesPoint])
+def report_margin_series(
+    days: int = Query(90, ge=7, le=365),
+    db:   Session      = Depends(get_db),
+    org:  Organization = Depends(get_current_org),
+) -> list[MarginSeriesPoint]:
+    """Daily revenue/COGS/margin + reconstructed stock value (динаміка запасу)."""
+    since_day = date.today() - timedelta(days=days - 1)
+    since = datetime.combine(since_day, datetime.min.time())
+    day_expr = func.date(WarehouseMovement.created_at)
+
+    sales = {
+        d: (rev or Decimal("0"), qty or Decimal("0"))
+        for d, rev, qty in db.query(
+            day_expr,
+            func.sum(func.coalesce(WarehouseMovement.total_revenue,
+                                   WarehouseMovement.quantity * func.coalesce(WarehouseMovement.unit_price, 0))),
+            func.sum(WarehouseMovement.quantity),
+        )
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == MovementType.SALE_OUT,
+                WarehouseMovement.created_at >= since)
+        .group_by(day_expr)
+        .all()
+    }
+    # COGS per day at current AVCO cost.
+    cost_by_product = {p.id: (p.cost_price or Decimal("0")) for p in
+                       db.query(Product).filter_by(organization_id=org.id).all()}
+    cogs_rows = (
+        db.query(day_expr, WarehouseMovement.product_id, func.sum(WarehouseMovement.quantity))
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.type == MovementType.SALE_OUT,
+                WarehouseMovement.created_at >= since)
+        .group_by(day_expr, WarehouseMovement.product_id)
+        .all()
+    )
+    cogs: dict[date, Decimal] = {}
+    for d, pid, qty in cogs_rows:
+        cogs[d] = cogs.get(d, Decimal("0")) + (qty or Decimal("0")) * cost_by_product.get(pid, Decimal("0"))
+
+    # Stock value: walk backwards from today's value using daily net qty changes.
+    current_value = Decimal("0")
+    for pid, qty in db.query(StockEntry.product_id, func.sum(StockEntry.quantity)) \
+            .filter(StockEntry.organization_id == org.id).group_by(StockEntry.product_id).all():
+        current_value += (qty or Decimal("0")) * cost_by_product.get(pid, Decimal("0"))
+
+    net_by_day: dict[date, Decimal] = {}
+    for d, pid, q in (
+        db.query(day_expr, WarehouseMovement.product_id, func.sum(_net_qty_expr()))
+        .filter(WarehouseMovement.organization_id == org.id,
+                WarehouseMovement.created_at >= since)
+        .group_by(day_expr, WarehouseMovement.product_id)
+        .all()
+    ):
+        net_by_day[d] = net_by_day.get(d, Decimal("0")) + (q or Decimal("0")) * cost_by_product.get(pid, Decimal("0"))
+
+    out: list[MarginSeriesPoint] = []
+    value = current_value
+    today = date.today()
+    for i in range(days):
+        d = today - timedelta(days=i)
+        rev = sales.get(d, (Decimal("0"), Decimal("0")))[0]
+        c = cogs.get(d, Decimal("0"))
+        out.append(MarginSeriesPoint(
+            day=d, revenue=rev.quantize(Decimal("0.01")), cogs=c.quantize(Decimal("0.01")),
+            margin=(rev - c).quantize(Decimal("0.01")),
+            stock_value=max(value, Decimal("0")).quantize(Decimal("0.01")),
+        ))
+        value -= net_by_day.get(d, Decimal("0"))
+    out.reverse()
+    return out
 
 
 router.include_router(_full)
