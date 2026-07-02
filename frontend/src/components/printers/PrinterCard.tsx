@@ -116,13 +116,17 @@ export function PrinterCard({
             onClick={(e) => {
               e.stopPropagation();
               const r = e.currentTarget.getBoundingClientRect();
-              setMenuPos({ x: r.right - 248, y: r.bottom + 4 });
+              setMenuPos((current) =>
+                current ? null : { x: r.right - 248, y: r.bottom + 4 },
+              );
             }}
+            aria-label="Швидке меню"
+            aria-haspopup="menu"
+            aria-expanded={menuPos !== null}
             title="Швидке меню"
-            className="rounded p-0.5 text-[var(--text-muted)] opacity-0 transition hover:text-[var(--text)] group-hover:opacity-100"
-            tabIndex={-1}
+            className="grid size-7 shrink-0 place-items-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
             </svg>
           </button>

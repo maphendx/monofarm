@@ -29,6 +29,14 @@ import { useUser } from "@/lib/auth-context";
 import type { Printer } from "@/lib/types";
 
 const MENU_WIDTH = 248;
+const SUBMENU_WIDTH = 220;
+
+type SubmenuKind = "preheat" | "speed" | "tags";
+
+interface OpenSubmenu {
+  kind: SubmenuKind;
+  anchorTop: number;
+}
 
 const PREHEAT_PRESETS: { label: string; nozzle: number; bed: number }[] = [
   { label: "PLA", nozzle: 200, bed: 60 },
@@ -69,14 +77,16 @@ function MenuItem({
   danger,
   title,
   chevron,
+  active,
 }: {
   icon?: React.ReactNode;
   label: string;
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   danger?: boolean;
   title?: string;
   chevron?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
@@ -90,7 +100,9 @@ function MenuItem({
           ? "cursor-not-allowed text-[var(--text-faint)]"
           : danger
             ? "text-[var(--state-error)] hover:bg-[rgba(239,68,68,.10)]"
-            : "text-[var(--text)] hover:bg-[var(--surface-hi)]",
+            : active
+              ? "bg-[var(--surface-hi)] text-[var(--text-hi)]"
+              : "text-[var(--text)] hover:bg-[var(--surface-hi)]",
       ].join(" ")}
     >
       {icon && <span className="shrink-0 text-[var(--text-muted)]">{icon}</span>}
@@ -130,7 +142,7 @@ function QuickMenuInner({
   const isAdmin = user.role === "admin";
   const canEdit = isAdmin || user.role === "operator";
 
-  const [submenu, setSubmenu] = useState<"preheat" | "speed" | "tags" | null>(null);
+  const [submenu, setSubmenu] = useState<OpenSubmenu | null>(null);
   const [gcodeOpen, setGcodeOpen] = useState(false);
   const [gcodeText, setGcodeText] = useState("");
   const [maintOpen, setMaintOpen] = useState<"maintenance" | "problem" | null>(null);
@@ -139,7 +151,7 @@ function QuickMenuInner({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const inFlight = useRef(false);
 
-  const { tags, loading: tagsLoading, setPrinterTags } = useTags();
+  const { tags, loading: tagsLoading, setPrinterTags } = useTags(submenu?.kind === "tags");
   const [tagIds, setTagIds] = useState<number[]>(() => (printer.tags ?? []).map((t) => t.id));
 
   const isBambu = printer.kind === "bambu";
@@ -147,6 +159,15 @@ function QuickMenuInner({
   const supportsGcode = hasMoonraker || (isBambu && !!printer.bambu_dev_id);
   const isBusyPrinting = printer.state === "printing" || printer.state === "paused";
   const modalActive = gcodeOpen || maintOpen !== null || confirmDelete;
+
+  function toggleSubmenu(kind: SubmenuKind, event: React.MouseEvent<HTMLButtonElement>) {
+    const anchorTop = event.currentTarget.getBoundingClientRect().top;
+    setSubmenu((current) =>
+      current?.kind === kind
+        ? null
+        : { kind, anchorTop },
+    );
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -160,6 +181,18 @@ function QuickMenuInner({
   const left = Math.max(8, Math.min(pos.x, window.innerWidth - MENU_WIDTH - 8));
   const maxH = Math.min(560, window.innerHeight - 16);
   const top = Math.max(8, Math.min(pos.y, window.innerHeight - Math.min(maxH, 480) - 8));
+  const compactSubmenu = window.innerWidth < MENU_WIDTH + SUBMENU_WIDTH + 36;
+  const submenuLeft = compactSubmenu
+    ? left
+    : left + MENU_WIDTH + 6 + SUBMENU_WIDTH <= window.innerWidth - 8
+      ? left + MENU_WIDTH + 6
+      : Math.max(8, left - SUBMENU_WIDTH - 6);
+  const submenuTop = submenu
+    ? compactSubmenu
+      ? top
+      : Math.max(8, Math.min(submenu.anchorTop, window.innerHeight - 200))
+    : 8;
+  const submenuMaxH = compactSubmenu ? maxH : Math.max(160, window.innerHeight - submenuTop - 8);
 
   async function run(action: () => Promise<void>, successMsg?: string, close = true) {
     if (inFlight.current) return;
@@ -282,6 +315,7 @@ function QuickMenuInner({
       />
 
       <div
+        data-testid="printer-quick-menu"
         className="fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
         style={{ left, top, width: MENU_WIDTH, maxHeight: maxH }}
         onClick={(e) => e.stopPropagation()}
@@ -306,19 +340,9 @@ function QuickMenuInner({
                     ? "Недоступно під час друку"
                     : undefined
               }
-              onClick={() => setSubmenu(submenu === "preheat" ? null : "preheat")}
+              active={submenu?.kind === "preheat"}
+              onClick={(event) => toggleSubmenu("preheat", event)}
             />
-            {submenu === "preheat" && (
-              <div className="ml-6 space-y-0.5">
-                {PREHEAT_PRESETS.map((p) => (
-                  <MenuItem
-                    key={p.label}
-                    label={`${p.label} — ${p.nozzle}° / ${p.bed}°`}
-                    onClick={() => preheat(p.nozzle, p.bed, p.label)}
-                  />
-                ))}
-              </div>
-            )}
             <MenuItem
               icon={<Snowflake size={14} />}
               label="Охолодження"
@@ -331,23 +355,9 @@ function QuickMenuInner({
               label="Швидкість друку"
               chevron
               disabled={!supportsGcode}
-              onClick={() => setSubmenu(submenu === "speed" ? null : "speed")}
+              active={submenu?.kind === "speed"}
+              onClick={(event) => toggleSubmenu("speed", event)}
             />
-            {submenu === "speed" && (
-              <div className="ml-6 space-y-0.5">
-                {isBambu
-                  ? BAMBU_SPEED_PROFILES.map((s) => (
-                      <MenuItem
-                        key={s.profile}
-                        label={s.label}
-                        onClick={() => setBambuSpeed(s.profile, s.label)}
-                      />
-                    ))
-                  : KLIPPER_SPEED_FACTORS.map((pct) => (
-                      <MenuItem key={pct} label={`${pct}%`} onClick={() => setKlipperSpeed(pct)} />
-                    ))}
-              </div>
-            )}
             <MenuItem
               icon={<Terminal size={14} />}
               label="Надіслати G-код…"
@@ -381,38 +391,9 @@ function QuickMenuInner({
               icon={<Tags size={14} />}
               label="Теги"
               chevron
-              onClick={() => setSubmenu(submenu === "tags" ? null : "tags")}
+              active={submenu?.kind === "tags"}
+              onClick={(event) => toggleSubmenu("tags", event)}
             />
-            {submenu === "tags" && (
-              <div className="ml-6 max-h-44 space-y-0.5 overflow-y-auto">
-                {tagsLoading ? (
-                  <div className="px-2.5 py-1 text-xs text-[var(--text-faint)]">Завантаження…</div>
-                ) : tags.length === 0 ? (
-                  <div className="px-2.5 py-1 text-xs text-[var(--text-faint)]">
-                    Тегів немає — створіть у Налаштуваннях
-                  </div>
-                ) : (
-                  tags.map((t) => (
-                    <label
-                      key={t.id}
-                      className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-1 text-sm hover:bg-[var(--surface-hi)]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={tagIds.includes(t.id)}
-                        onChange={() => toggleTag(t.id)}
-                        className="accent-[var(--accent)]"
-                      />
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: t.color ?? "var(--text-faint)" }}
-                      />
-                      <span className="min-w-0 flex-1 truncate">{t.display || t.label}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            )}
           </>
         )}
         <MenuItem
@@ -476,6 +457,87 @@ function QuickMenuInner({
           </>
         )}
       </div>
+
+      {submenu && (
+        <div
+          data-testid="printer-quick-submenu"
+          className="fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
+          style={{
+            left: submenuLeft,
+            top: submenuTop,
+            width: compactSubmenu ? MENU_WIDTH : SUBMENU_WIDTH,
+            maxHeight: submenuMaxH,
+            minHeight: compactSubmenu ? Math.min(480, maxH) : undefined,
+          }}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            onClick={() => setSubmenu(null)}
+            className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-1 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"
+          >
+            <ChevronRight size={13} className="rotate-180" />
+            <span className="truncate">
+              {submenu.kind === "preheat"
+                ? "Прогрів"
+                : submenu.kind === "speed"
+                  ? "Швидкість друку"
+                  : "Теги"}
+            </span>
+          </button>
+
+          {submenu.kind === "preheat" &&
+            PREHEAT_PRESETS.map((preset) => (
+              <MenuItem
+                key={preset.label}
+                label={`${preset.label} — ${preset.nozzle}° / ${preset.bed}°`}
+                onClick={() => preheat(preset.nozzle, preset.bed, preset.label)}
+              />
+            ))}
+
+          {submenu.kind === "speed" &&
+            (isBambu
+              ? BAMBU_SPEED_PROFILES.map((speed) => (
+                  <MenuItem
+                    key={speed.profile}
+                    label={speed.label}
+                    onClick={() => setBambuSpeed(speed.profile, speed.label)}
+                  />
+                ))
+              : KLIPPER_SPEED_FACTORS.map((pct) => (
+                  <MenuItem key={pct} label={`${pct}%`} onClick={() => setKlipperSpeed(pct)} />
+                )))}
+
+          {submenu.kind === "tags" &&
+            (tagsLoading ? (
+              <div className="px-2.5 py-1.5 text-xs text-[var(--text-faint)]">Завантаження…</div>
+            ) : tags.length === 0 ? (
+              <div className="px-2.5 py-1.5 text-xs text-[var(--text-faint)]">
+                Тегів немає — створіть у Налаштуваннях
+              </div>
+            ) : (
+              tags.map((tag) => (
+                <label
+                  key={tag.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-sm hover:bg-[var(--surface-hi)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={tagIds.includes(tag.id)}
+                    onChange={() => toggleTag(tag.id)}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: tag.color ?? "var(--text-faint)" }}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{tag.display || tag.label}</span>
+                </label>
+              ))
+            ))}
+        </div>
+      )}
 
       {/* ── Send G-code modal ── */}
       <Modal
