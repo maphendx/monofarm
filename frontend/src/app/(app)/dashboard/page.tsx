@@ -10,6 +10,7 @@ import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
+import { PrinterGroupActionsMenu } from "@/components/printers/PrinterGroupActionsMenu";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -834,6 +835,14 @@ export default function DashboardPage() {
                   </span>
                   <div className="h-px flex-1 bg-[var(--surface-hi)] " />
                   <GroupStatsBadges stats={stats} />
+                  {groupBy === "mygroup" && g.key.startsWith("g") && user.role === "admin" && (
+                    <PrinterGroupActionsMenu
+                      groupId={Number(g.key.slice(1))}
+                      groupName={g.label}
+                      printers={g.items}
+                      onChanged={reload}
+                    />
+                  )}
                 </div>
                 <div className={GRID}>
                   {g.items.map((p) => (

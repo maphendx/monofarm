@@ -3,14 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api } from "@/lib/api";
+import { isA1Mini } from "@/lib/printerCapabilities";
 import type { Printer } from "@/lib/types";
-
-function isA1Mini(model: string | null, devId: string | null): boolean {
-  const normalized = (model ?? "").toLowerCase().replaceAll("-", "").replaceAll("_", "").replaceAll(" ", "");
-  return normalized === "n1"
-    || (normalized.includes("a1") && normalized.includes("mini"))
-    || (devId ?? "").toUpperCase().startsWith("030");
-}
 
 export function AutoPrintCard({
   printer,
