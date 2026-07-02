@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   Bot,
@@ -266,8 +267,10 @@ function QuickMenuInner({
     onClose();
   };
 
-  return (
-    <>
+  // Portal to <body>: .printer-card has a hover transform, which would make
+  // position:fixed children anchor to the card instead of the viewport.
+  return createPortal(
+    <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
       {/* Click-away overlay */}
       <div
         className="fixed inset-0 z-40"
@@ -567,6 +570,7 @@ function QuickMenuInner({
         onConfirm={deletePrinter}
         onCancel={() => setConfirmDelete(false)}
       />
-    </>
+    </div>,
+    document.body,
   );
 }

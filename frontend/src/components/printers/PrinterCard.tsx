@@ -414,19 +414,17 @@ export function PrinterCard({
         </div>
       )}
 
-      {/* Quick menu (⋯ button or right-click) */}
+      {/* Quick menu (⋯ button or right-click) — rendered via portal */}
       {menuPos && (
-        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          <PrinterQuickMenu
-            printer={printer}
-            pos={menuPos}
-            onClose={() => setMenuPos(null)}
-            onUpdated={onUpdated}
-            onDeleted={onDeleted}
-            onOpenSettings={onSettings}
-            onOpenInfo={onClick}
-          />
-        </div>
+        <PrinterQuickMenu
+          printer={printer}
+          pos={menuPos}
+          onClose={() => setMenuPos(null)}
+          onUpdated={onUpdated}
+          onDeleted={onDeleted}
+          onOpenSettings={onSettings}
+          onOpenInfo={onClick}
+        />
       )}
     </div>
   );
