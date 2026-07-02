@@ -266,6 +266,130 @@ function BalanceModal({
   );
 }
 
+// ── Reconciliation act modal ──────────────────────────────────────────────────
+
+type ReconEntry = { doc_date: string; doc: string; debit: string; credit: string };
+type Reconciliation = {
+  counterparty_id: number; name: string;
+  date_from: string; date_to: string;
+  opening_balance: string; debit_total: string; credit_total: string; closing_balance: string;
+  entries: ReconEntry[];
+};
+
+function fmtMoney0(v: string) {
+  const n = parseFloat(v);
+  return n === 0 ? "—" : n.toLocaleString("uk-UA", { maximumFractionDigits: 2 }) + " ₴";
+}
+
+function ReconciliationModal({
+  open, onClose, cp,
+}: { open: boolean; onClose: () => void; cp: Counterparty | null }) {
+  const [dateFrom, setDateFrom] = useState(() => new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
+  const [dateTo,   setDateTo]   = useState(() => new Date().toISOString().slice(0, 10));
+  const [act, setAct] = useState<Reconciliation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !cp) return;
+    setAct(null);
+    setError(null);
+    api<Reconciliation>(
+      `/api/warehouse/counterparties/${cp.id}/reconciliation?date_from=${dateFrom}&date_to=${dateTo}`,
+    ).then(setAct).catch(() => setError("Не вдалося завантажити звірку"));
+  }, [open, cp, dateFrom, dateTo]);
+
+  const fmtD = (s: string) => new Date(s).toLocaleDateString("uk-UA");
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Акт звірки — ${cp?.name ?? ""}`} size="3xl"
+      footer={
+        <>
+          <button type="button" onClick={() => window.print()}
+            className="rounded-md px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-[var(--surface-hi)]">
+            Друк
+          </button>
+          <button type="button" onClick={onClose}
+            className="rounded-md bg-[var(--accent)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent-hi)]">
+            Закрити
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[var(--text-muted)]">
+            З
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1" />
+          </label>
+          <label className="flex items-center gap-2 text-[var(--text-muted)]">
+            по
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1" />
+          </label>
+        </div>
+
+        {error && <p className="text-[var(--state-error)]">{error}</p>}
+        {!act && !error && <div className="skeleton h-40 w-full" />}
+
+        {act && (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--text-muted)]">Сальдо на {fmtD(act.date_from)}</p>
+                <p className="mt-1 font-mono font-semibold">{fmtMoney0(act.opening_balance)}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--text-muted)]">Відвантажено (дебет)</p>
+                <p className="mt-1 font-mono font-semibold">{fmtMoney0(act.debit_total)}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <p className="text-xs text-[var(--text-muted)]">Оплачено (кредит)</p>
+                <p className="mt-1 font-mono font-semibold">{fmtMoney0(act.credit_total)}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--accent-ring)] bg-[var(--accent-soft)] p-3">
+                <p className="text-xs text-[var(--text-muted)]">Сальдо на {fmtD(act.date_to)}</p>
+                <p className="mt-1 font-mono font-semibold">{fmtMoney0(act.closing_balance)}</p>
+              </div>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-[var(--border)]">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-[var(--surface-2)] text-[var(--text-muted)]">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Дата</th>
+                    <th className="px-3 py-2 font-medium">Документ</th>
+                    <th className="px-3 py-2 text-right font-medium">Дебет</th>
+                    <th className="px-3 py-2 text-right font-medium">Кредит</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {act.entries.length === 0 ? (
+                    <tr><td colSpan={4} className="px-3 py-8 text-center text-[var(--text-faint)]">
+                      Немає операцій за період
+                    </td></tr>
+                  ) : act.entries.map((e, i) => (
+                    <tr key={i}>
+                      <td className="px-3 py-2 whitespace-nowrap">{fmtD(e.doc_date)}</td>
+                      <td className="px-3 py-2">{e.doc}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtMoney0(e.debit)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-[var(--state-ok)]">{fmtMoney0(e.credit)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-[var(--text-faint)]">
+              Додатне сальдо — контрагент винен вам; від’ємне — ви контрагенту.
+            </p>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type TypeFilter = "Всі" | CounterpartyType;
@@ -302,6 +426,7 @@ export default function CounterpartiesPage() {
   const [createOpen,     setCreateOpen]     = useState(false);
   const [editing,        setEditing]        = useState<Counterparty | null>(null);
   const [balanceCp,      setBalanceCp]      = useState<Counterparty | null>(null);
+  const [reconCp,        setReconCp]        = useState<Counterparty | null>(null);
 
   const colVis = useColumnVisibility("counterparties", COLS);
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
@@ -446,6 +571,12 @@ export default function CounterpartiesPage() {
                         ₴
                       </button>
                       <button
+                        onClick={() => { setReconCp(c); }}
+                        title="Акт звірки"
+                        className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--accent)]">
+                        ⇄
+                      </button>
+                      <button
                         onClick={() => { setEditing(c); setCreateOpen(true); }}
                         title="Редагувати"
                         className="rounded p-1 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)] ">
@@ -472,6 +603,12 @@ export default function CounterpartiesPage() {
         onClose={() => setBalanceCp(null)}
         cp={balanceCp}
         onSaved={handleSaved}
+      />
+
+      <ReconciliationModal
+        open={reconCp !== null}
+        onClose={() => setReconCp(null)}
+        cp={reconCp}
       />
 
       <ColumnSettingsModal
