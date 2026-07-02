@@ -79,40 +79,40 @@
 }
 
 /* ───── Tokens · dark (primary theme) ─────
-   Cool slate undertone (hue ≈ 215) instead of flat neutral black:
-   lifted bg, clearer surface steps, slate-tinted borders, softened
-   text contrast and calmer state hues — easier on the eyes at night. */
+   Deep neutral graphite (no blue-gray wash): near-black bg, bright
+   text for real contrast, clear elevation steps between surfaces,
+   vivid state hues. Depth comes from surface steps, not tinted gray. */
 .dark {
-  --bg:           #0c0f13;
-  --bg-elevated:  #12161c;
-  --surface:      #151a21;
-  --surface-2:    #1a2028;
-  --surface-hi:   #232b35;
-  --overlay:      rgba(9,12,16,.72);
+  --bg:           #0b0b0d;
+  --bg-elevated:  #121214;
+  --surface:      #151517;
+  --surface-2:    #19191c;
+  --surface-hi:   #212125;
+  --overlay:      rgba(8,8,10,.72);
 
-  --border:        rgba(148,163,184,.10);
-  --border-strong: rgba(148,163,184,.17);
+  --border:        rgba(255,255,255,.08);
+  --border-strong: rgba(255,255,255,.14);
   --border-focus:  rgba(34,211,238,.45);
 
-  --text:       #d6dde6;
-  --text-hi:    #f4f7fa;
-  --text-muted: #97a3b4;
-  --text-faint: #74849a;
-  --text-dim:   #4d5a6e;
+  --text:       #e7e9ec;
+  --text-hi:    #ffffff;
+  --text-muted: #a4a9b3;
+  --text-faint: #767c87;
+  --text-dim:   #54585f;
 
   --accent:        #22d3ee;
   --accent-hi:     #67e8f9;
-  --accent-soft:   rgba(34,211,238,.13);
+  --accent-soft:   rgba(34,211,238,.12);
   --accent-ring:   rgba(34,211,238,.22);
   --accent-strong: #06b6d4;
 
-  --state-print:   #45b8f2;
-  --state-ok:      #34c97c;
-  --state-idle:    #8b98a9;
-  --state-warn:    #f0b13e;
-  --state-error:   #f16a6a;
-  --state-offline: #556173;
-  --state-production: #ab90f5;
+  --state-print:   #38bdf8;
+  --state-ok:      #4ade80;
+  --state-idle:    #9ca3af;
+  --state-warn:    #fbbf24;
+  --state-error:   #f87171;
+  --state-offline: #5b616b;
+  --state-production: #a78bfa;
 
   --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
   --shadow-md: 0 4px 12px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.30);
