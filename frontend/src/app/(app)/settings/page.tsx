@@ -123,7 +123,7 @@ const NAV_ITEMS: Array<{ id: SectionId; label: string; d: string[]; adminOnly?: 
     adminOnly: true,
   },
   {
-    id: "integrations", label: "Вебхуки & API",
+    id: "integrations", label: "Інтеграції",
     d: ["M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"],
     adminOnly: true,
   },
@@ -2280,6 +2280,162 @@ function GeneralSection() {
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
+// ── Integrations catalog (RemOnline-style card grid) ────────────────────────
+
+type IntegrationId = "keycrm" | "horoshop" | "slicer" | "agent";
+
+interface IntegrationMeta {
+  id: IntegrationId;
+  name: string;
+  desc: string;
+  group: string;
+  letter: string;
+  tint: string; // brand tile color (brand art — exempt from token rule)
+}
+
+const INTEGRATIONS: IntegrationMeta[] = [
+  {
+    id: "keycrm", name: "KeyCRM", group: "Магазини та CRM", letter: "K", tint: "#2563eb",
+    desc: "Замовлення з KeyCRM автоматично потрапляють у склад через вебхук.",
+  },
+  {
+    id: "horoshop", name: "Хорошоп", group: "Магазини та CRM", letter: "Х", tint: "#16a34a",
+    desc: "Синхронізація замовлень інтернет-магазину на платформі Хорошоп.",
+  },
+  {
+    id: "slicer", name: "Slicer API", group: "Розробникам", letter: "S", tint: "#d97706",
+    desc: "Надсилай G-code напряму з OrcaSlicer / PrusaSlicer через OctoPrint-конектор.",
+  },
+  {
+    id: "agent", name: "Локальний агент", group: "Розробникам", letter: "A", tint: "#7c3aed",
+    desc: "Тунель до Klipper / Moonraker принтерів у локальній мережі.",
+  },
+];
+
+const INTEGRATION_GROUPS = ["Магазини та CRM", "Розробникам"];
+
+function IntegrationCard({ meta, connected, onOpen }: {
+  meta: IntegrationMeta;
+  connected: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex flex-col rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-md"
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <span
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold text-white"
+          style={{ backgroundColor: meta.tint }}
+        >
+          {meta.letter}
+        </span>
+        {connected && (
+          <span className="flex items-center gap-1 rounded-full border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-2 py-0.5 text-[11px] font-medium text-[var(--state-ok)]">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            Підключено
+          </span>
+        )}
+      </div>
+      <p className="mb-1 text-sm font-semibold text-[var(--text-hi)]">{meta.name}</p>
+      <p className="text-xs leading-relaxed text-[var(--text-muted)]">{meta.desc}</p>
+    </button>
+  );
+}
+
+function IntegrationsSection() {
+  const [status, setStatus] = useState<Record<IntegrationId, boolean>>({
+    keycrm: false, horoshop: false, slicer: false, agent: false,
+  });
+  const [open, setOpen] = useState<IntegrationId | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    api<{ keycrm_configured: boolean }>("/api/orgs/me/keycrm-settings")
+      .then((d) => setStatus((s) => ({ ...s, keycrm: d.keycrm_configured }))).catch(() => {});
+    api<{ configured: boolean }>("/api/horoshop/settings")
+      .then((d) => setStatus((s) => ({ ...s, horoshop: d.configured }))).catch(() => {});
+    api<{ connected: boolean }>("/api/agent/status")
+      .then((d) => setStatus((s) => ({ ...s, agent: d.connected }))).catch(() => {});
+    api<SlicerApiKey[]>("/api/api-keys")
+      .then((k) => setStatus((s) => ({ ...s, slicer: k.length > 0 }))).catch(() => {});
+  }, []);
+
+  // Detail view — reuse the existing config panels as-is.
+  if (open) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setOpen(null)}
+          className="btn btn-ghost btn-sm mb-4"
+        >
+          ← Усі інтеграції
+        </button>
+        {open === "keycrm" && <KeyCRMSection />}
+        {open === "horoshop" && <HoroshopSection />}
+        {open === "slicer" && <SlicerApiKeysSection />}
+        {open === "agent" && <AgentSection />}
+      </div>
+    );
+  }
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? INTEGRATIONS.filter((i) => i.name.toLowerCase().includes(q) || i.desc.toLowerCase().includes(q))
+    : INTEGRATIONS;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">Інтеграції</h2>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Розширюйте можливості monofarm за допомогою підключення сторонніх сервісів.
+          </p>
+        </div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Пошук інтеграції…"
+          className="input w-full sm:w-64"
+        />
+      </div>
+
+      {/* Grouped card grid */}
+      <div className="space-y-8">
+        {INTEGRATION_GROUPS.map((group) => {
+          const items = filtered.filter((i) => i.group === group);
+          if (items.length === 0) return null;
+          return (
+            <section key={group}>
+              <h3 className="mb-3 text-sm font-medium text-[var(--text-muted)]">{group}</h3>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {items.map((meta) => (
+                  <IntegrationCard
+                    key={meta.id}
+                    meta={meta}
+                    connected={status[meta.id]}
+                    onOpen={() => setOpen(meta.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+        {filtered.length === 0 && (
+          <p className="text-sm text-[var(--text-faint)]">Нічого не знайдено.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function defaultSection(): SectionId {
   if (typeof window === "undefined") return "profile";
   const params = new URLSearchParams(window.location.search);
@@ -2348,14 +2504,7 @@ export default function SettingsPage() {
         {active === "queue" && <ComingSoon label="Черга" />}
         {active === "notifications" && <ComingSoon label="Сповіщення" />}
         {active === "maintenance" && <ComingSoon label="Обслуговування" />}
-        {active === "integrations" && (
-          <div className="space-y-6">
-            <SlicerApiKeysSection />
-            <AgentSection />
-            <HoroshopSection />
-            <KeyCRMSection />
-          </div>
-        )}
+        {active === "integrations" && <IntegrationsSection />}
         {active === "billing" && <BillingSection />}
         {active === "tags" && <TagsSection />}
         </div>
