@@ -9,6 +9,7 @@ FastAPI via `asyncio.to_thread`.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import ftplib
 import json
@@ -1397,12 +1398,22 @@ async def init_lan_printers(org_id: int) -> None:
 
 
 async def init(org: "Organization") -> None:
-    """Start Bambu Cloud auth + MQTT for one org.  Called from FastAPI lifespan."""
+    """Start Bambu Cloud auth + MQTT for one org.  Called from FastAPI lifespan.
+
+    The cloud portion (login + list_devices) does blocking HTTP with retries; a
+    dead/expired token can stall it for tens of seconds. Run it in a worker
+    thread so a broken Bambu account never freezes the async event loop.
+    """
     await init_lan_printers(org.id)
 
     if not _is_configured(org):
         return
 
+    await asyncio.to_thread(_init_cloud_sync, org)
+
+
+def _init_cloud_sync(org: "Organization") -> None:
+    """Blocking cloud auth + MQTT startup for one org. Must run off the event loop."""
     # Skip login if token was already seeded (e.g. right after email-code verification).
     if not _access_tokens.get(org.id):
         try:
