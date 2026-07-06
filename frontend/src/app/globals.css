@@ -442,9 +442,11 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .printer-card.warn    { border-top: 3px solid var(--state-warn);  padding-top: 14px; background: color-mix(in srgb, var(--state-warn) 7%, var(--surface)); }
 .printer-card.error   { border-top: 3px solid var(--state-error); padding-top: 14px; background: color-mix(in srgb, var(--state-error) 7%, var(--surface)); }
 .pc-head { display: flex; justify-content: space-between; align-items: flex-start; }
-.pc-id   { font-size: 17.5px; font-weight: 650; color: var(--text-hi); letter-spacing: -0.02em; }
-.pc-model { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
-.pc-status { font-size: 13px; font-weight: 500; }
+.pc-id   { font-size: 19px; font-weight: 650; color: var(--text-hi); letter-spacing: -0.02em; }
+.pc-model { font-size: 12.5px; color: var(--text-faint); margin-top: 1px; }
+.pc-status { font-size: 13.5px; font-weight: 500; }
+.printer-card .progress { height: 8px; }
+.printer-card .pc-file { font-size: 13.5px; }
 .pc-status.printing { color: var(--state-print); }
 .pc-status.ok       { color: var(--state-ok); }
 .pc-status.warn     { color: var(--state-warn); }
