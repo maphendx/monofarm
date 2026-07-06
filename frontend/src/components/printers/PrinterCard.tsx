@@ -240,21 +240,45 @@ export function PrinterCard({
         </div>
       )}
 
-      {/* Tags */}
+      {/* Tags — label + add + chips (colour tags filled, like the reference) */}
       {printer.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {printer.tags.map((t) => (
-            <span
-              key={t.id}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-1.5 py-px text-[10px] text-[var(--text-muted)]"
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--text-faint)]">
+            Теги
+          </span>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenuPos((cur) => (cur ? null : { x: r.right - 248, y: r.bottom + 4 }));
+              }}
+              title="Додати тег"
+              aria-label="Додати тег"
+              className="grid size-4 place-items-center rounded-full border border-dashed border-[var(--border-strong)] text-[12px] leading-none text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
+              +
+            </button>
+          )}
+          {printer.tags.map((tag) =>
+            tag.color ? (
               <span
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: t.color ?? "var(--text-faint)" }}
-              />
-              {t.display || t.label}
-            </span>
-          ))}
+                key={tag.id}
+                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+                style={{ backgroundColor: tag.color }}
+              >
+                {tag.display || tag.label}
+              </span>
+            ) : (
+              <span
+                key={tag.id}
+                className="rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]"
+              >
+                {tag.display || tag.label}
+              </span>
+            ),
+          )}
         </div>
       )}
 

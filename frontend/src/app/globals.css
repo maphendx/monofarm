@@ -431,26 +431,26 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: 16px;
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
   position: relative;
   transition: border-color var(--dur-quick), transform var(--dur-quick) var(--ease-out);
 }
 .printer-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
-.printer-card.printing { border-top: 3px solid var(--state-print); padding-top: 14px; background: var(--surface-hi); }
-.printer-card.ok      { border-top: 3px solid var(--state-ok);    padding-top: 14px; }
-.printer-card.warn    { border-top: 3px solid var(--state-warn);  padding-top: 14px; background: color-mix(in srgb, var(--state-warn) 7%, var(--surface)); }
-.printer-card.error   { border-top: 3px solid var(--state-error); padding-top: 14px; background: color-mix(in srgb, var(--state-error) 7%, var(--surface)); }
+.printer-card.printing { border-top: 3px solid var(--state-print); padding-top: 12px; background: var(--surface-hi); }
+.printer-card.ok      { border-top: 3px solid var(--state-ok);    padding-top: 12px; }
+.printer-card.warn    { border-top: 3px solid var(--state-warn);  padding-top: 12px; background: color-mix(in srgb, var(--state-warn) 7%, var(--surface)); }
+.printer-card.error   { border-top: 3px solid var(--state-error); padding-top: 12px; background: color-mix(in srgb, var(--state-error) 7%, var(--surface)); }
 .pc-head { display: flex; justify-content: space-between; align-items: flex-start; }
-.pc-id   { font-size: 16px; font-weight: 600; color: var(--text-hi); letter-spacing: -0.015em; }
-.pc-model { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
-.pc-status { font-size: 11.5px; }
+.pc-id   { font-size: 17.5px; font-weight: 650; color: var(--text-hi); letter-spacing: -0.02em; }
+.pc-model { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+.pc-status { font-size: 13px; font-weight: 500; }
 .pc-status.printing { color: var(--state-print); }
 .pc-status.ok       { color: var(--state-ok); }
 .pc-status.warn     { color: var(--state-warn); }
 .pc-status.error    { color: var(--state-error); }
 .pc-status.muted    { color: var(--text-faint); }
-.pc-file  { font-size: 12px; color: var(--text); line-height: 1.4; word-break: break-all; }
+.pc-file  { font-size: 13px; color: var(--text); line-height: 1.4; word-break: break-all; }
 .pc-file.muted { color: var(--text-faint); }
 .pc-eta   { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
 .pc-temps { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
