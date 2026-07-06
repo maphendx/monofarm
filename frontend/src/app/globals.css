@@ -298,8 +298,8 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .ds-table tr:hover td { background: var(--surface-2); }
 
 /* Progress */
-.progress { height: 6px; background: var(--surface-hi); border-radius: var(--r-full); overflow: hidden; }
-.progress-fill { height: 100%; background: var(--state-print); border-radius: var(--r-full); transition: width var(--dur-slow) var(--ease-out); }
+.progress { height: 4px; background: var(--surface-hi); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--state-print); border-radius: 2px; transition: width var(--dur-slow) var(--ease-out); }
 .progress-fill.ok   { background: var(--state-ok); }
 .progress-fill.warn { background: var(--state-warn); }
 
@@ -426,290 +426,21 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .toggle.on { background: var(--accent); border-color: var(--accent); }
 .toggle.on::after { transform: translateX(14px); background: #fff; }
 
-/* ═══ PRINTER CARD REDESIGN (3DQue style) ═══ */
-
-/* Card with top accent stripe via inset shadow */
+/* Printer card (all 6 states) */
 .printer-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  overflow: hidden;
-  display: flex; flex-direction: column;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
   position: relative;
-  box-shadow: inset 0 3px 0 var(--rail, transparent);
   transition: border-color var(--dur-quick), transform var(--dur-quick) var(--ease-out);
 }
 .printer-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
-
-/* Status band: tinted header + name + pill + tool stack */
-.printer-card .band {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
-  padding: 10px 10px 10px 13px;
-  background: var(--band, transparent);
-  border-bottom: 1px solid var(--border);
-}
-.printer-card .band-id {
-  min-width: 0; display: flex; flex-direction: column; gap: 5px;
-}
-.printer-card .band .name {
-  font-size: 14.5px; font-weight: 600; letter-spacing: -0.015em;
-  color: var(--text-hi);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.printer-card .pill {
-  align-self: flex-start;
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--font-mono); font-size: 10px; font-weight: 600;
-  letter-spacing: 0.05em; text-transform: uppercase;
-  padding: 3px 9px; border-radius: var(--r-full);
-  background: var(--pill-bg); color: var(--pill-fg);
-  border: 1px solid var(--pill-bd); white-space: nowrap;
-}
-.printer-card .pill .dot {
-  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
-}
-.printer-card .pill .dot.live {
-  animation: pulse 1.6s ease-in-out infinite;
-}
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-
-/* Tool stack (gear / camera / expand) — top-right, vertical */
-.printer-card .tools {
-  display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;
-}
-.printer-card .tool {
-  width: 26px; height: 26px;
-  display: grid; place-items: center;
-  border-radius: var(--r-sm);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: 140ms;
-}
-.printer-card .tool:hover {
-  background: var(--surface-hi);
-  color: var(--text);
-}
-.printer-card .tool svg {
-  width: 15px; height: 15px;
-}
-.printer-card .tool.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-/* Body — content when not in camera mode */
-.printer-card .body {
-  padding: 12px 13px 13px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-.printer-card .file-row {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
-}
-.printer-card .file {
-  font-size: 12.5px; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.printer-card .file.faint { color: var(--text-faint); }
-.printer-card .qpos {
-  flex-shrink: 0;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--text-faint); font-variant-numeric: tabular-nums;
-}
-
-/* Progress bar + ETA */
-.printer-card .prog { height: 6px; background: var(--surface-hi); border-radius: var(--r-full); overflow: hidden; }
-.printer-card .prog-fill {
-  height: 100%; border-radius: var(--r-full);
-  background: var(--fill, var(--state-print));
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.printer-card .prog-meta {
-  display: flex; justify-content: space-between;
-  font-family: var(--font-mono); font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.printer-card .prog-meta .pct { color: var(--text-hi); font-weight: 500; }
-.printer-card .prog-meta .eta { color: var(--text-faint); }
-
-/* Tags row */
-.printer-card .tags {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-}
-.printer-card .tags-label {
-  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--text-faint); margin-right: 1px;
-}
-.printer-card .tag-add {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 1px dashed var(--border-strong);
-  color: var(--text-faint);
-  display: grid; place-items: center;
-  font-size: 12px; line-height: 1; cursor: pointer;
-  background: transparent; transition: 140ms;
-}
-.printer-card .tag-add:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.printer-card .tag {
-  display: inline-flex; align-items: center; gap: 5px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  border-radius: var(--r-full);
-  padding: 2px 9px;
-  font-size: 10.5px; color: var(--text-muted);
-  white-space: nowrap;
-}
-.printer-card .tag.color {
-  border: none; color: #fff; font-weight: 500;
-}
-
-/* Footer — weight + actions */
-.printer-card .foot {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  border-top: 1px solid var(--border);
-  padding-top: 10px; margin-top: 1px;
-}
-.printer-card .wt {
-  font-family: var(--font-mono); font-size: 11px; color: var(--text-faint);
-}
-.printer-card .foot-actions {
-  display: flex; align-items: center; gap: 6px;
-}
-
-/* Action button in footer */
-.printer-card .act {
-  font-size: 12px; font-weight: 600; font-family: var(--font-sans);
-  border-radius: var(--r-sm);
-  padding: 5px 11px; cursor: pointer; transition: 140ms;
-  border: 1px solid; white-space: nowrap;
-}
-.printer-card .act.collect {
-  color: var(--state-ok);
-  border-color: color-mix(in srgb, var(--state-ok) 40%, transparent);
-  background: color-mix(in srgb, var(--state-ok) 9%, transparent);
-}
-.printer-card .act.collect:hover {
-  background: color-mix(in srgb, var(--state-ok) 16%, transparent);
-}
-.printer-card .act.start {
-  color: #fff; background: var(--accent); border-color: var(--accent);
-}
-.printer-card .act.start:hover { filter: brightness(1.08); }
-.printer-card .act.reset {
-  color: var(--state-warn);
-  border-color: color-mix(in srgb, var(--state-warn) 40%, transparent);
-  background: color-mix(in srgb, var(--state-warn) 9%, transparent);
-}
-
-/* ═══ CAMERA MODE — live feed overlay ═══ */
-.printer-card .cam-view {
-  display: none; flex-direction: column;
-}
-.printer-card.cam-open .body { display: none; }
-.printer-card.cam-open .cam-view { display: flex; }
-
-.printer-card .cam-feed {
-  position: relative; aspect-ratio: 16 / 10;
-  background:
-    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--state-print) 22%, #0a0a0c) 0%, #0a0a0c 70%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 4px);
-  display: grid; place-items: center;
-}
-.printer-card .cam-feed .glyph { opacity: 0.5; color: #fff; }
-.printer-card .cam-feed .glyph svg { width: 34px; height: 34px; }
-
-.printer-card .cam-live {
-  position: absolute; top: 8px; left: 8px;
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
-  letter-spacing: 0.08em; color: #fff;
-  background: rgba(0, 0, 0, 0.55); padding: 2px 7px; border-radius: var(--r-full);
-}
-.printer-card .cam-live .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--state-error);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.printer-card .cam-temps {
-  position: absolute; bottom: 8px; left: 8px;
-  font-family: var(--font-mono); font-size: 10px; color: #fff;
-  background: rgba(0, 0, 0, 0.55); padding: 2px 7px; border-radius: var(--r-sm);
-}
-
-.printer-card .cam-controls {
-  display: flex; gap: 6px; padding: 10px 11px;
-}
-.printer-card .cam-btn {
-  flex: 1; height: 32px; display: grid; place-items: center;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--border);
-  background: var(--surface); color: var(--text-muted);
-  cursor: pointer; transition: 140ms;
-}
-.printer-card .cam-btn:hover {
-  background: var(--surface-hi);
-  color: var(--text);
-}
-.printer-card .cam-btn svg { width: 15px; height: 15px; }
-.printer-card .cam-btn.stop:hover {
-  color: var(--state-error);
-  border-color: color-mix(in srgb, var(--state-error) 40%, transparent);
-}
-
-/* ═══ PER-STATE THEMING ═══ */
-.printer-card.printing {
-  --rail: var(--state-print);
-  --band: color-mix(in srgb, var(--state-print) 8%, var(--surface));
-  --fill: var(--state-print);
-  --pill-bg: color-mix(in srgb, var(--state-print) 14%, transparent);
-  --pill-fg: var(--state-print);
-  --pill-bd: color-mix(in srgb, var(--state-print) 30%, transparent);
-}
-.printer-card.paused {
-  --rail: var(--state-warn);
-  --band: color-mix(in srgb, var(--state-warn) 9%, var(--surface));
-  --fill: var(--state-warn);
-  --pill-bg: color-mix(in srgb, var(--state-warn) 15%, transparent);
-  --pill-fg: var(--state-warn);
-  --pill-bd: color-mix(in srgb, var(--state-warn) 32%, transparent);
-}
-.printer-card.collect {
-  --rail: var(--state-ok);
-  --band: color-mix(in srgb, var(--state-ok) 12%, var(--surface));
-  --fill: var(--state-ok);
-  --pill-bg: color-mix(in srgb, var(--state-ok) 16%, transparent);
-  --pill-fg: var(--state-ok);
-  --pill-bd: color-mix(in srgb, var(--state-ok) 34%, transparent);
-}
-.printer-card.error {
-  --rail: var(--state-error);
-  --band: color-mix(in srgb, var(--state-error) 12%, var(--surface));
-  --pill-bg: color-mix(in srgb, var(--state-error) 16%, transparent);
-  --pill-fg: var(--state-error);
-  --pill-bd: color-mix(in srgb, var(--state-error) 34%, transparent);
-}
-.printer-card.idle {
-  --rail: transparent;
-  --band: var(--surface-2);
-  --pill-bg: var(--surface-hi);
-  --pill-fg: var(--text-muted);
-  --pill-bd: var(--border);
-}
-.printer-card.muted {
-  --rail: transparent;
-  --band: var(--surface-2);
-  opacity: 0.62;
-  --pill-bg: var(--surface-hi);
-  --pill-fg: var(--text-faint);
-  --pill-bd: var(--border);
-}
-
-/* ── OLD PRINTER CARD STYLES (deprecated — kept for compatibility) ── */
+.printer-card.printing { border-top: 3px solid var(--state-print); padding-top: 14px; background: var(--surface-hi); }
+.printer-card.ok      { border-top: 3px solid var(--state-ok);    padding-top: 14px; }
+.printer-card.warn    { border-top: 3px solid var(--state-warn);  padding-top: 14px; background: color-mix(in srgb, var(--state-warn) 7%, var(--surface)); }
+.printer-card.error   { border-top: 3px solid var(--state-error); padding-top: 14px; background: color-mix(in srgb, var(--state-error) 7%, var(--surface)); }
 .pc-head { display: flex; justify-content: space-between; align-items: flex-start; }
 .pc-id   { font-size: 16px; font-weight: 600; color: var(--text-hi); letter-spacing: -0.015em; }
 .pc-model { font-size: 11.5px; color: var(--text-faint); margin-top: 1px; }
@@ -724,6 +455,31 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .pc-eta   { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
 .pc-temps { font-size: 11.5px; color: var(--text-faint); font-family: var(--font-mono); }
 .pc-actions { display: flex; gap: 8px; }
+
+/* Progress meta line (% · ETA) */
+.pc-prog-meta { display: flex; justify-content: space-between; margin-top: 4px;
+  font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pc-prog-meta .pct { color: var(--text-hi); font-weight: 500; }
+.pc-prog-meta .eta { color: var(--text-faint); }
+
+/* In-card camera — absolute overlay over the card, no layout shift */
+.printer-card .cam-view { position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
+.printer-card .cam-feed { position: relative; flex: 1; min-height: 120px;
+  background: #0a0a0c; display: grid; place-items: center; }
+.printer-card .cam-feed .glyph { opacity: .4; color: #fff; }
+.printer-card .cam-live { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; letter-spacing: .06em; color: #fff;
+  background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: var(--r-full); }
+.printer-card .cam-live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--state-error); animation: pulse 1.4s ease-in-out infinite; }
+.printer-card .cam-temps { position: absolute; left: 8px; bottom: 8px; font-family: var(--font-mono); font-size: 10px; color: #fff;
+  background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: var(--r-sm); }
+.printer-card .cam-bar { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+.printer-card .cam-btn { flex: 1; height: 30px; display: grid; place-items: center; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; transition: 140ms; }
+.printer-card .cam-btn:hover { background: var(--surface-hi); color: var(--text); }
+.printer-card .cam-btn svg { width: 15px; height: 15px; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* Stat strip */
 .demo-stat-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
