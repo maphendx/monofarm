@@ -275,12 +275,12 @@ function PrinterPhotoCard({
     <div
       onClick={onClick}
       className={[
-        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-[var(--bg-elevated)] p-3",
-        "border-[var(--border-strong)]  ",
+        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-[var(--bg-elevated)] p-3 overflow-hidden",
+        "border-[var(--border-strong)]",
         tone === "muted" ? "opacity-60" : "",
         "text-left transition-shadow hover:shadow-md",
       ].join(" ")}
-      style={{ borderTopWidth: 2, borderTopColor: TOP[tone] }}
+      style={{ boxShadow: `inset 0 3px 0 ${TOP[tone]}` }}
     >
       {/* ── header: name + photo ── */}
       <div className="flex items-start justify-between gap-2">
