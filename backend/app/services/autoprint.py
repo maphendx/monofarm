@@ -180,6 +180,9 @@ async def start_next_for_printer(
             ams_mapping, use_ams, _details = build_ams_mapping(gcode.filament_meta, printer)
             run_index = entry.runs_completed + 1
             eject_after_print = printer.autoprint_eject_last_plate or _has_more_runs(db, entry)
+            # Cloud-mode printers reject LAN MQTT (needs Developer Mode) — the agent
+            # still FTPS-uploads to the SD, but the start command goes via cloud MQTT.
+            start_via = "lan" if printer.bambu_lan_mode else "cloud"
             job = create_cloud_job(
                 db,
                 org_id=printer.organization_id,
@@ -191,7 +194,7 @@ async def start_next_for_printer(
                 idempotency_key=f"autoprint:{printer.organization_id}:{entry.id}:{run_index}",
                 request_payload={
                     "source": "platecycler_autoprint",
-                    "start_via": "lan",
+                    "start_via": start_via,
                     "ams_mapping": ams_mapping,
                     "use_ams": use_ams,
                     "platecycler": {
@@ -283,3 +286,53 @@ async def start_next_for_device(
         printer_id,
         allow_finished_state=allow_finished_state,
     )
+
+
+async def run_kick_listener() -> None:
+    """Consume worker-published AutoPrint kicks (Redis `autoprint:kick`).
+
+    Cloud MQTT reports land in the worker process, but PlateCycler dispatch
+    needs the agent tunnel that terminates in the web process — this listener
+    runs in the web lifespan and acts only when this process holds the tunnel
+    (terminal-job accounting runs regardless: it is pure DB work).
+    """
+    import json
+    import logging
+
+    import redis.asyncio as aioredis
+
+    from app.core.config import settings
+    from app.services.bambu_lan_dispatch import has_agent_tunnel
+
+    log = logging.getLogger(__name__)
+    if not settings.REDIS_URL:
+        return
+    while True:
+        try:
+            client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            pubsub = client.pubsub()
+            await pubsub.subscribe("autoprint:kick")
+            log.info("autoprint kick listener: subscribed")
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                try:
+                    event = json.loads(message["data"])
+                    org_id = int(event["org_id"])
+                    if "job_id" in event:
+                        await handle_terminal_job(int(event["job_id"]))
+                    elif has_agent_tunnel(org_id):
+                        await start_next_for_device(
+                            org_id,
+                            str(event.get("dev_id") or ""),
+                            allow_finished_state=bool(event.get("finished")),
+                        )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("autoprint kick failed: %s", message.get("data"))
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            log.exception("autoprint kick listener lost connection — retrying in 5s")
+            await asyncio.sleep(5)

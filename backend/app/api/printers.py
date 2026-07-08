@@ -1355,10 +1355,12 @@ def update_autoprint(
 
         if row.kind != PrinterKind.bambu or not is_a1_mini(row.bambu_model, row.bambu_dev_id):
             raise HTTPException(status_code=400, detail="AutoPrint PlateCycler підтримує лише Bambu A1 Mini")
-        if not row.bambu_lan_mode or not row.bambu_dev_ip or not row.bambu_access_code:
+        # Cloud-mode printers are fine: upload goes via agent FTPS, start via
+        # cloud MQTT project_file. IP + Access Code are still needed for FTPS.
+        if not row.bambu_dev_ip or not row.bambu_access_code:
             raise HTTPException(
                 status_code=400,
-                detail="Для AutoPrint потрібні Bambu LAN-only/Developer Mode, IP та Access Code",
+                detail="Для AutoPrint потрібні IP адреса та Access Code принтера (FTPS-завантаження через monofarm-agent)",
             )
         if not 1 <= payload.plates_loaded <= 10:
             raise HTTPException(status_code=422, detail="Кількість пластин має бути від 1 до 10")

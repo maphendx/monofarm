@@ -84,6 +84,48 @@ def test_autoprint_rejects_non_a1_mini(
     assert "A1 Mini" in response.json()["detail"]
 
 
+def test_autoprint_allows_cloud_mode_printer(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+) -> None:
+    printer = _printer(db_session, test_org.id, bambu_lan_mode=False, autoprint_mode="off")
+
+    response = client.patch(
+        f"/api/printers/{printer.id}/autoprint",
+        headers=auth_headers,
+        json={"enabled": True, "plates_loaded": 2},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["autoprint_mode"] == "platecycler"
+
+
+def test_autoprint_still_requires_ip_and_access_code(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+) -> None:
+    printer = _printer(
+        db_session,
+        test_org.id,
+        bambu_lan_mode=False,
+        bambu_dev_ip=None,
+        autoprint_mode="off",
+    )
+
+    response = client.patch(
+        f"/api/printers/{printer.id}/autoprint",
+        headers=auth_headers,
+        json={"enabled": True, "plates_loaded": 2},
+    )
+
+    assert response.status_code == 400
+    assert "Access Code" in response.json()["detail"]
+
+
 def test_record_completed_run_is_idempotent(db_session, test_org, admin_user) -> None:
     printer = _printer(db_session, test_org.id)
     gcode = GcodeFile(

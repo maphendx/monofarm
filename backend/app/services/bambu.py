@@ -416,7 +416,60 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
         return
     dev_id = parts[1]
 
-    _handle_report_payload(dev_id, payload)
+    job = _handle_report_payload(dev_id, payload)
+    _kick_autoprint_from_report(dev_id, payload, job)
+
+
+_autoprint_idle_kicks: dict[str, float] = {}
+# Event loop of the process that called init() — lets paho callback threads
+# schedule coroutines when there is no Redis to relay through.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: BambuCloudJob | None) -> None:
+    """Forward PlateCycler AutoPrint triggers from cloud MQTT reports.
+
+    Runs in the paho callback thread of the worker process. Dispatch needs the
+    agent tunnel, which terminates in the web process — so publish a kick event
+    to Redis (`autoprint:kick`, consumed by autoprint.run_kick_listener). When
+    Redis is absent (single-process dev), schedule the coroutine locally.
+    """
+    org_id = _dev_to_org.get(dev_id)
+    if org_id is None:
+        return
+
+    from app.services.bambu_job_state import TERMINAL_STATUSES
+
+    event: dict[str, Any] | None = None
+    if job is not None and job.plan_entry_id is not None and job.status in TERMINAL_STATUSES:
+        event = {"org_id": org_id, "job_id": job.id}
+    else:
+        raw_state = str((payload.get("print") or {}).get("gcode_state") or "")
+        now = time.monotonic()
+        if raw_state in {"IDLE", "FINISH"} and now - _autoprint_idle_kicks.get(dev_id, 0.0) >= 30:
+            _autoprint_idle_kicks[dev_id] = now
+            event = {"org_id": org_id, "dev_id": dev_id, "finished": raw_state == "FINISH"}
+    if event is None:
+        return
+
+    from app.services.cache import _r
+
+    r = _r()
+    if r is not None:
+        try:
+            r.publish("autoprint:kick", json.dumps(event))
+            return
+        except Exception:
+            log.warning("autoprint kick publish failed (dev_id=%s)", dev_id, exc_info=True)
+    if _main_loop is None or not _main_loop.is_running():
+        return
+    from app.services.autoprint import handle_terminal_job, start_next_for_device
+
+    if "job_id" in event:
+        coro = handle_terminal_job(event["job_id"])
+    else:
+        coro = start_next_for_device(org_id, dev_id, allow_finished_state=bool(event.get("finished")))
+    asyncio.run_coroutine_threadsafe(coro, _main_loop)
 
 
 def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> BambuCloudJob | None:
@@ -1404,6 +1457,8 @@ async def init(org: "Organization") -> None:
     dead/expired token can stall it for tens of seconds. Run it in a worker
     thread so a broken Bambu account never freezes the async event loop.
     """
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
     await init_lan_printers(org.id)
 
     if not _is_configured(org):

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -87,9 +88,15 @@ async def lifespan(_: FastAPI):
     else:
         log.info("INLINE_WORKERS=false — Telegram/Scheduler/Bambu run in separate worker process")
 
+    # AutoPrint kicks from the worker's cloud MQTT arrive over Redis pub/sub;
+    # dispatch needs the agent tunnel, which lives in this (web) process.
+    from app.services.autoprint import run_kick_listener
+    autoprint_kick_task = asyncio.create_task(run_kick_listener())
+
     log.info("monofarm api started")
     yield
 
+    autoprint_kick_task.cancel()
     if settings.INLINE_WORKERS:
         try:
             await bambu.shutdown()
