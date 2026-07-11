@@ -37,6 +37,6 @@ describe("generateEan13", () => {
   test("uses the requested fixed SVG dimensions", () => {
     expect(EAN13_SVG_SIZE).toEqual({ width: 230, height: 100 });
     expect(EAN13_SVG_RENDER_OPTIONS.margin).toBe(0);
-    expect(EAN13_SVG_RENDER_OPTIONS.textMargin).toBe(-4);
+    expect(EAN13_SVG_RENDER_OPTIONS.textMargin).toBe(0);
   });
 });
