@@ -447,39 +447,39 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
   transition: border-color var(--dur-quick), transform var(--dur-quick) var(--ease-out);
 }
 .printer-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
-.printer-card.printing { --rail: var(--state-print); --band: var(--state-print); --fill: var(--state-print); --pill-bg: #fff; --pill-fg: var(--state-print); --pill-bd: transparent; border-color: var(--state-print); }
-.printer-card.paused { --rail: var(--state-warn); --band: var(--state-warn); --fill: var(--state-warn); --pill-bg: #fff; --pill-fg: var(--state-warn); --pill-bd: transparent; border-color: var(--state-warn); }
-.printer-card.collect, .printer-card.ok { --rail: var(--state-ok); --band: var(--state-ok); --fill: var(--state-ok); --pill-bg: #fff; --pill-fg: var(--state-ok); --pill-bd: transparent; border-color: var(--state-ok); }
-.printer-card.warn { --rail: var(--state-warn); --band: var(--state-warn); --fill: var(--state-warn); --pill-bg: #fff; --pill-fg: var(--state-warn); --pill-bd: transparent; border-color: var(--state-warn); }
-.printer-card.error { --rail: var(--state-error); --band: var(--state-error); --fill: var(--state-error); --pill-bg: #fff; --pill-fg: var(--state-error); --pill-bd: transparent; border-color: var(--state-error); }
+.printer-card.printing { --rail: var(--state-print); --band: color-mix(in srgb, var(--state-print) 8%, var(--surface)); --fill: var(--state-print); --pill-bg: color-mix(in srgb, var(--state-print) 14%, transparent); --pill-fg: var(--state-print); --pill-bd: color-mix(in srgb, var(--state-print) 30%, transparent); }
+.printer-card.paused { --rail: var(--state-warn); --band: color-mix(in srgb, var(--state-warn) 9%, var(--surface)); --fill: var(--state-warn); --pill-bg: color-mix(in srgb, var(--state-warn) 14%, transparent); --pill-fg: var(--state-warn); --pill-bd: color-mix(in srgb, var(--state-warn) 30%, transparent); }
+.printer-card.collect, .printer-card.ok { --rail: var(--state-ok); --band: color-mix(in srgb, var(--state-ok) 9%, var(--surface)); --fill: var(--state-ok); --pill-bg: color-mix(in srgb, var(--state-ok) 14%, transparent); --pill-fg: var(--state-ok); --pill-bd: color-mix(in srgb, var(--state-ok) 30%, transparent); }
+.printer-card.warn { --rail: var(--state-warn); --band: color-mix(in srgb, var(--state-warn) 9%, var(--surface)); --fill: var(--state-warn); --pill-bg: color-mix(in srgb, var(--state-warn) 14%, transparent); --pill-fg: var(--state-warn); --pill-bd: color-mix(in srgb, var(--state-warn) 30%, transparent); }
+.printer-card.error { --rail: var(--state-error); --band: color-mix(in srgb, var(--state-error) 9%, var(--surface)); --fill: var(--state-error); --pill-bg: color-mix(in srgb, var(--state-error) 14%, transparent); --pill-fg: var(--state-error); --pill-bd: color-mix(in srgb, var(--state-error) 30%, transparent); }
 .printer-card.offline { --rail: transparent; opacity: .68; }
 
-.pc-band { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 52px; padding: 9px 12px 9px 16px; background: var(--band); border-bottom: 1px solid color-mix(in srgb, #000 20%, transparent); }
+.pc-band { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 7px 10px 7px 13px; background: var(--band); border-bottom: 1px solid var(--border); }
 .pc-band-id { min-width: 0; display: flex; align-items: center; gap: 9px; }
-.pc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; font-weight: 700; letter-spacing: -.02em; color: #fff; }
+.pc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; letter-spacing: -.015em; color: var(--text-hi); }
 .pc-pill { align-self: center; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--pill-bd); border-radius: var(--r-full); background: var(--pill-bg); color: var(--pill-fg); font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
 .pc-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pc-pill-dot.live { animation: pulse 1.6s ease-in-out infinite; }
-.pc-tools { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.pc-tools { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 .pc-tool { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); cursor: pointer; transition: .14s; }
-.pc-tool { color: rgba(255,255,255,.92); }
-.pc-tool:hover { background: rgba(0,0,0,.16); color: #fff; }
+.pc-tool { color: var(--text-faint); }
+.pc-tool:hover { background: var(--surface-hi); color: var(--text); }
 .pc-tool.active { border-color: var(--accent); background: var(--accent); color: #fff; }
 .pc-tool svg { width: 15px; height: 15px; }
 .pc-tool > span { display: inline-flex; }
 
-.pc-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 12px; overflow: hidden; padding: 14px 16px 15px; }
-.pc-overview { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 92px; }
-.pc-cover { width: 112px; height: 92px; display: grid; place-items: center; color: var(--text-faint); }
-.pc-cover img { width: 112px; height: 92px; object-fit: contain; filter: drop-shadow(0 3px 3px color-mix(in srgb, var(--text) 20%, transparent)); }
+.pc-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 8px; overflow: hidden; padding: 10px 12px 11px; }
+.pc-overview { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 72px; }
+.pc-cover { width: 82px; height: 72px; display: grid; place-items: center; color: var(--text-faint); }
+.pc-cover img { width: 82px; height: 72px; object-fit: contain; filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--text) 16%, transparent)); }
 .pc-cover svg { width: 30px; height: 30px; }
 .pc-overview-main { min-width: 0; }
-.pc-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 14px; font-weight: 600; }
-.pc-temps { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pc-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.pc-temps { display: flex; flex-direction: column; gap: 2px; margin-top: 5px; color: var(--text-faint); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
 .pc-specs { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.pc-chip { padding: 7px 11px; border-radius: var(--r-md); background: var(--bg-elevated); color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+.pc-chip { padding: 5px 8px; border-radius: var(--r-sm); background: var(--bg-elevated); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
 .pc-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.pc-slots .size-3 { width: 25px; height: 25px; }
+.pc-slots .size-3 { width: 16px; height: 16px; }
 .pc-slot { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--r-full); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
 .pc-slot.empty { color: var(--text-faint); opacity: .65; }
 .pc-slot-dot { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface-hi); }
@@ -493,9 +493,9 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .pc-flags span { padding: 2px 7px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--state-warn) 10%, transparent); color: var(--state-warn); font-size: 10.5px; }
 .pc-substate { display: flex; align-items: center; gap: 6px; color: var(--state-warn); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
 .pc-substate-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; }
-.pc-progress { position: relative; height: 20px; overflow: hidden; border-radius: var(--r-full); background: var(--surface-hi); }
+.pc-progress { position: relative; height: 9px; overflow: hidden; border-radius: var(--r-full); background: var(--surface-hi); }
 .pc-progress-fill { height: 100%; border-radius: var(--r-full); background: var(--fill); transition: width .4s var(--ease-out); }
-.pc-progress-label { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-hi); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.pc-progress-label { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-hi); font-family: var(--font-mono); font-size: 9px; font-weight: 600; }
 .pc-progress-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-family: var(--font-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 .pc-progress-meta .pct { color: var(--text-hi); font-weight: 500; }
 .pc-progress-meta .eta { overflow: hidden; color: var(--text-faint); text-overflow: ellipsis; white-space: nowrap; }
@@ -507,8 +507,8 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .pc-tag.color { border-color: transparent; color: #fff; font-weight: 500; }
 .pc-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
 .pc-foot-meta { min-width: 0; overflow: hidden; color: var(--text-faint); font-family: var(--font-mono); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-.pc-foot-actions { display: flex; flex: 1; align-items: center; justify-content: stretch; gap: 8px; flex-wrap: nowrap; }
-.pc-action { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; transition: .14s; }
+.pc-foot-actions { display: flex; flex: 1; align-items: center; justify-content: stretch; gap: 6px; flex-wrap: nowrap; }
+.pc-action { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 11.5px; font-weight: 600; white-space: nowrap; transition: .14s; }
 .pc-action:hover { background: var(--surface-hi); color: var(--text); }
 .pc-action:disabled { cursor: wait; opacity: .45; }
 .pc-action svg { width: 14px; height: 14px; }
@@ -518,7 +518,7 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .pc-action.stop { border-color: color-mix(in srgb, var(--state-error) 45%, transparent); background: color-mix(in srgb, var(--state-error) 8%, transparent); color: var(--state-error); }
 .pc-action.collect { border-color: color-mix(in srgb, var(--state-ok) 45%, transparent); background: color-mix(in srgb, var(--state-ok) 9%, transparent); color: var(--state-ok); }
 .pc-action.reset { border-color: color-mix(in srgb, var(--state-warn) 45%, transparent); background: color-mix(in srgb, var(--state-warn) 9%, transparent); color: var(--state-warn); }
-.pc-action.skip { flex: 0 0 auto; min-width: 46px; padding-inline: 9px; border-radius: var(--r-full); color: var(--text-muted); }
+.pc-action.skip { flex: 0 0 auto; min-width: 40px; padding-inline: 8px; border-radius: var(--r-full); color: var(--text-muted); }
 
 /* In-card camera — swaps the status body without changing the card's place in the grid. */
 .pc-camera { display: none; flex-direction: column; }
@@ -541,7 +541,7 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .printer-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  grid-auto-rows: 340px;
+  grid-auto-rows: 320px;
   align-items: stretch;
   gap: 16px;
 }
