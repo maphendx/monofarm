@@ -837,9 +837,16 @@ function EmptySpoolIcon({ size = 72 }: { size?: number }) {
   const cx = size / 2;
   const r = size / 2 - 2;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      style={{ display: "block", width: size, height: size, maxWidth: size, maxHeight: size, flex: "0 0 auto" }}
+      aria-hidden="true"
+    >
       <circle cx={cx} cy={cx} r={r} fill="transparent" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" className="text-[var(--text-muted)] " />
       <circle cx={cx} cy={cx} r={r * 0.28} fill="transparent" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-muted)] " />
+      <line x1={cx - r * 0.56} y1={cx + r * 0.56} x2={cx + r * 0.56} y2={cx - r * 0.56} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-[var(--text-muted)] " />
     </svg>
   );
 }
@@ -1299,7 +1306,7 @@ function NozzleBedChips({ printer }: { printer: Printer }) {
 
 function SpoolTile({ slot }: { slot: SpoolView }) {
   return (
-    <div className="flex w-full max-w-[96px] flex-col items-center gap-1.5">
+    <div className="flex w-[96px] shrink-0 flex-col items-center gap-1.5">
       <div
         className={[
           "rounded-xl p-1 ring-2 transition",
