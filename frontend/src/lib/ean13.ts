@@ -5,8 +5,8 @@ export const EAN13_SVG_RENDER_OPTIONS = {
   width: 2.32,
   height: 71,
   fontSize: 14,
-  textMargin: 0,
-  margin: 4,
+  textMargin: -4,
+  margin: 0,
 } as const;
 
 function calculateCheckDigit(body: string): string {

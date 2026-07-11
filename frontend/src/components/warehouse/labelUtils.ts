@@ -58,6 +58,7 @@ export async function generateEan13Svg(text: string): Promise<string | null> {
     });
     svg.setAttribute("width", `${EAN13_SVG_SIZE.width}px`);
     svg.setAttribute("height", `${EAN13_SVG_SIZE.height}px`);
+    svg.setAttribute("preserveAspectRatio", "none");
     return new XMLSerializer().serializeToString(svg);
   } catch {
     return null;
