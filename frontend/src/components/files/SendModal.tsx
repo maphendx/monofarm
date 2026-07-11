@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { API_URL, ApiError, api } from "@/lib/api";
-import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
+import type { BambuCloudJob, BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
+import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
 
 // ── helpers (exported for use by other components) ────────────────────────────
 
@@ -65,6 +66,11 @@ function normalizeMaterial(type: string | null | undefined): string | null {
 
 export function slotLabel(slot: number) {
   return slot === 254 ? "Зовнішня котушка" : `Слот ${slot + 1}`;
+}
+
+export function isFileCompatibleWithPrinter(file: GcodeFile | null, printer: PrinterType): boolean {
+  if (!file || printer.kind !== "snapmaker_u1") return true;
+  return /\.(gcode|gco|g)$/i.test(file.original_name);
 }
 
 export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
@@ -446,6 +452,7 @@ export function SendModal({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [queuedJob, setQueuedJob] = useState<BambuQueuedResult | null>(null);
+  const [jobProgress, setJobProgress] = useState<BambuCloudJob | null>(null);
   const [multiSendResults, setMultiSendResults] = useState<{ printerId: number; name: string; ok: boolean; message: string }[] | null>(null);
 
   // ── queue state ──
@@ -456,7 +463,8 @@ export function SendModal({
     () => printers.filter((p) =>
       p.is_active &&
       (lockedPrinterId === undefined || p.id === lockedPrinterId) &&
-      (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id))
+      (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)) &&
+      isFileCompatibleWithPrinter(file, p)
     ),
     [printers, lockedPrinterId],
   );
@@ -504,6 +512,32 @@ export function SendModal({
     setSlotMap(autoMapSlots(file.filament_meta, primaryPrinter));
     setCalibrateSlots(new Set(usedSlots));
   }, [file?.filament_meta, primaryPrinter?.id, usedSlots]);
+
+  // Keep the send modal useful after the request returns: the operator sees
+  // upload, printer acknowledgement, and real printing instead of a generic
+  // green "queued" toast.
+  useEffect(() => {
+    if (!queuedJob?.job_id) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      try {
+        const job = await api<BambuCloudJob>(`/api/bambu-jobs/${queuedJob.job_id}`);
+        if (cancelled) return;
+        setJobProgress(job);
+        if (job.is_active) timer = setTimeout(poll, 900);
+      } catch {
+        if (!cancelled) timer = setTimeout(poll, 1800);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [queuedJob?.job_id]);
 
   // ── cleanup logic ──
   function keepFile() { keepFileRef.current = true; }
@@ -576,6 +610,7 @@ export function SendModal({
     setResult(null);
     setMultiSendResults(null);
     setQueuedJob(null);
+    setJobProgress(null);
 
     const targets = selectedPrinters;
 
@@ -602,7 +637,7 @@ export function SendModal({
         if (res.job_id != null) {
           keepFile();
           setQueuedJob(res as BambuQueuedResult);
-          setResult({ ok: true, message: `Відправляється на «${res.printer_name}» — друк запуститься автоматично` });
+          setResult({ ok: true, message: `Файл відправляється на «${res.printer_name}» — підтверджуємо запуск` });
         } else {
           if (res.ok) keepFile();
           setResult({ ok: res.ok, message: res.message });
@@ -998,11 +1033,20 @@ export function SendModal({
                     {/* Result */}
                     {result && (
                       <div className={["rounded-xl px-3 py-2.5 text-xs",
-                        result.ok
+                        result.ok && jobProgress?.status !== "failed" && jobProgress?.status !== "lost"
                           ? "border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]"
                           : "border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] text-[var(--state-error)]",
                       ].join(" ")}>
-                        {result.ok ? "✓ " : "✕ "}{result.message}
+                        {result.ok && jobProgress?.status !== "failed" && jobProgress?.status !== "lost" ? "✓ " : "✕ "}
+                        {jobProgress ? bambuJobStatusLabel(jobProgress.status) : result.message}
+                        {jobProgress?.status_reason && (
+                          <p className="mt-1 text-[11px] text-[var(--text-muted)]">{jobProgress.status_reason}</p>
+                        )}
+                        {jobProgress?.progress_pct != null && ["uploading", "printing", "paused"].includes(jobProgress.status) && (
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
+                            <div className="h-full rounded-full bg-current transition-[width]" style={{ width: `${jobProgress.progress_pct}%` }} />
+                          </div>
+                        )}
                         {queuedJob && queuedJob.printer_id != null && (
                           <Link href={`/printers/${queuedJob.printer_id}`} onClick={() => closeModal(true)}
                             className="mt-1 block text-xs font-medium underline hover:no-underline">

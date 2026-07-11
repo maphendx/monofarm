@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import json
 import logging
 import time
 import uuid
 from collections.abc import AsyncGenerator
+from typing import Any, Awaitable, Callable
 
 from fastapi import WebSocket
 
@@ -35,6 +37,7 @@ log = logging.getLogger(__name__)
 _tunnels: dict[int, WebSocket] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
+_pending_upload_progress: dict[str, Callable[[dict[str, Any]], Awaitable[None] | None]] = {}
 # request_id → Queue  (streaming)
 _pending_streams: dict[str, asyncio.Queue] = {}
 
@@ -153,6 +156,7 @@ async def unregister(org_id: int) -> None:
     for req_id, fut in list(_pending.items()):
         if not fut.done():
             fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
+    _pending_upload_progress.clear()
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
@@ -300,6 +304,14 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
 
     if msg_type == "stream_start":
         # Nothing to do here — the generator is already waiting on the queue
+        return
+
+    if msg_type == "upload_progress":
+        callback = _pending_upload_progress.get(req_id)
+        if callback:
+            result = callback(data)
+            if inspect.isawaitable(result):
+                await result
         return
 
     # Regular (non-streaming) response
@@ -533,7 +545,8 @@ async def send_moonraker_upload(
     filename: str,
     file_bytes: bytes,
     start_print: bool = False,
-    timeout: float = 120.0,
+    timeout: float | None = None,
+    progress_callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
 ) -> dict:
     """Upload a gcode/3mf to Moonraker via the agent's LAN connection.
 
@@ -541,16 +554,19 @@ async def send_moonraker_upload(
     Raises RuntimeError on failure.
     """
     import base64
-    from app.services.moonraker import _api_base, MoonrakerError  # noqa: PLC0415
+    from app.services.moonraker import _api_base, MoonrakerError, upload_timeout_for_size  # noqa: PLC0415
     ws = _tunnels.get(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     base = _api_base(moonraker_url)
+    effective_timeout = timeout if timeout is not None else upload_timeout_for_size(len(file_bytes))
     req_id = str(uuid.uuid4())
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
+    if progress_callback is not None:
+        _pending_upload_progress[req_id] = progress_callback
 
     try:
         await ws.send_text(json.dumps({
@@ -558,14 +574,28 @@ async def send_moonraker_upload(
             "method": "MOONRAKER_UPLOAD",
             "url": base,
             "filename": filename,
-            "data_b64": base64.b64encode(file_bytes).decode(),
             "start_print": start_print,
+            "upload_timeout": effective_timeout,
+            "chunked": True,
+            "total_bytes": len(file_bytes),
         }))
-        resp = await asyncio.wait_for(future, timeout=timeout)
+        chunk_size = 256 * 1024
+        offsets = range(0, len(file_bytes), chunk_size) or (0,)
+        for offset in offsets:
+            chunk = file_bytes[offset:offset + chunk_size]
+            await ws.send_text(json.dumps({
+                "id": req_id,
+                "method": "MOONRAKER_UPLOAD_CHUNK",
+                "offset": offset,
+                "final": offset + len(chunk) >= len(file_bytes),
+                "data_b64": base64.b64encode(chunk).decode(),
+            }))
+        resp = await asyncio.wait_for(future, timeout=effective_timeout)
     except asyncio.TimeoutError:
-        raise RuntimeError(f"Agent MOONRAKER_UPLOAD timed out ({timeout}s) for {moonraker_url}")
+        raise RuntimeError(f"Agent MOONRAKER_UPLOAD timed out ({effective_timeout}s) for {moonraker_url}")
     finally:
         _pending.pop(req_id, None)
+        _pending_upload_progress.pop(req_id, None)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise MoonrakerError(f"Agent upload failed ({resp.get('status')}): {resp.get('error')}")
@@ -606,11 +636,17 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
     return status
 
 
-async def moonraker_action(org_id: int, moonraker_url: str, path: str, body: dict | None = None) -> dict:
+async def moonraker_action(
+    org_id: int,
+    moonraker_url: str,
+    path: str,
+    body: dict | None = None,
+    timeout: float = 30.0,
+) -> dict:
     """Send a Moonraker POST action through the tunnel."""
     from app.services.moonraker import _api_base, MoonrakerError
     base = _api_base(moonraker_url)
-    resp = await proxy_request(org_id, "POST", f"{base}{path}", body=body)
+    resp = await proxy_request(org_id, "POST", f"{base}{path}", body=body, timeout=timeout)
     if resp.get("status", 200) >= 400:
         raise MoonrakerError(f"Agent proxy {resp.get('status')}: {resp.get('error', '')}")
     return resp.get("body") or {}

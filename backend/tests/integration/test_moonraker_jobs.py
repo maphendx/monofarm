@@ -18,7 +18,6 @@ from app.models.print_history import PrintHistory
 from app.models.printer import Printer, PrinterKind
 from app.services import bambu_dispatch, moonraker, moonraker_dispatch, print_tracker, storage
 from app.services.bambu_errors import BambuErrorCode
-from app.services.bambu_job_state import transition_job
 from app.services.storage import LOCAL_DIR
 
 
@@ -77,7 +76,7 @@ def _make_moonraker_job(db_session, *, org_id: int, printer_id: int, gcode_file_
     )
 
 
-def test_dispatch_moonraker_job_transitions_to_printing_and_opens_history(db_session, test_org, monkeypatch):
+def test_dispatch_moonraker_job_acknowledges_start_before_live_printing(db_session, test_org, monkeypatch):
     monkeypatch.setattr(core_db, "SessionLocal", lambda: _SessionContext(db_session))
     monkeypatch.setattr(storage, "is_s3", lambda: False)  # file is written to LOCAL_DIR
     printer = _make_printer(db_session, test_org.id)
@@ -88,6 +87,7 @@ def test_dispatch_moonraker_job_transitions_to_printing_and_opens_history(db_ses
 
     async def fake_send(**kwargs):
         sent.update(kwargs)
+        return {"start_requested": True, "upload_state": "started"}
 
     monkeypatch.setattr(moonraker_dispatch, "send_file_to_moonraker", fake_send)
 
@@ -97,18 +97,16 @@ def test_dispatch_moonraker_job_transitions_to_printing_and_opens_history(db_ses
         (LOCAL_DIR / stored_name).unlink(missing_ok=True)
 
     fresh = db_session.get(BambuCloudJob, job.id)
-    assert fresh.status == BambuCloudJobStatus.printing
+    assert fresh.status == BambuCloudJobStatus.acknowledged
     assert fresh.file_sha256 is not None
     assert fresh.file_size == 14
-    assert fresh.started_printing_at is not None
+    assert fresh.started_printing_at is None
     assert fresh.last_mqtt_at is not None
     assert sent["moonraker_url"] == "http://moonraker.local"
     assert sent["slot_map"] == {0: 1, 1: 0}
     assert sent["timelapse"] is False
 
-    entry = db_session.query(PrintHistory).filter(PrintHistory.bambu_cloud_job_id == job.id).one()
-    assert entry.result == "in_progress"
-    assert entry.source == "moonraker"
+    assert db_session.query(PrintHistory).filter(PrintHistory.bambu_cloud_job_id == job.id).count() == 0
 
 
 def test_dispatch_moonraker_job_marks_failed_retryable_on_upload_error(db_session, test_org, monkeypatch):
@@ -150,10 +148,11 @@ def test_dispatch_moonraker_job_fails_fast_without_file(db_session, test_org, mo
 def test_print_tracker_finalizes_active_moonraker_job(db_session, test_org, monkeypatch):
     printer = _make_printer(db_session, test_org.id)
     job = _make_moonraker_job(db_session, org_id=test_org.id, printer_id=printer.id, gcode_file_id=None)
-    job.status = BambuCloudJobStatus.uploading
+    job.status = BambuCloudJobStatus.acknowledged
     db_session.commit()
     started = datetime.now(timezone.utc)
-    transition_job(job, BambuCloudJobStatus.printing, reason="Upload accepted", now=started)
+    job.printer_ack_at = started
+    job.last_mqtt_at = started
     db_session.commit()
 
     states = iter([

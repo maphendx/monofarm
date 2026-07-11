@@ -53,6 +53,9 @@ _ALLOWED_TRANSITIONS: dict[BambuCloudJobStatus, set[BambuCloudJobStatus]] = {
         BambuCloudJobStatus.task_creating,
         # Moonraker provider: upload+start is one step — no cloud task stage.
         BambuCloudJobStatus.printing,
+        # Moonraker/U1 explicit start: upload and printer acknowledgement are
+        # separate so the UI never calls a file "printing" too early.
+        BambuCloudJobStatus.acknowledged,
         BambuCloudJobStatus.failed,
         BambuCloudJobStatus.cancelled,
         BambuCloudJobStatus.lost,
@@ -111,6 +114,7 @@ _STATUS_TIMESTAMP_FIELD: dict[BambuCloudJobStatus, str] = {
 
 TASK_CREATED_ACK_TIMEOUT = timedelta(minutes=10)
 ACTIVE_MQTT_TIMEOUT = timedelta(minutes=30)
+MOONRAKER_START_TIMEOUT = timedelta(minutes=2)
 
 
 class BambuJobTransitionError(ValueError):
@@ -245,6 +249,37 @@ def mark_lost_jobs(
             ),
         )
         lost += 1
+
+    remaining = max(limit - lost, 0)
+    if remaining:
+        moonraker_cutoff = now - MOONRAKER_START_TIMEOUT
+        moonraker_rows = (
+            db.query(BambuCloudJob)
+            .filter(
+                BambuCloudJob.dispatch_mode == "moonraker",
+                BambuCloudJob.status == BambuCloudJobStatus.acknowledged,
+                BambuCloudJob.started_printing_at.is_(None),
+                BambuCloudJob.printer_ack_at.isnot(None),
+                BambuCloudJob.printer_ack_at < moonraker_cutoff,
+            )
+            .order_by(BambuCloudJob.printer_ack_at.asc())
+            .limit(remaining)
+            .all()
+        )
+        for job in moonraker_rows:
+            transition_job(
+                job,
+                BambuCloudJobStatus.lost,
+                reason="Принтер не почав відповідний файл після підтвердження запуску",
+                now=now,
+                error_code=BambuErrorCode.MOONRAKER_START_TIMEOUT.value,
+                error_details_json=error_details(
+                    BambuErrorCode.MOONRAKER_START_TIMEOUT,
+                    stage="moonraker_start_ack",
+                    timeout_seconds=int(MOONRAKER_START_TIMEOUT.total_seconds()),
+                ),
+            )
+            lost += 1
 
     remaining = max(limit - lost, 0)
     if remaining:

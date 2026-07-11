@@ -490,6 +490,12 @@ async def send_to_printer(
     if not storage_svc.exists(row.stored_name, org.id):
         raise HTTPException(status_code=404, detail="Файл відсутній")
 
+    if printer.kind == PrinterKind.snapmaker_u1:
+        try:
+            moonraker_dispatch.validate_moonraker_filename(printer.kind, row.original_name)
+        except mr.MoonrakerError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     # Track last sent file so reprint is available from the dashboard
     printer.last_gcode_file_id = row.id
     db.commit()
@@ -694,6 +700,7 @@ async def send_to_printer(
                 file_name=row.original_name,
                 filament_meta=row.filament_meta or {},
                 slot_map=payload.slot_map,
+                printer_kind=printer.kind,
                 auto_bed_leveling=payload.auto_bed_leveling,
                 timelapse=payload.timelapse,
                 ai_detection=payload.ai_detection,

@@ -30,6 +30,8 @@ class BambuErrorCode(str, enum.Enum):
     DISPATCH_FAILED = "DISPATCH_FAILED"
     WORKER_DISPATCH_FAILED = "WORKER_DISPATCH_FAILED"
     MOONRAKER_UPLOAD_FAILED = "MOONRAKER_UPLOAD_FAILED"
+    MOONRAKER_START_FAILED = "MOONRAKER_START_FAILED"
+    MOONRAKER_START_TIMEOUT = "MOONRAKER_START_TIMEOUT"
     FILE_INVALID = "FILE_INVALID"
     PRINTER_NOT_CONFIGURED = "PRINTER_NOT_CONFIGURED"
     AGENT_NOT_CONNECTED = "AGENT_NOT_CONNECTED"
@@ -46,6 +48,8 @@ _RETRYABLE = {
     BambuErrorCode.DISPATCH_FAILED,
     BambuErrorCode.WORKER_DISPATCH_FAILED,
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED,
+    BambuErrorCode.MOONRAKER_START_FAILED,
+    BambuErrorCode.MOONRAKER_START_TIMEOUT,
     BambuErrorCode.AGENT_NOT_CONNECTED,
     BambuErrorCode.LAN_UPLOAD_FAILED,
     BambuErrorCode.LAN_MQTT_FAILED,
@@ -71,6 +75,8 @@ _USER_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.DISPATCH_FAILED: "Bambu Cloud dispatch failed.",
     BambuErrorCode.WORKER_DISPATCH_FAILED: "Bambu Cloud worker failed before dispatch completed.",
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload failed.",
+    BambuErrorCode.MOONRAKER_START_FAILED: "The printer accepted the file but did not confirm the print start.",
+    BambuErrorCode.MOONRAKER_START_TIMEOUT: "The printer did not start the file in time.",
     BambuErrorCode.FILE_INVALID: "The selected file is missing or invalid.",
     BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer connection is not configured.",
     BambuErrorCode.AGENT_NOT_CONNECTED: "Farm agent is not connected.",
@@ -98,6 +104,8 @@ _TECHNICAL_MESSAGES: dict[BambuErrorCode, str] = {
     BambuErrorCode.DISPATCH_FAILED: "Bambu Cloud dispatch failed after retry policy.",
     BambuErrorCode.WORKER_DISPATCH_FAILED: "Worker raised an uncaught exception while dispatching.",
     BambuErrorCode.MOONRAKER_UPLOAD_FAILED: "Moonraker upload/start stage failed.",
+    BambuErrorCode.MOONRAKER_START_FAILED: "Moonraker accepted the upload but rejected or failed the explicit start command.",
+    BambuErrorCode.MOONRAKER_START_TIMEOUT: "Moonraker accepted the start request but no matching printing state arrived before the timeout.",
     BambuErrorCode.FILE_INVALID: "File validation failed before dispatch.",
     BambuErrorCode.PRINTER_NOT_CONFIGURED: "Printer row is missing required connection fields.",
     BambuErrorCode.AGENT_NOT_CONNECTED: "No agent tunnel was available for a LAN dispatch.",

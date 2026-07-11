@@ -17,6 +17,9 @@ import requests
 
 log = logging.getLogger(__name__)
 TIMEOUT = 30
+UPLOAD_TIMEOUT_MIN = 300.0
+UPLOAD_TIMEOUT_MAX = 3600.0
+UPLOAD_RATE_GUESS = 256 * 1024  # conservative 256 KiB/s for WAN + LAN relay
 STATUS_TIMEOUT = 1.5  # short timeout for live status polling
 STATUS_CACHE_TTL = 35.0  # seconds — slightly above the 30s frontend poll interval so polls always hit cache
 STALE_CACHE_TTL = 300    # 5 min stale fallback for the very first load
@@ -26,6 +29,12 @@ META_TAIL_BYTES = 96 * 1024  # how much to download from remote file for parsing
 
 class MoonrakerError(Exception):
     """Raised when Moonraker returns an error response."""
+
+
+def upload_timeout_for_size(size_bytes: int) -> float:
+    """Give large uploads a generous budget; retain only a dead-tunnel guard."""
+    size = max(0, int(size_bytes))
+    return min(UPLOAD_TIMEOUT_MAX, max(UPLOAD_TIMEOUT_MIN, UPLOAD_TIMEOUT_MIN + size / UPLOAD_RATE_GUESS))
 
 
 # Local cache kept as stale-data fallback when Redis is unavailable or a fetch fails.
@@ -60,10 +69,10 @@ def _request(method: str, base: str, path: str, **kw) -> dict:
         return {}
 
 
-async def _async_request(method: str, base: str, path: str, **kw) -> dict:
+async def _async_request(method: str, base: str, path: str, timeout: float | None = None, **kw) -> dict:
     url = f"{base}{path}"
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout if timeout is not None else TIMEOUT)) as client:
             resp = await client.request(method, url, **kw)
     except httpx.RequestError as e:
         raise MoonrakerError(f"Не вдалося зʼєднатись з принтером: {e}") from e
@@ -121,6 +130,7 @@ async def async_upload_gcode(
     file_path: Path | bytes,
     filename: str | None = None,
     start_print: bool = False,
+    timeout: float | None = None,
 ) -> dict:
     """Async upload a .gcode/.3mf to Moonraker's `gcodes` root."""
     base = _api_base(moonraker_url)
@@ -135,7 +145,14 @@ async def async_upload_gcode(
 
     files = {"file": (name, content, "application/octet-stream")}
     data = {"root": "gcodes", "print": "true" if start_print else "false"}
-    return await _async_request("POST", base, "/server/files/upload", files=files, data=data)
+    return await _async_request(
+        "POST",
+        base,
+        "/server/files/upload",
+        timeout=timeout if timeout is not None else upload_timeout_for_size(len(content)),
+        files=files,
+        data=data,
+    )
 
 
 def start_print(moonraker_url: str, filename: str) -> dict:

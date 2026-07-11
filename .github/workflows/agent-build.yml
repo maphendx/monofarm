@@ -5,7 +5,7 @@ name: Build agent exe
 # publishes the binary to Cloudflare R2 so the backend can serve it at
 # GET /agent/monofarm-agent.exe.
 #
-# Trigger: push a tag like  agent-v0.8.0  or use workflow_dispatch.
+# Trigger: push a tag like  agent-v0.8.1  or use workflow_dispatch.
 
 on:
   workflow_dispatch:

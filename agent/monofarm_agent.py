@@ -37,7 +37,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.0"
+AGENT_VERSION = "0.8.1"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -79,6 +79,7 @@ logging.getLogger().addHandler(_log_buffer_handler)
 
 # Runtime state surfaced in the web UI
 _cloud_connected = False
+_moonraker_upload_buffers: dict[str, dict] = {}
 _current_server = ""
 _main_loop: "asyncio.AbstractEventLoop | None" = None
 _update_task: "asyncio.Task | None" = None  # single auto-update loop, owned by run()
@@ -1961,17 +1962,58 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
     url         = req.get("url", "")         # bare Moonraker base URL
     filename    = req.get("filename", "file.gcode")
     data_b64    = req.get("data_b64", "")
+    data_bytes  = req.get("_data_bytes")
     start_print = req.get("start_print", False)
+    upload_timeout = max(300.0, min(3600.0, float(req.get("upload_timeout", 300.0))))
 
     try:
-        file_bytes = base64.b64decode(data_b64)
+        file_bytes = data_bytes if isinstance(data_bytes, bytes) else base64.b64decode(data_b64)
+        boundary = "----monofarm-upload-" + hashlib.sha256(req_id.encode()).hexdigest()[:16]
+        prefix = (
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"root\"\r\n\r\n"
+            "gcodes\r\n"
+            f"--{boundary}\r\n"
+            "Content-Disposition: form-data; name=\"print\"\r\n\r\n"
+            f"{'true' if start_print else 'false'}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n"
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        suffix = f"\r\n--{boundary}--\r\n".encode()
+        total = len(prefix) + len(file_bytes) + len(suffix)
+        chunk_size = 256 * 1024
 
-        import io as _io
-        async with httpx.AsyncClient(timeout=120, verify=False) as client:  # noqa: S501
+        async def multipart_body():
+            yield prefix
+            sent = 0
+            last_report = -1
+            for offset in range(0, len(file_bytes), chunk_size):
+                chunk = file_bytes[offset:offset + chunk_size]
+                sent += len(chunk)
+                progress = round(sent * 100 / max(len(file_bytes), 1))
+                if progress == 100 or progress - last_report >= 5:
+                    await ws.send(json.dumps({
+                        "id": req_id,
+                        "type": "upload_progress",
+                        "sent": sent,
+                        "total": len(file_bytes),
+                    }))
+                    last_report = progress
+                yield chunk
+            yield suffix
+
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(upload_timeout, connect=30.0, pool=30.0),
+            verify=False,
+        ) as client:  # noqa: S501
             resp = await client.post(
                 f"{url}/server/files/upload",
-                files={"file": (filename, _io.BytesIO(file_bytes), "application/octet-stream")},
-                data={"root": "gcodes", "print": "true" if start_print else "false"},
+                content=multipart_body(),
+                headers={
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "Content-Length": str(total),
+                },
             )
         result = {
             "id": req_id,
@@ -1984,6 +2026,38 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
 
     await ws.send(json.dumps(result))
+
+
+async def handle_moonraker_upload_chunk(ws, req: dict) -> None:
+    """Collect a chunked cloud upload and start the LAN upload on the final chunk."""
+    req_id = req.get("id")
+    if not req_id:
+        return
+    state = _moonraker_upload_buffers.get(req_id)
+    if state is None:
+        await ws.send(json.dumps({"id": req_id, "status": 400, "error": "upload metadata missing"}))
+        return
+
+    try:
+        offset = int(req.get("offset", -1))
+        data = base64.b64decode(req.get("data_b64", ""))
+        expected = int(state["next_offset"])
+        if offset != expected:
+            raise ValueError(f"unexpected upload chunk offset {offset}, expected {expected}")
+        state["data"].extend(data)
+        state["next_offset"] = expected + len(data)
+        if not req.get("final"):
+            return
+        if state["next_offset"] != int(state["total_bytes"]):
+            raise ValueError("incomplete upload")
+        upload_req = dict(state["meta"])
+        upload_req["_data_bytes"] = bytes(state["data"])
+        _moonraker_upload_buffers.pop(req_id, None)
+        asyncio.create_task(handle_moonraker_upload(ws, upload_req))
+    except Exception as e:
+        _moonraker_upload_buffers.pop(req_id, None)
+        log.warning("MOONRAKER_UPLOAD chunk error: %s", e)
+        await ws.send(json.dumps({"id": req_id, "status": 400, "error": str(e)}))
 
 
 async def handle_agent_logs(ws, req: dict) -> None:
@@ -2188,7 +2262,17 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                         elif method == "BAMBU_MQTT":
                             asyncio.create_task(handle_bambu_mqtt(ws, req))
                         elif method == "MOONRAKER_UPLOAD":
-                            asyncio.create_task(handle_moonraker_upload(ws, req))
+                            if req.get("chunked"):
+                                _moonraker_upload_buffers[req["id"]] = {
+                                    "meta": req,
+                                    "data": bytearray(),
+                                    "next_offset": 0,
+                                    "total_bytes": int(req.get("total_bytes", 0)),
+                                }
+                            else:
+                                asyncio.create_task(handle_moonraker_upload(ws, req))
+                        elif method == "MOONRAKER_UPLOAD_CHUNK":
+                            await handle_moonraker_upload_chunk(ws, req)
                         elif method == "PRINT_ZPL":
                             asyncio.create_task(handle_print_zpl(ws, req))
                         elif method == "AGENT_LOGS":
@@ -2202,6 +2286,7 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                     _cloud_connected = False
                     _cancel_all_subscriptions()
                     _cancel_all_bambu_lan_subscriptions()
+                    _moonraker_upload_buffers.clear()
                     bambu_lan_task.cancel()
 
         except asyncio.CancelledError:

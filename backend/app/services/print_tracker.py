@@ -6,6 +6,7 @@ Works for all printer types (Bambu via MQTT cache, Moonraker via polling cache).
 """
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import or_
 
@@ -177,7 +178,12 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
     from app.models.bambu_cloud_job import BambuCloudJobStatus
     from app.services.bambu_job_state import transition_job
 
-    if job.status not in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused):
+    if job.status not in (
+        BambuCloudJobStatus.task_created,
+        BambuCloudJobStatus.acknowledged,
+        BambuCloudJobStatus.printing,
+        BambuCloudJobStatus.paused,
+    ):
         return  # dispatch still in flight — the dispatcher owns it
 
     state = current["state"]
@@ -189,11 +195,22 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
 
     target = None
     reason = None
-    if state == "paused" and job.status != BambuCloudJobStatus.paused:
+    if state == "printing" and job.status in {
+        BambuCloudJobStatus.task_created,
+        BambuCloudJobStatus.acknowledged,
+    }:
+        expected = Path(job.file_name or "").name
+        observed = Path(current.get("file") or "").name
+        if expected and observed and expected != observed:
+            # Another file is printing on this printer. Do not correlate it to
+            # the new dispatch job and never create a false history row.
+            return
+        target, reason = BambuCloudJobStatus.printing, "Принтер підтвердив друк відповідного файлу"
+    elif state == "paused" and job.status == BambuCloudJobStatus.printing:
         target, reason = BambuCloudJobStatus.paused, "Printer reports print paused"
     elif state in PRINTING_STATES and job.status == BambuCloudJobStatus.paused:
         target, reason = BambuCloudJobStatus.printing, "Printer reports print progress"
-    elif state in DONE_STATES:
+    elif state in DONE_STATES and job.status in (BambuCloudJobStatus.printing, BambuCloudJobStatus.paused):
         result = "completed" if state in ("operational", "idle") else ("failed" if state == "error" else "cancelled")
         target = {
             "completed": BambuCloudJobStatus.completed,
