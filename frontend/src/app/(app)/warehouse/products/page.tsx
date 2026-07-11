@@ -18,6 +18,7 @@ import {
   type ColDef,
 } from "@/components/warehouse/TableSettings";
 import { WarehouseLabelModal, type WarehouseLabelItem } from "@/components/warehouse/WarehouseLabelModal";
+import { Ean13Cell } from "@/components/warehouse/Ean13Cell";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ const COLS: ColDef[] = [
   { key: "name",       label: "Назва",        required: true },
   { key: "sku",        label: "Артикул" },
   { key: "barcode",    label: "Штрих-код" },
+  { key: "ean13",      label: "EAN-13" },
   { key: "categories", label: "Категорія" },
   { key: "unit",       label: "Од." },
   { key: "stock",      label: "Залишок" },
@@ -1877,6 +1879,7 @@ export default function ProductsPage() {
                       case "name":       return <Th key="name" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Назва</Th>;
                       case "sku":        return <Th key="sku" col="sku" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort}>Артикул</Th>;
                       case "barcode":    return <th key="barcode" className="px-4 py-3 font-medium">Штрих-код</th>;
+                      case "ean13":      return <th key="ean13" className="px-4 py-3 font-medium">EAN-13</th>;
                       case "categories": return <th key="categories" className="px-4 py-3 font-medium">Категорія</th>;
                       case "unit":       return <th key="unit" className="px-4 py-3 font-medium">Од.</th>;
                       case "stock":      return <Th key="stock" col="stock" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="text-right">Залишок</Th>;
@@ -1956,6 +1959,11 @@ export default function ProductsPage() {
                           case "barcode": return (
                             <td key="barcode" className="px-4 py-3 font-mono text-xs text-[var(--text-faint)]">
                               {p.barcode || <span className="opacity-30">—</span>}
+                            </td>
+                          );
+                          case "ean13": return (
+                            <td key="ean13" className="px-4 py-2">
+                              <Ean13Cell barcode={p.barcode} />
                             </td>
                           );
                           case "categories": return (

@@ -36,3 +36,28 @@ export async function generateCode128Url(
     return null;
   }
 }
+
+/** Generates a raw EAN-13 SVG for vector previews and clipboard export. */
+export async function generateEan13Svg(text: string): Promise<string | null> {
+  if (!/^\d{13}$/.test(text)) return null;
+  try {
+    const mod = await import("jsbarcode");
+    const JsBarcode = ((mod as { default?: unknown }).default ?? mod) as (
+      el: SVGSVGElement, v: string, o: object,
+    ) => void;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    JsBarcode(svg, text, {
+      format: "EAN13",
+      displayValue: true,
+      fontSize: 14,
+      textMargin: 4,
+      margin: 4,
+      background: "#ffffff",
+      lineColor: "#000000",
+      xmlDocument: document,
+    });
+    return new XMLSerializer().serializeToString(svg);
+  } catch {
+    return null;
+  }
+}

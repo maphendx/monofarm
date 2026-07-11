@@ -21,3 +21,8 @@ export function isValidEan13(value: string): boolean {
   if (!/^\d{13}$/.test(normalized)) return false;
   return normalized[12] === calculateCheckDigit(normalized.slice(0, 12));
 }
+
+export function getEan13Value(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return generateEan13(value) ?? (isValidEan13(value) ? value.replace(/\s/g, "") : null);
+}
