@@ -575,6 +575,7 @@ async def send_moonraker_upload(
     start_print: bool = False,
     timeout: float | None = None,
     progress_callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+    presigned_url: str | None = None,
 ) -> dict:
     """Upload a gcode/3mf to Moonraker via the agent's LAN connection.
 
@@ -624,10 +625,16 @@ async def send_moonraker_upload(
             "start_print": start_print,
             "upload_timeout": agent_timeout,
         }
-        if "moonraker_upload_chunks" in _agent_capabilities.get(org_id, set()):
+        capabilities = _agent_capabilities.get(org_id, set())
+        if presigned_url and "moonraker_upload_url" in capabilities:
+            # Fastest path: the agent downloads straight from R2 at its own ISP
+            # speed — no base64 chunk relay through the cloud WebSocket.
+            payload.update({"download_url": presigned_url, "total_bytes": len(file_bytes)})
+            await ws.send_text(json.dumps(payload))
+        elif "moonraker_upload_chunks" in capabilities:
             payload.update({"chunked": True, "total_bytes": len(file_bytes)})
             await ws.send_text(json.dumps(payload))
-            chunk_size = 256 * 1024
+            chunk_size = 1024 * 1024  # agent connects with max_size=None
             offsets = range(0, len(file_bytes), chunk_size) or (0,)
             for offset in offsets:
                 chunk = file_bytes[offset:offset + chunk_size]

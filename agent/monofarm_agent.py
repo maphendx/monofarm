@@ -37,7 +37,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.2"
+AGENT_VERSION = "0.8.3"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -538,6 +538,8 @@ _MOONRAKER_OBJECTS = {
     "virtual_sdcard": None,
     "extruder": None,
     "heater_bed": None,
+    # U1: loaded spool colors/materials (filament_exist, filament_color_rgba, …)
+    "print_task_config": None,
 }
 
 # dev_id → asyncio task/config for Bambu LAN-only MQTT subscriptions.
@@ -1961,16 +1963,46 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
 
     Cloud backend sends bytes as base64; agent does the actual LAN upload.
     """
+    import time
+
     req_id      = req.get("id")
     url         = req.get("url", "")         # bare Moonraker base URL
     filename    = req.get("filename", "file.gcode")
     data_b64    = req.get("data_b64", "")
     data_bytes  = req.get("_data_bytes")
+    download_url = req.get("download_url", "")
     start_print = req.get("start_print", False)
     upload_timeout = max(300.0, min(3600.0, float(req.get("upload_timeout", 300.0))))
 
     try:
-        file_bytes = data_bytes if isinstance(data_bytes, bytes) else base64.b64decode(data_b64)
+        if isinstance(data_bytes, bytes):
+            file_bytes = data_bytes
+        elif download_url:
+            # Cloud sent a presigned URL — pull the file directly (much faster
+            # than base64 chunks through the tunnel). Heartbeat progress keeps
+            # the cloud stall-guard alive during a slow download.
+            parts: list[bytes] = []
+            last_beat = time.monotonic()
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(upload_timeout, connect=30.0)
+            ) as dl:
+                async with dl.stream("GET", download_url) as resp_dl:
+                    resp_dl.raise_for_status()
+                    total_dl = int(resp_dl.headers.get("content-length") or 0)
+                    async for part in resp_dl.aiter_bytes(1024 * 1024):
+                        parts.append(part)
+                        now = time.monotonic()
+                        if now - last_beat >= 2.0:
+                            await ws.send(json.dumps({
+                                "id": req_id,
+                                "type": "upload_progress",
+                                "sent": 0,
+                                "total": total_dl,
+                            }))
+                            last_beat = now
+            file_bytes = b"".join(parts)
+        else:
+            file_bytes = base64.b64decode(data_b64)
         boundary = "----monofarm-upload-" + hashlib.sha256(req_id.encode()).hexdigest()[:16]
         prefix = (
             f"--{boundary}\r\n"
@@ -1988,7 +2020,6 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         chunk_size = 256 * 1024
 
         async def multipart_body():
-            import time
             yield prefix
             sent = 0
             last_report = -1
@@ -2220,7 +2251,7 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                 await ws.send(json.dumps({
                     "type": "AGENT_HELLO",
                     "version": AGENT_VERSION,
-                    "capabilities": ["moonraker_upload_chunks"],
+                    "capabilities": ["moonraker_upload_chunks", "moonraker_upload_url"],
                 }))
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 

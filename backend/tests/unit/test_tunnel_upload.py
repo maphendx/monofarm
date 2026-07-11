@@ -136,6 +136,48 @@ def test_unregister_only_fails_requests_of_its_own_org(monkeypatch):
     assert asyncio.run(scenario()) == {"ok": True}
 
 
+def test_presigned_url_skips_chunk_transfer_when_agent_supports_it(monkeypatch):
+    ws = _register()
+    tunnel._agent_capabilities[1] = {"moonraker_upload_chunks", "moonraker_upload_url"}
+    monkeypatch.setattr(tunnel, "UPLOAD_STALL_TIMEOUT", 5.0)
+
+    async def scenario():
+        upload = asyncio.create_task(tunnel.send_moonraker_upload(
+            1, "http://192.168.31.24/", "part.gcode", b"G28\n" * 100,
+            presigned_url="https://r2.example/part.gcode?sig=x",
+        ))
+        await asyncio.sleep(0.05)
+        await tunnel.handle_agent_message(
+            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None})
+        return await upload
+
+    assert asyncio.run(scenario()) == {"ok": True}
+    assert len(ws.sent) == 1  # single request message — no chunk messages
+    assert ws.sent[0]["download_url"] == "https://r2.example/part.gcode?sig=x"
+    assert "data_b64" not in ws.sent[0]
+
+
+def test_presigned_url_falls_back_to_chunks_for_old_agents(monkeypatch):
+    ws = _register()
+    tunnel._agent_capabilities[1] = {"moonraker_upload_chunks"}  # no url capability
+    monkeypatch.setattr(tunnel, "UPLOAD_STALL_TIMEOUT", 5.0)
+
+    async def scenario():
+        upload = asyncio.create_task(tunnel.send_moonraker_upload(
+            1, "http://192.168.31.24/", "part.gcode", b"G28\n",
+            presigned_url="https://r2.example/part.gcode?sig=x",
+        ))
+        await asyncio.sleep(0.05)
+        await tunnel.handle_agent_message(
+            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None})
+        return await upload
+
+    assert asyncio.run(scenario()) == {"ok": True}
+    assert ws.sent[0].get("chunked") is True
+    assert "download_url" not in ws.sent[0]
+    assert any(m.get("method") == "MOONRAKER_UPLOAD_CHUNK" for m in ws.sent[1:])
+
+
 def test_unregister_of_stale_socket_keeps_replacement_tunnel():
     old_ws = _register(1)
     new_ws = FakeWS()

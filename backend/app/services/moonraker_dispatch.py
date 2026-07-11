@@ -161,6 +161,7 @@ async def dispatch_moonraker_job(job_id: int) -> BambuCloudJob | None:
                     ai_detection=payload.get("ai_detection"),
                     calibrate_slots=payload.get("calibrate_slots"),
                     on_upload_progress=on_upload_progress,
+                    presigned_url=storage_svc.presigned_url(stored_name, org_id),
                 )
         except FileNotFoundError:
             return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл відсутній у сховищі", retryable=False)
@@ -217,6 +218,7 @@ async def send_file_to_moonraker(
     ai_detection: bool | None = None,
     calibrate_slots: list[int] | None = None,
     on_upload_progress: UploadProgressCallback | None = None,
+    presigned_url: str | None = None,
 ) -> dict:
     """Prepare, upload, and explicitly start a Moonraker print.
 
@@ -280,6 +282,9 @@ async def send_file_to_moonraker(
             upload_bytes,  # type: ignore[arg-type]
             start_print=not is_u1,
             progress_callback=tunnel_progress if on_upload_progress is not None else None,
+            # Rewritten gcode differs from the stored object — R2 direct
+            # download is only valid when the file goes out unmodified.
+            presigned_url=presigned_url if working is None else None,
         )
     elif working is not None:
         with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:

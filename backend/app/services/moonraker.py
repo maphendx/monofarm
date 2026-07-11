@@ -8,6 +8,7 @@ bookkeeping detail and is NOT needed for Moonraker API calls. We strip it.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -236,7 +237,7 @@ _STATE_MAP = {
 }
 
 
-LIVE_STATUS_OBJECTS = "print_stats&display_status&virtual_sdcard&extruder&heater_bed"
+LIVE_STATUS_OBJECTS = "print_stats&display_status&virtual_sdcard&extruder&heater_bed&print_task_config"
 
 
 def _parse_moonraker_status(status: dict) -> dict:
@@ -285,7 +286,43 @@ def _parse_moonraker_status(status: dict) -> dict:
         "bed_temp": bed.get("temperature"),
         "bed_target": bed.get("target"),
         "error_msg": error_msg,
+        "u1_filaments": u1_slots_from_task_config(status.get("print_task_config") or {}),
     }
+
+
+def u1_slots_from_task_config(ptc: dict) -> list[dict] | None:
+    """Decode Snapmaker U1 `print_task_config` into FilamentSlot-shaped dicts.
+
+    Colors live in print_task_config (touchscreen-assigned, persists with the
+    spool until unload) — NOT in filament_detect, which only reports RFID-tagged
+    official spools (semantics hardware-verified by the u1hub project).
+    """
+    exist = ptc.get("filament_exist") or []
+    if not exist:
+        return None
+    rgba = ptc.get("filament_color_rgba") or []
+    types = ptc.get("filament_type") or []
+    official = ptc.get("filament_official") or []
+    slots: list[dict] = []
+    for i in range(4):
+        loaded = bool(exist[i]) if i < len(exist) else False
+        hex_color = None
+        if loaded and i < len(rgba) and rgba[i]:
+            m = re.match(r"#?([0-9a-fA-F]{6})", str(rgba[i]))
+            if m:
+                hex_color = "#" + m.group(1).upper()
+        material = types[i] if loaded and i < len(types) and types[i] else "PLA"
+        slots.append({
+            "slot": i,
+            "color": hex_color or "#888888",
+            "color_name": None,
+            "type": material,
+            "brand": "Snapmaker" if loaded and i < len(official) and official[i] else None,
+            "filament_id": None,
+            "empty": not loaded,
+            "unit_id": None,
+        })
+    return slots
 
 
 def _fetch_live_status(moonraker_url: str) -> dict:

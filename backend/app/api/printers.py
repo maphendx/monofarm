@@ -269,6 +269,12 @@ def _to_dto(
             if db
             else None
         )
+        # U1 reports loaded spool colors/materials in print_task_config —
+        # prefer the printer's own data over the manually-entered DB slots
+        # (same read-time pattern as Bambu AMS above).
+        u1_live = live.get("u1_filaments") if printer.kind == PrinterKind.snapmaker_u1 else None
+        if u1_live:
+            base["loaded_filaments"] = u1_live
         return PrinterOut(
             **base,
             state=live.get("state") or "unknown",
