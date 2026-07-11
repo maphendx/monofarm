@@ -1,0 +1,469 @@
+<style>
+  /* ═══ monofarm tokens — copied verbatim from globals.css ═══ */
+  :root {
+    --bg:#f7f7f6; --bg-elevated:#fff; --surface:#fff; --surface-2:#fafafa; --surface-hi:#f4f4f5;
+    --border:rgba(0,0,0,.07); --border-strong:rgba(0,0,0,.12);
+    --text:#18181b; --text-hi:#09090b; --text-muted:#52525b; --text-faint:#71717a; --text-dim:#a1a1aa;
+    --accent:#0891b2; --accent-soft:rgba(8,145,178,.10); --accent-ring:rgba(8,145,178,.20);
+    --state-print:#0284c7; --state-ok:#16a34a; --state-idle:#71717a; --state-warn:#d97706; --state-error:#dc2626; --state-offline:#a1a1aa;
+    --shadow-md:0 4px 12px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+    --r-sm:6px; --r-md:8px; --r-lg:10px; --r-full:9999px;
+    --font-sans:"IBM Plex Sans",system-ui,sans-serif;
+    --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#0b0b0d; --bg-elevated:#121214; --surface:#151517; --surface-2:#19191c; --surface-hi:#212125;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --text:#e7e9ec; --text-hi:#fff; --text-muted:#a4a9b3; --text-faint:#767c87; --text-dim:#54585f;
+    --accent:#22d3ee; --accent-soft:rgba(34,211,238,.12); --accent-ring:rgba(34,211,238,.22);
+    --state-print:#38bdf8; --state-ok:#4ade80; --state-idle:#9ca3af; --state-warn:#fbbf24; --state-error:#f87171; --state-offline:#5b616b;
+    --shadow-md:0 4px 12px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.30);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0b0b0d; --bg-elevated:#121214; --surface:#151517; --surface-2:#19191c; --surface-hi:#212125;
+    --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+    --text:#e7e9ec; --text-hi:#fff; --text-muted:#a4a9b3; --text-faint:#767c87; --text-dim:#54585f;
+    --accent:#22d3ee; --accent-soft:rgba(34,211,238,.12); --accent-ring:rgba(34,211,238,.22);
+    --state-print:#38bdf8; --state-ok:#4ade80; --state-idle:#9ca3af; --state-warn:#fbbf24; --state-error:#f87171; --state-offline:#5b616b;
+    --shadow-md:0 4px 12px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.30);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);
+    -webkit-font-smoothing:antialiased;line-height:1.5;}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 72px;}
+
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:8px;}
+  .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 10px;}
+  h1{font-size:clamp(1.6rem,1rem+2.4vw,2.5rem);font-weight:600;letter-spacing:-.02em;color:var(--text-hi);margin:0;text-wrap:balance;}
+  .lede{max-width:60ch;color:var(--text-muted);font-size:15px;margin:14px 0 0;}
+  .toggle{flex-shrink:0;border:1px solid var(--border-strong);background:var(--surface);color:var(--text-muted);
+    font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    padding:9px 14px;border-radius:var(--r-full);cursor:pointer;transition:all .16s;}
+  .toggle:hover{border-color:var(--accent);color:var(--accent);}
+  .toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  section{margin-top:56px;}
+  .sec-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--text-faint);margin:0 0 20px;display:flex;align-items:center;gap:12px;}
+  .sec-label::after{content:"";flex:1;height:1px;background:var(--border);}
+  .hint{font-size:12.5px;color:var(--text-faint);margin:-8px 0 20px;}
+  .hint b{color:var(--accent);font-weight:600;}
+
+  /* ═══ THE CARD ═══ accent strip on TOP */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+    overflow:hidden;display:flex;flex-direction:column;position:relative;
+    box-shadow:inset 0 3px 0 var(--rail,transparent);
+    transition:border-color .16s,transform .16s cubic-bezier(.16,1,.3,1);}
+  .card:hover{border-color:var(--border-strong);transform:translateY(-1px);}
+
+  /* status band: tinted header + name + pill + tool stack */
+  .band{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+    padding:10px 10px 10px 13px;background:var(--band,transparent);border-bottom:1px solid var(--border);}
+  .band-id{min-width:0;display:flex;flex-direction:column;gap:5px;}
+  .name{font-size:14.5px;font-weight:600;letter-spacing:-.015em;color:var(--text-hi);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pill{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;
+    font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+    padding:3px 9px;border-radius:var(--r-full);
+    background:var(--pill-bg);color:var(--pill-fg);border:1px solid var(--pill-bd);white-space:nowrap;}
+  .pill .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .pill .dot.live{animation:pulse 1.6s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* tool stack (gear / camera / expand) — top-right */
+  .tools{display:flex;flex-direction:column;gap:4px;flex-shrink:0;}
+  .tool{width:26px;height:26px;display:grid;place-items:center;border-radius:var(--r-sm);
+    border:1px solid transparent;background:transparent;color:var(--text-faint);cursor:pointer;transition:.14s;}
+  .tool:hover{background:var(--surface-hi);color:var(--text);}
+  .tool svg{width:15px;height:15px;}
+  .tool.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .body{padding:12px 13px 13px;display:flex;flex-direction:column;gap:10px;}
+  .file-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .file{font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .file.faint{color:var(--text-faint);}
+  .qpos{flex-shrink:0;font-family:var(--font-mono);font-size:11px;color:var(--text-faint);font-variant-numeric:tabular-nums;}
+
+  .prog{height:6px;background:var(--surface-hi);border-radius:var(--r-full);overflow:hidden;}
+  .prog-fill{height:100%;border-radius:var(--r-full);background:var(--fill,var(--state-print));
+    transition:width .4s cubic-bezier(.16,1,.3,1);}
+  .prog-meta{display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;font-variant-numeric:tabular-nums;}
+  .prog-meta .pct{color:var(--text-hi);font-weight:500;}
+  .prog-meta .eta{color:var(--text-faint);}
+
+  .substate{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--state-warn);display:flex;align-items:center;gap:6px;}
+  .substate .dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.6s ease-in-out infinite;}
+
+  .errline{font-size:11.5px;color:var(--state-error);background:color-mix(in srgb,var(--state-error) 10%,transparent);
+    border-radius:var(--r-sm);padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* tags row (label + add + filled chips) */
+  .tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .tags-label{font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin-right:1px;}
+  .tag-add{width:18px;height:18px;border-radius:50%;border:1px dashed var(--border-strong);color:var(--text-faint);
+    display:grid;place-items:center;font-size:12px;line-height:1;cursor:pointer;background:transparent;transition:.14s;}
+  .tag-add:hover{border-color:var(--accent);color:var(--accent);}
+  .tag{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--bg-elevated);
+    border-radius:var(--r-full);padding:2px 9px;font-size:10.5px;color:var(--text-muted);white-space:nowrap;}
+  .tag.color{border:none;color:#fff;font-weight:500;}    /* filled colour chip */
+
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    border-top:1px solid var(--border);padding-top:10px;margin-top:1px;}
+  .wt{font-family:var(--font-mono);font-size:11px;color:var(--text-faint);}
+  .foot-actions{display:flex;align-items:center;gap:6px;}
+
+  .act{font-size:12px;font-weight:600;font-family:var(--font-sans);border-radius:var(--r-sm);
+    padding:5px 11px;cursor:pointer;transition:.14s;border:1px solid;white-space:nowrap;}
+  .act.collect{color:var(--state-ok);border-color:color-mix(in srgb,var(--state-ok) 40%,transparent);
+    background:color-mix(in srgb,var(--state-ok) 9%,transparent);}
+  .act.collect:hover{background:color-mix(in srgb,var(--state-ok) 16%,transparent);}
+  .act.start{color:#fff;background:var(--accent);border-color:var(--accent);}
+  .act.start:hover{filter:brightness(1.08);}
+  .act.reset{color:var(--state-warn);border-color:color-mix(in srgb,var(--state-warn) 40%,transparent);
+    background:color-mix(in srgb,var(--state-warn) 9%,transparent);}
+
+  /* ═══ camera mode — body swaps to live feed + controls ═══ */
+  .cam-view{display:none;flex-direction:column;}
+  .card.cam-open .body{display:none;}
+  .card.cam-open .cam-view{display:flex;}
+  .cam-feed{position:relative;aspect-ratio:16/10;
+    background:
+      radial-gradient(120% 80% at 50% 0%, color-mix(in srgb,var(--state-print) 22%, #0a0a0c) 0%, #0a0a0c 70%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 2px, transparent 2px 4px);
+    display:grid;place-items:center;}
+  .cam-feed .glyph{opacity:.5;color:#fff;}
+  .cam-feed .glyph svg{width:34px;height:34px;}
+  .cam-live{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:5px;
+    font-family:var(--font-mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;color:#fff;
+    background:rgba(0,0,0,.55);padding:2px 7px;border-radius:var(--r-full);}
+  .cam-live .dot{width:6px;height:6px;border-radius:50%;background:var(--state-error);animation:pulse 1.6s ease-in-out infinite;}
+  .cam-temps{position:absolute;bottom:8px;left:8px;font-family:var(--font-mono);font-size:10px;color:#fff;
+    background:rgba(0,0,0,.55);padding:2px 7px;border-radius:var(--r-sm);}
+  .cam-controls{display:flex;gap:6px;padding:10px 11px;}
+  .cam-btn{flex:1;height:32px;display:grid;place-items:center;border-radius:var(--r-sm);
+    border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;transition:.14s;}
+  .cam-btn:hover{background:var(--surface-hi);color:var(--text);}
+  .cam-btn svg{width:15px;height:15px;}
+  .cam-btn.stop:hover{color:var(--state-error);border-color:color-mix(in srgb,var(--state-error) 40%,transparent);}
+
+  /* ── per-state theming ── */
+  .card.printing{--rail:var(--state-print);--band:color-mix(in srgb,var(--state-print) 8%,var(--surface));
+    --fill:var(--state-print);--pill-bg:color-mix(in srgb,var(--state-print) 14%,transparent);
+    --pill-fg:var(--state-print);--pill-bd:color-mix(in srgb,var(--state-print) 30%,transparent);}
+  .card.paused{--rail:var(--state-warn);--band:color-mix(in srgb,var(--state-warn) 9%,var(--surface));
+    --fill:var(--state-warn);--pill-bg:color-mix(in srgb,var(--state-warn) 15%,transparent);
+    --pill-fg:var(--state-warn);--pill-bd:color-mix(in srgb,var(--state-warn) 32%,transparent);}
+  .card.collect{--rail:var(--state-ok);--band:color-mix(in srgb,var(--state-ok) 12%,var(--surface));
+    --fill:var(--state-ok);--pill-bg:color-mix(in srgb,var(--state-ok) 16%,transparent);
+    --pill-fg:var(--state-ok);--pill-bd:color-mix(in srgb,var(--state-ok) 34%,transparent);}
+  .card.error{--rail:var(--state-error);--band:color-mix(in srgb,var(--state-error) 12%,var(--surface));
+    --pill-bg:color-mix(in srgb,var(--state-error) 16%,transparent);
+    --pill-fg:var(--state-error);--pill-bd:color-mix(in srgb,var(--state-error) 34%,transparent);}
+  .card.idle{--rail:transparent;--band:var(--surface-2);
+    --pill-bg:var(--surface-hi);--pill-fg:var(--text-muted);--pill-bd:var(--border);}
+  .card.offline{--rail:transparent;--band:var(--surface-2);opacity:.62;
+    --pill-bg:var(--surface-hi);--pill-fg:var(--text-faint);--pill-bd:var(--border);}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;}
+
+  /* ── before/after ── */
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+  @media(max-width:680px){.ba{grid-template-columns:1fr;}}
+  .ba-col > .ba-tag{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+    margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .ba-tag.now{color:var(--text-faint);}
+  .ba-tag.next{color:var(--accent);}
+  .ba-tag::before{content:"";width:22px;height:2px;border-radius:2px;background:currentColor;}
+  .old-card{background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--state-print);
+    border-radius:var(--r-lg);padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;max-width:290px;}
+  .old-head{display:flex;justify-content:space-between;align-items:flex-start;}
+  .old-id{font-size:16px;font-weight:600;color:var(--text-hi);letter-spacing:-.015em;}
+  .old-model{font-size:11.5px;color:var(--text-faint);margin-top:1px;}
+  .old-status{font-size:11.5px;color:var(--state-print);}
+  .old-file{font-size:12px;color:var(--text);border-top:1px solid var(--border);padding-top:8px;}
+  .old-eta{font-size:11.5px;color:var(--text-faint);font-family:var(--font-mono);margin-top:2px;}
+  .old-prog{height:4px;background:var(--surface-hi);border-radius:2px;overflow:hidden;}
+  .old-prog > i{display:block;height:100%;width:40%;background:var(--state-print);}
+  .after-single{max-width:290px;}
+
+  /* ── change legend ── */
+  .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;}
+  .lcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:15px 16px;
+    box-shadow:inset 0 3px 0 var(--accent);}
+  .lnum{font-family:var(--font-mono);font-size:11px;color:var(--accent);font-weight:600;}
+  .lcard h3{font-size:14px;font-weight:600;color:var(--text-hi);margin:6px 0 6px;letter-spacing:-.01em;}
+  .lcard p{font-size:12.5px;color:var(--text-muted);margin:0 0 10px;}
+  .lcard code{font-family:var(--font-mono);font-size:11px;color:var(--text-faint);
+    background:var(--surface-hi);border-radius:4px;padding:1px 6px;}
+  .files{margin-top:40px;border-top:1px solid var(--border);padding-top:24px;overflow-x:auto;}
+  .files table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px;}
+  .files td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  .files tr:last-child td{border-bottom:none;}
+  .files td:first-child{font-family:var(--font-mono);font-size:11.5px;color:var(--text-hi);white-space:nowrap;}
+  .files td:nth-child(2){font-family:var(--font-mono);font-size:10.5px;color:var(--accent);white-space:nowrap;}
+  .files td:last-child{color:var(--text-muted);}
+  .foot-note{margin-top:44px;font-size:12.5px;color:var(--text-faint);border-top:1px solid var(--border);padding-top:20px;}
+  .foot-note b{color:var(--text-muted);font-weight:600;}
+
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <p class="eyebrow">Monofarm · Dashboard redesign spec · v2</p>
+      <h1>Стан принтера — з першого погляду</h1>
+      <p class="lede">Стриманіша адаптація 3DQue на токенах monofarm: акцентна смуга <b>зверху</b>, тонований банер із назвою та пігулкою стану, стек інструментів ⚙ ▤ ✛, зручні теги і камера прямо в картці.</p>
+    </div>
+    <button class="toggle" id="tg" aria-label="Перемкнути тему">◐ Тема</button>
+  </div>
+
+  <section>
+    <p class="sec-label">Було → стане</p>
+    <p class="hint">Натисни іконку <b>камери ▤</b> у новій картці — вміст перемкнеться на живий фід принтера з керуванням.</p>
+    <div class="ba">
+      <div class="ba-col">
+        <p class="ba-tag now">Зараз</p>
+        <div class="old-card">
+          <div class="old-head">
+            <div><div class="old-id">X1C · 1</div><div class="old-model">Bambu X1C</div></div>
+            <div class="old-status">Друкує</div>
+          </div>
+          <div class="old-file">Part_756.gcode<div class="old-eta">1г 15хв залишилось</div></div>
+          <div class="old-prog"><i></i></div>
+        </div>
+      </div>
+      <div class="ba-col">
+        <p class="ba-tag next">Стане</p>
+        <div class="after-single">
+          <article class="card printing" data-cam>
+            <header class="band">
+              <div class="band-id">
+                <span class="name">X1C · 1</span>
+                <span class="pill"><span class="dot live"></span>Друкує</span>
+              </div>
+              <div class="tools">
+                <button class="tool" title="Налаштування" aria-label="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+                <button class="tool cam-toggle" title="Камера" aria-label="Камера"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+                <button class="tool" title="На весь екран" aria-label="На весь екран"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+              </div>
+            </header>
+            <div class="body">
+              <div class="file-row"><span class="file">Part_756.gcode</span><span class="qpos">1 / 2</span></div>
+              <div class="prog"><div class="prog-fill" style="width:40%"></div></div>
+              <div class="prog-meta"><span class="pct">40%</span><span class="eta">1г 15хв · 16:42</span></div>
+              <div class="tags">
+                <span class="tags-label">Теги</span>
+                <button class="tag-add" title="Додати тег">+</button>
+                <span class="tag">Bambu X1C</span>
+                <span class="tag color" style="background:#7c3aed">Purple</span>
+                <span class="tag">PLA</span>
+              </div>
+              <footer class="foot"><span class="wt">600 г · 1 забрати</span>
+                <button class="act start" style="padding:5px 11px">❚❚ Пауза</button></footer>
+            </div>
+            <div class="cam-view">
+              <div class="cam-feed">
+                <span class="cam-live"><span class="dot"></span>LIVE</span>
+                <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span>
+                <span class="cam-temps">🔥 210° · 🛏 60°</span>
+              </div>
+              <div class="cam-controls">
+                <button class="cam-btn" title="Пауза"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+                <button class="cam-btn stop" title="Стоп"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+                <button class="cam-btn" title="Додому"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
+                <button class="cam-btn" title="Підсвітка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/></svg></button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-label">Усі стани — аномалії вистрілюють зі стіни</p>
+    <div class="grid">
+
+      <!-- printing (interactive camera) -->
+      <article class="card printing" data-cam>
+        <header class="band">
+          <div class="band-id"><span class="name">A1 Mini · 1</span><span class="pill"><span class="dot live"></span>Друкує</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+            <button class="tool cam-toggle" title="Камера"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+            <button class="tool" title="На весь екран"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="file-row"><span class="file">Part_100.gcode</span><span class="qpos">1 / 10</span></div>
+          <div class="prog"><div class="prog-fill" style="width:67%"></div></div>
+          <div class="prog-meta"><span class="pct">67%</span><span class="eta">56хв · 15:20</span></div>
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button>
+            <span class="tag">A1 Mini</span><span class="tag color" style="background:#dc2626">Red</span><span class="tag">PLA</span></div>
+          <footer class="foot"><span class="wt">507 г · 10 забрати</span>
+            <button class="act start" style="padding:5px 11px">❚❚ Пауза</button></footer>
+        </div>
+        <div class="cam-view">
+          <div class="cam-feed"><span class="cam-live"><span class="dot"></span>LIVE</span>
+            <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span>
+            <span class="cam-temps">🔥 215° · 🛏 55°</span></div>
+          <div class="cam-controls">
+            <button class="cam-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+            <button class="cam-btn stop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+            <button class="cam-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
+            <button class="cam-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/></svg></button>
+          </div>
+        </div>
+      </article>
+
+      <!-- paused -->
+      <article class="card paused">
+        <header class="band">
+          <div class="band-id"><span class="name">Mk3 · 1</span><span class="pill"><span class="dot"></span>Пауза</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+            <button class="tool" title="На весь екран"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="file-row"><span class="file">Calibration_Max.gcode</span><span class="qpos">1 / 10</span></div>
+          <div class="prog"><div class="prog-fill" style="width:62%"></div></div>
+          <div class="prog-meta"><span class="pct">62%</span><span class="eta">призупинено</span></div>
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button>
+            <span class="tag">Prusa Mk3</span><span class="tag color" style="background:#dc2626">Red</span></div>
+          <footer class="foot"><span class="wt">250 г</span><button class="act start">▶ Продовж.</button></footer>
+        </div>
+      </article>
+
+      <!-- collect -->
+      <article class="card collect">
+        <header class="band">
+          <div class="band-id"><span class="name">X1C · 2</span><span class="pill"><span class="dot"></span>Готово</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+            <button class="tool cam-toggle" title="Камера"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="file-row"><span class="file faint">Part_756.gcode</span><span class="qpos">2 / 2</span></div>
+          <div class="prog"><div class="prog-fill" style="width:100%"></div></div>
+          <div class="prog-meta"><span class="pct">100%</span><span class="eta">завершено</span></div>
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button>
+            <span class="tag">Bambu X1C</span><span class="tag color" style="background:#1f2937">Black</span></div>
+          <footer class="foot"><span class="wt">158 г</span><button class="act collect">🗑 Забрати стіл</button></footer>
+        </div>
+        <div class="cam-view">
+          <div class="cam-feed"><span class="cam-live"><span class="dot"></span>LIVE</span>
+            <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span></div>
+          <div class="cam-controls"><button class="cam-btn" style="flex:1">← Назад до статусу</button></div>
+        </div>
+      </article>
+
+      <!-- error -->
+      <article class="card error">
+        <header class="band">
+          <div class="band-id"><span class="name">A1 Mini · 2</span><span class="pill"><span class="dot"></span>Помилка</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+            <button class="tool cam-toggle" title="Камера"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="errline">HMS 0300: збій завантаження філаменту</div>
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button>
+            <span class="tag">A1 Mini</span><span class="tag color" style="background:#9ca3af">Silver</span></div>
+          <footer class="foot"><span class="wt">300 г</span><button class="act reset">↺ Скинути</button></footer>
+        </div>
+        <div class="cam-view">
+          <div class="cam-feed"><span class="cam-live"><span class="dot"></span>LIVE</span>
+            <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span></div>
+          <div class="cam-controls"><button class="cam-btn" style="flex:1">← Назад до статусу</button></div>
+        </div>
+      </article>
+
+      <!-- idle -->
+      <article class="card idle">
+        <header class="band">
+          <div class="band-id"><span class="name">P1S · 1</span><span class="pill">Готовий</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+            <button class="tool cam-toggle" title="Камера"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button>
+            <span class="tag">Bambu P1S</span><span class="tag color" style="background:#22c55e">PETG</span></div>
+          <footer class="foot"><span class="wt">2 слоти</span><button class="act start">▶ Друк</button></footer>
+        </div>
+        <div class="cam-view">
+          <div class="cam-feed"><span class="cam-live"><span class="dot"></span>LIVE</span>
+            <span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg></span></div>
+          <div class="cam-controls"><button class="cam-btn" style="flex:1">← Назад до статусу</button></div>
+        </div>
+      </article>
+
+      <!-- offline -->
+      <article class="card offline">
+        <header class="band">
+          <div class="band-id"><span class="name">P1P · 3</span><span class="pill">Офлайн</span></div>
+          <div class="tools">
+            <button class="tool" title="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 12 4.6a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 12z"/></svg></button>
+          </div>
+        </header>
+        <div class="body">
+          <div class="tags"><span class="tags-label">Теги</span><button class="tag-add">+</button><span class="tag">Bambu P1P</span></div>
+          <footer class="foot"><span class="wt">не в мережі</span></footer>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-label">Що змінюється — чекліст для Sonnet 5</p>
+    <div class="legend">
+      <div class="lcard"><span class="lnum">01</span><h3>Акцентна смуга зверху + банер</h3>
+        <p>Кольорова смуга <b>зверху</b> картки через <code>box-shadow: inset 0 3px 0</code>, тонований банер із назвою та пігулкою стану.</p>
+        <code>.printer-card</code> · <code>globals.css:440</code></div>
+      <div class="lcard"><span class="lnum">02</span><h3>Стек ⚙ ▤ ✛ + камера в картці</h3>
+        <p>Кнопка камери перемикає вміст картки на живий фід + керування (пауза/стоп/додому/світло) без переходу на іншу сторінку.</p>
+        <code>go2rtc</code> · <code>PrinterCard.tsx</code></div>
+      <div class="lcard"><span class="lnum">03</span><h3>Зручні теги з <code>+</code></h3>
+        <p>Рядок «Теги»: кнопка додавання і заповнені кольорові чипи (модель / колір / матеріал), як у референсі.</p>
+        <code>printer.tags</code> · <code>loaded_filaments</code></div>
+      <div class="lcard"><span class="lnum">04</span><h3>Прогрес+ETA, черга, «Забрати»</h3>
+        <p>Бар 6px + <code>67% · 56хв</code>, позиція <code>2/10</code>, і зелена кнопка «Забрати стіл» для завершених.</p>
+        <code>needsClearBed</code> · <code>.progress</code></div>
+    </div>
+
+    <div class="files">
+      <table>
+        <tr><td>PrinterCard.tsx</td><td>UPDATE</td><td>Банер, стек інструментів, тумблер камери, теги, прогрес+ETA, чип «Забрати».</td></tr>
+        <tr><td>globals.css</td><td>UPDATE</td><td>Класи банера/тегів/камери на токенах, смуга зверху. ⚠ рестарт dev (Tailwind v4).</td></tr>
+        <tr><td>dashboard/page.tsx</td><td>UPDATE</td><td>Дзеркалимо у PrinterPhotoCard (view «Фото»).</td></tr>
+        <tr><td>translations/uk,en</td><td>UPDATE</td><td>«Забрати стіл», «Гріє стіл», «Теги» — обидві мови.</td></tr>
+      </table>
+    </div>
+
+    <p class="foot-note"><b>Камера:</b> перевикористати наявний go2rtc-проксі (<code>GO2RTC_URL</code>) і потік, що вже є в <code>PrinterDetailModal</code> — не писати новий плеєр. <b>Правила:</b> лише токени <code>var(--*)</code> · обидві теми · компонент у <code>printers/</code> · деплой: lowercase-коміт → push main → Dokploy (перевір CI зелений).</p>
+  </section>
+</div>
+
+<script>
+  const root=document.documentElement, tg=document.getElementById('tg');
+  root.setAttribute('data-theme', matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  tg.addEventListener('click',()=>{
+    root.setAttribute('data-theme', root.getAttribute('data-theme')==='dark'?'light':'dark');
+  });
+  document.querySelectorAll('.card').forEach(card=>{
+    card.querySelectorAll('.cam-toggle').forEach(btn=>{
+      btn.addEventListener('click',()=>{card.classList.toggle('cam-open');btn.classList.toggle('active');});
+    });
+    const back=card.querySelector('.cam-controls .cam-btn:only-child');
+    if(back) back.addEventListener('click',()=>{card.classList.remove('cam-open');
+      const t=card.querySelector('.cam-toggle');if(t)t.classList.remove('active');});
+  });
+</script>
