@@ -1,5 +1,14 @@
 const EAN13_PREFIX = "4820";
 
+export const EAN13_SVG_SIZE = { width: 230, height: 100 } as const;
+export const EAN13_SVG_RENDER_OPTIONS = {
+  width: 2.32,
+  height: 71,
+  fontSize: 14,
+  textMargin: 0,
+  margin: 4,
+} as const;
+
 function calculateCheckDigit(body: string): string {
   const sum = [...body].reduce(
     (total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3),

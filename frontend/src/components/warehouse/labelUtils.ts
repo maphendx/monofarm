@@ -1,3 +1,5 @@
+import { EAN13_SVG_RENDER_OPTIONS, EAN13_SVG_SIZE } from "@/lib/ean13";
+
 /**
  * Generates a Code128 barcode as an SVG data URL.
  * SVG is infinitely scalable — no pixelation at any element size.
@@ -49,13 +51,13 @@ export async function generateEan13Svg(text: string): Promise<string | null> {
     JsBarcode(svg, text, {
       format: "EAN13",
       displayValue: true,
-      fontSize: 14,
-      textMargin: 4,
-      margin: 4,
+      ...EAN13_SVG_RENDER_OPTIONS,
       background: "#ffffff",
       lineColor: "#000000",
       xmlDocument: document,
     });
+    svg.setAttribute("width", `${EAN13_SVG_SIZE.width}px`);
+    svg.setAttribute("height", `${EAN13_SVG_SIZE.height}px`);
     return new XMLSerializer().serializeToString(svg);
   } catch {
     return null;
