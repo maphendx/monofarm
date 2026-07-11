@@ -38,9 +38,16 @@ _tunnels: dict[int, WebSocket] = {}
 _agent_capabilities: dict[int, set[str]] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
+# request_id → org_id — lets unregister() fail only its own org's requests
+_pending_org: dict[str, int] = {}
 _pending_upload_progress: dict[str, Callable[[dict[str, Any]], Awaitable[None] | None]] = {}
 # request_id → Queue  (streaming)
 _pending_streams: dict[str, asyncio.Queue] = {}
+
+# Uploads are bounded by a stall guard, not total time: a slow printer link
+# (U1 WiFi can drop to ~30 KB/s) may legitimately need many minutes per file.
+UPLOAD_STALL_TIMEOUT = 180.0  # seconds without an agent progress message → dead upload
+_UPLOAD_POLL = 5.0
 
 
 def has_tunnel(org_id: int) -> bool:
@@ -152,14 +159,21 @@ async def _backfill_org_history(org_id: int) -> None:
         log.exception("_backfill_org_history failed for org %s", org_id)
 
 
-async def unregister(org_id: int) -> None:
+async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
+    current = _tunnels.get(org_id)
+    if ws is not None and current is not None and current is not ws:
+        # A reconnect already replaced this socket — keep the live tunnel intact.
+        log.info("Agent stale socket closed for org %s — replacement kept", org_id)
+        return
     _tunnels.pop(org_id, None)
     _agent_capabilities.pop(org_id, None)
-    # Fail any futures that were waiting for a response from this agent
+    # Fail only this org's futures — other orgs' in-flight requests stay alive
     for req_id, fut in list(_pending.items()):
+        if _pending_org.get(req_id) != org_id:
+            continue
         if not fut.done():
             fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
-    _pending_upload_progress.clear()
+        _pending_upload_progress.pop(req_id, None)
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
@@ -344,6 +358,7 @@ async def proxy_request(
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({"id": req_id, "method": method, "url": url, "body": body}))
@@ -352,6 +367,7 @@ async def proxy_request(
         raise RuntimeError(f"Agent timed out ({timeout}s): {method} {url}")
     finally:
         _pending.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
 
 async def bambu_camera_stream(
@@ -494,6 +510,7 @@ async def send_bambu_upload(
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps(payload))
@@ -502,6 +519,7 @@ async def send_bambu_upload(
         raise RuntimeError(f"Agent BAMBU_UPLOAD timed out ({timeout}s) for {dev_ip}")
     finally:
         _pending.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_UPLOAD failed: {resp.get('error')}")
@@ -526,6 +544,7 @@ async def send_bambu_mqtt(
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({
@@ -541,6 +560,7 @@ async def send_bambu_mqtt(
         raise RuntimeError(f"Agent BAMBU_MQTT timed out ({timeout}s) for {dev_ip}")
     finally:
         _pending.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_MQTT failed: {resp.get('error')}")
@@ -558,23 +578,42 @@ async def send_moonraker_upload(
 ) -> dict:
     """Upload a gcode/3mf to Moonraker via the agent's LAN connection.
 
+    Bounded by a stall guard, not total time: as long as the agent keeps
+    reporting `upload_progress` the transfer may take as long as the printer
+    needs. `timeout` (default `UPLOAD_TIMEOUT_MAX`) is only a hard cap.
+
     Returns Moonraker's response dict.
     Raises RuntimeError on failure.
     """
     import base64
-    from app.services.moonraker import _api_base, MoonrakerError, upload_timeout_for_size  # noqa: PLC0415
+    from app.services.moonraker import (  # noqa: PLC0415
+        _api_base, MoonrakerError, UPLOAD_TIMEOUT_MAX, upload_timeout_for_size,
+    )
     ws = _tunnels.get(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     base = _api_base(moonraker_url)
-    effective_timeout = timeout if timeout is not None else upload_timeout_for_size(len(file_bytes))
+    # Sent to the agent as its per-operation httpx timeout — not a total budget.
+    agent_timeout = timeout if timeout is not None else upload_timeout_for_size(len(file_bytes))
+    hard_cap = timeout if timeout is not None else UPLOAD_TIMEOUT_MAX
     req_id = str(uuid.uuid4())
     loop = asyncio.get_event_loop()
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
-    if progress_callback is not None:
-        _pending_upload_progress[req_id] = progress_callback
+    _pending_org[req_id] = org_id
+
+    last_activity = time.monotonic()
+
+    async def _on_progress(data: dict[str, Any]) -> None:
+        nonlocal last_activity
+        last_activity = time.monotonic()
+        if progress_callback is not None:
+            result = progress_callback(data)
+            if inspect.isawaitable(result):
+                await result
+
+    _pending_upload_progress[req_id] = _on_progress
 
     try:
         payload = {
@@ -583,7 +622,7 @@ async def send_moonraker_upload(
             "url": base,
             "filename": filename,
             "start_print": start_print,
-            "upload_timeout": effective_timeout,
+            "upload_timeout": agent_timeout,
         }
         if "moonraker_upload_chunks" in _agent_capabilities.get(org_id, set()):
             payload.update({"chunked": True, "total_bytes": len(file_bytes)})
@@ -599,15 +638,33 @@ async def send_moonraker_upload(
                     "final": offset + len(chunk) >= len(file_bytes),
                     "data_b64": base64.b64encode(chunk).decode(),
                 }))
+                last_activity = time.monotonic()  # cloud→agent transfer is activity too
         else:
             # Keep old agents working until they receive the chunk-capable build.
             payload["data_b64"] = base64.b64encode(file_bytes).decode()
             await ws.send_text(json.dumps(payload))
-        resp = await asyncio.wait_for(future, timeout=effective_timeout)
-    except asyncio.TimeoutError:
-        raise RuntimeError(f"Agent MOONRAKER_UPLOAD timed out ({effective_timeout}s) for {moonraker_url}")
+
+        started = time.monotonic()
+        while True:
+            now = time.monotonic()
+            if now - started >= hard_cap:
+                raise RuntimeError(
+                    f"Agent MOONRAKER_UPLOAD timed out ({hard_cap:.0f}s hard cap) for {moonraker_url}")
+            if now - last_activity >= UPLOAD_STALL_TIMEOUT:
+                raise RuntimeError(
+                    f"Agent MOONRAKER_UPLOAD: {UPLOAD_STALL_TIMEOUT:.0f}s без прогресу для {moonraker_url}")
+            wait_slice = min(
+                _UPLOAD_POLL,
+                hard_cap - (now - started),
+                UPLOAD_STALL_TIMEOUT - (now - last_activity),
+            )
+            done, _ = await asyncio.wait({future}, timeout=wait_slice)
+            if done:
+                resp = future.result()
+                break
     finally:
         _pending.pop(req_id, None)
+        _pending_org.pop(req_id, None)
         _pending_upload_progress.pop(req_id, None)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):

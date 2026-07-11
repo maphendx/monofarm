@@ -25,6 +25,16 @@ from app.models import User, UserRole  # noqa: F401 — ensures all model module
 from app.models.organization import Organization
 
 
+@pytest.fixture(scope="session", autouse=True)
+def force_local_storage():
+    """Keep storage on local disk: a developer .env with R2 credentials would
+    otherwise round-trip test files through production S3."""
+    mp = pytest.MonkeyPatch()
+    mp.setattr(core_db.settings, "S3_BUCKET", "")
+    yield
+    mp.undo()
+
+
 @pytest.fixture(scope="session")
 def db_engine():
     engine = create_engine(core_db.settings.DATABASE_URL, pool_pre_ping=True)

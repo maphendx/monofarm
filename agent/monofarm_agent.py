@@ -37,7 +37,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.1"
+AGENT_VERSION = "0.8.2"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 try:
@@ -1988,14 +1988,19 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         chunk_size = 256 * 1024
 
         async def multipart_body():
+            import time
             yield prefix
             sent = 0
             last_report = -1
+            # Report on time as well as percent: the cloud stall-guard needs a
+            # heartbeat even when 5% of a big file takes minutes on slow WiFi.
+            last_report_at = time.monotonic()
             for offset in range(0, len(file_bytes), chunk_size):
                 chunk = file_bytes[offset:offset + chunk_size]
                 sent += len(chunk)
                 progress = round(sent * 100 / max(len(file_bytes), 1))
-                if progress == 100 or progress - last_report >= 5:
+                now = time.monotonic()
+                if progress == 100 or progress - last_report >= 5 or now - last_report_at >= 2.0:
                     await ws.send(json.dumps({
                         "id": req_id,
                         "type": "upload_progress",
@@ -2003,6 +2008,7 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
                         "total": len(file_bytes),
                     }))
                     last_report = progress
+                    last_report_at = now
                 yield chunk
             yield suffix
 

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.8.1"
+AGENT_VERSION = "0.8.2"
 
 
 @router.get("/api/agent/version")
@@ -154,4 +154,4 @@ async def agent_connect(
     except Exception as e:
         log.warning("Agent org %s connection error: %s", org_id, e)
     finally:
-        await tunnel.unregister(org_id)
+        await tunnel.unregister(org_id, ws)
