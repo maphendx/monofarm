@@ -33,6 +33,9 @@ Thumbs.db
 # Claude Code — personal project notes (optional)
 CLAUDE.local.md
 
+# Codex — private notes (mirror of CLAUDE.local.md)
+AGENTS.local.md
+
 # Claude Code (machine-specific allowlist; keep shared hooks in settings.json)
 .claude/settings.local.json
 

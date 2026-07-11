@@ -1,9 +1,2 @@
-[mcp_servers.railway]
-url = "https://mcp.railway.com"
-
-[mcp_servers.railway-mcp-server]
-command = "npx"
-args = [
-    "-y",
-    "@railway/mcp-server",
-]
+# Railway MCP servers removed 2026-07-11 — Railway decommissioned 2026-06-12,
+# production is Hetzner + Dokploy (deploy = push to main after green CI).
