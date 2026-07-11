@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { matchTokens } from "@/lib/search";
+import { generateEan13, isValidEan13 } from "@/lib/ean13";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { useConfirm } from "@/hooks/useConfirm";
 import { BulkActionBar } from "@/components/ui/BulkActionBar";
@@ -251,6 +252,12 @@ function ProductModal({
   const [name,         setName]         = useState(src?.name    ?? "");
   const [sku,          setSku]          = useState(src?.sku     ?? "");
   const [barcode,      setBarcode]      = useState(product?.barcode ?? "");
+  const ean13 = useMemo(() => {
+    const generated = generateEan13(barcode);
+    if (generated) return generated;
+    const normalized = barcode.replace(/\s/g, "");
+    return isValidEan13(normalized) ? normalized : null;
+  }, [barcode]);
   const [cats,         setCats]         = useState<string[]>(src?.categories ?? []);
   const [unit,         setUnit]         = useState(src?.unit    ?? "шт");
   const [price,        setPrice]        = useState(src?.sale_price ? parseFloat(src.sale_price).toString() : "");
@@ -322,7 +329,7 @@ function ProductModal({
     setBusy(true); setErr(null);
     try {
       const body = {
-        name: name.trim(), sku: sku.trim(), barcode: barcode.trim() || null,
+        name: name.trim(), sku: sku.trim(), barcode: ean13 ?? (barcode.trim() || null),
         categories: cats, unit: unit.trim() || "шт",
         sale_price: price ? parseFloat(price) : null,
         description: desc.trim() || null,
@@ -339,6 +346,16 @@ function ProductModal({
       setErr(e instanceof ApiError ? e.message : "Помилка збереження. Перевірте поля.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyEan13() {
+    if (!ean13) return;
+    try {
+      await navigator.clipboard.writeText(ean13);
+      toast.success("EAN-13 скопійовано");
+    } catch {
+      toast.error("Не вдалося скопіювати EAN-13");
     }
   }
 
@@ -469,9 +486,33 @@ function ProductModal({
                 className={INPUT} />
             </FormRow>
             <FormRow label="Штрих-код">
-              <input value={barcode} onChange={(e) => setBarcode(e.target.value)}
-                placeholder="EAN-13, QR або будь-який"
-                className={INPUT} />
+              <div className="space-y-2">
+                <input value={barcode} onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="8 цифр товарного коду"
+                  className={INPUT} />
+                {ean13 ? (
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-hi)] px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--text-faint)]">Готовий EAN-13</p>
+                        <code className="text-sm font-semibold tracking-[0.12em] text-[var(--text-hi)]">{ean13}</code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={copyEan13}
+                        className="btn btn-ghost shrink-0 text-xs"
+                      >
+                        Копіювати
+                      </button>
+                    </div>
+                    {generateEan13(barcode) && (
+                      <p className="mt-1 text-[10px] text-[var(--text-faint)]">4820 + 8 цифр + контрольне число · при збереженні запишеться повний код</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-[var(--text-faint)]">Для автоматичного EAN-13 введіть 8 цифр товарного коду.</p>
+                )}
+              </div>
             </FormRow>
             <FormRow label="Категорії">
               <CategoryInput value={cats} onChange={setCats} existing={existingCats} />
