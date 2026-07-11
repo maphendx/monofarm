@@ -56,6 +56,14 @@ export async function generateEan13Svg(text: string): Promise<string | null> {
       lineColor: "#000000",
       xmlDocument: document,
     });
+    const groups = svg.querySelectorAll("g");
+    const leadingText = svg.querySelector("text");
+    const firstBarsTransform = groups[1]?.getAttribute("transform") ?? "";
+    const firstBarsX = Number(/translate\(([-\d.]+)/.exec(firstBarsTransform)?.[1]);
+    if (leadingText && Number.isFinite(firstBarsX)) {
+      const digitWidth = EAN13_SVG_RENDER_OPTIONS.fontSize * 0.62;
+      leadingText.setAttribute("x", String(Math.max(0, firstBarsX - digitWidth - 1)));
+    }
     svg.setAttribute("width", `${EAN13_SVG_SIZE.width}px`);
     svg.setAttribute("height", `${EAN13_SVG_SIZE.height}px`);
     svg.setAttribute("preserveAspectRatio", "none");
