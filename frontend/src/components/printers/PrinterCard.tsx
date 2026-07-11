@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, Maximize, MoreHorizontal, Pause, Play, Settings, Square, Video } from "lucide-react";
 import { toast } from "sonner";
 
 import { PrinterQuickMenu, type QuickMenuPos } from "@/components/printers/PrinterQuickMenu";
@@ -17,65 +18,6 @@ import {
   getPrinterCardTone,
   printerCover,
 } from "./printerCardModel";
-
-function GearIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.17 1.58V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H4.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 6 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a2 2 0 0 1 3-1.43 2 2 0 0 1 1 1.43 1.65 1.65 0 0 0 1.17 1.17 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.58 1.17H21a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 19.4 15Z" />
-    </svg>
-  );
-}
-
-function CameraIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="m23 7-7 5 7 5V7Z" />
-      <rect x="1" y="5" width="15" height="14" rx="2" />
-    </svg>
-  );
-}
-
-function ExpandIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-    </svg>
-  );
-}
-
-function BackIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path d="M19 12H5M12 19l-7-7 7-7" />
-    </svg>
-  );
-}
-
-function PauseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="6" y="5" width="4" height="14" rx="1" />
-      <rect x="14" y="5" width="4" height="14" rx="1" />
-    </svg>
-  );
-}
-
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  );
-}
-
-function StopIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="6" y="6" width="12" height="12" rx="2" />
-    </svg>
-  );
-}
 
 export function PrinterCard({
   printer,
@@ -237,20 +179,20 @@ export function PrinterCard({
         </div>
         <div className="pc-tools">
           <button type="button" className="pc-tool" title="Швидке меню" aria-label="Швидке меню" onClick={openMenu}>
-            <span aria-hidden="true">⋯</span>
+            <MoreHorizontal size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
           {onSettings && (
             <button type="button" className="pc-tool" title="Налаштування" aria-label="Налаштування" onClick={(e) => { e.stopPropagation(); onSettings(printer); }}>
-              <GearIcon />
+              <Settings size={15} strokeWidth={1.8} aria-hidden="true" />
             </button>
           )}
           {hasCamera && (
             <button type="button" className={["pc-tool", camOpen ? "active" : ""].filter(Boolean).join(" ")} title={t("common.camera")} aria-label={t("common.camera")} aria-pressed={camOpen} onClick={toggleCamera}>
-              <CameraIcon />
+              <Video size={15} strokeWidth={1.8} aria-hidden="true" />
             </button>
           )}
           <button type="button" className="pc-tool" title="Відкрити принтер" aria-label="Відкрити принтер" onClick={(e) => { e.stopPropagation(); onClick?.(printer); }}>
-            <ExpandIcon />
+            <Maximize size={15} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -368,7 +310,7 @@ export function PrinterCard({
           {canEdit && <div className="pc-foot-actions" onClick={(e) => e.stopPropagation()}>
             {canStartPrint && onPrint && (
               <button type="button" className="pc-action start" onClick={(e) => { e.stopPropagation(); onPrint(printer); }}>
-                <PlayIcon /> {t("common.print")}
+                <Play size={14} strokeWidth={2} aria-hidden="true" /> {t("common.print")}
               </button>
             )}
             {needsClearBed && (
@@ -386,12 +328,12 @@ export function PrinterCard({
             )}
             {isPrinting && (
               <button type="button" className="pc-action pause" disabled={busy !== null} onClick={(e) => act(e, "pause")}>
-                <PauseIcon /> {busy === "pause" ? "…" : t("printers.pause")}
+                <Pause size={14} strokeWidth={2} aria-hidden="true" /> {busy === "pause" ? "…" : t("printers.pause")}
               </button>
             )}
             {isPaused && (
               <button type="button" className="pc-action start" disabled={busy !== null} onClick={(e) => act(e, "resume")}>
-                <PlayIcon /> {busy === "resume" ? "…" : t("printers.resume")}
+                <Play size={14} strokeWidth={2} aria-hidden="true" /> {busy === "resume" ? "…" : t("printers.resume")}
               </button>
             )}
             {isError && (
@@ -407,7 +349,7 @@ export function PrinterCard({
                 </>
               ) : (
                 <button type="button" className="pc-action stop" disabled={busy !== null} onClick={(e) => { e.stopPropagation(); setConfirmCancel(true); }}>
-                  <StopIcon /> {t("common.stop")}
+                  <Square size={14} strokeWidth={2.5} fill="currentColor" aria-hidden="true" /> {t("common.stop")}
                 </button>
               )
             )}
@@ -427,7 +369,7 @@ export function PrinterCard({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={camSrc} alt="" onLoad={() => setCamLoaded(true)} onError={() => setCamError(true)} />
             )}
-            {(!camLoaded || camError) && <span className="pc-camera-placeholder"><CameraIcon /></span>}
+            {(!camLoaded || camError) && <span className="pc-camera-placeholder"><Video size={34} strokeWidth={1.5} aria-hidden="true" /></span>}
             {camLoaded && !camError && <span className="pc-camera-live"><span className="pc-camera-live-dot" />LIVE</span>}
             {(printer.extruder_temp != null || printer.bed_temp != null) && (
               <span className="pc-camera-temps">
@@ -438,10 +380,10 @@ export function PrinterCard({
             )}
           </div>
           <div className="pc-camera-controls">
-            <button type="button" className="pc-camera-btn pc-camera-back" onClick={() => setCamOpen(false)}><BackIcon /> <span>{t("printers.backToStatus")}</span></button>
-            {canEdit && isPrinting && <button type="button" className="pc-camera-btn" title={t("common.pause")} disabled={busy !== null} onClick={(e) => act(e, "pause")}><PauseIcon /></button>}
-            {canEdit && isPaused && <button type="button" className="pc-camera-btn" title={t("common.resume")} disabled={busy !== null} onClick={(e) => act(e, "resume")}><PlayIcon /></button>}
-            {canEdit && (isPrinting || isPaused) && <button type="button" className="pc-camera-btn stop" title={t("common.stop")} disabled={busy !== null} onClick={(e) => act(e, "cancel")}><StopIcon /></button>}
+            <button type="button" className="pc-camera-btn pc-camera-back" onClick={() => setCamOpen(false)}><ArrowLeft size={15} strokeWidth={1.8} aria-hidden="true" /> <span>{t("printers.backToStatus")}</span></button>
+            {canEdit && isPrinting && <button type="button" className="pc-camera-btn" title={t("common.pause")} disabled={busy !== null} onClick={(e) => act(e, "pause")}><Pause size={15} strokeWidth={1.8} aria-hidden="true" /></button>}
+            {canEdit && isPaused && <button type="button" className="pc-camera-btn" title={t("common.resume")} disabled={busy !== null} onClick={(e) => act(e, "resume")}><Play size={15} strokeWidth={1.8} aria-hidden="true" /></button>}
+            {canEdit && (isPrinting || isPaused) && <button type="button" className="pc-camera-btn stop" title={t("common.stop")} disabled={busy !== null} onClick={(e) => act(e, "cancel")}><Square size={15} strokeWidth={2.5} fill="currentColor" aria-hidden="true" /></button>}
           </div>
         </div>
       )}

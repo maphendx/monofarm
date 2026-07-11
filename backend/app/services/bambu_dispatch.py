@@ -505,13 +505,25 @@ _PROFILE_POLL_ATTEMPTS = 10
 _PROFILE_POLL_DELAY_SECONDS = 2.0
 
 
+def _numeric_profile_id(value: Any) -> int | None:
+    """Normalize Bambu's numeric profile id to the type task.create expects."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
+
+
 def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
     """Poll `GET /project/{id}` until Bambu finishes parsing the uploaded .3mf.
 
     Bambu attaches a profile (slice metadata + plate thumbnails) to the project
     asynchronously after the OSS upload; `/my/task` rejects requests without
     `profileId` (and `cover`). Returns
-    `{"profile_id": str|None, "cover": str, "plate_index": int}` — callers fall
+    `{"profile_id": int|None, "cover": str, "plate_index": int}` — callers fall
     back to safe defaults when parsing is still pending after the poll window.
     """
     from app.services import bambu_provider
@@ -536,7 +548,7 @@ def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
         if not profiles:
             continue
         prof = profiles[0]
-        profile_id = str(prof.get("profile_id") or prof.get("id") or "") or None
+        profile_id = _numeric_profile_id(prof.get("profile_id") or prof.get("id"))
         cover = ""
         plate_index = 1
         context = prof.get("context") or {}
