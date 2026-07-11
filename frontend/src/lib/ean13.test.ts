@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { generateEan13, getEan13Value, isValidEan13 } from "./ean13";
+import { EAN13_SVG_SIZE, generateEan13, getEan13Value, isValidEan13 } from "./ean13";
 
 describe("generateEan13", () => {
   test("builds a Ukrainian EAN-13 from an eight-digit product code", () => {
@@ -26,5 +26,9 @@ describe("generateEan13", () => {
     expect(getEan13Value("03026100")).toBe("4820030261006");
     expect(getEan13Value("4820030261006")).toBe("4820030261006");
     expect(getEan13Value("CODE-128")).toBeNull();
+  });
+
+  test("uses the requested fixed SVG dimensions", () => {
+    expect(EAN13_SVG_SIZE).toEqual({ width: 230, height: 100 });
   });
 });
