@@ -16,6 +16,7 @@ persisted to JSONB columns for admin diagnostics, not to logs.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 import time
@@ -517,6 +518,27 @@ def _numeric_profile_id(value: Any) -> int | None:
     return None
 
 
+def _profile_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _url_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        url = value.get("url") or value.get("uri") or value.get("src")
+        return url.strip() if isinstance(url, str) else ""
+    return ""
+
+
 def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
     """Poll `GET /project/{id}` until Bambu finishes parsing the uploaded .3mf.
 
@@ -551,16 +573,30 @@ def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
         profile_id = _numeric_profile_id(prof.get("profile_id") or prof.get("id"))
         cover = ""
         plate_index = 1
-        context = prof.get("context") or {}
-        for plate in context.get("plates") or []:
+        context = _profile_mapping(prof.get("context"))
+        cover = _url_value(
+            prof.get("cover") or prof.get("cover_url")
+            or context.get("cover") or context.get("cover_url")
+        )
+        plates = context.get("plates") or prof.get("plates") or []
+        for picture in context.get("pictures") or prof.get("pictures") or []:
+            cover = cover or _url_value(picture)
+        for plate in plates:
             if not isinstance(plate, dict):
                 continue
-            thumb_url = (plate.get("thumbnail") or {}).get("url") or ""
+            thumb_url = _url_value(
+                plate.get("thumbnail") or plate.get("thumbnail_url")
+                or plate.get("cover") or plate.get("cover_url")
+            )
             if thumb_url:
                 cover = thumb_url
-                plate_index = int(plate.get("index") or 1)
+                try:
+                    plate_index = int(plate.get("index") or 1)
+                except (TypeError, ValueError):
+                    plate_index = 1
                 break
-        return {"profile_id": profile_id, "cover": cover, "plate_index": plate_index}
+        if profile_id and cover:
+            return {"profile_id": profile_id, "cover": cover, "plate_index": plate_index}
 
     log.warning("bambu.cloud.project.profile_pending org_id=%s project_id=%s — dispatching with defaults", org_id, project_id)
     return {"profile_id": None, "cover": "", "plate_index": 1}
@@ -668,13 +704,13 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         # Bambu parses the uploaded .3mf server-side into a profile — /my/task
         # validates `profileId` and `cover` are set, so fetch the real values.
         # A zero/placeholder profileId is treated as unset by Bambu, so when the
-        # profile is still pending after the poll window, fail retryable instead
+        # profile/cover is still pending after the poll window, fail retryable instead
         # of sending a doomed request.
         profile_info = fetch_project_profile(org_id, project_id)
-        if not profile_info["profile_id"]:
+        if not profile_info["profile_id"] or not profile_info["cover"]:
             return fail_job(
                 job_id, BambuErrorCode.TASK_CREATE_FAILED,
-                "Bambu Cloud ще не обробив завантажений файл (profile відсутній). Натисни Retry за хвилину.",
+                "Bambu Cloud ще не обробив профіль/прев’ю завантаженого файлу. Натисни Retry за хвилину.",
                 retryable=True,
             )
 
