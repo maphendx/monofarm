@@ -2203,6 +2203,11 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                 _cloud_connected = True
                 backoff = RECONNECT_DELAY  # reset backoff on a successful connect
                 _emit("connected")
+                await ws.send(json.dumps({
+                    "type": "AGENT_HELLO",
+                    "version": AGENT_VERSION,
+                    "capabilities": ["moonraker_upload_chunks"],
+                }))
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 
                 # Fetch TG config on every connect (token may have changed while disconnected)

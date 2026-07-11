@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 # org_id → active WebSocket
 _tunnels: dict[int, WebSocket] = {}
+_agent_capabilities: dict[int, set[str]] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
 _pending_upload_progress: dict[str, Callable[[dict[str, Any]], Awaitable[None] | None]] = {}
@@ -84,6 +85,7 @@ async def register(org_id: int, ws: WebSocket) -> None:
     if org_id in _tunnels:
         log.info("Agent reconnected for org %s — replacing old connection", org_id)
     _tunnels[org_id] = ws
+    _agent_capabilities[org_id] = set()
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
     asyncio.create_task(_subscribe_org_printers(org_id))
     asyncio.create_task(_backfill_org_history(org_id))
@@ -152,6 +154,7 @@ async def _backfill_org_history(org_id: int) -> None:
 
 async def unregister(org_id: int) -> None:
     _tunnels.pop(org_id, None)
+    _agent_capabilities.pop(org_id, None)
     # Fail any futures that were waiting for a response from this agent
     for req_id, fut in list(_pending.items()):
         if not fut.done():
@@ -266,6 +269,11 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
 async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
     msg_type = data.get("type")
+
+    if msg_type == "AGENT_HELLO":
+        _agent_capabilities[org_id] = set(data.get("capabilities") or [])
+        log.info("Agent org %s capabilities: %s", org_id, sorted(_agent_capabilities[org_id]))
+        return
 
     if msg_type == "STATUS_PUSH":
         _handle_status_push(data)
@@ -569,27 +577,32 @@ async def send_moonraker_upload(
         _pending_upload_progress[req_id] = progress_callback
 
     try:
-        await ws.send_text(json.dumps({
+        payload = {
             "id": req_id,
             "method": "MOONRAKER_UPLOAD",
             "url": base,
             "filename": filename,
             "start_print": start_print,
             "upload_timeout": effective_timeout,
-            "chunked": True,
-            "total_bytes": len(file_bytes),
-        }))
-        chunk_size = 256 * 1024
-        offsets = range(0, len(file_bytes), chunk_size) or (0,)
-        for offset in offsets:
-            chunk = file_bytes[offset:offset + chunk_size]
-            await ws.send_text(json.dumps({
-                "id": req_id,
-                "method": "MOONRAKER_UPLOAD_CHUNK",
-                "offset": offset,
-                "final": offset + len(chunk) >= len(file_bytes),
-                "data_b64": base64.b64encode(chunk).decode(),
-            }))
+        }
+        if "moonraker_upload_chunks" in _agent_capabilities.get(org_id, set()):
+            payload.update({"chunked": True, "total_bytes": len(file_bytes)})
+            await ws.send_text(json.dumps(payload))
+            chunk_size = 256 * 1024
+            offsets = range(0, len(file_bytes), chunk_size) or (0,)
+            for offset in offsets:
+                chunk = file_bytes[offset:offset + chunk_size]
+                await ws.send_text(json.dumps({
+                    "id": req_id,
+                    "method": "MOONRAKER_UPLOAD_CHUNK",
+                    "offset": offset,
+                    "final": offset + len(chunk) >= len(file_bytes),
+                    "data_b64": base64.b64encode(chunk).decode(),
+                }))
+        else:
+            # Keep old agents working until they receive the chunk-capable build.
+            payload["data_b64"] = base64.b64encode(file_bytes).decode()
+            await ws.send_text(json.dumps(payload))
         resp = await asyncio.wait_for(future, timeout=effective_timeout)
     except asyncio.TimeoutError:
         raise RuntimeError(f"Agent MOONRAKER_UPLOAD timed out ({effective_timeout}s) for {moonraker_url}")
