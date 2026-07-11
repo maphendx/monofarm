@@ -272,6 +272,12 @@ export function PrinterCard({
               <img className="pc-thumb" src={thumbnailSrc} alt="" />
             )}
             <span className="pc-file" title={printer.job}>{printer.job}</span>
+            {(eta || finish) && (
+              <span className="pc-file-eta">
+                {eta && <strong>{eta}</strong>}
+                {finish && <span>{finish}</span>}
+              </span>
+            )}
           </div>
         )}
 
@@ -280,11 +286,10 @@ export function PrinterCard({
         )}
 
         {showProgress && (
-          <div>
-            <div className="pc-progress"><div className="pc-progress-fill" style={{ width: `${Math.max(0, Math.min(100, printer.progress_pct ?? 0))}%` }} /></div>
-            <div className="pc-progress-meta">
-              <span className="pct">{Math.round(printer.progress_pct ?? 0)}%</span>
-              <span className="eta">{needsClearBed ? t("printers.completed") : eta && finish ? `${eta} · ${finish}` : isPaused ? t("printers.paused") : ""}</span>
+          <div className="pc-progress-wrap">
+            <div className="pc-progress">
+              <div className="pc-progress-fill" style={{ width: `${Math.max(0, Math.min(100, printer.progress_pct ?? 0))}%` }} />
+              <span className="pc-progress-label">{Math.round(printer.progress_pct ?? 0)}%</span>
             </div>
           </div>
         )}
