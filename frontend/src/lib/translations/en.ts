@@ -208,6 +208,12 @@ const en = {
     taskDone: "Task done",
     alreadyDone: "Already done",
     resetError: "Reset error",
+    heatingBed: "Heating bed",
+    completed: "completed",
+    collectBed: "Clear bed",
+    reprint: "Reprint",
+    backToStatus: "Back to status",
+    skip: "Skip",
     // speed profiles
     silent: "Silent",
     standard: "Standard",

@@ -270,6 +270,8 @@ function SlotDot({
 interface SlotStripProps {
   slots: PrinterSlotInfo[];
   kind: PrinterKind;
+  /** Show one-based UI slot numbers next to the swatches */
+  showLabels?: boolean;
   /** Show click-to-edit picker on each slot dot */
   editable?: boolean;
   /** Required when editable=true */
@@ -289,6 +291,7 @@ interface SlotStripProps {
 export function SlotStrip({
   slots,
   kind,
+  showLabels = false,
   editable = false,
   printerId,
   onSlotUpdated,
@@ -342,21 +345,23 @@ export function SlotStrip({
     <>
       <div className="flex flex-wrap items-center gap-1.5">
         {groups.map((group, gi) => (
-          <div key={gi} className="flex gap-1">
+          <div key={gi} className={showLabels ? "flex gap-1.5" : "flex gap-1"}>
             {group.map((s) => {
               const label = slotLabel(s, kind);
               return (
-                <SlotDot
-                  key={s.slot_index}
-                  slot={s}
-                  label={label}
-                  editable={editable && !!printerId}
-                  onOpen={
-                    editable && printerId
-                      ? (e) => openPicker(e, s.slot_index)
-                      : undefined
-                  }
-                />
+                <span key={s.slot_index} className="inline-flex items-center gap-1">
+                  <SlotDot
+                    slot={s}
+                    label={label}
+                    editable={editable && !!printerId}
+                    onOpen={
+                      editable && printerId
+                        ? (e) => openPicker(e, s.slot_index)
+                        : undefined
+                    }
+                  />
+                  {showLabels && <span className="font-mono text-[10px] tabular-nums text-[var(--text-faint)]">{s.slot_index + 1}</span>}
+                </span>
               );
             })}
           </div>

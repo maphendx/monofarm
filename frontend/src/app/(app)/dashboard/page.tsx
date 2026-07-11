@@ -9,6 +9,7 @@ import { FlowView } from "@/components/dashboard/FlowView";
 import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
+import { printerCover as getPrinterCover } from "@/components/printers/printerCardModel";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupActionsMenu } from "@/components/printers/PrinterGroupActionsMenu";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
@@ -177,35 +178,6 @@ function groupPrinters(
 
 // ── printer photo view ────────────────────────────────────────────────────────
 
-const BAMBU_COVER: [RegExp, string][] = [
-  [/a1[\s_-]*mini/i,  "/printers/a1_mini.png"],
-  [/a1[\s_-]*combo/i, "/printers/a1_mini.png"],
-  [/\ba1\b/i,         "/printers/a1.png"],
-  [/p1s/i,            "/printers/p1s.png"],
-  [/p1p/i,            "/printers/p1p.png"],
-  [/x1[\s_-]*carbon/i,"/printers/x1c.png"],
-  [/x1c/i,            "/printers/x1c.png"],
-  [/x1e/i,            "/printers/x1e.png"],
-  [/\bx1\b/i,         "/printers/x1.png"],
-  [/h2d[\s_-]*pro/i,  "/printers/h2d_pro.png"],
-  [/h2d/i,            "/printers/h2d.png"],
-];
-
-function bambuCover(model: string | null | undefined): string | null {
-  if (!model) return null;
-  for (const [re, path] of BAMBU_COVER) {
-    if (re.test(model)) return path;
-  }
-  return null;
-}
-
-function printerCover(printer: Printer): string | null {
-  if (printer.kind === "bambu") return bambuCover(printer.bambu_model);
-  if (printer.kind === "snapmaker_u1") return "/printers/snapmaker_u1.png";
-  return null;
-}
-
-
 function fmtFinish(eta_minutes: number): string {
   const finish = new Date(Date.now() + eta_minutes * 60_000);
   const now = new Date();
@@ -236,7 +208,7 @@ function PrinterPhotoCard({
   onUpdated: (p: Printer) => void;
   onPrint?: (p: Printer) => void;
 }) {
-  const cover      = printerCover(printer);
+  const cover      = getPrinterCover(printer);
   const tone       = printerTone(printer);
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
@@ -627,7 +599,7 @@ export default function DashboardPage() {
     }
   }
 
-  const GRID = "grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4";
+  const GRID = "printer-card-grid";
   const isGrouped = groupBy !== "none";
 
   const statusStats = useMemo(() => {
