@@ -176,7 +176,9 @@ def test_send_file_to_moonraker_printer_calls_upload(
 ):
     # Legacy synchronous upload path — exercised when the Moonraker queue is off.
     from app.core.config import settings
+    from app.services import moonraker
     monkeypatch.setattr(settings, "MOONRAKER_QUEUE_ENABLED", False)
+    monkeypatch.setattr(moonraker, "send_gcode", MagicMock(return_value={}))
     # Create a printer with a moonraker_url
     p = client.post(
         "/api/printers",
@@ -279,7 +281,7 @@ def test_send_to_moonraker_queues_job_when_flag_enabled(
     mock_external_services["moonraker_upload"].assert_not_called()
 
 
-def test_send_file_with_slot_remap_uses_temp_file(
+def test_send_file_with_slot_mapping_keeps_u1_logical_tools(
     client, auth_headers, cleanup_uploads, mock_external_services, monkeypatch
 ):
     # Legacy synchronous upload path — exercised when the Moonraker queue is off.
@@ -303,16 +305,12 @@ def test_send_file_with_slot_remap_uses_temp_file(
     )
     assert resp.status_code == 200, resp.text
     mock_external_services["moonraker_upload"].assert_called_once()
-    # When a remap is requested, the upload is called with a temp file path
-    # (not the original stored_name). The temp path is unlinked after the call
-    # so we can only verify it's not the original.
+    # U1 mapping is sent as firmware macros; the source T0/T1 commands remain
+    # logical and the original stored file is uploaded unchanged.
     args, _ = mock_external_services["moonraker_upload"].call_args
     sent_path: Path = args[1]
     assert isinstance(sent_path, Path)
-    # The remap rewrote the gcode, so we verify by re-reading working bytes
-    # was passed to upload_gcode (we just check it was a tempfile path,
-    # not the canonical stored_name in GCODES_DIR).
-    assert sent_path.parent != GCODES_DIR
+    assert sent_path.parent == GCODES_DIR
 
 
 def test_send_to_missing_printer_returns_404(client, auth_headers, cleanup_uploads):
