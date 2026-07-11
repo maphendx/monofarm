@@ -859,7 +859,10 @@ async def handle_bambu_mqtt(ws, req: dict) -> None:
     except Exception as exc:
         log.warning("BAMBU_MQTT error %s@%s: %s", dev_id, ip, exc)
         result = {"id": req_id, "status": 502, "body": None, "error": str(exc)}
-    await ws.send(json.dumps(result))
+    try:
+        await ws.send(json.dumps(result))
+    except websockets.exceptions.ConnectionClosed as exc:
+        log.warning("BAMBU_MQTT response dropped after cloud disconnect: %s", exc)
 
 
 async def _bambu_lan_mqtt_loop(cloud_ws, printer: dict) -> None:
@@ -2025,7 +2028,10 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         log.warning("MOONRAKER_UPLOAD error %s: %s", url, e)
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
 
-    await ws.send(json.dumps(result))
+    try:
+        await ws.send(json.dumps(result))
+    except websockets.exceptions.ConnectionClosed as exc:
+        log.warning("MOONRAKER_UPLOAD response dropped after cloud disconnect: %s", exc)
 
 
 async def handle_moonraker_upload_chunk(ws, req: dict) -> None:
@@ -2195,7 +2201,9 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
             async with websockets.connect(
                 ws_url,
                 ping_interval=20,
-                ping_timeout=10,
+                # Large uploads can temporarily starve a WAN relay. Do not
+                # kill an otherwise active tunnel after a short 10s pause.
+                ping_timeout=120,
                 open_timeout=15,
                 max_size=None,  # allow large messages (base64 chunks)
             ) as ws:
