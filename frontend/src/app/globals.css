@@ -480,9 +480,12 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .pc-chip { padding: 5px 8px; border-radius: var(--r-sm); background: var(--bg-elevated); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
 .pc-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .pc-slots .size-3 { width: 16px; height: 16px; }
+.pc-slot-indicator.pc-slot-empty { border: 1px dashed var(--border-strong); border-radius: 50%; background: transparent; box-shadow: none; opacity: .72; }
+.pc-slot-indicator.pc-slot-empty::after, .pc-slot-dot.empty::after { content: ""; position: absolute; top: 50%; left: 2px; right: 2px; height: 1px; background: var(--text-faint); transform: rotate(-45deg); }
 .pc-slot { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--border); border-radius: var(--r-full); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; font-variant-numeric: tabular-nums; }
 .pc-slot.empty { color: var(--text-faint); opacity: .65; }
-.pc-slot-dot { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface-hi); }
+.pc-slot-dot { position: relative; width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface-hi); }
+.pc-slot-dot.empty { border-style: dashed; background: transparent; opacity: .72; }
 .pc-file-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pc-thumb { width: 84px; height: 64px; flex-shrink: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-hi); object-fit: contain; }
 .pc-file { min-width: 0; display: -webkit-box; flex: 1; overflow: hidden; color: var(--text); font-size: 13px; font-weight: 500; line-height: 1.35; word-break: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
@@ -540,7 +543,7 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .printer-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   grid-auto-rows: 350px;
   align-items: stretch;
   gap: 16px;

@@ -225,9 +225,9 @@ function SlotDot({
     .join(": ");
 
   const dotClass = [
-    "relative size-3 shrink-0 rounded-full ring-1 transition",
+    "pc-slot-indicator relative size-3 shrink-0 rounded-full ring-1 transition",
     isEmpty
-      ? "ring-[var(--border)] bg-[var(--bg-elevated)]"
+      ? "pc-slot-empty ring-[var(--border)] bg-[var(--bg-elevated)]"
       : isRunout || isError
         ? "ring-[var(--state-error)]"
         : "ring-[var(--border-strong)]",
