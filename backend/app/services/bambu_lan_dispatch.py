@@ -34,6 +34,17 @@ log = logging.getLogger(__name__)
 _inflight: set[int] = set()
 _inflight_guard = threading.Lock()
 
+# Tunnel wait budget for BAMBU_UPLOAD: the agent downloads from R2 and then
+# FTPS-uploads over the printer's (often 2.4GHz-only) Wi-Fi, so scale with
+# file size instead of a flat wait. Capped at the presigned-URL lifetime.
+_UPLOAD_BASE_TIMEOUT_S = 180.0
+_UPLOAD_MIN_RATE_BYTES_S = 128 * 1024
+_UPLOAD_MAX_TIMEOUT_S = 900.0
+
+
+def _upload_timeout(size_bytes: int) -> float:
+    return min(_UPLOAD_MAX_TIMEOUT_S, _UPLOAD_BASE_TIMEOUT_S + size_bytes / _UPLOAD_MIN_RATE_BYTES_S)
+
 
 def _bambu_upload_target_dir(model: str | None, dev_id: str | None = None) -> str:
     """A1 firmware reads project_file from SD root; P/X printers use cache."""
@@ -151,6 +162,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                     file_bytes=None if presigned else file_bytes,
                     presigned_url=presigned,
                     target_dir=upload_target_dir,
+                    timeout=_upload_timeout(len(file_bytes)),
                 )
             elif isinstance(platecycler, dict):
                 raise RuntimeError("PlateCycler AutoPrint потребує підключений monofarm-agent")

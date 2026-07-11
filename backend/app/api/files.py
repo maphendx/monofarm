@@ -34,7 +34,7 @@ from app.services import bambu_dispatch, bambu_lan_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
-from app.services.bambu_mapping import build_ams_mapping, is_a1_series
+from app.services.bambu_mapping import build_ams_mapping
 from app.workers import bambu_jobs as bambu_jobs_worker
 from app.services.gcode_meta import extract_thumbnail, parse_gcode
 from app.services.storage import LOCAL_DIR as GCODES_DIR  # kept for self-heal read
@@ -548,9 +548,12 @@ async def send_to_printer(
             raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
         ams_mapping, use_ams, mapping_details = build_ams_mapping(row.filament_meta, printer, payload.slot_map)
+        # Prefer the hybrid path for every cloud-mode printer when the agent is
+        # available: Bambu Cloud's cloud_file parser only handles Bambu-Studio
+        # 3mf (OrcaSlicer files stay at 0 plates → no profileId → doomed task),
+        # while agent FTPS + project_file works regardless of the slicer.
         hybrid_cloud_command = (
             not printer.bambu_lan_mode
-            and is_a1_series(printer.bambu_model)
             and printer.bambu_dev_ip
             and printer.bambu_access_code
             and bambu_lan_dispatch.has_agent_tunnel(org.id)
@@ -563,9 +566,9 @@ async def send_to_printer(
                     detail="Для Bambu LAN потрібні IP адреса та LAN Access Code",
                 )
             # SimplyPrint-style path: agent uploads to the printer SD card over
-            # FTPS, then project_file starts file:///sdcard/<file>. In LAN mode
-            # the command goes through agent MQTT; on old A1 cloud mode it goes
-            # through the existing Bambu cloud MQTT connection.
+            # FTPS, then project_file starts the local file. In LAN mode the
+            # command goes through agent MQTT; in cloud mode it goes through
+            # the existing Bambu cloud MQTT connection.
             start_via = "lan" if printer.bambu_lan_mode else "cloud"
             job = bambu_dispatch.create_cloud_job(
                 db,

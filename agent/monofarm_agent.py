@@ -37,8 +37,13 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.3"
+AGENT_VERSION = "0.8.4"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
+
+# Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
+# SD-card flushes block the data socket well beyond the handshake timeout.
+BAMBU_FTPS_CONNECT_TIMEOUT = 15
+BAMBU_FTPS_IO_TIMEOUT = 120
 
 try:
     import httpx
@@ -1917,8 +1922,14 @@ async def handle_bambu_upload(ws, req: dict) -> None:
 
         def _ftp_connect() -> "ftplib.FTP_TLS":
             ftp = _ImplicitFTP_TLS(context=_bambu_ssl_context(ip))
-            ftp.connect(ip, 990, timeout=15)
+            ftp.connect(ip, 990, timeout=BAMBU_FTPS_CONNECT_TIMEOUT)
             ftp.login(user="bblp", passwd=access_code)
+            # ftplib reuses self.timeout for every data connection: keep the
+            # short timeout for the TCP+TLS handshake, then relax it so an SD
+            # write stall mid-transfer doesn't kill the upload
+            # ("The write operation timed out").
+            ftp.timeout = BAMBU_FTPS_IO_TIMEOUT
+            ftp.sock.settimeout(BAMBU_FTPS_IO_TIMEOUT)
             return ftp
 
         def _ftp_upload() -> str:
