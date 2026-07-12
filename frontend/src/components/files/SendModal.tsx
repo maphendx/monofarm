@@ -507,8 +507,10 @@ export function SendModal({
     const base = fileHasDimensions
       ? sendablePrinters.filter((p) => fitCheck(file?.filament_meta ?? null, p) !== "oversize")
       : sendablePrinters;
+    // hide printer models this gcode was never sliced for (e.g. Bambu 3mf on a U1)
+    const modelMatched = base.filter((p) => modelCheck(file?.filament_meta ?? null, p, file?.original_name) !== "mismatch");
     // free + type-compatible first, then busy-but-compatible, then wrong type
-    return [...base].sort((a, b) => printerSendRank(file, a) - printerSendRank(file, b));
+    return [...modelMatched].sort((a, b) => printerSendRank(file, a) - printerSendRank(file, b));
   }, [sendablePrinters, fileHasDimensions, file]);
   const selectedPrinters = useMemo(
     // only free + type-compatible printers can actually be sent to
@@ -763,7 +765,7 @@ export function SendModal({
   const modalWidth = showFilePicker
     ? "max-w-lg"
     : choosing ? "max-w-3xl"
-    : isPrintSplit ? (lockedPrinterId !== undefined ? "max-w-3xl" : "max-w-7xl")
+    : isPrintSplit ? (lockedPrinterId !== undefined ? "max-w-3xl" : "max-w-screen-2xl")
     : "max-w-sm";
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -1167,7 +1169,7 @@ export function SendModal({
                           {printerGroups.size > 1 && (
                             <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">{groupName}</p>
                           )}
-                          <div className={lockedPrinterId !== undefined ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3 xl:grid-cols-3"}>
+                          <div className={lockedPrinterId !== undefined ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-4"}>
                             {groupPrinters.map((p) => {
                               const slots    = checkSlots(file?.filament_meta ?? null, p);
                               const compat   = compatBadge(slots);

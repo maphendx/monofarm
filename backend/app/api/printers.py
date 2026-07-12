@@ -1597,6 +1597,13 @@ async def _dispatch(
         if optimistic_state and row.bambu_dev_id in bambu._state_cache:  # noqa: SLF001
             bambu._state_cache[row.bambu_dev_id]["state"] = optimistic_state  # noqa: SLF001
             bambu._state_cache[row.bambu_dev_id]["ts"] = _time.monotonic()  # noqa: SLF001
+        if action == "cancel":
+            # Cancel means "I'm done with whatever this printer thinks it's
+            # doing" — force idle regardless of what live telemetry reports.
+            # A print that failed outright (e.g. FAILED at layer 0) can stay
+            # reported that way indefinitely; nothing else can get it unstuck.
+            row.bed_cleared_at = datetime.now(timezone.utc)
+            db.commit()
     elif row.moonraker_url:
         try:
             if _tunnel.has_tunnel(org.id) and action in _MR_ACTION_PATH:
@@ -1606,6 +1613,9 @@ async def _dispatch(
         except (moonraker.MoonrakerError, RuntimeError) as e:
             raise HTTPException(status_code=502, detail=str(e))
         moonraker.invalidate_status(row.moonraker_url)
+        if action == "cancel":
+            row.bed_cleared_at = datetime.now(timezone.utc)
+            db.commit()
     else:
         # Manual (non-networked) printer — nothing to send a real command to.
         # manual_status is the only state that exists, so these actions just

@@ -114,6 +114,50 @@ def test_bambu_error_cleared_flag_does_not_force_paused_on_an_idle_printer(
     assert printer.error_cleared_at is None
 
 
+def test_cancel_unsticks_a_bambu_printer_permanently_stuck_reporting_failed(
+    db_session: Session,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_org,
+    monkeypatch,
+):
+    """Regression: a print that fails outright (e.g. FAILED at layer 0) can
+    stay reported that way indefinitely — Bambu firmware doesn't self-clear
+    it without a new print or a physical touchscreen tap. error_cleared_at
+    alone just keeps forcing "paused" forever with no escape. Cancel must be
+    a guaranteed way out regardless of what live telemetry still says.
+    """
+    printer = Printer(
+        organization_id=test_org.id,
+        name="Bambu-Err-05",
+        kind=PrinterKind.bambu,
+        bambu_dev_id="DEV-ERR-STUCK",
+        is_active=True,
+        error_cleared_at=datetime.now(timezone.utc),
+    )
+    db_session.add(printer)
+    db_session.commit()
+    db_session.refresh(printer)
+
+    monkeypatch.setattr(
+        bambu, "get_cached_state",
+        lambda _dev_id: {"state": "error", "raw_state": "FAILED", "filename": "broken.gcode", "progress_pct": 0},
+    )
+    monkeypatch.setattr(bambu, "stop_print", lambda _dev_id: None)
+
+    cancel_response = client.post(f"/api/printers/{printer.id}/print/cancel", headers=auth_headers)
+    assert cancel_response.status_code == 200
+
+    get_response = client.get(f"/api/printers/{printer.id}", headers=auth_headers)
+    assert get_response.status_code == 200
+    body = get_response.json()
+    assert body["state"] == "idle"
+    assert body["job"] is None
+
+    db_session.refresh(printer)
+    assert printer.error_cleared_at is None
+
+
 def test_clear_error_succeeds_even_if_bambu_command_fails(
     db_session: Session,
     client: TestClient,
