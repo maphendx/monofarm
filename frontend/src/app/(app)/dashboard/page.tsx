@@ -10,7 +10,7 @@ import { FlowView } from "@/components/dashboard/FlowView";
 import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
-import { printerCanStartPrint, printerCover as getPrinterCover, printerNeedsClearBed } from "@/components/printers/printerCardModel";
+import { printerNeedsClearBed } from "@/components/printers/printerCardModel";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupActionsMenu } from "@/components/printers/PrinterGroupActionsMenu";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
@@ -226,226 +226,6 @@ function groupPrinters(
   }));
 }
 
-// ── printer photo view ────────────────────────────────────────────────────────
-
-function fmtFinish(eta_minutes: number): string {
-  const finish = new Date(Date.now() + eta_minutes * 60_000);
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
-  const dayAfter = new Date(todayStart.getTime() + 2 * 86_400_000);
-  const time = finish.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
-  if (finish < tomorrowStart) return `Сьогодні, ${time}`;
-  if (finish < dayAfter) return `Завтра, ${time}`;
-  return finish.toLocaleDateString("uk-UA", { weekday: "short", day: "numeric", month: "short" }) + `, ${time}`;
-}
-
-function fmtEtaShort(min: number): string {
-  if (min < 60) return `${min}хв`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m ? `${h}г ${m}хв` : `${h}год`;
-}
-
-function PrinterPhotoCard({
-  printer,
-  onClick,
-  onUpdated,
-  onPrint,
-}: {
-  printer: Printer;
-  onClick: () => void;
-  onUpdated: (p: Printer) => void;
-  onPrint?: (p: Printer) => void;
-}) {
-  const cover      = getPrinterCover(printer);
-  const tone       = printerTone(printer);
-  const isPrinting = printer.state === "printing";
-  const isPaused   = printer.state === "paused";
-  const isError    = printer.state === "error";
-  const needsClearBed = printerNeedsClearBed(printer);
-  const canStartPrint = printerCanStartPrint(printer);
-  const pct        = printer.progress_pct ?? 0;
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirmClearBed, setConfirmClearBed] = useState(false);
-
-  const TOP: Record<string, string> = {
-    printing: "var(--state-print)", ok: "var(--state-ok)", warn: "var(--state-warn)", bad: "var(--state-error)",
-    idle: "transparent", muted: "transparent",
-  };
-  const STATE_LABEL: Record<string, string> = {
-    printing: "text-[var(--state-print)]", ok: "text-[var(--state-ok)]", warn: "text-[var(--state-warn)]",
-    bad: "text-[var(--state-error)]", idle: "text-[var(--text-muted)]", muted: "text-[var(--text-faint)]",
-  };
-
-  async function act(e: React.MouseEvent, action: string) {
-    e.stopPropagation();
-    if (busy) return;
-    setConfirmClearBed(false);
-    setBusy(action);
-    try {
-      await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
-      const list = await api<Printer[]>("/api/printers");
-      const updated = list.find((p) => p.id === printer.id);
-      if (updated) onUpdated(updated);
-    } catch { /* ignore */ }
-    finally { setBusy(null); }
-  }
-
-  return (
-    <div
-      onClick={onClick}
-      className={[
-        "group flex cursor-pointer flex-col gap-1.5 rounded-xl border bg-[var(--bg-elevated)] p-3",
-        "border-[var(--border-strong)]  ",
-        tone === "muted" ? "opacity-60" : "",
-        "text-left transition-shadow hover:shadow-md",
-      ].join(" ")}
-      style={{ borderTopWidth: 2, borderTopColor: TOP[tone] }}
-    >
-      {/* ── header: name + photo ── */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold leading-tight">{printer.name}</div>
-          <div className="text-xs text-[var(--text-faint)]">{printer.bambu_model ?? printer.kind}</div>
-        </div>
-        {/* model photo */}
-        <div className="shrink-0 h-10 w-10 flex items-center justify-center">
-          {cover ? (
-            <img src={cover} alt="" className="h-10 w-10 object-contain drop-shadow" />
-          ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-faint)] ">
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-              <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/>
-              <rect x="6" y="18" width="12" height="4" rx="1"/>
-            </svg>
-          )}
-        </div>
-      </div>
-
-      {/* ── state label ── */}
-      <div className={`text-[11px] font-medium ${STATE_LABEL[tone]}`}>
-        {printer.state === "printing" ? "Друкує" :
-         printer.state === "paused"   ? "На паузі" :
-         printer.state === "error"    ? (printer.error_msg ?? "Помилка") :
-         printer.state === "idle" || printer.state === "operational" ? "Готовий" :
-         printer.state === "awaiting_bed_clear" ? "Очікує стіл" : "Офлайн"}
-      </div>
-
-      {/* ── filament dots ── */}
-      {(printer.loaded_filaments?.length ?? 0) > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {printer.loaded_filaments.map((s, i) => (
-            <span key={i}
-              className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/10"
-              style={{ backgroundColor: s.color.startsWith("#") ? s.color.slice(0,7) : s.color }}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* ── progress bar ── */}
-      {(isPrinting || isPaused) && (
-        <div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-hi)] ">
-            <div
-              style={{ background: isPrinting ? "var(--state-print)" : "var(--state-warn)", width: `${Math.max(pct, 1)}%` }}
-            />
-          </div>
-          <div className="mt-0.5 flex justify-between text-[10px] text-[var(--text-faint)]">
-            <span>{Math.round(pct)}%</span>
-            {printer.eta_minutes != null && (
-              <span>{fmtEtaShort(printer.eta_minutes)} · {fmtFinish(printer.eta_minutes)}</span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── action buttons ── */}
-      {canStartPrint && onPrint && (
-        <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onPrint(printer); }}
-            className="flex w-full items-center justify-center rounded-lg border border-[var(--state-ok)] bg-[rgba(34,197,94,.08)] py-1.5 text-xs font-semibold text-[var(--state-ok)] transition hover:bg-[rgba(34,197,94,.15)]"
-          >
-            ▶ Друк
-          </button>
-        </div>
-      )}
-
-      {(needsClearBed || isError) && (
-        <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-          {confirmClearBed ? (
-            <>
-              <button
-                onClick={(e) => act(e, "clear-bed")}
-                disabled={!!busy}
-                className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-                style={{ borderColor: "var(--state-ok)", color: "var(--state-ok)" }}
-              >
-                {busy === "clear-bed" ? "…" : "Так"}
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setConfirmClearBed(false); }}
-                disabled={!!busy}
-                className="flex flex-1 items-center justify-center rounded-lg border border-[var(--border)] py-1.5 text-xs font-semibold text-[var(--text-muted)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40"
-              >
-                Ні
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); setConfirmClearBed(true); }}
-              disabled={!!busy}
-              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-              style={{ borderColor: "var(--state-ok)", color: "var(--state-ok)" }}
-            >
-              Стіл очищено
-            </button>
-          )}
-        </div>
-      )}
-
-      {(isPrinting || isPaused || isError) && (
-        <div className="flex gap-1.5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-          {isError ? (
-            <button
-              onClick={(e) => act(e, "clear-error")}
-              disabled={!!busy}
-              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-              style={{ borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
-              title="Скинути помилку"
-            >
-              {busy === "clear-error" ? "…" : "↺"}
-            </button>
-          ) : (
-            <button
-              onClick={(e) => act(e, isPaused ? "resume" : "pause")}
-              disabled={!!busy}
-              className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-              style={isPaused
-                ? { borderColor: "var(--state-ok)", color: "var(--state-ok)" }
-                : { borderColor: "var(--state-warn)", color: "var(--state-warn)" }}
-              title={isPaused ? "Продовжити" : "Пауза"}
-            >
-              {busy === (isPaused ? "resume" : "pause") ? "…" : isPaused ? "▶" : "⏸"}
-            </button>
-          )}
-          <button
-            onClick={(e) => act(e, "cancel")}
-            disabled={!!busy}
-            className="flex flex-1 items-center justify-center rounded-lg border py-1.5 text-xs font-semibold transition disabled:opacity-40"
-            style={{ borderColor: "var(--state-error)", color: "var(--state-error)" }}
-          >
-            {busy === "cancel" ? "…" : "⏹"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── compact select ────────────────────────────────────────────────────────────
 
 function CompactSelect<T extends string>({
@@ -521,7 +301,7 @@ export default function DashboardPage() {
   const [autoDispatchOpen, setAutoDispatchOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
-  const [view, setView] = useState<"cards" | "photos" | "flow">("cards");
+  const [view, setView] = useState<"cards" | "flow">("cards");
   const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [localOrder, setLocalOrder] = useState<number[] | null>(null);
@@ -869,13 +649,6 @@ export default function DashboardPage() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </button>
             <button
-              onClick={() => setView("photos")}
-              title="Фото"
-              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "photos" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-            </button>
-            <button
               onClick={() => setView("flow")}
               title="Потік виробництва"
               className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "flow" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
@@ -916,12 +689,6 @@ export default function DashboardPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-muted)] ">
           {t("dashboard.noMatch")}
-        </div>
-      ) : view === "photos" ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4">
-          {filtered.map((p) => (
-            <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
-          ))}
         </div>
       ) : splitPanels ? (
         <PanelGroup
