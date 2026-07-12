@@ -249,8 +249,8 @@ export function PrinterCard({
         ) : filamentSlots.length > 0 ? (
           <div className="pc-slots" aria-label="Філаменти">
             {filamentSlots.map((slot) => (
-              <span key={slot.key} className={["pc-slot", slot.empty ? "empty" : ""].filter(Boolean).join(" ")} title={slot.title}>
-                <span className={['pc-slot-dot', slot.empty ? 'empty' : ''].filter(Boolean).join(' ')} style={{ backgroundColor: slot.empty ? undefined : slot.color ?? undefined }} />
+              <span key={slot.key} className={["pc-slot", slot.empty ? "is-empty" : ""].filter(Boolean).join(" ")} title={slot.title}>
+                <span className={['pc-slot-dot', slot.empty ? 'is-empty' : ''].filter(Boolean).join(' ')} style={{ backgroundColor: slot.empty ? undefined : slot.color ?? undefined }} />
                 <span>{slot.label}</span>
               </span>
             ))}
