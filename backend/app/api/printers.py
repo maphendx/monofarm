@@ -248,6 +248,7 @@ def _to_dto(
         return PrinterOut(
             **{**base, "loaded_filaments": filaments},
             state=live.get("state") or "unknown",
+            state_stale=bool(live.get("state_stale")),
             flags=[],
             job=live.get("filename"),
             eta_minutes=live.get("eta_minutes"),

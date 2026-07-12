@@ -89,6 +89,7 @@ class PrinterOut(BaseModel):
 
     # Live / merged state for the dashboard
     state: str | None = None  # primary state ('printing', 'paused', 'idle', ...)
+    state_stale: bool = False  # last known MQTT state while the printer is quiet
     flags: list[str] = []  # ['requires_attention', ...] from SimplyPrint
     job: str | None = None  # current job title
     eta_minutes: int | None = None

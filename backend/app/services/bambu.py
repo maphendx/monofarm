@@ -44,6 +44,10 @@ log = logging.getLogger(__name__)
 FTPS_TIMEOUT = 30
 MQTT_KEEPALIVE = 60
 STATUS_CACHE_TTL = 30.0
+# A printer can stay quiet on MQTT while its SD card is busy writing a large
+# 3MF. Keep the last known state separately so the dashboard does not turn a
+# working printer red just because the fresh telemetry window elapsed.
+STATUS_STALE_TTL = 15 * 60
 DEVICE_LIST_CACHE_TTL = 60
 # MQTT reports arrive ~1/s per printing device — persist to Redis on change
 # or at most this often, so Upstash isn't hammered with identical payloads.
@@ -616,6 +620,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
     ):
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
+        cache_set(f"bambu:state:stale:{dev_id}", updated, STATUS_STALE_TTL)
         _last_state_redis_write[dev_id] = now_mono
     if cleared_terminal:
         return None
@@ -648,6 +653,7 @@ def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]
     }
     _state_cache[dev_id] = idle
     cache_set(f"bambu:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
+    cache_set(f"bambu:state:stale:{dev_id}", idle, STATUS_STALE_TTL)
     return idle
 
 
@@ -1102,11 +1108,16 @@ def get_cached_state(dev_id: str) -> dict:
     from app.services.cache import cache_get
     fresh = cache_get(f"bambu:state:{dev_id}")
     if fresh is not None:
-        return fresh
+        return {**fresh, "state_stale": False}
+    stale = cache_get(f"bambu:state:stale:{dev_id}")
+    if stale is not None:
+        return {**stale, "state_stale": True}
     # Local dict fallback (same-worker stale data)
     entry = _state_cache.get(dev_id)
     if entry and time.monotonic() - entry.get("ts", 0) <= STATUS_CACHE_TTL:
-        return entry
+        return {**entry, "state_stale": False}
+    if entry:
+        return {**entry, "state_stale": True}
     return {"state": "offline"}
 
 

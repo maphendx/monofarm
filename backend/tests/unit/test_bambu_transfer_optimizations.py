@@ -1,3 +1,4 @@
+from app.services import bambu
 from app.services.bambu_lan_dispatch import (
     bambu_upload_progress_update,
     plate_gcode_from_metadata,
@@ -23,3 +24,20 @@ def test_upload_progress_resets_when_agent_switches_from_download_to_ftps():
 
     state = bambu_upload_progress_update(state[0], state[1], {"phase": "uploading", "sent": 4, "total": 100})
     assert state == ("uploading", 0, False)
+
+
+def test_expired_live_cache_uses_last_known_bambu_state(monkeypatch):
+    from app.services import cache
+
+    stale = {"state": "printing", "filename": "large.3mf", "progress_pct": 72}
+    monkeypatch.setattr(bambu, "_state_cache", {})
+    monkeypatch.setattr(
+        cache,
+        "cache_get",
+        lambda key: stale if key == "bambu:state:stale:dev-1" else None,
+    )
+
+    result = bambu.get_cached_state("dev-1")
+
+    assert result["state"] == "printing"
+    assert result["state_stale"] is True
