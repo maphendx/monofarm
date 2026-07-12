@@ -700,6 +700,7 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         stored = job.request_payload_json or {}
         ams_mapping: list[int] | None = stored.get("ams_mapping")
         use_ams: bool = stored.get("use_ams", True)
+        bed_leveling = stored.get("auto_bed_leveling")
 
         # Bambu parses the uploaded .3mf server-side into a profile — /my/task
         # validates `profileId` and `cover` are set, so fetch the real values.
@@ -722,8 +723,8 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
             "deviceId": job.printer_bambu_dev_id,
             "plateIndex": profile_info["plate_index"],
             "useAms": use_ams,
-            "bedLeveling": True,
-            "flowCali": False,
+            "bedLeveling": True if bed_leveling is None else bool(bed_leveling),
+            "flowCali": bool(stored.get("flow_calibration")),
             "vibrationCali": True,
             "layerInspect": False,
             "timelapse": False,

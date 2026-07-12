@@ -4,6 +4,8 @@ import { Check, ChevronRight, Folder, FolderDown, ListPlus, Printer as PrinterIc
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { toast } from "sonner";
+
 import { API_URL, ApiError, api } from "@/lib/api";
 import type { BambuCloudJob, BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
 import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
@@ -28,6 +30,35 @@ export function fmtMinutes(m: number): string {
   const h = Math.floor(m / 60);
   const min = m % 60;
   return min > 0 ? `${h} г ${min} хв` : `${h} г`;
+}
+
+// ── saved send options (localStorage) ─────────────────────────────────────────
+
+const SEND_OPTS_KEY = "monofarm_send_opts";
+
+type SavedSendOpts = {
+  bed_leveling: boolean;      // U1 gcode rewrite + Bambu MQTT bed_leveling
+  timelapse: boolean;         // Moonraker only
+  ai_detection: boolean;      // Moonraker only
+  u1_flow_calibrate: boolean; // U1: calibrate all used slots vs none
+  bambu_flow_cali: boolean;   // Bambu MQTT flow_cali
+};
+
+const DEFAULT_SEND_OPTS: SavedSendOpts = {
+  bed_leveling: true,
+  timelapse: true,
+  ai_detection: true,
+  u1_flow_calibrate: true,
+  bambu_flow_cali: false,
+};
+
+function loadSendOpts(): SavedSendOpts {
+  if (typeof window === "undefined") return DEFAULT_SEND_OPTS;
+  try {
+    return { ...DEFAULT_SEND_OPTS, ...JSON.parse(localStorage.getItem(SEND_OPTS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULT_SEND_OPTS;
+  }
 }
 
 type SlotMatch = "ok" | "type_mismatch" | "missing";
@@ -443,9 +474,11 @@ export function SendModal({
     defaultPrinterId ? new Set([defaultPrinterId]) : new Set(),
   );
   const [slotMap, setSlotMap] = useState<Record<number, number>>({});
-  const [autoBedLeveling, setAutoBedLeveling] = useState(true);
-  const [timelapse, setTimelapse] = useState(true);
-  const [aiDetection, setAiDetection] = useState(true);
+  const [savedOpts] = useState(loadSendOpts);
+  const [autoBedLeveling, setAutoBedLeveling] = useState(savedOpts.bed_leveling);
+  const [timelapse, setTimelapse] = useState(savedOpts.timelapse);
+  const [aiDetection, setAiDetection] = useState(savedOpts.ai_detection);
+  const [bambuFlowCali, setBambuFlowCali] = useState(savedOpts.bambu_flow_cali);
   const [calibrateSlots, setCalibrateSlots] = useState<Set<number>>(new Set());
 
   // ── results ──
@@ -484,6 +517,7 @@ export function SendModal({
   );
   const usedSlots = useMemo(() => usedSlotIndices(file?.filament_meta ?? null), [file?.filament_meta]);
   const isMoonraker = numSelected === 1 && !!primaryPrinter?.moonraker_url;
+  const isBambu = numSelected === 1 && primaryPrinter?.kind === "bambu";
   const primaryPrinterAllSlots = primaryPrinter ? printerAllSlotsForDisplay(primaryPrinter) : [];
   const primaryPrinterHasAmsUnits = primaryPrinterAllSlots.some((s) => s.unit !== null);
 
@@ -510,8 +544,8 @@ export function SendModal({
   useEffect(() => {
     if (!file || !primaryPrinter) return;
     setSlotMap(autoMapSlots(file.filament_meta, primaryPrinter));
-    setCalibrateSlots(new Set(usedSlots));
-  }, [file?.filament_meta, primaryPrinter?.id, usedSlots]);
+    setCalibrateSlots(savedOpts.u1_flow_calibrate ? new Set(usedSlots) : new Set());
+  }, [file?.filament_meta, primaryPrinter?.id, usedSlots, savedOpts.u1_flow_calibrate]);
 
   // Keep the send modal useful after the request returns: the operator sees
   // upload, printer acknowledgement, and real printing instead of a generic
@@ -581,6 +615,19 @@ export function SendModal({
   }, [deleteOnCancel, fileProp?.id]);
 
   // ── handlers ──
+  function saveSendOpts() {
+    const opts: SavedSendOpts = {
+      bed_leveling: autoBedLeveling,
+      timelapse,
+      ai_detection: aiDetection,
+      u1_flow_calibrate:
+        isMoonraker && usedSlots.length > 0 ? calibrateSlots.size > 0 : savedOpts.u1_flow_calibrate,
+      bambu_flow_cali: bambuFlowCali,
+    };
+    try { localStorage.setItem(SEND_OPTS_KEY, JSON.stringify(opts)); } catch {}
+    toast.success("Параметри збережено — нові відправки відкриються з ними");
+  }
+
   function switchMode(m: Mode) {
     setMode(m);
     setResult(null);
@@ -629,6 +676,9 @@ export function SendModal({
           if (!aiDetection)     body.ai_detection = false;
           if (calibrateSlots.size !== usedSlots.length)
             body.calibrate_slots = Array.from(calibrateSlots).sort((a, b) => a - b);
+        } else if (p.kind === "bambu") {
+          if (!autoBedLeveling) body.auto_bed_leveling = false;
+          if (bambuFlowCali)    body.flow_calibration = true;
         }
         const res = await api<{ ok: boolean; printer_name: string; message: string; dispatch_mode?: string; job_id?: number; printer_id?: number | null }>(
           `/api/files/${file.id}/send/${p.id}`,
@@ -653,9 +703,18 @@ export function SendModal({
           for (const i of usedSlotIndices(file.filament_meta)) {
             if ((sm[i] ?? i) !== i) apiSlotMap[i] = sm[i];
           }
+          const multiBody: Record<string, unknown> = { slot_map: apiSlotMap };
+          if (p.moonraker_url) {
+            if (!autoBedLeveling) multiBody.auto_bed_leveling = false;
+            if (!timelapse)       multiBody.timelapse = false;
+            if (!aiDetection)     multiBody.ai_detection = false;
+          } else if (p.kind === "bambu") {
+            if (!autoBedLeveling) multiBody.auto_bed_leveling = false;
+            if (bambuFlowCali)    multiBody.flow_calibration = true;
+          }
           const res = await api<{ ok: boolean; message: string }>(
             `/api/files/${file.id}/send/${p.id}`,
-            { method: "POST", body: JSON.stringify({ slot_map: apiSlotMap }) },
+            { method: "POST", body: JSON.stringify(multiBody) },
           );
           if (res.ok) keepFile();
           return { printerId: p.id, name: p.name, ok: res.ok, message: res.message };
@@ -986,23 +1045,35 @@ export function SendModal({
                       </div>
                     )}
 
-                    {/* Moonraker options */}
-                    {isMoonraker && file && (
+                    {/* Print options (Moonraker/U1 + Bambu) */}
+                    {(isMoonraker || isBambu) && file && (
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-3">
-                        <p className="mb-2 text-[11px] font-medium text-[var(--text-muted)]">Опції</p>
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-[11px] font-medium text-[var(--text-muted)]">Опції</p>
+                          <button type="button" onClick={saveSendOpts}
+                            className="text-[11px] font-medium text-[var(--accent)] transition hover:underline">
+                            Зберегти параметри
+                          </button>
+                        </div>
                         <div className="space-y-1.5">
-                          {([
-                            [autoBedLeveling, setAutoBedLeveling, "Автокалібрування"] as const,
-                            [timelapse,       setTimelapse,       "Таймлапс"] as const,
-                            [aiDetection,     setAiDetection,     "AI детекція"] as const,
-                          ] as const).map(([checked, setter, label]) => (
+                          {(isMoonraker
+                            ? ([
+                                [autoBedLeveling, setAutoBedLeveling, "Вирівнювання столу"] as const,
+                                [timelapse,       setTimelapse,       "Таймлапс"] as const,
+                                [aiDetection,     setAiDetection,     "AI детекція"] as const,
+                              ] as const)
+                            : ([
+                                [autoBedLeveling, setAutoBedLeveling, "Вирівнювання столу"] as const,
+                                [bambuFlowCali,   setBambuFlowCali,   "Калібрування пластику"] as const,
+                              ] as const)
+                          ).map(([checked, setter, label]) => (
                             <label key={label} className="flex cursor-pointer items-center gap-2 text-[11px]">
                               <input type="checkbox" checked={checked} onChange={(e) => setter(e.target.checked)} />
                               <span className="text-[var(--text)]">{label}</span>
                             </label>
                           ))}
                         </div>
-                        {usedSlots.length > 0 && (
+                        {isMoonraker && usedSlots.length > 0 && (
                           <>
                             <p className="mb-1.5 mt-3 text-[11px] font-medium text-[var(--text-muted)]">Калібрувати</p>
                             <div className="space-y-1">

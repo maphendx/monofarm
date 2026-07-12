@@ -1237,6 +1237,8 @@ def build_start_print_payload(
     task_id: str | None = None,
     plate_index: int = 1,
     plate_gcode: str | None = None,
+    bed_leveling: bool = True,
+    flow_cali: bool = False,
 ) -> dict[str, Any]:
     """Build a Bambu MQTT project_file command (OpenBambuAPI spec, §6.7).
 
@@ -1275,9 +1277,9 @@ def build_start_print_payload(
             "timelapse": False,
             # Firmware generations disagree on the spelling — send both, unknown
             # keys are ignored (old fw: bed_leveling, OpenBambuAPI: bed_levelling).
-            "bed_leveling": True,
-            "bed_levelling": True,
-            "flow_cali": False,
+            "bed_leveling": bed_leveling,
+            "bed_levelling": bed_leveling,
+            "flow_cali": flow_cali,
             "vibration_cali": True,
             "layer_inspect": False,
         },

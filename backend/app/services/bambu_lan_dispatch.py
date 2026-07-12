@@ -201,6 +201,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
 
         # ── task_creating → project_file via LAN MQTT ────────────────────────
         stored_slots = payload or {}
+        bed_leveling = stored_slots.get("auto_bed_leveling")
         start_payload = bambu.build_start_print_payload(
             dev_id,
             file_name,
@@ -209,6 +210,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             ftp_filename=remote_path,
             task_id=correlation_id,
             plate_gcode=plate_gcode,
+            bed_leveling=True if bed_leveling is None else bool(bed_leveling),
+            flow_cali=bool(stored_slots.get("flow_calibration")),
         )
         advance_job_status(job_id, BambuCloudJobStatus.task_creating, bambu_task_id=correlation_id)
         try:

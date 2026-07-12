@@ -115,6 +115,8 @@ class SendPayload(BaseModel):
     # 0-based extruder indices to calibrate. None = leave SM_PRINT_FLOW_CALIBRATE
     # lines untouched; empty list = skip calibration on every slot.
     calibrate_slots: list[int] | None = None
+    # Bambu flow (dynamics) calibration before print. None = firmware default (off).
+    flow_calibration: bool | None = None
     # Optional link to a PrintTask — used for schedule eligibility guard.
     task_id: int | None = None
 
@@ -586,6 +588,8 @@ async def send_to_printer(
                     "use_ams": use_ams,
                     "slot_map": {str(k): v for k, v in payload.slot_map.items()},
                     "mapping_details": mapping_details,
+                    "auto_bed_leveling": payload.auto_bed_leveling,
+                    "flow_calibration": payload.flow_calibration,
                 },
             )
             if job.file_size is None:
@@ -628,6 +632,8 @@ async def send_to_printer(
                 "use_ams": use_ams,
                 "slot_map": {str(k): v for k, v in payload.slot_map.items()},
                 "mapping_details": mapping_details,
+                "auto_bed_leveling": payload.auto_bed_leveling,
+                "flow_calibration": payload.flow_calibration,
             },
         )
         if job.file_size is None:
