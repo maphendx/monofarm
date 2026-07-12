@@ -34,6 +34,7 @@ function StatusCard({
   sub,
   color,
   active,
+  dimmed,
   onClick,
 }: {
   label: string;
@@ -41,17 +42,19 @@ function StatusCard({
   sub?: string;
   color: string;
   active?: boolean;
+  dimmed?: boolean;
   onClick?: () => void;
 }) {
   return (
     <div
       onClick={onClick}
       className={[
-        "relative overflow-hidden rounded-xl border px-4 py-3 transition-colors",
+        "relative overflow-hidden rounded-xl border px-4 py-3 transition",
         onClick ? "cursor-pointer" : "",
         active
           ? "border-[var(--border-strong)] bg-[var(--surface-2)]"
           : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
+        dimmed ? "opacity-50 hover:opacity-90" : "",
       ].join(" ")}
     >
       <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-b-xl" style={{ background: color }} />
@@ -67,18 +70,20 @@ function StatusCard({
 interface GroupStats {
   printing: number;
   paused: number;
-  action: number;  // awaiting_bed_clear / in_maintenance / error
-  ready: number;   // operational / idle / online / print_pending
+  awaiting: number; // needs bed clear
+  action: number;  // in_maintenance / error
+  ready: number;   // operational / idle / online / print_pending, excluding those awaiting bed clear
   offline: number; // offline / not_connected / unknown
 }
 
 function calcGroupStats(items: Printer[]): GroupStats {
-  const s: GroupStats = { printing: 0, paused: 0, action: 0, ready: 0, offline: 0 };
+  const s: GroupStats = { printing: 0, paused: 0, awaiting: 0, action: 0, ready: 0, offline: 0 };
   for (const p of items) {
     const st = p.state ?? "unknown";
     if (st === "printing") s.printing++;
     else if (st === "paused") s.paused++;
-    else if (["awaiting_bed_clear", "in_maintenance", "error"].includes(st)) s.action++;
+    else if (printerNeedsClearBed(p)) s.awaiting++;
+    else if (["in_maintenance", "error"].includes(st)) s.action++;
     else if (["operational", "idle", "online", "print_pending"].includes(st)) s.ready++;
     else s.offline++;
   }
@@ -108,6 +113,7 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
     <div className="flex items-center gap-1.5">
       <StatBadge count={stats.printing} label={t("dashboard.printing")} className="badge badge-print" />
       <StatBadge count={stats.paused}   label={t("dashboard.paused")}   className="badge badge-warn" />
+      <StatBadge count={stats.awaiting} label={t("dashboard.awaiting")} className="badge badge-warn" />
       <StatBadge count={stats.action}   label={t("dashboard.action")}   className="badge badge-warn" />
       <StatBadge count={stats.ready}    label={t("dashboard.ready")}    className="badge badge-ok" />
       <StatBadge count={stats.offline}  label={t("dashboard.offline")}  className="badge badge-offline" />
@@ -525,7 +531,7 @@ export default function DashboardPage() {
     else if (filter === "attention") result = displayPrinters.filter((p) => p.state === "error");
     else if (filter === "idle") result = displayPrinters.filter((p) => p.state === "idle" || p.state === "operational");
     else if (filter === "paused") result = displayPrinters.filter((p) => p.state === "paused");
-    else if (filter === "awaiting") result = displayPrinters.filter((p) => p.state === "awaiting_bed_clear");
+    else if (filter === "awaiting") result = displayPrinters.filter((p) => printerNeedsClearBed(p));
     else if (filter === "offline") result = displayPrinters.filter((p) => p.state === "offline" || p.state === "unknown");
     else result = displayPrinters;
 
@@ -605,9 +611,9 @@ export default function DashboardPage() {
     for (const p of printers) {
       const s = p.state ?? "unknown";
       if (s === "error") attention++;
+      else if (printerNeedsClearBed(p)) awaiting++;
       else if (s === "idle" || s === "operational") idle++;
       else if (s === "paused") paused++;
-      else if (s === "awaiting_bed_clear") awaiting++;
       else if (s === "printing") {
         printing++;
         if (p.eta_minutes != null && (!nextFinish || p.eta_minutes < nextFinish.eta))
@@ -633,14 +639,15 @@ export default function DashboardPage() {
             sub={statusStats.nextFinish?.name}
             color="var(--state-print)"
             active={filter === "printing"}
+            dimmed={filter !== "all" && filter !== "printing"}
             onClick={() => setFilter(filter === "printing" ? "all" : "printing")}
           />
-          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={filter === "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
-          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={filter === "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
-          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={filter === "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
-          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={filter === "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
-          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={filter === "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
-          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={filter === "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
+          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={filter === "attention"} dimmed={filter !== "all" && filter !== "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
+          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={filter === "idle"} dimmed={filter !== "all" && filter !== "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
+          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={filter === "paused"} dimmed={filter !== "all" && filter !== "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
+          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={filter === "awaiting"} dimmed={filter !== "all" && filter !== "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
+          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={filter === "printing"} dimmed={filter !== "all" && filter !== "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
+          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={filter === "offline"} dimmed={filter !== "all" && filter !== "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
         </div>
       )}
 

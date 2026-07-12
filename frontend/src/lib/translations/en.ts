@@ -131,6 +131,7 @@ const en = {
     ready: "ready",
     paused: "paused",
     offline: "offline",
+    awaiting: "awaiting bed clear",
     action: "action",
     error: "error",
     allPrinters: "All printers",

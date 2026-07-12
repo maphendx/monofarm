@@ -131,6 +131,7 @@ const uk = {
     ready: "готові",
     paused: "пауза",
     offline: "офлайн",
+    awaiting: "очікує стіл",
     action: "дія",
     error: "помилка",
     allPrinters: "Всі принтери",
