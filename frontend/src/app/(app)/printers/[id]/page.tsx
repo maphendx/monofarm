@@ -1456,10 +1456,12 @@ function LoadedFilamentsCard({
 }) {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
+  const isBambu = printer.kind === "bambu";
 
   const [slots, setSlots] = useState<FilamentSlot[]>(printer.loaded_filaments ?? []);
   const [inventory, setInventory] = useState<Filament[]>([]);
   const [editing, setEditing] = useState(false);
+  const [hasAms, setHasAms] = useState<boolean | null>(printer.bambu_has_ams);
   const [paletteSlot, setPaletteSlot] = useState<number | null>(null);
   const [nozzle, setNozzle] = useState<string>(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
   const [bedType, setBedType] = useState<string>(printer.bed_type ?? "");
@@ -1474,6 +1476,7 @@ function LoadedFilamentsCard({
   // Display reads live data straight off the printer; the editor works on a draft.
   function startEdit() {
     setSlots(printer.loaded_filaments ?? []);
+    setHasAms(printer.bambu_has_ams);
     setNozzle(printer.nozzle_diameter != null ? String(printer.nozzle_diameter) : "");
     setBedType(printer.bed_type ?? "");
     setEditing(true);
@@ -1514,6 +1517,12 @@ function LoadedFilamentsCard({
         method: "PUT",
         body: JSON.stringify(slots),
       });
+      if (isBambu) {
+        await api(`/api/printers/${printer.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ bambu_has_ams: hasAms }),
+        });
+      }
       const nz = nozzle.trim() ? Number(nozzle) : null;
       const bt = bedType.trim() || null;
       if (nz !== (printer.nozzle_diameter ?? null) || bt !== (printer.bed_type ?? null)) {
@@ -1563,6 +1572,11 @@ function LoadedFilamentsCard({
               </svg>
             </button>
           )}
+          {isBambu && !editing && (
+            <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
+              {printer.bambu_has_ams === null ? "Авто" : printer.bambu_has_ams ? "AMS" : "Зовнішня котушка"}
+            </span>
+          )}
         </div>
 
         {groups.length === 0 ? (
@@ -1585,6 +1599,28 @@ function LoadedFilamentsCard({
         {/* ── edit panel ── */}
         {canEdit && editing && (
           <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4 ">
+            {isBambu && (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3">
+                <p className="mb-2 text-[11px] font-medium text-[var(--text-muted)]">Подача філаменту</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {([[null, "Авто"], [true, "AMS"], [false, "Зовнішня котушка"]] as const).map(([value, label]) => (
+                    <label key={label} className={["flex cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs", hasAms === value
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]"].join(" ")}>
+                      <input
+                        type="radio"
+                        name={`bambu-ams-${printer.id}`}
+                        checked={hasAms === value}
+                        onChange={() => setHasAms(value)}
+                        className="sr-only"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {!hasAms && <p className="mt-2 text-[10px] text-[var(--text-faint)]">Відправка друку використовуватиме зовнішню котушку.</p>}
+              </div>
+            )}
             {/* nozzle + build plate */}
             <div className="flex flex-wrap items-end gap-3 pb-1">
               <label className="block">

@@ -100,6 +100,7 @@ export interface Printer {
   bambu_dev_ip: string | null;
   bambu_model: string | null;
   bambu_lan_mode: boolean;
+  bambu_has_ams: boolean | null;
   is_active: boolean;
   is_out_of_order: boolean;
   sort_order: number;

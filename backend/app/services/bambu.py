@@ -525,7 +525,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     if error_msg is None and print_data.get("print_error"):
         err_code = print_data["print_error"]
         if err_code != 0:
-            error_msg = f"Помилка друку: {err_code:#010x}"
+            error_msg = _describe_print_error(err_code)
     if cleared_terminal:
         error_msg = None
 
@@ -620,6 +620,13 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     if cleared_terminal:
         return None
     return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
+
+
+def _describe_print_error(err_code: int) -> str:
+    """Return an actionable message for a numeric Bambu print error."""
+    if err_code == 0x0500C010:
+        return "Помилка MicroSD: карта пам’яті не читається або не записується — перевір/заміни MicroSD-карту на принтері (0x0500c010)"
+    return f"Помилка друку: {err_code:#010x}"
 
 
 def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]:
@@ -1164,6 +1171,39 @@ def set_speed_profile(dev_id: str, profile: int) -> None:
             "sequence_id": _next_seq(),
         }
     })
+
+
+def build_ams_filament_setting_payload(slot: dict[str, Any]) -> dict[str, Any]:
+    """Build the MQTT command that makes Handy show a slot's material/color."""
+    slot_index = int(slot.get("slot", 254))
+    if slot_index == 254:
+        ams_id, tray_id = 255, 254
+    else:
+        ams_id, tray_id = divmod(slot_index, 4)
+
+    raw_color = str(slot.get("hex_color") or slot.get("color") or "").strip().lstrip("#")
+    color = raw_color[:8].upper() if len(raw_color) in (6, 8) else "FFFFFF00"
+    if len(color) == 6:
+        color += "FF"
+    empty = bool(slot.get("empty"))
+    return {
+        "print": {
+            "command": "ams_filament_setting",
+            "sequence_id": _next_seq(),
+            "ams_id": ams_id,
+            "tray_id": tray_id,
+            "tray_info_idx": "",
+            "tray_color": "FFFFFF00" if empty else color,
+            "nozzle_temp_min": 0,
+            "nozzle_temp_max": 0,
+            "tray_type": "" if empty else str(slot.get("type") or "PLA").upper(),
+        },
+    }
+
+
+def sync_filament_slot(dev_id: str, slot: dict[str, Any]) -> None:
+    """Publish one operator-edited AMS/external-spool setting."""
+    _publish(dev_id, build_ams_filament_setting_payload(slot), qos=1)
 
 
 # Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.

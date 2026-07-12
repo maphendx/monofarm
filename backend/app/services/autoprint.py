@@ -177,7 +177,10 @@ async def start_next_for_printer(
                 _set_error(db, printer, safety_error)
                 return None
 
-            ams_mapping, use_ams, _details = build_ams_mapping(gcode.filament_meta, printer)
+            ams_mapping, detected_use_ams, _details = build_ams_mapping(gcode.filament_meta, printer)
+            use_ams = printer.bambu_has_ams if printer.bambu_has_ams is not None else detected_use_ams
+            if not use_ams:
+                ams_mapping = None
             run_index = entry.runs_completed + 1
             eject_after_print = printer.autoprint_eject_last_plate or _has_more_runs(db, entry)
             # Cloud-mode printers reject LAN MQTT (needs Developer Mode) — the agent

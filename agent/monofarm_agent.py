@@ -37,7 +37,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.4"
+AGENT_VERSION = "0.8.5"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -346,9 +346,15 @@ def _classify_bambu(print_data: dict) -> tuple[str, str, str]:
     if isinstance(print_error, int) and print_error != 0:
         codes.append(f"{print_error:#010x}")
         if not error_text:
-            error_text = f"Помилка друку: {print_error:#010x}"
+            error_text = _describe_print_error_local(print_error)
 
     return state, error_text, " ".join(codes)
+
+
+def _describe_print_error_local(err_code: int) -> str:
+    if err_code == 0x0500C010:
+        return "Помилка MicroSD: карта пам’яті не читається або не записується — перевір/заміни MicroSD-карту на принтері (0x0500c010)"
+    return f"Помилка друку: {err_code:#010x}"
 
 
 def _alert_should_fire(printer_key: str, state: str, error_code: str) -> bool:

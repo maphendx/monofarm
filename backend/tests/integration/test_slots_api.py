@@ -48,6 +48,46 @@ def test_list_slots_returns_4_for_u1(client: TestClient, auth_headers, u1_printe
     assert all(s["state"] == "empty" for s in data)
 
 
+def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, monkeypatch):
+    from app.services import bambu
+
+    captured = []
+    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    # The test fixture's DB session is injected by the request; create the row through the API.
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu A1", "kind": "bambu", "bambu_dev_id": "BAMBU-SYNC"},
+    )
+    assert created.status_code == 201
+    printer_id = created.json()["id"]
+
+    assert created.json()["bambu_has_ams"] is None
+    no_ams = client.patch(
+        f"/api/printers/{printer_id}",
+        headers=auth_headers,
+        json={"bambu_has_ams": False},
+    )
+    assert no_ams.status_code == 200
+    assert no_ams.json()["bambu_has_ams"] is False
+    auto = client.patch(
+        f"/api/printers/{printer_id}",
+        headers=auth_headers,
+        json={"bambu_has_ams": None},
+    )
+    assert auto.status_code == 200
+    assert auto.json()["bambu_has_ams"] is None
+
+    resp = client.put(
+        f"/api/printers/{printer_id}/loaded-filaments",
+        headers=auth_headers,
+        json=[{"slot": 0, "color": "#ff0000", "color_name": "Red", "type": "PLA", "empty": False, "unit_id": 0}],
+    )
+    assert resp.status_code == 200, resp.text
+    assert captured[0][0] == "BAMBU-SYNC"
+    assert captured[0][1]["print"]["tray_color"] == "FF0000FF"
+
+
 def test_assign_filament_to_slot(client: TestClient, auth_headers, u1_printer, test_filament):
     resp = client.put(
         f"/api/printers/{u1_printer.id}/slots/0",

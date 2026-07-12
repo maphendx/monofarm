@@ -2,7 +2,12 @@
 import io
 import zipfile
 
-from app.services.bambu import build_start_print_payload, plate_gcode_entry, sanitize_sd_filename
+from app.services.bambu import (
+    build_ams_filament_setting_payload,
+    build_start_print_payload,
+    plate_gcode_entry,
+    sanitize_sd_filename,
+)
 from app.services.bambu_lan_dispatch import _bambu_upload_target_dir
 from app.services.bambu_mapping import build_ams_mapping
 
@@ -138,3 +143,32 @@ def test_sanitize_sd_filename_drops_cyrillic_keeps_ascii_tail():
 def test_sanitize_sd_filename_falls_back_when_stem_empties():
     assert sanitize_sd_filename("Сборка.gcode.3mf", fallback="job-7") == "job-7.gcode.3mf"
     assert sanitize_sd_filename("Сборка.3mf", fallback="job-7") == "job-7.3mf"
+
+
+def test_ams_filament_setting_uses_local_tray_index_and_rgba_color():
+    cmd = build_ams_filament_setting_payload(
+        {"slot": 5, "type": "PLA", "color": "#ff0000", "empty": False}
+    )
+    p = cmd["print"]
+    assert p["command"] == "ams_filament_setting"
+    assert p["ams_id"] == 1
+    assert p["tray_id"] == 1
+    assert p["tray_color"] == "FF0000FF"
+    assert p["tray_type"] == "PLA"
+
+
+def test_ams_filament_setting_uses_external_spool_ids():
+    cmd = build_ams_filament_setting_payload(
+        {"slot": 254, "type": "PETG", "color": "#00ff00", "empty": False}
+    )
+    p = cmd["print"]
+    assert p["ams_id"] == 255
+    assert p["tray_id"] == 254
+    assert p["tray_color"] == "00FF00FF"
+
+
+def test_ams_filament_setting_clears_empty_tray():
+    p = build_ams_filament_setting_payload({"slot": 0, "empty": True})["print"]
+    assert p["tray_info_idx"] == ""
+    assert p["tray_type"] == ""
+    assert p["tray_color"] == "FFFFFF00"

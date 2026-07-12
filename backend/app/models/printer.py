@@ -43,6 +43,8 @@ class Printer(Base):
 
     # LAN-only MQTT mode (for older firmware without reliable cloud)
     bambu_lan_mode: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # Operator-selected material transport. None keeps legacy auto-detection.
+    bambu_has_ams: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     # Array of {slot, color, type, brand?, filament_id?} dicts — what's loaded in each slot

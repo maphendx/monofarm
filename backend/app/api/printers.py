@@ -214,6 +214,7 @@ def _to_dto(
         bambu_dev_ip=printer.bambu_dev_ip,
         bambu_model=printer.bambu_model,
         bambu_lan_mode=printer.bambu_lan_mode,
+        bambu_has_ams=printer.bambu_has_ams,
         is_active=printer.is_active,
         is_out_of_order=printer.is_out_of_order,
         sort_order=printer.sort_order,
@@ -1089,6 +1090,7 @@ def create_printer(
         bambu_dev_ip=payload.bambu_dev_ip,
         bambu_model=payload.bambu_model,
         bambu_lan_mode=payload.bambu_lan_mode,
+        bambu_has_ams=payload.bambu_has_ams,
         build_x=payload.build_x if payload.build_x is not None else (bvol[0] if bvol else None),
         build_y=payload.build_y if payload.build_y is not None else (bvol[1] if bvol else None),
         build_z=payload.build_z if payload.build_z is not None else (bvol[2] if bvol else None),
@@ -1139,6 +1141,8 @@ def update_printer(
                 row.build_x, row.build_y, row.build_z = bvol
     if payload.bambu_lan_mode is not None:
         row.bambu_lan_mode = payload.bambu_lan_mode
+    if "bambu_has_ams" in payload.model_fields_set:
+        row.bambu_has_ams = payload.bambu_has_ams
     if payload.build_x is not None:
         row.build_x = payload.build_x
     if payload.build_y is not None:
@@ -1198,6 +1202,12 @@ def set_loaded_filaments(
     row.loaded_filaments = [s.model_dump() for s in slots]
     db.commit()
     db.refresh(row)
+    if row.kind == PrinterKind.bambu and row.bambu_dev_id:
+        try:
+            for slot in slots:
+                bambu.sync_filament_slot(row.bambu_dev_id, slot.model_dump())
+        except bambu.BambuError as exc:
+            raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
     return _to_dto(row, db)
 
 

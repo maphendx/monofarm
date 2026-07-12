@@ -117,6 +117,8 @@ class SendPayload(BaseModel):
     calibrate_slots: list[int] | None = None
     # Bambu flow (dynamics) calibration before print. None = firmware default (off).
     flow_calibration: bool | None = None
+    # Bambu AMS selection. None = infer from the selected slot mapping.
+    use_ams: bool | None = None
     # Optional link to a PrintTask — used for schedule eligibility guard.
     task_id: int | None = None
 
@@ -549,7 +551,17 @@ async def send_to_printer(
         if not is_3mf:
             raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
-        ams_mapping, use_ams, mapping_details = build_ams_mapping(row.filament_meta, printer, payload.slot_map)
+        ams_mapping, detected_use_ams, mapping_details = build_ams_mapping(
+            row.filament_meta, printer, payload.slot_map
+        )
+        configured_use_ams = printer.bambu_has_ams
+        use_ams = (
+            payload.use_ams
+            if payload.use_ams is not None
+            else configured_use_ams if configured_use_ams is not None else detected_use_ams
+        )
+        if not use_ams:
+            ams_mapping = None
         # Prefer the hybrid path for every cloud-mode printer when the agent is
         # available: Bambu Cloud's cloud_file parser only handles Bambu-Studio
         # 3mf (OrcaSlicer files stay at 0 plates → no profileId → doomed task),
