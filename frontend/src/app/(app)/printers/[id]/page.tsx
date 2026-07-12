@@ -19,6 +19,7 @@ import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
+import { normalizedPrinterSlots } from "@/lib/printerSlots";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1382,7 +1383,18 @@ function spoolHex(color: string | null | undefined): string {
 
 /** Build SimplyPrint spool groups from a printer's live/loaded filaments (Bambu, other). */
 function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[] {
-  const slots = printer.loaded_filaments ?? [];
+  const slots: FilamentSlot[] = printer.kind === "bambu"
+    ? normalizedPrinterSlots(printer).map((slot) => ({
+        slot: slot.slot,
+        color: slot.color ?? "#888888",
+        color_name: slot.colorName,
+        type: slot.material ?? "",
+        brand: slot.brand,
+        filament_id: slot.filamentId,
+        empty: slot.empty,
+        unit_id: slot.unitIndex,
+      }))
+    : printer.loaded_filaments ?? [];
   const units = new Map<number, FilamentSlot[]>();
   const external: FilamentSlot[] = [];
   for (const s of slots) {
@@ -1509,6 +1521,12 @@ function LoadedFilamentsCard({
     setSlots((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
 
+  function bambuSlotLabel(slot: FilamentSlot): string {
+    if (slot.slot === 254) return "Зовнішня";
+    const unit = slot.unit_id ?? Math.floor(slot.slot / 4);
+    return `AMS ${unit + 1} · слот ${(slot.slot % 4) + 1}`;
+  }
+
   function pickFromInventory(i: number, filamentId: number | null) {
     if (filamentId === null) { update(i, { filament_id: null }); return; }
     const f = inventory.find((x) => x.id === filamentId);
@@ -1555,13 +1573,30 @@ function LoadedFilamentsCard({
   }
 
   const groups = buildLoadedGroups(printer, inventory);
+  const editorPrinter = isBambu
+    ? {
+        ...printer,
+        loaded_filaments: slots,
+        bambu_has_ams: hasAms,
+        // A changed transport choice should immediately switch the editor;
+        // keep the live active tray only while the choice itself is unchanged.
+        active_tray: hasAms === printer.bambu_has_ams ? printer.active_tray : null,
+      }
+    : printer;
+  const visibleSlotIds = isBambu
+    ? new Set(normalizedPrinterSlots(editorPrinter).map((s) => s.slot))
+    : null;
+  const editableSlots = slots
+    .map((slot, index) => ({ slot, index }))
+    .filter(({ slot }) => !visibleSlotIds || visibleSlotIds.has(slot.slot));
+  const paletteTarget = paletteSlot === null ? null : slots[paletteSlot];
 
   return (
     <>
       {/* ── palette modal ── */}
       {paletteSlot !== null && (
         <ColorPaletteModal
-          slotLabel={`#${paletteSlot + 1}`}
+          slotLabel={isBambu && paletteTarget ? bambuSlotLabel(paletteTarget) : `#${paletteSlot + 1}`}
           onPick={(c) => update(paletteSlot, { color: c.hex_color, color_name: c.name, filament_id: null })}
           onClose={() => setPaletteSlot(null)}
         />
@@ -1666,13 +1701,20 @@ function LoadedFilamentsCard({
                 </datalist>
               </label>
             </div>
-            {slots.map((s, i) => (
+            {isBambu && editableSlots.length === 0 && (
+              <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--text-muted)]">
+                Очікую дані про слоти від принтера. Після синхронізації з Handy тут з’являться актуальні кольори.
+              </p>
+            )}
+            {editableSlots.map(({ slot: s, index: i }) => (
               <div
-                key={i}
+                key={s.slot}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2 "
               >
                 {/* slot number */}
-                <span className="w-5 shrink-0 text-center text-xs text-[var(--text-faint)]">#{i + 1}</span>
+                <span className="w-24 shrink-0 text-center text-xs text-[var(--text-faint)]">
+                  {isBambu ? bambuSlotLabel(s) : `#${i + 1}`}
+                </span>
 
                 {/* colour swatch — click opens palette modal, hold for native picker */}
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -1760,13 +1802,15 @@ function LoadedFilamentsCard({
 
             {/* actions */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="button"
-                onClick={addSlot}
-                className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] "
-              >
-                + Додати слот
-              </button>
+              {!isBambu && (
+                <button
+                  type="button"
+                  onClick={addSlot}
+                  className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] "
+                >
+                  + Додати слот
+                </button>
+              )}
 
               <button
                 type="button"

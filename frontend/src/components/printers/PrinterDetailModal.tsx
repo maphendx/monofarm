@@ -434,7 +434,7 @@ export function PrinterDetailModal({
                     />
                   </div>
                 )}
-                {printer.slots && printer.slots.length > 0 && (
+                {printer.kind !== "bambu" && printer.slots && printer.slots.length > 0 && (
                   <div>
                     <div className="mb-1 text-[var(--text-muted)]">Слоти</div>
                     <SlotStrip

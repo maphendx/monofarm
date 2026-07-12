@@ -12,10 +12,11 @@ from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.filament import Filament
 from app.models.organization import Organization
-from app.models.printer import Printer
+from app.models.printer import Printer, PrinterKind
 from app.models.printer_slot import PrinterSlot, SlotEvent, SlotEventType, SlotState
 from app.models.user import User, UserRole
 from app.schemas.printer_slot import PrinterSlotOut, SlotAssign, SlotEventOut
+from app.services import bambu
 
 router = APIRouter(prefix="/printers", tags=["slots"])
 
@@ -52,13 +53,18 @@ def list_slots(
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> list[PrinterSlot]:
-    _get_printer(db, printer_id, org.id)
+    printer = _get_printer(db, printer_id, org.id)
     slots = (
         db.query(PrinterSlot)
         .filter_by(printer_id=printer_id)
         .order_by(PrinterSlot.slot_index)
         .all()
     )
+    # U1 is a fixed four-tool machine. Bambu AMS slots come from live MQTT and
+    # must not be fabricated as four generic tool slots here.
+    if printer.kind != "snapmaker_u1":
+        return slots
+
     # Ensure 4 slots always returned for U1 (0-3)
     by_index = {s.slot_index: s for s in slots}
     result = []
@@ -82,9 +88,11 @@ def assign_slot(
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> PrinterSlot:
     """Assign a filament spool to a slot, or clear with filament_id=null."""
-    _get_printer(db, printer_id, org.id)
-    if slot_index < 0 or slot_index > 3:
+    printer = _get_printer(db, printer_id, org.id)
+    if printer.kind == PrinterKind.snapmaker_u1 and not 0 <= slot_index <= 3:
         raise HTTPException(400, detail="slot_index має бути 0-3")
+    if printer.kind == PrinterKind.bambu and not (0 <= slot_index <= 253 or slot_index == 254):
+        raise HTTPException(400, detail="Невірний індекс Bambu слота")
 
     slot = _get_or_create_slot(db, printer_id, slot_index)
     now = datetime.now(timezone.utc)
@@ -130,6 +138,20 @@ def assign_slot(
 
     db.commit()
     db.refresh(slot)
+    if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
+        try:
+            bambu.sync_filament_slot(
+                printer.bambu_dev_id,
+                {
+                    "slot": slot.slot_index,
+                    "type": slot.material,
+                    "color": slot.hex_color or slot.color,
+                    "hex_color": slot.hex_color,
+                    "empty": slot.state == SlotState.empty,
+                },
+            )
+        except bambu.BambuError as exc:
+            raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc
     return slot
 
 

@@ -538,6 +538,10 @@ async def webcam_snapshot(
         if webcams:
             url = webcams[0].get("snapshot_url", "")
             return url if url.startswith("http") else base + url
+        if row.kind == PrinterKind.snapmaker_u1:
+            # Stock U1 firmware writes the built-in camera frame here. The
+            # agent keeps camera.start_monitor alive while the printer is subscribed.
+            return f"{base}/server/files/camera/monitor.jpg"
         return f"{base}/webcam/?action=snapshot"
 
     snapshot_url = await _get_snapshot_url()
@@ -634,7 +638,11 @@ async def camera_snapshot(
                     if snapshot_url and not snapshot_url.startswith("http"):
                         snapshot_url = f"{base}{snapshot_url if snapshot_url.startswith('/') else '/' + snapshot_url}"
                 if not snapshot_url:
-                    snapshot_url = f"{base}/webcam/?action=snapshot"
+                    snapshot_url = (
+                        f"{base}/server/files/camera/monitor.jpg"
+                        if row.kind == PrinterKind.snapmaker_u1
+                        else f"{base}/webcam/?action=snapshot"
+                    )
                 result = await _tunnel.proxy_request(org_id, "GET", snapshot_url, timeout=8.0)
                 if result.get("binary"):
                     content = base64.b64decode(result["binary"])
@@ -644,7 +652,12 @@ async def camera_snapshot(
                         headers={"Cache-Control": "no-store"},
                     )
 
-            resp = await asyncio.to_thread(lambda: _requests.get(f"{base}/webcam/?action=snapshot", timeout=5))
+            snapshot_url = (
+                f"{base}/server/files/camera/monitor.jpg"
+                if row.kind == PrinterKind.snapmaker_u1
+                else f"{base}/webcam/?action=snapshot"
+            )
+            resp = await asyncio.to_thread(lambda: _requests.get(snapshot_url, timeout=5))
             resp.raise_for_status()
             return Response(
                 content=resp.content,

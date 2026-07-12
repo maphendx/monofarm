@@ -10,6 +10,7 @@ import { API_URL, ApiError, api } from "@/lib/api";
 import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
 import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
 import { trackPrintTransfer, usePrintTransfers } from "@/lib/printTransferStore";
+import { normalizedPrinterSlots } from "@/lib/printerSlots";
 
 // ── helpers (exported for use by other components) ────────────────────────────
 
@@ -72,22 +73,13 @@ function normalizeSlotColor(color: string | null | undefined): string | null {
 }
 
 export function printerMaterialSlots(printer: PrinterType) {
-  const slots = (printer.slots ?? [])
-    .filter((s) => s.state !== "empty" && (s.filament_id || s.material || s.hex_color || s.color))
-    .map((s) => ({
-      slot: s.slot_index,
-      type: s.material,
-      color: s.hex_color ?? s.color,
-      colorName: s.color,
-    }));
-  if (slots.length > 0) return slots;
-  return (printer.loaded_filaments ?? [])
-    .filter((s) => !s.empty && (s.filament_id || s.color || s.type))
+  return normalizedPrinterSlots(printer)
+    .filter((s) => !s.empty && (s.filamentId || s.color || s.material))
     .map((s) => ({
       slot: s.slot,
-      type: s.type,
+      type: s.material,
       color: s.color,
-      colorName: s.color_name,
+      colorName: s.colorName,
     }));
 }
 
@@ -233,25 +225,14 @@ type DisplaySlot = {
 };
 
 function printerAllSlotsForDisplay(printer: PrinterType): DisplaySlot[] {
-  const fromSlots = (printer.slots ?? []).map((s) => ({
-    slot: s.slot_index,
-    type: s.material ?? null,
-    color: s.hex_color ?? s.color ?? null,
-    unit: s.unit_index,
-    isEmpty: s.state === "empty",
-    isExternal: s.is_external,
+  return normalizedPrinterSlots(printer).map((s) => ({
+    slot: s.slot,
+    type: s.material,
+    color: s.color,
+    unit: s.unitIndex,
+    isEmpty: s.empty,
+    isExternal: s.isExternal,
   }));
-  if (fromSlots.length > 0) return fromSlots.sort((a, b) => a.slot - b.slot);
-  return (printer.loaded_filaments ?? [])
-    .map((s) => ({
-      slot: s.slot,
-      type: s.type ?? null,
-      color: s.color ?? null,
-      unit: s.unit_id ?? null,
-      isEmpty: !!s.empty,
-      isExternal: false,
-    }))
-    .sort((a, b) => a.slot - b.slot);
 }
 
 // ── Tag compatibility check (mirrors backend _task_matches_printer) ───────────
@@ -656,6 +637,7 @@ export function SendModal({
         } else if (p.kind === "bambu") {
           if (!autoBedLeveling) body.auto_bed_leveling = false;
           if (bambuFlowCali)    body.flow_calibration = true;
+          body.use_ams = usedSlots.some((i) => (slotMap[i] ?? i) < 254);
         }
         const res = await api<{ ok: boolean; printer_name: string; message: string; dispatch_mode?: string; job_id?: number; printer_id?: number | null }>(
           `/api/files/${file.id}/send/${p.id}`,
@@ -696,6 +678,7 @@ export function SendModal({
           } else if (p.kind === "bambu") {
             if (!autoBedLeveling) multiBody.auto_bed_leveling = false;
             if (bambuFlowCali)    multiBody.flow_calibration = true;
+            multiBody.use_ams = usedSlotIndices(file.filament_meta).some((i) => (sm[i] ?? i) < 254);
           }
           const res = await api<{ ok: boolean; message: string; printer_name?: string; dispatch_mode?: string; job_id?: number; printer_id?: number | null }>(
             `/api/files/${file.id}/send/${p.id}`,

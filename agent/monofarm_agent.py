@@ -38,7 +38,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.7"
+AGENT_VERSION = "0.8.8"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -629,7 +629,28 @@ def _bambu_mark_tls_failure(ip: str, exc: Exception) -> None:
             _bambu_tls_insecure.add(ip)
 
 
-async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
+async def _u1_camera_keepalive(mr_ws, moonraker_url: str) -> None:
+    """Keep the stock U1 camera monitor updating its JPEG file.
+
+    Stock U1 firmware stops refreshing /server/files/camera/monitor.jpg when
+    nothing has recently asked it to start the LAN camera monitor. Reusing the
+    already-open Moonraker websocket avoids another connection per printer.
+    """
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "method": "camera.start_monitor",
+        "params": {"domain": "lan", "interval": 0},
+        "id": "monofarm-u1-camera",
+    })
+    while True:
+        try:
+            await mr_ws.send(payload)
+        except Exception:
+            return
+        await asyncio.sleep(10)
+
+
+async def _moonraker_ws_loop(cloud_ws, moonraker_url: str, printer_kind: str | None = None) -> None:
     """Maintain a persistent Moonraker WS subscription and push STATUS_PUSH to cloud.
 
     Moonraker sends the full state in the subscribe response, then incremental
@@ -657,50 +678,59 @@ async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
                 ws_url, ping_interval=20, ping_timeout=10, open_timeout=10
             ) as mr_ws:
                 log.info("MOONRAKER_SUBSCRIBE: connected %s", ws_url)
+                camera_task = (
+                    asyncio.create_task(_u1_camera_keepalive(mr_ws, moonraker_url))
+                    if printer_kind == "snapmaker_u1" else None
+                )
                 await mr_ws.send(subscribe_msg)
-                async for message in mr_ws:
-                    try:
-                        data = json.loads(message)
-                    except Exception:
-                        continue
+                try:
+                    async for message in mr_ws:
+                        try:
+                            data = json.loads(message)
+                        except Exception:
+                            continue
 
-                    # Subscribe result — Moonraker returns full current state
-                    if data.get("id") == 1 and "result" in data:
-                        full_state = (data["result"] or {}).get("status") or {}
+                        # Subscribe result — Moonraker returns full current state
+                        if data.get("id") == 1 and "result" in data:
+                            full_state = (data["result"] or {}).get("status") or {}
 
-                    # Incremental diff — merge into accumulated full state
-                    elif data.get("method") == "notify_status_update":
-                        params = data.get("params", [])
-                        if params and isinstance(params[0], dict):
-                            for key, val in params[0].items():
-                                existing = full_state.get(key)
-                                if isinstance(existing, dict) and isinstance(val, dict):
-                                    full_state[key] = {**existing, **val}
-                                else:
-                                    full_state[key] = val
-                    else:
-                        continue
+                        # Incremental diff — merge into accumulated full state
+                        elif data.get("method") == "notify_status_update":
+                            params = data.get("params", [])
+                            if params and isinstance(params[0], dict):
+                                for key, val in params[0].items():
+                                    existing = full_state.get(key)
+                                    if isinstance(existing, dict) and isinstance(val, dict):
+                                        full_state[key] = {**existing, **val}
+                                    else:
+                                        full_state[key] = val
+                        else:
+                            continue
 
-                    if not full_state:
-                        continue
-                    try:
-                        await cloud_ws.send(json.dumps({
-                            "type": "STATUS_PUSH",
-                            "url": moonraker_url,
-                            "status": full_state,
-                        }))
-                    except Exception as e:
-                        log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
-                        return  # cloud WS gone — task will be cancelled on reconnect
+                        if not full_state:
+                            continue
+                        try:
+                            await cloud_ws.send(json.dumps({
+                                "type": "STATUS_PUSH",
+                                "url": moonraker_url,
+                                "status": full_state,
+                            }))
+                        except Exception as e:
+                            log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
+                            return  # cloud WS gone — task will be cancelled on reconnect
 
-                    # Local failure/stop detection (off the forwarding path).
-                    _state, _etext, _ecode = _classify_moonraker(full_state.get("print_stats") or {})
-                    if _alert_should_fire(f"mr:{moonraker_url}", _state, _ecode):
-                        asyncio.create_task(_dispatch_alert(
-                            _moonraker_names.get(moonraker_url) or host or moonraker_url,
-                            _state, _etext, _ecode, "moonraker",
-                            {"moonraker_url": moonraker_url},
-                        ))
+                        # Local failure/stop detection (off the forwarding path).
+                        _state, _etext, _ecode = _classify_moonraker(full_state.get("print_stats") or {})
+                        if _alert_should_fire(f"mr:{moonraker_url}", _state, _ecode):
+                            asyncio.create_task(_dispatch_alert(
+                                _moonraker_names.get(moonraker_url) or host or moonraker_url,
+                                _state, _etext, _ecode, "moonraker",
+                                {"moonraker_url": moonraker_url},
+                            ))
+                finally:
+                    if camera_task:
+                        camera_task.cancel()
+                        await asyncio.gather(camera_task, return_exceptions=True)
 
         except asyncio.CancelledError:
             log.debug("MOONRAKER_SUBSCRIBE: task cancelled for %s", moonraker_url)
@@ -731,7 +761,7 @@ async def handle_moonraker_subscribe(cloud_ws, req: dict) -> None:
     if existing and not existing.done():
         existing.cancel()
 
-    task = asyncio.create_task(_moonraker_ws_loop(cloud_ws, url))
+    task = asyncio.create_task(_moonraker_ws_loop(cloud_ws, url, req.get("kind")))
     _moonraker_sub_tasks[url] = task
 
     await cloud_ws.send(json.dumps({

@@ -88,6 +88,47 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     assert captured[0][1]["print"]["tray_color"] == "FF0000FF"
 
 
+def test_bambu_slot_list_does_not_fabricate_u1_slots(client, auth_headers):
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu A1", "kind": "bambu", "bambu_dev_id": "BAMBU-SLOTS"},
+    )
+    assert created.status_code == 201
+
+    resp = client.get(
+        f"/api/printers/{created.json()['id']}/slots",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, monkeypatch):
+    from app.services import bambu
+
+    captured = []
+    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu A1", "kind": "bambu", "bambu_dev_id": "BAMBU-HANDY"},
+    )
+    assert created.status_code == 201
+
+    resp = client.put(
+        f"/api/printers/{created.json()['id']}/slots/254",
+        headers=auth_headers,
+        json={"filament_id": test_filament.id},
+    )
+    assert resp.status_code == 200, resp.text
+    assert captured[-1][0] == "BAMBU-HANDY"
+    payload = captured[-1][1]["print"]
+    assert payload["ams_id"] == 255
+    assert payload["tray_id"] == 254
+    assert payload["tray_color"] == "FF0000FF"
+
+
 def test_assign_filament_to_slot(client: TestClient, auth_headers, u1_printer, test_filament):
     resp = client.put(
         f"/api/printers/{u1_printer.id}/slots/0",
