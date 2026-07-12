@@ -102,7 +102,7 @@ def test_autoprint_allows_cloud_mode_printer(
     assert response.json()["autoprint_mode"] == "platecycler"
 
 
-def test_autoprint_still_requires_ip_and_access_code(
+def test_autoprint_cloud_mode_does_not_require_ip_or_access_code(
     client,
     auth_headers,
     db_session,
@@ -113,6 +113,32 @@ def test_autoprint_still_requires_ip_and_access_code(
         test_org.id,
         bambu_lan_mode=False,
         bambu_dev_ip=None,
+        bambu_access_code=None,
+        autoprint_mode="off",
+    )
+
+    response = client.patch(
+        f"/api/printers/{printer.id}/autoprint",
+        headers=auth_headers,
+        json={"enabled": True, "plates_loaded": 2},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["autoprint_mode"] == "platecycler"
+
+
+def test_autoprint_explicit_lan_mode_still_requires_local_credentials(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+) -> None:
+    printer = _printer(
+        db_session,
+        test_org.id,
+        bambu_lan_mode=True,
+        bambu_dev_ip=None,
+        bambu_access_code=None,
         autoprint_mode="off",
     )
 
@@ -123,7 +149,92 @@ def test_autoprint_still_requires_ip_and_access_code(
     )
 
     assert response.status_code == 400
-    assert "Access Code" in response.json()["detail"]
+    assert "LAN mode" in response.json()["detail"]
+
+
+def test_autoprint_status_returns_current_copy_and_printer_queue(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+    admin_user,
+) -> None:
+    printer = _printer(
+        db_session,
+        test_org.id,
+        bambu_lan_mode=False,
+        autoprint_plates_remaining=4,
+    )
+    first_task = PrintTask(
+        organization_id=test_org.id,
+        title="Gear set",
+        file_name="gear-set.3mf",
+    )
+    second_task = PrintTask(
+        organization_id=test_org.id,
+        title="Hook",
+        file_name="hook.3mf",
+    )
+    db_session.add_all([first_task, second_task])
+    db_session.flush()
+    first_entry = PlanEntry(
+        organization_id=test_org.id,
+        plan_date=date.today(),
+        printer_id=printer.id,
+        task_id=first_task.id,
+        runs_total=5,
+        runs_completed=1,
+        priority=1,
+    )
+    second_entry = PlanEntry(
+        organization_id=test_org.id,
+        plan_date=date.today(),
+        printer_id=printer.id,
+        task_id=second_task.id,
+        runs_total=2,
+        runs_completed=0,
+    )
+    db_session.add_all([first_entry, second_entry])
+    db_session.flush()
+    db_session.add(
+        BambuCloudJob(
+            organization_id=test_org.id,
+            printer_id=printer.id,
+            created_by_user_id=admin_user.id,
+            printer_bambu_dev_id=printer.bambu_dev_id,
+            file_name=first_task.file_name,
+            dispatch_mode="cloud",
+            status=BambuCloudJobStatus.printing,
+            correlation_id="autoprint-status-correlation",
+            idempotency_key="autoprint-status-idempotency",
+            plan_entry_id=first_entry.id,
+            autoprint_run_index=2,
+            progress_pct=42,
+        )
+    )
+    db_session.commit()
+
+    response = client.get(
+        f"/api/printers/{printer.id}/autoprint/status",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["enabled"] is True
+    assert body["plates_remaining"] == 4
+    assert body["active_job_status"] == "printing"
+    assert body["active_job_progress_pct"] == 42
+    assert [entry["file_name"] for entry in body["entries"]] == ["gear-set.3mf", "hook.3mf"]
+    assert body["entries"][0] == {
+        "id": first_entry.id,
+        "title": "Gear set",
+        "file_name": "gear-set.3mf",
+        "runs_total": 5,
+        "runs_completed": 1,
+        "active_run_index": 2,
+        "is_active": True,
+    }
 
 
 def test_record_completed_run_is_idempotent(db_session, test_org, admin_user) -> None:
