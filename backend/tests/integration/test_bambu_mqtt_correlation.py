@@ -105,6 +105,45 @@ def test_mqtt_report_transitions_matched_job_to_printing(db_session, test_org, m
     assert job.started_printing_at is not None
 
 
+def test_transient_failed_report_before_start_waits_for_running(db_session, test_org, monkeypatch):
+    monkeypatch.setattr(bambu, "SessionLocal", lambda: _SessionContext(db_session))
+    printer = _make_printer(db_session, test_org.id, dev_id="DEV-TRANSIENT")
+    job = _make_job(
+        db_session,
+        org_id=test_org.id,
+        printer_id=printer.id,
+        dev_id="DEV-TRANSIENT",
+        file_name="large.3mf",
+        task_id="task-transient",
+    )
+
+    bambu._on_message(
+        None,
+        None,
+        _Msg(
+            "DEV-TRANSIENT",
+            {"print": {"gcode_state": "FAILED", "task_id": "task-transient", "mc_percent": 0}},
+        ),
+    )
+
+    db_session.refresh(job)
+    assert job.status == BambuCloudJobStatus.acknowledged
+    assert job.started_printing_at is None
+
+    bambu._on_message(
+        None,
+        None,
+        _Msg(
+            "DEV-TRANSIENT",
+            {"print": {"gcode_state": "RUNNING", "task_id": "task-transient", "mc_percent": 1}},
+        ),
+    )
+
+    db_session.refresh(job)
+    assert job.status == BambuCloudJobStatus.printing
+    assert job.started_printing_at is not None
+
+
 def test_mqtt_ambiguous_report_does_not_update_jobs(db_session, test_org, monkeypatch):
     monkeypatch.setattr(bambu, "SessionLocal", lambda: _SessionContext(db_session))
     printer = _make_printer(db_session, test_org.id, dev_id="DEV-AMBIG")

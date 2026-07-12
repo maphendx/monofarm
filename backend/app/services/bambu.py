@@ -781,6 +781,17 @@ def _status_from_mqtt_report(
     ):
         return BambuCloudJobStatus.completed, "Printer reports print completed"
     if raw_state == "FAILED":
+        # Bambu can echo a transient FAILED snapshot immediately after
+        # project_file is accepted, before the first RUNNING report. Do not
+        # terminally fail a job unless the printer supplied a real error or
+        # had already started this print.
+        if error_msg or job.started_printing_at is not None or job.status in (
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.paused,
+        ):
+            return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
+        if job.status in (BambuCloudJobStatus.task_created, BambuCloudJobStatus.acknowledged):
+            return BambuCloudJobStatus.acknowledged, "Printer acknowledged task; awaiting start confirmation"
         return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
     if job.status == BambuCloudJobStatus.task_created and raw_state:
         return BambuCloudJobStatus.acknowledged, "Printer acknowledged Bambu Cloud task"
