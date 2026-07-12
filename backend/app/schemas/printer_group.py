@@ -50,6 +50,7 @@ class PrinterGroupAction(str, Enum):
     create_maintenance = "create_maintenance"
     enable_autoprint = "enable_autoprint"
     disable_autoprint = "disable_autoprint"
+    add_tags = "add_tags"
 
 
 class PrinterGroupActionRequest(BaseModel):
@@ -61,6 +62,7 @@ class PrinterGroupActionRequest(BaseModel):
     cooldown_temp_c: int = Field(40, ge=20, le=80)
     delay_seconds: int = Field(0, ge=0, le=3600)
     eject_last_plate: bool = True
+    tag_ids: list[int] = Field(default_factory=list)
 
 
 class PrinterGroupActionSkipped(BaseModel):

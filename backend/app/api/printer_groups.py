@@ -8,6 +8,7 @@ from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.printer import Printer
 from app.models.printer_group import PrinterGroup
+from app.models.tag import Tag
 from app.models.task import FarmTask, FarmTaskStatus
 from app.models.user import UserRole
 from app.schemas.printer_group import (
@@ -161,6 +162,23 @@ def run_group_action(
             printer.autoprint_error = None
             affected += 1
 
+    elif payload.action == PrinterGroupAction.add_tags:
+        if not payload.tag_ids:
+            raise HTTPException(status_code=400, detail="No tags selected")
+        tags = (
+            db.query(Tag)
+            .filter(Tag.id.in_(payload.tag_ids), Tag.organization_id == org.id)
+            .all()
+        )
+        if len(tags) != len(set(payload.tag_ids)):
+            raise HTTPException(status_code=400, detail="Some tag IDs not found in your org")
+        for printer in printers:
+            existing_ids = {t.id for t in printer.tags}
+            new_tags = [t for t in tags if t.id not in existing_ids]
+            if new_tags:
+                printer.tags = [*printer.tags, *new_tags]
+                affected += 1
+
     db.commit()
 
     messages = {
@@ -169,6 +187,7 @@ def run_group_action(
         PrinterGroupAction.create_maintenance: "Завдання обслуговування створено",
         PrinterGroupAction.enable_autoprint: f"AutoPrint увімкнено: {affected}",
         PrinterGroupAction.disable_autoprint: f"AutoPrint вимкнено: {affected}",
+        PrinterGroupAction.add_tags: f"Теги додано: {affected} принтерів",
     }
     return PrinterGroupActionResult(
         action=payload.action,

@@ -9,13 +9,18 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Table, Column, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+
+if TYPE_CHECKING:
+    from app.models.gcode_file import GcodeFile
+    from app.models.printer import Printer
+    from app.models.task import PrintTask
 
 
 class TagKind(str, enum.Enum):
@@ -68,13 +73,13 @@ class Tag(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships (back_populates defined on the parent models)
-    printers: Mapped[list] = relationship(
+    printers: Mapped[list["Printer"]] = relationship(
         "Printer", secondary=printer_tags_table, back_populates="tags"
     )
-    gcode_files: Mapped[list] = relationship(
+    gcode_files: Mapped[list["GcodeFile"]] = relationship(
         "GcodeFile", secondary=gcode_file_tags_table, back_populates="tags"
     )
-    print_tasks: Mapped[list] = relationship(
+    print_tasks: Mapped[list["PrintTask"]] = relationship(
         "PrintTask", secondary=print_task_tags_table, back_populates="tags"
     )
 

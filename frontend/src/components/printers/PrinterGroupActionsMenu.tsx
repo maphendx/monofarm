@@ -9,12 +9,14 @@ import {
   MoreHorizontal,
   Play,
   RotateCcw,
+  Tag as TagIcon,
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Modal } from "@/components/ui/Modal";
+import { useTags } from "@/hooks/useTags";
 import { ApiError, api } from "@/lib/api";
 import { isA1Mini } from "@/lib/printerCapabilities";
 import type { Printer } from "@/lib/types";
@@ -24,7 +26,8 @@ type GroupAction =
   | "restore_service"
   | "create_maintenance"
   | "enable_autoprint"
-  | "disable_autoprint";
+  | "disable_autoprint"
+  | "add_tags";
 
 interface GroupActionResult {
   action: GroupAction;
@@ -116,6 +119,9 @@ export function PrinterGroupActionsMenu({
   const [cooldownTemp, setCooldownTemp] = useState(40);
   const [delaySeconds, setDelaySeconds] = useState(0);
   const [ejectLastPlate, setEjectLastPlate] = useState(true);
+  const [tagsOpen, setTagsOpen] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const { tags, loading: tagsLoading } = useTags(tagsOpen);
   const [busy, setBusy] = useState(false);
 
   const outOfOrderCount = printers.filter((printer) => printer.is_out_of_order).length;
@@ -175,6 +181,7 @@ export function PrinterGroupActionsMenu({
       setConfirmAction(null);
       setMaintenanceOpen(false);
       setAutoPrintOpen(false);
+      setTagsOpen(false);
       onChanged();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Не вдалося виконати групову дію");
@@ -200,6 +207,18 @@ export function PrinterGroupActionsMenu({
       delay_seconds: delaySeconds,
       eject_last_plate: ejectLastPlate,
     });
+  }
+
+  function toggleTagSelection(tagId: number) {
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+    );
+  }
+
+  function submitTags() {
+    if (selectedTagIds.length === 0) return;
+    void runAction("add_tags", { tag_ids: selectedTagIds });
+    setSelectedTagIds([]);
   }
 
   const confirmOptions = confirmAction === "mark_out_of_order"
@@ -305,6 +324,17 @@ export function PrinterGroupActionsMenu({
               label="Почати заплановане ТО"
               detail="Потрібна привʼязка графіка ТО до груп принтерів"
               disabled
+            />
+            <ActionItem
+              icon={<TagIcon size={16} />}
+              label="Додати теги"
+              detail={`Додати один або кілька тегів усім ${printers.length} принтерам`}
+              tone="accent"
+              onClick={() => {
+                setPosition(null);
+                setSelectedTagIds([]);
+                setTagsOpen(true);
+              }}
             />
 
             <div className="my-1.5 border-t border-[var(--border)]" />
@@ -483,6 +513,59 @@ export function PrinterGroupActionsMenu({
             />
             Виштовхувати останній стіл
           </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={tagsOpen}
+        onClose={() => setTagsOpen(false)}
+        title={`Теги · ${groupName}`}
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setTagsOpen(false)}>
+              Скасувати
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary disabled:opacity-50"
+              disabled={busy || selectedTagIds.length === 0}
+              onClick={submitTags}
+            >
+              {busy ? "Додаю…" : `Додати для ${printers.length}`}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-1">
+          {tagsLoading ? (
+            <p className="px-1 py-2 text-xs text-[var(--text-faint)]">Завантаження…</p>
+          ) : tags.length === 0 ? (
+            <p className="px-1 py-2 text-xs text-[var(--text-faint)]">
+              Тегів немає — створіть у Налаштуваннях
+            </p>
+          ) : (
+            tags.map((tag) => (
+              <label
+                key={tag.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-sm hover:bg-[var(--surface-hi)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedTagIds.includes(tag.id)}
+                  onChange={() => toggleTagSelection(tag.id)}
+                  className="accent-[var(--accent)]"
+                />
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: tag.color ?? "var(--text-faint)" }}
+                />
+                <span className="min-w-0 flex-1 truncate">{tag.display || tag.label}</span>
+              </label>
+            ))
+          )}
+          <p className="pt-2 text-xs text-[var(--text-faint)]">
+            Теги додаються до наявних — попередні теги принтерів не видаляються.
+          </p>
         </div>
       </Modal>
     </>

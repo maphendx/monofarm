@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 from app.models.printer import Printer, PrinterKind
 from app.models.printer_group import PrinterGroup
+from app.models.tag import Tag, TagKind
 from app.models.task import FarmTask
 
 
@@ -146,3 +147,59 @@ def test_group_action_enables_autoprint_and_reports_skipped_printers(
     assert eligible.autoprint_eject_last_plate is False
     assert unsupported.autoprint_mode == "off"
     start_next.assert_awaited_once_with(eligible.id)
+
+
+def test_group_action_adds_tags_without_duplicating_existing(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+) -> None:
+    group = _group(db_session, test_org.id)
+    already_tagged = _printer(db_session, test_org.id, group.id, "A1-01")
+    untagged = _printer(db_session, test_org.id, group.id, "A1-02")
+    other_group = _group(db_session, test_org.id, "Other")
+    untouched = _printer(db_session, test_org.id, other_group.id, "A1-03")
+
+    tag_a = Tag(organization_id=test_org.id, kind=TagKind.custom, label="urgent", color="#ff0000")
+    tag_b = Tag(organization_id=test_org.id, kind=TagKind.custom, label="calibrated", color="#00ff00")
+    db_session.add_all([tag_a, tag_b])
+    db_session.commit()
+    db_session.refresh(tag_a)
+    db_session.refresh(tag_b)
+
+    already_tagged.tags = [tag_a]
+    db_session.commit()
+
+    response = client.post(
+        f"/api/printer-groups/{group.id}/actions",
+        headers=auth_headers,
+        json={"action": "add_tags", "tag_ids": [tag_a.id, tag_b.id]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["affected"] == 2
+    db_session.refresh(already_tagged)
+    db_session.refresh(untagged)
+    db_session.refresh(untouched)
+    assert {t.id for t in already_tagged.tags} == {tag_a.id, tag_b.id}
+    assert {t.id for t in untagged.tags} == {tag_a.id, tag_b.id}
+    assert untouched.tags == []
+
+
+def test_group_action_add_tags_requires_selection(
+    client,
+    auth_headers,
+    db_session,
+    test_org,
+) -> None:
+    group = _group(db_session, test_org.id)
+    _printer(db_session, test_org.id, group.id, "A1-01")
+
+    response = client.post(
+        f"/api/printer-groups/{group.id}/actions",
+        headers=auth_headers,
+        json={"action": "add_tags", "tag_ids": []},
+    )
+
+    assert response.status_code == 400

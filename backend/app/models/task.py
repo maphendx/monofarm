@@ -1,5 +1,6 @@
 import enum
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 
@@ -7,6 +8,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+
+if TYPE_CHECKING:
+    from app.models.tag import Tag
 
 
 class PrintTaskStatus(str, enum.Enum):
@@ -59,7 +63,7 @@ class PrintTask(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Tags
-    tags: Mapped[list] = relationship(
+    tags: Mapped[list["Tag"]] = relationship(
         "Tag",
         secondary="print_task_tags",
         back_populates="print_tasks",

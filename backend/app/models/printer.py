@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -8,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 from app.core.db import Base
+
+if TYPE_CHECKING:
+    from app.models.tag import Tag
 
 
 class PrinterKind(str, enum.Enum):
@@ -90,7 +93,7 @@ class Printer(Base):
     autoprint_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Tags
-    tags: Mapped[list] = relationship(
+    tags: Mapped[list["Tag"]] = relationship(
         "Tag",
         secondary="printer_tags",
         back_populates="printers",
