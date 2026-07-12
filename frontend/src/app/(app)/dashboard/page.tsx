@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -123,8 +124,51 @@ function GroupStatsBadges({ stats }: { stats: GroupStats }) {
 
 // ── filter ───────────────────────────────────────────────────────────────────
 
-type Filter = "all" | "printing" | "attention" | "idle" | "paused" | "awaiting" | "offline";
+type Filter = "printing" | "attention" | "idle" | "paused" | "awaiting" | "offline";
 type GroupBy = "mygroup" | "none" | "kind" | "state";
+
+const FILTER_VALUES: Filter[] = ["printing", "attention", "idle", "paused", "awaiting", "offline"];
+
+const FILTER_LABEL: Record<Filter, string> = {
+  printing: "Printing",
+  attention: "Requires attention",
+  idle: "Idle & ready",
+  paused: "Paused",
+  awaiting: "Awaiting",
+  offline: "Offline / not connected",
+};
+
+function matchesFilter(p: Printer, f: Filter): boolean {
+  switch (f) {
+    case "printing": return p.state === "printing";
+    case "attention": return p.state === "error";
+    case "idle": return p.state === "idle" || p.state === "operational";
+    case "paused": return p.state === "paused";
+    case "awaiting": return printerNeedsClearBed(p);
+    case "offline": return p.state === "offline" || p.state === "unknown";
+  }
+}
+
+function sortByEta(items: Printer[]): Printer[] {
+  return [...items].sort((a, b) => {
+    if (a.eta_minutes == null && b.eta_minutes == null) return 0;
+    if (a.eta_minutes == null) return 1;
+    if (b.eta_minutes == null) return -1;
+    return a.eta_minutes - b.eta_minutes;
+  });
+}
+
+function useIsNarrowScreen(breakpointPx: number): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`);
+    setNarrow(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpointPx]);
+  return narrow;
+}
 
 const KIND_ORDER: PrinterKind[] = ["bambu", "snapmaker_u1", "other"];
 
@@ -443,15 +487,31 @@ export default function DashboardPage() {
   ];
 
   const { printers, connected, loading, reload, upsertPrinter } = usePrinterStream();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [activeFilters, setActiveFilters] = useState<Filter[]>([]);
   const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
+  const isNarrowScreen = useIsNarrowScreen(768);
   useEffect(() => {
     try {
       const saved = localStorage.getItem("monofarm_printer_group_by") as GroupBy;
       if (saved && (["mygroup", "none", "kind", "state"] as GroupBy[]).includes(saved)) setGroupBy(saved);
     } catch {}
   }, []);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("monofarm_dashboard_filters") ?? "[]");
+      if (Array.isArray(saved) && saved.every((v) => FILTER_VALUES.includes(v))) {
+        setActiveFilters(saved as Filter[]);
+      }
+    } catch {}
+  }, []);
+  function toggleFilter(f: Filter) {
+    setActiveFilters((prev) => {
+      const next = prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f];
+      try { localStorage.setItem("monofarm_dashboard_filters", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
   function handleGroupByChange(v: GroupBy) {
     setGroupBy(v);
     setLocalOrder(null);
@@ -525,30 +585,28 @@ export default function DashboardPage() {
   }, [localOrder, printers]);
 
   const filtered = useMemo(() => {
-    let result: Printer[];
-    if (filter === "all") result = displayPrinters;
-    else if (filter === "printing") result = displayPrinters.filter((p) => p.state === "printing");
-    else if (filter === "attention") result = displayPrinters.filter((p) => p.state === "error");
-    else if (filter === "idle") result = displayPrinters.filter((p) => p.state === "idle" || p.state === "operational");
-    else if (filter === "paused") result = displayPrinters.filter((p) => p.state === "paused");
-    else if (filter === "awaiting") result = displayPrinters.filter((p) => printerNeedsClearBed(p));
-    else if (filter === "offline") result = displayPrinters.filter((p) => p.state === "offline" || p.state === "unknown");
-    else result = displayPrinters;
+    let result = activeFilters.length === 0
+      ? displayPrinters
+      : displayPrinters.filter((p) => activeFilters.some((f) => matchesFilter(p, f)));
 
     if (tagFilter.length > 0) {
       result = result.filter((p) => tagFilter.every((id) => p.tags?.some((t) => t.id === id)));
     }
 
-    if (filter === "printing") {
-      return [...result].sort((a, b) => {
-        if (a.eta_minutes == null && b.eta_minutes == null) return 0;
-        if (a.eta_minutes == null) return 1;
-        if (b.eta_minutes == null) return -1;
-        return a.eta_minutes - b.eta_minutes;
-      });
+    if (activeFilters.length === 1 && activeFilters[0] === "printing") {
+      return sortByEta(result);
     }
     return result;
-  }, [displayPrinters, filter, tagFilter]);
+  }, [displayPrinters, activeFilters, tagFilter]);
+
+  // 2+ active filters in cards view → split the board into resizable "magnetic window" panels
+  const splitPanels = useMemo(() => {
+    if (activeFilters.length < 2 || view !== "cards") return null;
+    return activeFilters.map((f) => {
+      const items = filtered.filter((p) => matchesFilter(p, f));
+      return { key: f, label: FILTER_LABEL[f], items: f === "printing" ? sortByEta(items) : items };
+    });
+  }, [activeFilters, filtered, view]);
 
   // All tags currently assigned to at least one printer (for the filter chips)
   const availableTags = useMemo(() => {
@@ -556,11 +614,6 @@ export default function DashboardPage() {
     for (const p of printers) for (const t of p.tags ?? []) byId.set(t.id, t);
     return [...byId.values()].sort((a, b) => (a.display || "").localeCompare(b.display || ""));
   }, [printers]);
-
-  const groups = useMemo(
-    () => groupPrinters(filtered, groupBy),
-    [filtered, groupBy],
-  );
 
   const counts = useMemo(() => {
     const c = { all: printers.length, snapmaker_u1: 0, problems: 0 };
@@ -572,11 +625,8 @@ export default function DashboardPage() {
     return c;
   }, [printers]);
 
-  async function handlePrinterDropInGroup(groupKey: string, targetId: number) {
+  async function handlePrinterDropInGroup(items: Printer[], targetId: number) {
     if (!dragPrinterId || dragPrinterId === targetId) return;
-    const group = groups.find(g => g.key === groupKey);
-    if (!group) { setDragPrinterId(null); setDragOverId(null); return; }
-    const items = group.items;
     const fromIdx = items.findIndex(p => p.id === dragPrinterId);
     const toIdx = items.findIndex(p => p.id === targetId);
     if (fromIdx < 0 || toIdx < 0) { setDragPrinterId(null); setDragOverId(null); return; }
@@ -624,6 +674,65 @@ export default function DashboardPage() {
     return { attention, idle, paused, printing, awaiting, offline, nextFinish };
   }, [printers]);
 
+  function renderPrinterSection(items: Printer[]) {
+    if (!isGrouped) {
+      return (
+        <div className={GRID}>
+          {items.map((p) => (
+            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
+          ))}
+        </div>
+      );
+    }
+    const sectionGroups = groupPrinters(items, groupBy);
+    return (
+      <div className="space-y-5">
+        {sectionGroups.map((g) => {
+          const stats = calcGroupStats(g.items);
+          return (
+            <section key={g.key}>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-sm font-semibold">{g.label}</span>
+                <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
+                  {g.items.length}
+                </span>
+                <div className="h-px flex-1 bg-[var(--surface-hi)] " />
+                <GroupStatsBadges stats={stats} />
+                {groupBy === "mygroup" && g.key.startsWith("g") && user.role === "admin" && (
+                  <PrinterGroupActionsMenu
+                    groupId={Number(g.key.slice(1))}
+                    groupName={g.label}
+                    printers={g.items}
+                    onChanged={reload}
+                  />
+                )}
+              </div>
+              <div className={GRID}>
+                {g.items.map((p) => (
+                  <div
+                    key={p.id}
+                    draggable={groupBy === "mygroup"}
+                    onDragStart={() => setDragPrinterId(p.id)}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverId(p.id); }}
+                    onDragEnd={() => { setDragPrinterId(null); setDragOverId(null); }}
+                    onDrop={(e) => { e.preventDefault(); handlePrinterDropInGroup(g.items, p.id); }}
+                    className={[
+                      "transition-opacity",
+                      dragPrinterId === p.id ? "opacity-40" : "",
+                      dragOverId === p.id && dragPrinterId !== p.id ? "ring-2 ring-[var(--accent)] rounded-xl" : "",
+                    ].join(" ")}
+                  >
+                    <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* ── status cards ── */}
@@ -638,16 +747,38 @@ export default function DashboardPage() {
               : "—"}
             sub={statusStats.nextFinish?.name}
             color="var(--state-print)"
-            active={filter === "printing"}
-            dimmed={filter !== "all" && filter !== "printing"}
-            onClick={() => setFilter(filter === "printing" ? "all" : "printing")}
+            active={activeFilters.includes("printing")}
+            dimmed={activeFilters.length > 0 && !activeFilters.includes("printing")}
+            onClick={() => toggleFilter("printing")}
           />
-          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={filter === "attention"} dimmed={filter !== "all" && filter !== "attention"} onClick={() => setFilter(filter === "attention" ? "all" : "attention")} />
-          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={filter === "idle"} dimmed={filter !== "all" && filter !== "idle"} onClick={() => setFilter(filter === "idle" ? "all" : "idle")} />
-          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={filter === "paused"} dimmed={filter !== "all" && filter !== "paused"} onClick={() => setFilter(filter === "paused" ? "all" : "paused")} />
-          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={filter === "awaiting"} dimmed={filter !== "all" && filter !== "awaiting"} onClick={() => setFilter(filter === "awaiting" ? "all" : "awaiting")} />
-          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={filter === "printing"} dimmed={filter !== "all" && filter !== "printing"} onClick={() => setFilter(filter === "printing" ? "all" : "printing")} />
-          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={filter === "offline"} dimmed={filter !== "all" && filter !== "offline"} onClick={() => setFilter(filter === "offline" ? "all" : "offline")} />
+          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={activeFilters.includes("attention")} dimmed={activeFilters.length > 0 && !activeFilters.includes("attention")} onClick={() => toggleFilter("attention")} />
+          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={activeFilters.includes("idle")} dimmed={activeFilters.length > 0 && !activeFilters.includes("idle")} onClick={() => toggleFilter("idle")} />
+          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={activeFilters.includes("paused")} dimmed={activeFilters.length > 0 && !activeFilters.includes("paused")} onClick={() => toggleFilter("paused")} />
+          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={activeFilters.includes("awaiting")} dimmed={activeFilters.length > 0 && !activeFilters.includes("awaiting")} onClick={() => toggleFilter("awaiting")} />
+          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={activeFilters.includes("printing")} dimmed={activeFilters.length > 0 && !activeFilters.includes("printing")} onClick={() => toggleFilter("printing")} />
+          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={activeFilters.includes("offline")} dimmed={activeFilters.length > 0 && !activeFilters.includes("offline")} onClick={() => toggleFilter("offline")} />
+        </div>
+      )}
+      {activeFilters.length >= 2 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-faint)]">
+          <span>{splitPanels ? "Розбито на панелі:" : "Активні фільтри:"}</span>
+          {activeFilters.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => toggleFilter(f)}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[var(--text-hi)] transition hover:opacity-80"
+            >
+              {FILTER_LABEL[f]} ✕
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setActiveFilters([]); try { localStorage.setItem("monofarm_dashboard_filters", "[]"); } catch {} }}
+            className="rounded-full px-1.5 py-0.5 text-[var(--text-faint)] hover:text-[var(--text)]"
+          >
+            Скинути все
+          </button>
         </div>
       )}
 
@@ -792,57 +923,49 @@ export default function DashboardPage() {
             <PrinterPhotoCard key={p.id} printer={p} onClick={() => router.push(`/printers/${p.id}`)} onUpdated={upsertPrinter} onPrint={setPrintPrinter} />
           ))}
         </div>
-      ) : !isGrouped ? (
-        <div className={GRID}>
-          {filtered.map((p) => (
-            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {groups.map((g) => {
-            const stats = calcGroupStats(g.items);
-            return (
-              <section key={g.key}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-sm font-semibold">{g.label}</span>
-                  <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]  ">
-                    {g.items.length}
+      ) : splitPanels ? (
+        <PanelGroup
+          key={splitPanels.map((p) => p.key).join("-")}
+          direction={isNarrowScreen ? "vertical" : "horizontal"}
+          autoSaveId="monofarm-dashboard-split"
+          className={isNarrowScreen ? "dashboard-split-group-v" : "dashboard-split-group"}
+        >
+          {splitPanels.map((panel, i) => (
+            <Fragment key={panel.key}>
+              {i > 0 && (
+                <PanelResizeHandle className={isNarrowScreen ? "dashboard-split-handle-v" : "dashboard-split-handle"} />
+              )}
+              <Panel id={panel.key} order={i} minSize={18} className="dashboard-split-panel">
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <span className="text-sm font-semibold">{panel.label}</span>
+                  <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
+                    {panel.items.length}
                   </span>
-                  <div className="h-px flex-1 bg-[var(--surface-hi)] " />
-                  <GroupStatsBadges stats={stats} />
-                  {groupBy === "mygroup" && g.key.startsWith("g") && user.role === "admin" && (
-                    <PrinterGroupActionsMenu
-                      groupId={Number(g.key.slice(1))}
-                      groupName={g.label}
-                      printers={g.items}
-                      onChanged={reload}
-                    />
+                  <div className="h-px flex-1 bg-[var(--surface-hi)]" />
+                  <button
+                    type="button"
+                    onClick={() => toggleFilter(panel.key)}
+                    title="Прибрати панель"
+                    className="rounded-md px-1.5 py-0.5 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)]"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="dashboard-split-panel-body">
+                  {panel.items.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-[var(--border-strong)] px-4 py-10 text-center text-sm text-[var(--text-muted)]">
+                      {t("dashboard.noMatch")}
+                    </div>
+                  ) : (
+                    renderPrinterSection(panel.items)
                   )}
                 </div>
-                <div className={GRID}>
-                  {g.items.map((p) => (
-                    <div
-                      key={p.id}
-                      draggable={groupBy === "mygroup"}
-                      onDragStart={() => setDragPrinterId(p.id)}
-                      onDragOver={(e) => { e.preventDefault(); setDragOverId(p.id); }}
-                      onDragEnd={() => { setDragPrinterId(null); setDragOverId(null); }}
-                      onDrop={(e) => { e.preventDefault(); handlePrinterDropInGroup(g.key, p.id); }}
-                      className={[
-                        "transition-opacity",
-                        dragPrinterId === p.id ? "opacity-40" : "",
-                        dragOverId === p.id && dragPrinterId !== p.id ? "ring-2 ring-[var(--accent)] rounded-xl" : "",
-                      ].join(" ")}
-                    >
-                      <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+              </Panel>
+            </Fragment>
+          ))}
+        </PanelGroup>
+      ) : (
+        renderPrinterSection(filtered)
       )}
 
       <PrinterGroupsModal
