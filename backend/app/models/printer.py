@@ -60,6 +60,9 @@ class Printer(Base):
     # display flag — never derived from or reset by live printer telemetry.
     # Cleared automatically once the printer starts a new print.
     bed_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Operator dismissed an error. Purely a display flag — shows "paused"
+    # instead of the error, regardless of live telemetry, until a new print starts.
+    error_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Klipper / hardware metadata (populated on first successful connect)

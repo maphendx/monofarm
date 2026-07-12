@@ -218,6 +218,22 @@ def _apply_bed_cleared_flag(printer: Printer, live: dict, db: Session | None) ->
     }
 
 
+def _apply_error_cleared_flag(printer: Printer, live: dict, db: Session | None) -> dict:
+    """Force a paused (not error) display while the operator-confirmed
+    error-cleared flag is set — same idea as `_apply_bed_cleared_flag`, for
+    the "Скинути помилку" action. The printer itself does not need to do
+    anything; this only hides the red error until a new print starts.
+    """
+    if printer.error_cleared_at is None:
+        return live
+    if live.get("state") == "printing":
+        printer.error_cleared_at = None
+        if db is not None:
+            db.commit()
+        return live
+    return {**live, "state": "paused", "error_msg": None}
+
+
 def _to_dto(
     printer: Printer,
     db: Session | None = None,
@@ -289,6 +305,7 @@ def _to_dto(
     if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
         live = bambu.get_cached_state(printer.bambu_dev_id)
         live = _apply_bed_cleared_flag(printer, live, db)
+        live = _apply_error_cleared_flag(printer, live, db)
         ams_trays = bambu.get_ams_filaments(printer.bambu_dev_id)
         filaments = ams_trays if ams_trays else (printer.loaded_filaments or [])
         return PrinterOut(
@@ -312,6 +329,7 @@ def _to_dto(
     if printer.moonraker_url:
         live = prefetched_live if prefetched_live is not None else moonraker.get_live_status(printer.moonraker_url)
         live = _apply_bed_cleared_flag(printer, live, db)
+        live = _apply_error_cleared_flag(printer, live, db)
         filename = None if live.get("_bed_clear_forced") else (live.get("filename") or printer.manual_job)
         current_meta = (
             _resolve_filament_for_file(db, filename, printer.moonraker_url, printer.organization_id)
@@ -1680,8 +1698,17 @@ async def print_clear_error(
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> dict:
-    """Acknowledge and clear an error state."""
+    """Acknowledge and clear an error state.
+
+    Sets a durable operator-side flag (`error_cleared_at`) read back in
+    `_to_dto()`, so the display always flips to "paused" instantly and stays
+    that way — regardless of whether the best-effort hardware command below
+    actually lands. The printer does not need to do anything for the operator
+    to see this.
+    """
     row = _require_printer(printer_id, db, org.id)
+    row.error_cleared_at = datetime.now(timezone.utc)
+    db.commit()
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
@@ -1706,10 +1733,8 @@ async def print_clear_error(
                 )
             else:
                 await asyncio.to_thread(bambu.clear_print_error, row.bambu_dev_id)
-        except (bambu.BambuError, RuntimeError) as e:
-            raise HTTPException(status_code=502, detail=str(e))
-        import time as _time
-        bambu._state_cache[row.bambu_dev_id] = {"ts": _time.monotonic(), "state": "idle"}
+        except (bambu.BambuError, RuntimeError):
+            pass  # best-effort — the operator-visible state no longer depends on this
 
     elif row.moonraker_url:
         try:
@@ -1719,7 +1744,7 @@ async def print_clear_error(
         moonraker.invalidate_status(row.moonraker_url)
 
     else:
-        row.manual_status = "idle"
+        row.manual_status = "paused"
         db.commit()
 
     return {"ok": True, "action": "clear_error"}
