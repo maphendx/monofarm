@@ -397,6 +397,41 @@ def test_send_bambu_3mf_creates_queued_cloud_job(client, auth_headers, cleanup_u
     assert job.request_payload_json["ams_mapping"] == [0, 1]
 
 
+def test_send_bambu_3mf_can_disable_ams(client, auth_headers, cleanup_uploads, db_session):
+    from app.models.bambu_cloud_job import BambuCloudJob
+
+    p = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={
+            "name": "Bambu-No-AMS",
+            "kind": "bambu",
+            "bambu_dev_id": "BAMBU-NO-AMS",
+            "bambu_access_code": "12345678",
+        },
+    ).json()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Metadata/plate_1.gcode", GCODE_SAMPLE.decode())
+    f = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("no_ams.gcode.3mf", buf.getvalue(), "application/octet-stream")},
+    ).json()
+
+    resp = client.post(
+        f"/api/files/{f['id']}/send/{p['id']}",
+        headers=auth_headers,
+        json={"slot_map": {"0": 0, "1": 1}, "use_ams": False},
+    )
+
+    assert resp.status_code == 202, resp.text
+    job = db_session.get(BambuCloudJob, resp.json()["job_id"])
+    assert job.request_payload_json["use_ams"] is False
+    assert job.request_payload_json["ams_mapping"] is None
+
+
 def test_send_bambu_3mf_respects_cloud_feature_flag(client, auth_headers, cleanup_uploads, monkeypatch):
     from app.api import files as files_api
 

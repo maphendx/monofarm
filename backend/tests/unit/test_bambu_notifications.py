@@ -73,4 +73,5 @@ def test_bambu_pause_with_error_emits_failed_alert(monkeypatch):
     assert alert["printer_name"] == "A3"
     assert alert["printer_id"] == 77
     assert alert["file_name"] == "benchy.3mf"
+    assert "microSD" in alert["reason"]
     assert "0x0500c010" in alert["reason"].lower()
