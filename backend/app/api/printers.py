@@ -1607,7 +1607,18 @@ async def _dispatch(
             raise HTTPException(status_code=502, detail=str(e))
         moonraker.invalidate_status(row.moonraker_url)
     else:
-        raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
+        # Manual (non-networked) printer — nothing to send a real command to.
+        # manual_status is the only state that exists, so these actions just
+        # move it directly instead of leaving the operator stuck with no way
+        # to get off "paused"/"error".
+        if action == "pause":
+            row.manual_status = "paused"
+        elif action == "resume":
+            row.manual_status = "printing" if row.manual_job else "idle"
+        elif action == "cancel":
+            row.manual_status = "idle"
+            row.manual_job = None
+        db.commit()
     return {"ok": True, "action": action}
 
 
@@ -1747,7 +1758,11 @@ async def print_clear_error(
         moonraker.invalidate_status(row.moonraker_url)
 
     else:
-        row.manual_status = "paused"
+        # Manual printers have no live telemetry to auto-correct against later
+        # (unlike _apply_error_cleared_flag for Bambu/Moonraker), and pause/
+        # resume/cancel can't reach them either if this leaves them anywhere
+        # but idle — idle is the only state guaranteed to stay recoverable.
+        row.manual_status = "idle"
         db.commit()
 
     return {"ok": True, "action": "clear_error"}
