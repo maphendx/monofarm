@@ -624,8 +624,10 @@ export function SendModal({
       try {
         const apiSlotMap: Record<number, number> = {};
         for (const i of usedSlots) {
-          const mapped = slotMap[i] ?? i;
-          if (mapped !== i) apiSlotMap[i] = mapped;
+          // Send the complete map, including identity entries. U1 keeps the
+          // previous firmware map when an identity slot is omitted, so a
+          // second print could silently reuse stale touchscreen assignments.
+          apiSlotMap[i] = slotMap[i] ?? i;
         }
         const body: Record<string, unknown> = { slot_map: apiSlotMap };
         if (p.moonraker_url) {
@@ -668,7 +670,7 @@ export function SendModal({
           const sm = autoMapSlots(file.filament_meta, p);
           const apiSlotMap: Record<number, number> = {};
           for (const i of usedSlotIndices(file.filament_meta)) {
-            if ((sm[i] ?? i) !== i) apiSlotMap[i] = sm[i];
+            apiSlotMap[i] = sm[i] ?? i;
           }
           const multiBody: Record<string, unknown> = { slot_map: apiSlotMap };
           if (p.moonraker_url) {
