@@ -219,14 +219,17 @@ def _apply_bed_cleared_flag(printer: Printer, live: dict, db: Session | None) ->
 
 
 def _apply_error_cleared_flag(printer: Printer, live: dict, db: Session | None) -> dict:
-    """Force a paused (not error) display while the operator-confirmed
-    error-cleared flag is set — same idea as `_apply_bed_cleared_flag`, for
-    the "Скинути помилку" action. The printer itself does not need to do
-    anything; this only hides the red error until a new print starts.
+    """Show "paused" instead of "error" while the operator-confirmed
+    error-cleared flag is set and the printer is still actually reporting an
+    error. The printer itself does not need to do anything for the dismiss to
+    show up. The moment live state is anything other than "error" (a new
+    print, or the printer settling back to idle on its own), the flag clears
+    itself — it must never linger and force "paused" onto a printer that has
+    no active print at all.
     """
     if printer.error_cleared_at is None:
         return live
-    if live.get("state") == "printing":
+    if live.get("state") != "error":
         printer.error_cleared_at = None
         if db is not None:
             db.commit()

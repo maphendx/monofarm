@@ -79,6 +79,41 @@ def test_bambu_error_cleared_flag_resets_once_a_new_print_is_running(
     assert printer.error_cleared_at is None
 
 
+def test_bambu_error_cleared_flag_does_not_force_paused_on_an_idle_printer(
+    db_session: Session,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_org,
+    monkeypatch,
+):
+    """Regression: a printer with no active print must never be shown as
+    "paused" just because it had an error dismissed at some earlier point and
+    hasn't printed again since — the flag must not linger past the error.
+    """
+    printer = Printer(
+        organization_id=test_org.id,
+        name="Bambu-Err-04",
+        kind=PrinterKind.bambu,
+        bambu_dev_id="DEV-ERR-IDLE",
+        is_active=True,
+        error_cleared_at=datetime.now(timezone.utc),
+    )
+    db_session.add(printer)
+    db_session.commit()
+    db_session.refresh(printer)
+
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: {"state": "idle", "filename": None})
+
+    get_response = client.get(f"/api/printers/{printer.id}", headers=auth_headers)
+    assert get_response.status_code == 200
+    body = get_response.json()
+    assert body["state"] == "idle"
+    assert body["job"] is None
+
+    db_session.refresh(printer)
+    assert printer.error_cleared_at is None
+
+
 def test_clear_error_succeeds_even_if_bambu_command_fails(
     db_session: Session,
     client: TestClient,
