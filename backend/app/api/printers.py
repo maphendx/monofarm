@@ -7,6 +7,7 @@ import asyncio
 import base64
 import logging
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 import httpx
 import requests as _requests
@@ -54,6 +55,21 @@ class SendGcodePayload(BaseModel):
 
 
 import re
+
+
+def _resolve_webcam_url(base: str, raw_url: str | None) -> str:
+    """Resolve Moonraker webcam URLs, including U1's localhost config."""
+    url = (raw_url or "").strip()
+    if not url:
+        return ""
+    if not url.startswith(("http://", "https://")):
+        return f"{base}{url if url.startswith('/') else '/' + url}"
+
+    parsed = urlsplit(url)
+    if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+        query = f"?{parsed.query}" if parsed.query else ""
+        return f"{base}{parsed.path or '/'}{query}"
+    return url
 
 
 # Known Bambu build volumes (X × Y × Z in mm). Matched by substring in bambu_model.
@@ -537,7 +553,7 @@ async def webcam_snapshot(
             webcams = []
         if webcams:
             url = webcams[0].get("snapshot_url", "")
-            return url if url.startswith("http") else base + url
+            return _resolve_webcam_url(base, url)
         if row.kind == PrinterKind.snapmaker_u1:
             # Stock U1 firmware writes the built-in camera frame here. The
             # agent keeps camera.start_monitor alive while the printer is subscribed.
@@ -635,8 +651,7 @@ async def camera_snapshot(
                 snapshot_url = ""
                 if webcams:
                     snapshot_url = webcams[0].get("snapshot_url", "") or ""
-                    if snapshot_url and not snapshot_url.startswith("http"):
-                        snapshot_url = f"{base}{snapshot_url if snapshot_url.startswith('/') else '/' + snapshot_url}"
+                    snapshot_url = _resolve_webcam_url(base, snapshot_url)
                 if not snapshot_url:
                     snapshot_url = (
                         f"{base}/server/files/camera/monitor.jpg"
