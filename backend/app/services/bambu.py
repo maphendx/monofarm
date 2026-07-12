@@ -434,10 +434,10 @@ _main_loop: asyncio.AbstractEventLoop | None = None
 def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: BambuCloudJob | None) -> None:
     """Forward PlateCycler AutoPrint triggers from cloud MQTT reports.
 
-    Runs in the paho callback thread of the worker process. Dispatch needs the
-    agent tunnel, which terminates in the web process — so publish a kick event
-    to Redis (`autoprint:kick`, consumed by autoprint.run_kick_listener). When
-    Redis is absent (single-process dev), schedule the coroutine locally.
+    Runs in the paho callback thread of the worker process. Publish a kick event
+    to Redis (`autoprint:kick`, consumed by autoprint.run_kick_listener) so the
+    web process advances the queue. When Redis is absent (single-process dev),
+    schedule the coroutine locally.
     """
     org_id = _dev_to_org.get(dev_id)
     if org_id is None:

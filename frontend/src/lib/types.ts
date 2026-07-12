@@ -141,6 +141,25 @@ export interface Printer {
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 
+export interface AutoPrintQueueEntry {
+  id: number;
+  title: string;
+  file_name: string | null;
+  runs_total: number;
+  runs_completed: number;
+  active_run_index: number | null;
+  is_active: boolean;
+}
+
+export interface AutoPrintStatus {
+  enabled: boolean;
+  plates_remaining: number;
+  active_job_status: BambuCloudJobStatus | null;
+  active_job_progress_pct: number | null;
+  error: string | null;
+  entries: AutoPrintQueueEntry[];
+}
+
 export interface FilamentMeta {
   types?: string[];
   colors?: string[];

@@ -6,7 +6,7 @@ Bambu live state comes from MQTT cache; Moonraker from REST polling.
 import asyncio
 import base64
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import urlsplit
 
 import httpx
@@ -14,17 +14,20 @@ import requests as _requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
+from app.models.bambu_cloud_job import BambuCloudJob
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
 from app.models.printer_group import PrinterGroup
 from app.models.task import PrintTask
 from app.models.user import User, UserRole
 from app.schemas.printer import (
+    AutoPrintQueueEntryOut,
+    AutoPrintStatusOut,
     FilamentSlot,
     PrinterCreate,
     PrinterGroupAssign,
@@ -34,6 +37,7 @@ from app.schemas.printer import (
     PrinterUpdate,
 )
 from app.services import bambu, moonraker, tunnel as _tunnel
+from app.services.bambu_job_state import ACTIVE_STATUSES
 
 log = logging.getLogger(__name__)
 
@@ -1385,6 +1389,63 @@ async def cancel_print(
 # ── Unified print controls (dispatches to Moonraker or Bambu) ────────────────
 
 
+@router.get("/{printer_id}/autoprint/status", response_model=AutoPrintStatusOut)
+def get_autoprint_status(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+) -> AutoPrintStatusOut:
+    row = _require_printer(printer_id, db, org.id)
+    entries = (
+        db.query(PlanEntry)
+        .options(joinedload(PlanEntry.task))
+        .filter(
+            PlanEntry.organization_id == org.id,
+            PlanEntry.printer_id == row.id,
+            PlanEntry.plan_date == date.today(),
+            PlanEntry.done.is_(False),
+            PlanEntry.runs_completed < PlanEntry.runs_total,
+        )
+        .order_by(PlanEntry.priority.desc(), PlanEntry.sequence, PlanEntry.created_at)
+        .all()
+    )
+    active_job = (
+        db.query(BambuCloudJob)
+        .filter(
+            BambuCloudJob.organization_id == org.id,
+            BambuCloudJob.printer_id == row.id,
+            BambuCloudJob.plan_entry_id.isnot(None),
+            BambuCloudJob.status.in_(ACTIVE_STATUSES),
+        )
+        .order_by(BambuCloudJob.id.desc())
+        .first()
+    )
+    active_entry_id = active_job.plan_entry_id if active_job else None
+    return AutoPrintStatusOut(
+        enabled=row.autoprint_mode == "platecycler",
+        plates_remaining=row.autoprint_plates_remaining,
+        active_job_status=active_job.status.value if active_job else None,
+        active_job_progress_pct=active_job.progress_pct if active_job else None,
+        error=row.autoprint_error,
+        entries=[
+            AutoPrintQueueEntryOut(
+                id=entry.id,
+                title=entry.task.title,
+                file_name=entry.task.file_name,
+                runs_total=entry.runs_total,
+                runs_completed=entry.runs_completed,
+                active_run_index=(
+                    active_job.autoprint_run_index
+                    if active_job and entry.id == active_entry_id
+                    else None
+                ),
+                is_active=entry.id == active_entry_id,
+            )
+            for entry in entries
+        ],
+    )
+
+
 @router.patch("/{printer_id}/autoprint", response_model=PrinterOut)
 def update_autoprint(
     printer_id: int,
@@ -1400,12 +1461,12 @@ def update_autoprint(
 
         if row.kind != PrinterKind.bambu or not is_a1_mini(row.bambu_model, row.bambu_dev_id):
             raise HTTPException(status_code=400, detail="AutoPrint PlateCycler підтримує лише Bambu A1 Mini")
-        # Cloud-mode printers are fine: upload goes via agent FTPS, start via
-        # cloud MQTT project_file. IP + Access Code are still needed for FTPS.
-        if not row.bambu_dev_ip or not row.bambu_access_code:
+        # Cloud-mode printers use the Bambu Cloud upload pipeline. Only an
+        # explicitly configured LAN-only printer needs local FTPS credentials.
+        if row.bambu_lan_mode and (not row.bambu_dev_ip or not row.bambu_access_code):
             raise HTTPException(
                 status_code=400,
-                detail="Для AutoPrint потрібні IP адреса та Access Code принтера (FTPS-завантаження через monofarm-agent)",
+                detail="Для AutoPrint у LAN mode потрібні IP адреса та Access Code принтера",
             )
         if not 1 <= payload.plates_loaded <= 10:
             raise HTTPException(status_code=422, detail="Кількість пластин має бути від 1 до 10")

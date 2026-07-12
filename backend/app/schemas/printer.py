@@ -70,6 +70,25 @@ class PrinterGroupAssign(BaseModel):
     group_id: int | None  # None = remove from group
 
 
+class AutoPrintQueueEntryOut(BaseModel):
+    id: int
+    title: str
+    file_name: str | None = None
+    runs_total: int
+    runs_completed: int
+    active_run_index: int | None = None
+    is_active: bool = False
+
+
+class AutoPrintStatusOut(BaseModel):
+    enabled: bool
+    plates_remaining: int
+    active_job_status: str | None = None
+    active_job_progress_pct: int | None = None
+    error: str | None = None
+    entries: list[AutoPrintQueueEntryOut] = Field(default_factory=list)
+
+
 class PrinterOut(BaseModel):
     id: int
     name: str

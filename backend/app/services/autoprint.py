@@ -110,7 +110,7 @@ async def start_next_for_printer(
         from app.models.gcode_file import GcodeFile
         from app.models.task import PrintTask
         from app.services import bambu
-        from app.services.bambu_dispatch import create_cloud_job
+        from app.services.bambu_dispatch import create_cloud_job, dispatch_cloud_job
         from app.services.bambu_lan_dispatch import dispatch_lan_job, has_agent_tunnel
         from app.services.bambu_mapping import build_ams_mapping
         from app.services.schedule_conflict import check_eligibility
@@ -125,7 +125,7 @@ async def start_next_for_printer(
                 or not printer.bambu_dev_id
             ):
                 return None
-            if not has_agent_tunnel(printer.organization_id):
+            if printer.bambu_lan_mode and not has_agent_tunnel(printer.organization_id):
                 return None
 
             active_job = (
@@ -183,9 +183,7 @@ async def start_next_for_printer(
                 ams_mapping = None
             run_index = entry.runs_completed + 1
             eject_after_print = printer.autoprint_eject_last_plate or _has_more_runs(db, entry)
-            # Cloud-mode printers reject LAN MQTT (needs Developer Mode) — the agent
-            # still FTPS-uploads to the SD, but the start command goes via cloud MQTT.
-            start_via = "lan" if printer.bambu_lan_mode else "cloud"
+            dispatch_mode = "lan" if printer.bambu_lan_mode else "cloud"
             job = create_cloud_job(
                 db,
                 org_id=printer.organization_id,
@@ -193,11 +191,11 @@ async def start_next_for_printer(
                 printer_bambu_dev_id=printer.bambu_dev_id,
                 gcode_file_id=gcode.id,
                 file_name=gcode.original_name,
-                dispatch_mode="lan",
+                dispatch_mode=dispatch_mode,
                 idempotency_key=f"autoprint:{printer.organization_id}:{entry.id}:{run_index}",
                 request_payload={
                     "source": "platecycler_autoprint",
-                    "start_via": start_via,
+                    "start_via": dispatch_mode,
                     "ams_mapping": ams_mapping,
                     "use_ams": use_ams,
                     "platecycler": {
@@ -213,7 +211,11 @@ async def start_next_for_printer(
             db.commit()
             job_id = job.id
 
-        result = await dispatch_lan_job(job_id)
+        result = (
+            await dispatch_lan_job(job_id)
+            if dispatch_mode == "lan"
+            else await asyncio.to_thread(dispatch_cloud_job, job_id)
+        )
         if result and result.status == BambuCloudJobStatus.failed:
             with SessionLocal() as db:
                 printer = db.get(Printer, printer_id)
@@ -294,10 +296,9 @@ async def start_next_for_device(
 async def run_kick_listener() -> None:
     """Consume worker-published AutoPrint kicks (Redis `autoprint:kick`).
 
-    Cloud MQTT reports land in the worker process, but PlateCycler dispatch
-    needs the agent tunnel that terminates in the web process — this listener
-    runs in the web lifespan and acts only when this process holds the tunnel
-    (terminal-job accounting runs regardless: it is pure DB work).
+    Cloud MQTT reports land in the worker process. This listener runs in the web
+    lifespan and advances the queue; cloud-mode printers dispatch without an
+    agent, while explicit LAN-mode printers still verify their agent tunnel.
     """
     import json
     import logging
@@ -305,8 +306,6 @@ async def run_kick_listener() -> None:
     import redis.asyncio as aioredis
 
     from app.core.config import settings
-    from app.services.bambu_lan_dispatch import has_agent_tunnel
-
     log = logging.getLogger(__name__)
     if not settings.REDIS_URL:
         return
@@ -324,7 +323,7 @@ async def run_kick_listener() -> None:
                     org_id = int(event["org_id"])
                     if "job_id" in event:
                         await handle_terminal_job(int(event["job_id"]))
-                    elif has_agent_tunnel(org_id):
+                    else:
                         await start_next_for_device(
                             org_id,
                             str(event.get("dev_id") or ""),

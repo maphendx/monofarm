@@ -2527,6 +2527,8 @@ export default function PrinterPage() {
         </div>
       </div>
 
+      <AutoPrintCard printer={printer} onUpdated={(updated) => upsertPrinter(updated)} />
+
       {/* ── main grid — 2 columns ── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
 
@@ -2551,7 +2553,6 @@ export default function PrinterPage() {
           <TemperaturesCard printer={printer} />
           <SpeedCard printer={printer} />
           <ConnectionCard printer={printer} />
-          <AutoPrintCard printer={printer} onUpdated={() => void reload()} />
           {((isBambu && printer.bambu_dev_id) || !!printer.moonraker_url) && <BambuJobsCard printer={printer} />}
           <PrintHistoryCard printer={printer} />
         </div>

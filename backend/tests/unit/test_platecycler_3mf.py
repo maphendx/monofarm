@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import io
+from types import SimpleNamespace
 import zipfile
 
 import pytest
 
 from app.services.platecycler_3mf import PlateCycler3MFError, build_platecycler_3mf
+from app.services.bambu_dispatch import _prepare_job_file_bytes
 
 
 def _source_3mf(*, extra_plate: bool = False) -> bytes:
@@ -68,3 +70,23 @@ def test_build_platecycler_3mf_rejects_multi_plate_source() -> None:
 def test_build_platecycler_3mf_rejects_corrupt_archive() -> None:
     with pytest.raises(PlateCycler3MFError, match="valid 3MF"):
         build_platecycler_3mf(b"not a zip", cooldown_temp_c=40)
+
+
+def test_cloud_dispatch_prepares_platecycler_3mf_before_upload() -> None:
+    job = SimpleNamespace(
+        request_payload_json={
+            "platecycler": {
+                "cooldown_temp_c": 35,
+                "delay_seconds": 45,
+                "eject_after_print": True,
+            }
+        }
+    )
+
+    prepared = _prepare_job_file_bytes(job, _source_3mf())
+
+    with zipfile.ZipFile(io.BytesIO(prepared)) as archive:
+        gcode = archive.read("Metadata/plate_1.gcode")
+    assert b"M190 S35" in gcode
+    assert b"G4 S45" in gcode
+    assert b"MONOFARM PLATECYCLER" in gcode

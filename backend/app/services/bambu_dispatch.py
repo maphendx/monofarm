@@ -341,6 +341,22 @@ def _read_gcode_bytes(job: BambuCloudJob) -> bytes:
         return path.read_bytes()
 
 
+def _prepare_job_file_bytes(job: BambuCloudJob, file_bytes: bytes) -> bytes:
+    """Apply job-specific file preparation before either validation or upload."""
+    platecycler = (job.request_payload_json or {}).get("platecycler")
+    if not isinstance(platecycler, dict):
+        return file_bytes
+
+    from app.services.platecycler_3mf import build_platecycler_3mf
+
+    return build_platecycler_3mf(
+        file_bytes,
+        cooldown_temp_c=int(platecycler.get("cooldown_temp_c", 40)),
+        delay_seconds=int(platecycler.get("delay_seconds", 0)),
+        eject_after_print=bool(platecycler.get("eject_after_print", True)),
+    )
+
+
 def prepare_cloud_job(job_id: int) -> BambuCloudJob:
     """Validate the source file and stamp integrity metadata before dispatch.
 
@@ -363,9 +379,16 @@ def prepare_cloud_job(job_id: int) -> BambuCloudJob:
         )
 
     try:
-        file_bytes = _read_gcode_bytes(job)
+        file_bytes = _prepare_job_file_bytes(job, _read_gcode_bytes(job))
     except FileNotFoundError as e:
         return fail_job(job_id, BambuErrorCode.INVALID_3MF, f"Файл відсутній у сховищі: {e}", retryable=False)
+    except (TypeError, ValueError) as e:
+        return fail_job(
+            job_id,
+            BambuErrorCode.INVALID_3MF,
+            f"Не вдалося підготувати 3MF для PlateCycler: {e}",
+            retryable=False,
+        )
 
     if not file_bytes:
         return fail_job(job_id, BambuErrorCode.INVALID_3MF, "Файл порожній", retryable=False)
@@ -655,9 +678,16 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
             return job
 
     try:
-        file_bytes = _read_gcode_bytes(job)
+        file_bytes = _prepare_job_file_bytes(job, _read_gcode_bytes(job))
     except FileNotFoundError as e:
         return fail_job(job_id, BambuErrorCode.INVALID_3MF, f"Файл відсутній у сховищі: {e}", retryable=False)
+    except (TypeError, ValueError) as e:
+        return fail_job(
+            job_id,
+            BambuErrorCode.INVALID_3MF,
+            f"Не вдалося підготувати 3MF для PlateCycler: {e}",
+            retryable=False,
+        )
 
     org_id = job.organization_id
     filename = job.file_name or "print.3mf"
@@ -742,7 +772,9 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
             ams_mapping, use_ams, task_body.get("plateIndex"),
             task_body,
         )
-        job = advance_job_status(job_id, BambuCloudJobStatus.task_creating, request_payload_json=task_body)
+        # Keep the original dispatch options on the job. Retries need them to
+        # rebuild a derived PlateCycler 3MF and preserve AMS/calibration choices.
+        job = advance_job_status(job_id, BambuCloudJobStatus.task_creating)
 
         task_data = create_task_with_retry(org_id, task_body)
         bambu_task_id = str(task_data.get("id") or task_data.get("task_id") or task_data.get("taskId") or "") or None
