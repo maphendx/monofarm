@@ -967,7 +967,8 @@ export function SendModal({
                     )}
 
                     {/* Slot mapping (single printer) */}
-                    {numSelected === 1 && usedSlots.length > 0 && primaryPrinter && file && (
+                    {numSelected === 1 && usedSlots.length > 0 && primaryPrinter && file &&
+                      (!isBambu || primaryPrinter.bambu_has_ams !== false) && (
                       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
                         <div className="mb-3 flex items-center justify-between">
                           <p className="text-[11px] font-semibold text-[var(--text-muted)]">Маппінг котушок</p>

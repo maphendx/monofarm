@@ -397,7 +397,7 @@ def test_send_bambu_3mf_creates_queued_cloud_job(client, auth_headers, cleanup_u
     assert job.request_payload_json["ams_mapping"] == [0, 1]
 
 
-def test_send_bambu_3mf_can_disable_ams(client, auth_headers, cleanup_uploads, db_session):
+def test_send_bambu_3mf_uses_printer_ams_setting(client, auth_headers, cleanup_uploads, db_session):
     from app.models.bambu_cloud_job import BambuCloudJob
 
     p = client.post(
@@ -408,6 +408,7 @@ def test_send_bambu_3mf_can_disable_ams(client, auth_headers, cleanup_uploads, d
             "kind": "bambu",
             "bambu_dev_id": "BAMBU-NO-AMS",
             "bambu_access_code": "12345678",
+            "bambu_has_ams": False,
         },
     ).json()
 
@@ -423,7 +424,7 @@ def test_send_bambu_3mf_can_disable_ams(client, auth_headers, cleanup_uploads, d
     resp = client.post(
         f"/api/files/{f['id']}/send/{p['id']}",
         headers=auth_headers,
-        json={"slot_map": {"0": 0, "1": 1}, "use_ams": False},
+        json={"slot_map": {"0": 0, "1": 1}},
     )
 
     assert resp.status_code == 202, resp.text
