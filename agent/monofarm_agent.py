@@ -33,11 +33,12 @@ import socket
 import ssl
 import logging
 import sys
+import tempfile
 import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.5"
+AGENT_VERSION = "0.8.8"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -628,7 +629,28 @@ def _bambu_mark_tls_failure(ip: str, exc: Exception) -> None:
             _bambu_tls_insecure.add(ip)
 
 
-async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
+async def _u1_camera_keepalive(mr_ws, moonraker_url: str) -> None:
+    """Keep the stock U1 camera monitor updating its JPEG file.
+
+    Stock U1 firmware stops refreshing /server/files/camera/monitor.jpg when
+    nothing has recently asked it to start the LAN camera monitor. Reusing the
+    already-open Moonraker websocket avoids another connection per printer.
+    """
+    payload = json.dumps({
+        "jsonrpc": "2.0",
+        "method": "camera.start_monitor",
+        "params": {"domain": "lan", "interval": 0},
+        "id": "monofarm-u1-camera",
+    })
+    while True:
+        try:
+            await mr_ws.send(payload)
+        except Exception:
+            return
+        await asyncio.sleep(10)
+
+
+async def _moonraker_ws_loop(cloud_ws, moonraker_url: str, printer_kind: str | None = None) -> None:
     """Maintain a persistent Moonraker WS subscription and push STATUS_PUSH to cloud.
 
     Moonraker sends the full state in the subscribe response, then incremental
@@ -656,50 +678,59 @@ async def _moonraker_ws_loop(cloud_ws, moonraker_url: str) -> None:
                 ws_url, ping_interval=20, ping_timeout=10, open_timeout=10
             ) as mr_ws:
                 log.info("MOONRAKER_SUBSCRIBE: connected %s", ws_url)
+                camera_task = (
+                    asyncio.create_task(_u1_camera_keepalive(mr_ws, moonraker_url))
+                    if printer_kind == "snapmaker_u1" else None
+                )
                 await mr_ws.send(subscribe_msg)
-                async for message in mr_ws:
-                    try:
-                        data = json.loads(message)
-                    except Exception:
-                        continue
+                try:
+                    async for message in mr_ws:
+                        try:
+                            data = json.loads(message)
+                        except Exception:
+                            continue
 
-                    # Subscribe result — Moonraker returns full current state
-                    if data.get("id") == 1 and "result" in data:
-                        full_state = (data["result"] or {}).get("status") or {}
+                        # Subscribe result — Moonraker returns full current state
+                        if data.get("id") == 1 and "result" in data:
+                            full_state = (data["result"] or {}).get("status") or {}
 
-                    # Incremental diff — merge into accumulated full state
-                    elif data.get("method") == "notify_status_update":
-                        params = data.get("params", [])
-                        if params and isinstance(params[0], dict):
-                            for key, val in params[0].items():
-                                existing = full_state.get(key)
-                                if isinstance(existing, dict) and isinstance(val, dict):
-                                    full_state[key] = {**existing, **val}
-                                else:
-                                    full_state[key] = val
-                    else:
-                        continue
+                        # Incremental diff — merge into accumulated full state
+                        elif data.get("method") == "notify_status_update":
+                            params = data.get("params", [])
+                            if params and isinstance(params[0], dict):
+                                for key, val in params[0].items():
+                                    existing = full_state.get(key)
+                                    if isinstance(existing, dict) and isinstance(val, dict):
+                                        full_state[key] = {**existing, **val}
+                                    else:
+                                        full_state[key] = val
+                        else:
+                            continue
 
-                    if not full_state:
-                        continue
-                    try:
-                        await cloud_ws.send(json.dumps({
-                            "type": "STATUS_PUSH",
-                            "url": moonraker_url,
-                            "status": full_state,
-                        }))
-                    except Exception as e:
-                        log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
-                        return  # cloud WS gone — task will be cancelled on reconnect
+                        if not full_state:
+                            continue
+                        try:
+                            await cloud_ws.send(json.dumps({
+                                "type": "STATUS_PUSH",
+                                "url": moonraker_url,
+                                "status": full_state,
+                            }))
+                        except Exception as e:
+                            log.debug("STATUS_PUSH send failed, stopping loop: %s", e)
+                            return  # cloud WS gone — task will be cancelled on reconnect
 
-                    # Local failure/stop detection (off the forwarding path).
-                    _state, _etext, _ecode = _classify_moonraker(full_state.get("print_stats") or {})
-                    if _alert_should_fire(f"mr:{moonraker_url}", _state, _ecode):
-                        asyncio.create_task(_dispatch_alert(
-                            _moonraker_names.get(moonraker_url) or host or moonraker_url,
-                            _state, _etext, _ecode, "moonraker",
-                            {"moonraker_url": moonraker_url},
-                        ))
+                        # Local failure/stop detection (off the forwarding path).
+                        _state, _etext, _ecode = _classify_moonraker(full_state.get("print_stats") or {})
+                        if _alert_should_fire(f"mr:{moonraker_url}", _state, _ecode):
+                            asyncio.create_task(_dispatch_alert(
+                                _moonraker_names.get(moonraker_url) or host or moonraker_url,
+                                _state, _etext, _ecode, "moonraker",
+                                {"moonraker_url": moonraker_url},
+                            ))
+                finally:
+                    if camera_task:
+                        camera_task.cancel()
+                        await asyncio.gather(camera_task, return_exceptions=True)
 
         except asyncio.CancelledError:
             log.debug("MOONRAKER_SUBSCRIBE: task cancelled for %s", moonraker_url)
@@ -730,7 +761,7 @@ async def handle_moonraker_subscribe(cloud_ws, req: dict) -> None:
     if existing and not existing.done():
         existing.cancel()
 
-    task = asyncio.create_task(_moonraker_ws_loop(cloud_ws, url))
+    task = asyncio.create_task(_moonraker_ws_loop(cloud_ws, url, req.get("kind")))
     _moonraker_sub_tasks[url] = task
 
     await cloud_ws.send(json.dumps({
@@ -1874,8 +1905,8 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     the backend can build the matching `project_file` URL.
     """
     import ftplib
-    import io as _io
     import ssl as _ssl
+    import time
 
     class _ImplicitFTP_TLS(ftplib.FTP_TLS):
         """Bambu printers serve IMPLICIT FTPS on :990 — the socket must be TLS
@@ -1916,15 +1947,52 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     target_dir  = (req.get("target_dir") or "cache").strip().lower()
     url         = req.get("url")
     data_b64    = req.get("data_b64", "")
+    temp_path: Path | None = None
+    progress = {"phase": "downloading", "sent": 0, "total": 0}
+    progress_task: asyncio.Task | None = None
+
+    async def _report_progress() -> None:
+        last: tuple[str, int, int] | None = None
+        last_sent_at = 0.0
+        while True:
+            current = (progress["phase"], progress["sent"], progress["total"])
+            now = time.monotonic()
+            if current != last or now - last_sent_at >= 5.0:
+                try:
+                    await ws.send(json.dumps({
+                        "id": req_id,
+                        "type": "upload_progress",
+                        "phase": current[0],
+                        "sent": current[1],
+                        "total": current[2],
+                        "heartbeat": current == last,
+                    }))
+                    last = current
+                    last_sent_at = now
+                except Exception:
+                    return
+            await asyncio.sleep(1.0)
 
     try:
+        with tempfile.NamedTemporaryFile(suffix=".3mf", delete=False) as tmp:
+            temp_path = Path(tmp.name)
+        progress_task = asyncio.create_task(_report_progress())
+
         if url:
-            async with httpx.AsyncClient(timeout=120, verify=False) as client:  # noqa: S501
-                resp = await client.get(url)
-                resp.raise_for_status()
-                file_bytes = resp.content
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180, connect=30), verify=False) as client:  # noqa: S501
+                async with client.stream("GET", url) as resp:
+                    resp.raise_for_status()
+                    progress["total"] = int(resp.headers.get("content-length") or 0)
+                    with temp_path.open("wb") as file_obj:
+                        async for chunk in resp.aiter_bytes(1024 * 1024):
+                            file_obj.write(chunk)
+                            progress["sent"] += len(chunk)
         else:
             file_bytes = base64.b64decode(data_b64)
+            progress["total"] = len(file_bytes)
+            temp_path.write_bytes(file_bytes)
+        progress["phase"] = "uploading"
+        progress["sent"] = 0
 
         def _ftp_connect() -> "ftplib.FTP_TLS":
             ftp = _ImplicitFTP_TLS(context=_bambu_ssl_context(ip))
@@ -1956,13 +2024,33 @@ async def handle_bambu_upload(ws, req: dict) -> None:
                     remote_path = f"cache/{filename}"
                 except ftplib.all_errors:
                     pass  # old firmware without cache dir: upload to SD root
-            ftp.storbinary(f"STOR {filename}", _io.BytesIO(file_bytes))
-            ftp.quit()
+            with temp_path.open("rb") as file_obj:
+                ftp.storbinary(
+                    f"STOR {filename}",
+                    file_obj,
+                    blocksize=64 * 1024,
+                    callback=lambda chunk: progress.__setitem__("sent", progress["sent"] + len(chunk)),
+                )
+            try:
+                ftp.quit()
+            except ftplib.all_errors:
+                pass
             return remote_path
 
         # Run blocking FTP in a thread so asyncio event loop stays alive
         # (handles WS keepalive pings during upload)
         remote_path = await asyncio.to_thread(_ftp_upload)
+        progress["sent"] = progress["total"]
+        try:
+            await ws.send(json.dumps({
+                "id": req_id,
+                "type": "upload_progress",
+                "phase": "uploading",
+                "sent": progress["sent"],
+                "total": progress["total"],
+            }))
+        except Exception:
+            pass
 
         result = {
             "id": req_id, "status": 200,
@@ -1971,6 +2059,15 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     except Exception as e:
         log.warning("BAMBU_UPLOAD error %s: %s", ip, e)
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
+    finally:
+        if progress_task:
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
 
     await ws.send(json.dumps(result))
 

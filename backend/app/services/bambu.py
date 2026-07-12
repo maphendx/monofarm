@@ -44,12 +44,17 @@ log = logging.getLogger(__name__)
 FTPS_TIMEOUT = 30
 MQTT_KEEPALIVE = 60
 STATUS_CACHE_TTL = 30.0
+# A printer can stay quiet on MQTT while its SD card is busy writing a large
+# 3MF. Keep the last known state separately so the dashboard does not turn a
+# working printer red just because the fresh telemetry window elapsed.
+STATUS_STALE_TTL = 15 * 60
 DEVICE_LIST_CACHE_TTL = 60
 # MQTT reports arrive ~1/s per printing device — persist to Redis on change
 # or at most this often, so Upstash isn't hammered with identical payloads.
 REDIS_STATE_WRITE_INTERVAL = 5.0
 REDIS_AMS_WRITE_INTERVAL = 60.0
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
+TRANSIENT_FAILURE_RECOVERY_WINDOW = timedelta(minutes=30)
 BED_CLEARED_TTL_SECONDS = 12 * 3600
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
@@ -616,6 +621,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
     ):
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
+        cache_set(f"bambu:state:stale:{dev_id}", updated, STATUS_STALE_TTL)
         _last_state_redis_write[dev_id] = now_mono
     if cleared_terminal:
         return None
@@ -648,6 +654,7 @@ def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]
     }
     _state_cache[dev_id] = idle
     cache_set(f"bambu:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
+    cache_set(f"bambu:state:stale:{dev_id}", idle, STATUS_STALE_TTL)
     return idle
 
 
@@ -705,7 +712,7 @@ def _find_matching_cloud_job(
             .filter(
                 BambuCloudJob.printer_bambu_dev_id == dev_id,
                 BambuCloudJob.bambu_task_id == task_id,
-                BambuCloudJob.status.in_(CLOUD_JOB_ACTIVE_STATUSES),
+                BambuCloudJob.status.in_((*CLOUD_JOB_ACTIVE_STATUSES, BambuCloudJobStatus.failed)),
             )
             .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
             .all()
@@ -757,6 +764,17 @@ def _find_matching_cloud_job(
     return None
 
 
+def _can_recover_transient_failure(job: BambuCloudJob, now: datetime) -> bool:
+    return bool(
+        job.status == BambuCloudJobStatus.failed
+        and job.error_code == BambuErrorCode.PRINT_FAILED_HMS.value
+        and job.started_printing_at is None
+        and job.failed_at is not None
+        and job.task_created_at is not None
+        and timedelta(0) <= now - job.failed_at <= TRANSIENT_FAILURE_RECOVERY_WINDOW
+    )
+
+
 def _status_from_mqtt_report(
     job: BambuCloudJob,
     *,
@@ -775,6 +793,17 @@ def _status_from_mqtt_report(
     ):
         return BambuCloudJobStatus.completed, "Printer reports print completed"
     if raw_state == "FAILED":
+        # Bambu can echo a transient FAILED snapshot immediately after
+        # project_file is accepted, before the first RUNNING report. Do not
+        # terminally fail a job unless the printer supplied a real error or
+        # had already started this print.
+        if error_msg or job.started_printing_at is not None or job.status in (
+            BambuCloudJobStatus.printing,
+            BambuCloudJobStatus.paused,
+        ):
+            return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
+        if job.status in (BambuCloudJobStatus.task_created, BambuCloudJobStatus.acknowledged):
+            return BambuCloudJobStatus.acknowledged, "Printer acknowledged task; awaiting start confirmation"
         return BambuCloudJobStatus.failed, error_msg or "Printer reports print failed"
     if job.status == BambuCloudJobStatus.task_created and raw_state:
         return BambuCloudJobStatus.acknowledged, "Printer acknowledged Bambu Cloud task"
@@ -821,6 +850,18 @@ def _sync_cloud_job_from_report(
             progress_pct=updates.get("progress_pct"),
             error_msg=error_msg,
         )
+        recovering_transient_failure = (
+            target_status == BambuCloudJobStatus.printing
+            and _can_recover_transient_failure(job, now)
+        )
+        if recovering_transient_failure:
+            reason = "Printer is printing; previous pre-start failure report was transient"
+            updates.update({
+                "error_code": None,
+                "error_msg": None,
+                "error_details_json": None,
+                "failed_at": None,
+            })
         if target_status in (
             BambuCloudJobStatus.acknowledged,
             BambuCloudJobStatus.printing,
@@ -1102,11 +1143,16 @@ def get_cached_state(dev_id: str) -> dict:
     from app.services.cache import cache_get
     fresh = cache_get(f"bambu:state:{dev_id}")
     if fresh is not None:
-        return fresh
+        return {**fresh, "state_stale": False}
+    stale = cache_get(f"bambu:state:stale:{dev_id}")
+    if stale is not None:
+        return {**stale, "state_stale": True}
     # Local dict fallback (same-worker stale data)
     entry = _state_cache.get(dev_id)
     if entry and time.monotonic() - entry.get("ts", 0) <= STATUS_CACHE_TTL:
-        return entry
+        return {**entry, "state_stale": False}
+    if entry:
+        return {**entry, "state_stale": True}
     return {"state": "offline"}
 
 

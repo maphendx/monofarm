@@ -30,7 +30,7 @@ from app.models.printer import Printer, PrinterKind
 from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
 from app.schemas.tag import TagOut
-from app.services import bambu_dispatch, bambu_lan_dispatch
+from app.services import bambu, bambu_dispatch, bambu_lan_dispatch
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
@@ -338,6 +338,11 @@ async def upload_file(
         filament_meta = parsed if parsed else None
     except Exception:
         pass
+
+    if ext.endswith(".3mf"):
+        plate_gcode = bambu.plate_gcode_entry(contents)
+        if plate_gcode:
+            filament_meta = {**(filament_meta or {}), "bambu_plate_gcode": plate_gcode}
 
     # Extract preview (3mf plate render / gcode embedded thumbnail)
     thumb = extract_thumbnail(contents, ext)

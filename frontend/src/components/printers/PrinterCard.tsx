@@ -10,6 +10,7 @@ import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import { flagLabel, kindLabel, stateLabel } from "@/lib/printerLabels";
+import { normalizedPrinterSlots } from "@/lib/printerSlots";
 import type { Printer } from "@/lib/types";
 import {
   canSkipObject,
@@ -149,13 +150,13 @@ export function PrinterCard({
               : stateLabel(printer.state).replace(/^./, (c) => c.toUpperCase());
 
   const statusLive = isPrinting;
-  const filamentSlots = (printer.loaded_filaments ?? []).map((slot, index) => ({
-        key: `loaded-${slot.slot}-${index}`,
-        label: String(index + 1),
-        color: slot.color?.startsWith("#") ? slot.color.slice(0, 7) : slot.color,
-        empty: slot.empty,
-        title: `${index + 1}: ${slot.color_name ?? slot.type}`,
-      }));
+  const filamentSlots = normalizedPrinterSlots(printer).map((slot) => ({
+    key: `loaded-${slot.slot}`,
+    label: slot.isExternal ? "EXT" : String(slot.slot + 1),
+    color: slot.color?.startsWith("#") ? slot.color.slice(0, 7) : slot.color,
+    empty: slot.empty,
+    title: `${slot.isExternal ? "External" : slot.slot + 1}: ${slot.colorName ?? slot.material ?? ""}`,
+  }));
 
   return (
     <div
@@ -234,7 +235,7 @@ export function PrinterCard({
           </div>
         </div>
 
-        {printer.slots?.length ? (
+        {printer.kind !== "bambu" && printer.slots?.length ? (
           <div className="pc-slots" aria-label={t("common.slots")}>
             <SlotStrip
               slots={printer.slots}
@@ -252,7 +253,7 @@ export function PrinterCard({
           <div className="pc-slots" aria-label="Філаменти">
             {filamentSlots.map((slot) => (
               <span key={slot.key} className={["pc-slot", slot.empty ? "empty" : ""].filter(Boolean).join(" ")} title={slot.title}>
-                <span className={['pc-slot-dot', slot.empty ? 'empty' : ''].filter(Boolean).join(' ')} style={{ backgroundColor: slot.empty ? undefined : slot.color }} />
+                <span className={['pc-slot-dot', slot.empty ? 'empty' : ''].filter(Boolean).join(' ')} style={{ backgroundColor: slot.empty ? undefined : slot.color ?? undefined }} />
                 <span>{slot.label}</span>
               </span>
             ))}

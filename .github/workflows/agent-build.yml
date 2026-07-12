@@ -16,6 +16,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
     permissions:
       contents: read
 
@@ -46,7 +48,6 @@ jobs:
       - name: Publish to R2
         if: env.R2_ENDPOINT != ''
         env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
           AWS_DEFAULT_REGION: auto

@@ -108,6 +108,7 @@ export interface Printer {
   group_name: string | null;
   loaded_filaments: FilamentSlot[];
   state: string | null;
+  state_stale: boolean;
   flags: string[];
   job: string | null;
   eta_minutes: number | null;

@@ -8,6 +8,7 @@ import { DynamicFavicon } from "@/components/ui/DynamicFavicon";
 import { MascotLoader } from "@/components/ui/MascotLoader";
 import { SearchModal } from "@/components/ui/SearchModal";
 import { ScannerModal } from "@/components/warehouse/ScannerModal";
+import { PrintTransferStatus } from "@/components/files/PrintTransferStatus";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ApiError, api, getToken } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
@@ -110,6 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {searchOpen  && <SearchModal  onClose={() => setSearchOpen(false)} />}
       {scannerOpen && <ScannerModal onClose={() => setScannerOpen(false)} />}
+      <PrintTransferStatus />
       <Toaster position="bottom-right" richColors closeButton />
     </AuthProvider>
   );

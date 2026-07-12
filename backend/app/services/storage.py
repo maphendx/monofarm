@@ -166,9 +166,14 @@ def local_path_for(stored_name: str, org_id: int, prefix: str = "gcodes") -> Gen
 
     suffix = "".join(Path(stored_name).suffixes) or Path(stored_name).suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(get_bytes(stored_name, org_id, prefix))
         tmp_path = Path(tmp.name)
     try:
+        from app.core.config import settings
+        _client().download_file(
+            settings.S3_BUCKET,
+            _s3_key(stored_name, org_id, prefix),
+            str(tmp_path),
+        )
         yield tmp_path
     finally:
         tmp_path.unlink(missing_ok=True)

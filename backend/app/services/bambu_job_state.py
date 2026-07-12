@@ -98,7 +98,9 @@ _ALLOWED_TRANSITIONS: dict[BambuCloudJobStatus, set[BambuCloudJobStatus]] = {
         BambuCloudJobStatus.lost,
     },
     BambuCloudJobStatus.completed: set(),
-    BambuCloudJobStatus.failed: set(),
+    # Bambu may emit a stale FAILED snapshot immediately before RUNNING;
+    # MQTT correlation can recover that narrow pre-start case.
+    BambuCloudJobStatus.failed: {BambuCloudJobStatus.printing},
     BambuCloudJobStatus.cancelled: set(),
     BambuCloudJobStatus.lost: set(),
 }
