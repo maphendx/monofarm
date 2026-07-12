@@ -26,9 +26,9 @@ class _Printer:
         self.slots = []
 
 
-def test_cache_path_uses_ftp_url():
+def test_cache_path_uses_sdcard_file_url_for_p1s():
     cmd = build_start_print_payload("DEV1", "model.3mf", ftp_filename="cache/model.3mf")
-    assert cmd["print"]["url"] == "ftp:///cache/model.3mf"
+    assert cmd["print"]["url"] == "file:///sdcard/cache/model.3mf"
 
 
 def test_root_path_uses_sdcard_url():
