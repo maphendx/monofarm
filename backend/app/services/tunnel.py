@@ -476,6 +476,7 @@ async def send_bambu_upload(
     presigned_url: str | None = None,
     target_dir: str = "cache",
     timeout: float = 180.0,
+    progress_callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
 ) -> str:
     """Upload a .3mf to a Bambu printer via the agent's LAN FTPS connection.
 
@@ -511,6 +512,8 @@ async def send_bambu_upload(
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
     _pending_org[req_id] = org_id
+    if progress_callback is not None:
+        _pending_upload_progress[req_id] = progress_callback
 
     try:
         await ws.send_text(json.dumps(payload))
@@ -520,6 +523,7 @@ async def send_bambu_upload(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        _pending_upload_progress.pop(req_id, None)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_UPLOAD failed: {resp.get('error')}")

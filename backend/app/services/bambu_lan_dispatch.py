@@ -40,7 +40,7 @@ _inflight_guard = threading.Lock()
 _UPLOAD_BASE_TIMEOUT_S = 180.0
 _UPLOAD_MIN_RATE_BYTES_S = 128 * 1024
 _UPLOAD_MAX_TIMEOUT_S = 900.0
-_CACHE_UPLOAD_SETTLE_SECONDS = 5.0
+_CACHE_UPLOAD_SETTLE_SECONDS = 1.0
 
 
 def _upload_timeout(size_bytes: int) -> float:
@@ -51,6 +51,14 @@ def _bambu_upload_target_dir(model: str | None, dev_id: str | None = None) -> st
     """A1 firmware reads project_file from SD root; P/X printers use cache."""
     is_a1 = is_a1_series(model) or (dev_id or "").upper().startswith(("030", "039"))
     return "sdcard" if is_a1 else "cache"
+
+
+def plate_gcode_from_metadata(metadata: dict | None) -> str | None:
+    """Return a previously indexed plate entry without reopening the 3MF."""
+    value = (metadata or {}).get("bambu_plate_gcode")
+    if isinstance(value, str) and value.startswith("Metadata/plate_") and value.endswith(".gcode"):
+        return value
+    return None
 
 
 def has_agent_tunnel(org_id: int) -> bool:
@@ -96,6 +104,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             )
             start_via = (payload.get("start_via") or "lan").strip().lower()
             stored_name = gcode.stored_name if gcode else None
+            known_file_size = job.file_size or (gcode.size_bytes if gcode else None)
+            cached_plate_gcode = plate_gcode_from_metadata(gcode.filament_meta if gcode else None)
 
         if not dev_id or not dev_ip or not access_code:
             return fail_job(
@@ -119,12 +129,15 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         platecycler = payload.get("platecycler")
 
         # ── validating ───────────────────────────────────────────────────────
-        try:
-            file_bytes = await asyncio.to_thread(storage_svc.get_bytes, stored_name, org_id)
-        except FileNotFoundError:
-            return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл відсутній у сховищі", retryable=False)
-        if not file_bytes:
-            return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл порожній", retryable=False)
+        file_bytes: bytes | None = None
+        plate_gcode = cached_plate_gcode
+        if isinstance(platecycler, dict) or plate_gcode is None:
+            try:
+                file_bytes = await asyncio.to_thread(storage_svc.get_bytes, stored_name, org_id)
+            except FileNotFoundError:
+                return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл відсутній у сховищі", retryable=False)
+            if not file_bytes:
+                return fail_job(job_id, BambuErrorCode.FILE_INVALID, "Файл порожній", retryable=False)
         if isinstance(platecycler, dict):
             from app.services.platecycler_3mf import PlateCycler3MFError, build_platecycler_3mf
 
@@ -146,7 +159,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         # The project_file `param` must point at the real gcode entry: an
         # exported plate keeps its project number (plate 2 → plate_2.gcode),
         # and a hardcoded plate_1 makes the printer "fail to parse the file".
-        plate_gcode = bambu.plate_gcode_entry(file_bytes)
+        if file_bytes is not None:
+            plate_gcode = bambu.plate_gcode_entry(file_bytes)
         if plate_gcode is None:
             return fail_job(
                 job_id, BambuErrorCode.INVALID_3MF,
@@ -157,12 +171,32 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         advance_job_status(
             job_id,
             BambuCloudJobStatus.validating,
-            file_sha256=hashlib.sha256(file_bytes).hexdigest(),
-            file_size=len(file_bytes),
+            file_sha256=hashlib.sha256(file_bytes).hexdigest() if file_bytes is not None else None,
+            file_size=len(file_bytes) if file_bytes is not None else known_file_size,
         )
 
         # ── uploading (FTPS via agent, direct LAN fallback) ──────────────────
-        advance_job_status(job_id, BambuCloudJobStatus.uploading)
+        advance_job_status(job_id, BambuCloudJobStatus.uploading, progress_pct=0)
+        last_progress = -1
+
+        async def on_upload_progress(data: dict) -> None:
+            nonlocal last_progress
+            total = int(data.get("total") or known_file_size or 0)
+            sent = int(data.get("sent") or 0)
+            if total <= 0:
+                return
+            progress_pct = max(0, min(100, round(sent * 100 / total)))
+            if progress_pct == last_progress or (progress_pct < 100 and progress_pct - last_progress < 5):
+                return
+            last_progress = progress_pct
+            phase = data.get("phase") or "uploading"
+            advance_job_status(
+                job_id,
+                BambuCloudJobStatus.uploading,
+                progress_pct=progress_pct,
+                reason="Агент завантажує файл з хмари" if phase == "downloading" else "Файл передається на принтер",
+            )
+
         try:
             if has_tunnel:
                 presigned = None
@@ -176,7 +210,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                     file_bytes=None if presigned else file_bytes,
                     presigned_url=presigned,
                     target_dir=upload_target_dir,
-                    timeout=_upload_timeout(len(file_bytes)),
+                    timeout=_upload_timeout(known_file_size or len(file_bytes or b"")),
+                    progress_callback=on_upload_progress,
                 )
             elif isinstance(platecycler, dict):
                 raise RuntimeError("PlateCycler AutoPrint потребує підключений monofarm-agent")
