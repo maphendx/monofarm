@@ -54,6 +54,7 @@ DEVICE_LIST_CACHE_TTL = 60
 REDIS_STATE_WRITE_INTERVAL = 5.0
 REDIS_AMS_WRITE_INTERVAL = 60.0
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
+TRANSIENT_FAILURE_RECOVERY_WINDOW = timedelta(minutes=30)
 BED_CLEARED_TTL_SECONDS = 12 * 3600
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
@@ -711,7 +712,7 @@ def _find_matching_cloud_job(
             .filter(
                 BambuCloudJob.printer_bambu_dev_id == dev_id,
                 BambuCloudJob.bambu_task_id == task_id,
-                BambuCloudJob.status.in_(CLOUD_JOB_ACTIVE_STATUSES),
+                BambuCloudJob.status.in_((*CLOUD_JOB_ACTIVE_STATUSES, BambuCloudJobStatus.failed)),
             )
             .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
             .all()
@@ -761,6 +762,17 @@ def _find_matching_cloud_job(
             filename=filename,
         )
     return None
+
+
+def _can_recover_transient_failure(job: BambuCloudJob, now: datetime) -> bool:
+    return bool(
+        job.status == BambuCloudJobStatus.failed
+        and job.error_code == BambuErrorCode.PRINT_FAILED_HMS.value
+        and job.started_printing_at is None
+        and job.failed_at is not None
+        and job.task_created_at is not None
+        and timedelta(0) <= now - job.failed_at <= TRANSIENT_FAILURE_RECOVERY_WINDOW
+    )
 
 
 def _status_from_mqtt_report(
@@ -838,6 +850,18 @@ def _sync_cloud_job_from_report(
             progress_pct=updates.get("progress_pct"),
             error_msg=error_msg,
         )
+        recovering_transient_failure = (
+            target_status == BambuCloudJobStatus.printing
+            and _can_recover_transient_failure(job, now)
+        )
+        if recovering_transient_failure:
+            reason = "Printer is printing; previous pre-start failure report was transient"
+            updates.update({
+                "error_code": None,
+                "error_msg": None,
+                "error_details_json": None,
+                "failed_at": None,
+            })
         if target_status in (
             BambuCloudJobStatus.acknowledged,
             BambuCloudJobStatus.printing,

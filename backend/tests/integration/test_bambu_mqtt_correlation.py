@@ -144,6 +144,37 @@ def test_transient_failed_report_before_start_waits_for_running(db_session, test
     assert job.started_printing_at is not None
 
 
+def test_running_report_recovers_job_marked_failed_before_start(db_session, test_org, monkeypatch):
+    monkeypatch.setattr(bambu, "SessionLocal", lambda: _SessionContext(db_session))
+    printer = _make_printer(db_session, test_org.id, dev_id="DEV-RECOVER")
+    job = _make_job(
+        db_session,
+        org_id=test_org.id,
+        printer_id=printer.id,
+        dev_id="DEV-RECOVER",
+        file_name="already-started.3mf",
+        task_id="task-recover",
+        status=BambuCloudJobStatus.failed,
+    )
+    job.error_code = "PRINT_FAILED_HMS"
+    job.failed_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    bambu._on_message(
+        None,
+        None,
+        _Msg(
+            "DEV-RECOVER",
+            {"print": {"gcode_state": "RUNNING", "task_id": "task-recover", "mc_percent": 4}},
+        ),
+    )
+
+    db_session.refresh(job)
+    assert job.status == BambuCloudJobStatus.printing
+    assert job.error_code is None
+    assert job.failed_at is None
+
+
 def test_mqtt_ambiguous_report_does_not_update_jobs(db_session, test_org, monkeypatch):
     monkeypatch.setattr(bambu, "SessionLocal", lambda: _SessionContext(db_session))
     printer = _make_printer(db_session, test_org.id, dev_id="DEV-AMBIG")
