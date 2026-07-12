@@ -786,7 +786,7 @@ function JobHeroCard({
               {busy === "clear-error" ? "…" : "Скинути помилку"}
             </button>
           )}
-          {isPrinting && hasMoonraker && (
+          {isPrinting && hasMoonraker && printer.kind !== "snapmaker_u1" && (
             <button onClick={() => act("skip-object")} disabled={busy !== null}
               title="Потребує [exclude_object] в printer.cfg"
               className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
