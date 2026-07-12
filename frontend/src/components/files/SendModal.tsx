@@ -11,6 +11,7 @@ import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer 
 import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
 import { trackPrintTransfer, usePrintTransfers } from "@/lib/printTransferStore";
 import { normalizedPrinterSlots } from "@/lib/printerSlots";
+import { printerCanStartPrint } from "@/components/printers/printerCardModel";
 
 // ── helpers (exported for use by other components) ────────────────────────────
 
@@ -190,6 +191,21 @@ export function modelCheck(meta: GcodeFileMeta | null, printer: PrinterType, fil
     return fn.includes("j1") || fn.includes("u1") || fn.includes("snapmaker") ? "ok" : "mismatch";
   }
   return "unknown";
+}
+
+// ── printer ranking for the send picker (free+compatible → busy → wrong type) ─
+
+export function printerTypeMismatch(file: GcodeFile | null, printer: PrinterType): boolean {
+  const meta = file?.filament_meta ?? null;
+  if (nozzleCheck(meta, printer) === "mismatch") return true;
+  if (modelCheck(meta, printer, file?.original_name) === "mismatch") return true;
+  if (tagCompatCheck(file, printer).length > 0) return true;
+  return false;
+}
+
+export function printerSendRank(file: GcodeFile | null, printer: PrinterType): 0 | 1 | 2 {
+  if (printerTypeMismatch(file, printer)) return 2;
+  return printerCanStartPrint(printer) ? 0 : 1;
 }
 
 function SlotSwatches({ meta }: { meta: GcodeFileMeta }) {
@@ -487,13 +503,17 @@ export function SendModal({
     [printers, lockedPrinterId],
   );
   const fileHasDimensions = !!(file?.filament_meta?.print_size_x || file?.filament_meta?.print_size_y || file?.filament_meta?.print_size_z);
-  const compatiblePrinters = useMemo(
-    () => fileHasDimensions ? sendablePrinters.filter((p) => fitCheck(file?.filament_meta ?? null, p) !== "oversize") : sendablePrinters,
-    [sendablePrinters, fileHasDimensions, file?.filament_meta],
-  );
+  const compatiblePrinters = useMemo(() => {
+    const base = fileHasDimensions
+      ? sendablePrinters.filter((p) => fitCheck(file?.filament_meta ?? null, p) !== "oversize")
+      : sendablePrinters;
+    // free + type-compatible first, then busy-but-compatible, then wrong type
+    return [...base].sort((a, b) => printerSendRank(file, a) - printerSendRank(file, b));
+  }, [sendablePrinters, fileHasDimensions, file]);
   const selectedPrinters = useMemo(
-    () => compatiblePrinters.filter((p) => selectedIds.has(p.id)),
-    [compatiblePrinters, selectedIds],
+    // only free + type-compatible printers can actually be sent to
+    () => compatiblePrinters.filter((p) => selectedIds.has(p.id) && printerSendRank(file, p) === 0),
+    [compatiblePrinters, selectedIds, file],
   );
   const numSelected = selectedPrinters.length;
   const primaryPrinter = useMemo(
@@ -1160,18 +1180,25 @@ export function SendModal({
                               const cover    = printerCover(p);
                               const res      = multiSendResults?.find((r) => r.printerId === p.id);
                               const isOffline = p.state === "offline" || p.state === "unknown";
+                              const sendRank = printerSendRank(file, p);
+                              const isUnavailable = sendRank > 0;
+                              const unavailableReason = sendRank === 2
+                                ? "Тип принтера не підходить для цього файлу"
+                                : "Принтер зараз зайнятий";
                               return (
                                 <button
                                   key={p.id}
                                   type="button"
                                   onClick={() => togglePrinter(p.id)}
-                                  disabled={lockedPrinterId !== undefined}
+                                  disabled={lockedPrinterId !== undefined || isUnavailable}
+                                  title={isUnavailable ? unavailableReason : undefined}
                                   className={[
                                     "relative flex flex-col overflow-hidden rounded-xl border text-left transition",
                                     isSelected
                                       ? "border-[var(--accent)] shadow-md ring-1 ring-[var(--accent)]"
                                       : "border-[var(--border)] hover:border-[var(--border-strong)] hover:shadow-sm",
                                     lockedPrinterId !== undefined ? "cursor-default" : "",
+                                    isUnavailable ? "opacity-50 cursor-not-allowed hover:border-[var(--border)] hover:shadow-none" : "",
                                   ].join(" ")}
                                 >
                                   {/* Photo */}

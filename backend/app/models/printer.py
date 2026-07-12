@@ -56,6 +56,10 @@ class Printer(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     # Operator-set "out of order" flag — excluded from tag matching / autoprint
     is_out_of_order: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Operator confirmed the finished print was removed from the bed. Purely a
+    # display flag — never derived from or reset by live printer telemetry.
+    # Cleared automatically once the printer starts a new print.
+    bed_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Klipper / hardware metadata (populated on first successful connect)

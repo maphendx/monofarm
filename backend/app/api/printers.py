@@ -193,6 +193,31 @@ def _resolve_filament_for_file(
     return None
 
 
+def _apply_bed_cleared_flag(printer: Printer, live: dict, db: Session | None) -> dict:
+    """Force an idle/no-job display while the operator-confirmed bed-cleared flag
+    is set, regardless of what the printer itself is still reporting (stale
+    FINISH telemetry, cache races, etc.) — the printer does not need to do
+    anything for this. The flag clears itself the moment live state shows a new
+    print actually running.
+    """
+    if printer.bed_cleared_at is None:
+        return live
+    if live.get("state") == "printing":
+        printer.bed_cleared_at = None
+        if db is not None:
+            db.commit()
+        return live
+    return {
+        **live,
+        "state": "idle",
+        "filename": None,
+        "progress_pct": None,
+        "eta_minutes": None,
+        "error_msg": None,
+        "_bed_clear_forced": True,
+    }
+
+
 def _to_dto(
     printer: Printer,
     db: Session | None = None,
@@ -263,6 +288,7 @@ def _to_dto(
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
     if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
         live = bambu.get_cached_state(printer.bambu_dev_id)
+        live = _apply_bed_cleared_flag(printer, live, db)
         ams_trays = bambu.get_ams_filaments(printer.bambu_dev_id)
         filaments = ams_trays if ams_trays else (printer.loaded_filaments or [])
         return PrinterOut(
@@ -285,7 +311,8 @@ def _to_dto(
     # Manual (U1, other) — if Moonraker URL is set, prefer live data
     if printer.moonraker_url:
         live = prefetched_live if prefetched_live is not None else moonraker.get_live_status(printer.moonraker_url)
-        filename = live.get("filename") or printer.manual_job
+        live = _apply_bed_cleared_flag(printer, live, db)
+        filename = None if live.get("_bed_clear_forced") else (live.get("filename") or printer.manual_job)
         current_meta = (
             _resolve_filament_for_file(db, filename, printer.moonraker_url, printer.organization_id)
             if db
@@ -1618,8 +1645,15 @@ async def print_clear_bed(
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> dict:
-    """Mark bed cleared — operator confirmed print was removed from bed."""
+    """Mark bed cleared — operator confirmed print was removed from bed.
+
+    This is a pure operator-side flag (`bed_cleared_at`) read back in
+    `_to_dto()`. It does not depend on the printer reporting anything —
+    it stays in force until the printer's live state shows an actual new
+    print in progress, at which point `_to_dto()` clears it automatically.
+    """
     row = _require_printer(printer_id, db, org.id)
+    row.bed_cleared_at = datetime.now(timezone.utc)
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
@@ -1634,8 +1668,8 @@ async def print_clear_bed(
     else:
         row.manual_status = "idle"
         row.manual_job = None
-        db.commit()
 
+    db.commit()
     return {"ok": True, "action": "clear_bed"}
 
 
