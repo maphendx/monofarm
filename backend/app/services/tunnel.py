@@ -512,14 +512,39 @@ async def send_bambu_upload(
     future: asyncio.Future = loop.create_future()
     _pending[req_id] = future
     _pending_org[req_id] = org_id
-    if progress_callback is not None:
-        _pending_upload_progress[req_id] = progress_callback
+
+    last_activity = time.monotonic()
+
+    async def _on_progress(data: dict[str, Any]) -> None:
+        nonlocal last_activity
+        if not data.get("heartbeat"):
+            last_activity = time.monotonic()
+        if progress_callback is not None:
+            result = progress_callback(data)
+            if inspect.isawaitable(result):
+                await result
+
+    _pending_upload_progress[req_id] = _on_progress
 
     try:
         await ws.send_text(json.dumps(payload))
-        resp = await asyncio.wait_for(future, timeout=timeout)
-    except asyncio.TimeoutError:
-        raise RuntimeError(f"Agent BAMBU_UPLOAD timed out ({timeout}s) for {dev_ip}")
+        started = time.monotonic()
+        while True:
+            now = time.monotonic()
+            if now - started >= timeout:
+                raise RuntimeError(f"Agent BAMBU_UPLOAD timed out ({timeout}s) for {dev_ip}")
+            if now - last_activity >= UPLOAD_STALL_TIMEOUT:
+                raise RuntimeError(
+                    f"Agent BAMBU_UPLOAD: {UPLOAD_STALL_TIMEOUT:.0f}s без прогресу для {dev_ip}")
+            wait_slice = min(
+                _UPLOAD_POLL,
+                timeout - (now - started),
+                UPLOAD_STALL_TIMEOUT - (now - last_activity),
+            )
+            done, _ = await asyncio.wait({future}, timeout=wait_slice)
+            if done:
+                resp = future.result()
+                break
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)

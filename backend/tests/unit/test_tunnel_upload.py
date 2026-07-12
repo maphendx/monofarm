@@ -207,6 +207,25 @@ def test_bambu_upload_forwards_agent_progress(monkeypatch):
     assert seen == [{"id": _req_id(ws), "type": "upload_progress", "phase": "uploading", "sent": 50, "total": 100}]
 
 
+def test_bambu_upload_fails_when_agent_stalls(monkeypatch):
+    ws = _register()
+    monkeypatch.setattr(tunnel, "UPLOAD_STALL_TIMEOUT", 0.2)
+
+    async def scenario():
+        await tunnel.send_bambu_upload(
+            1,
+            "192.168.31.24",
+            "access",
+            "model.3mf",
+            presigned_url="https://r2.example/model.3mf?sig=x",
+            timeout=1.0,
+        )
+
+    with pytest.raises(RuntimeError, match="без прогресу"):
+        asyncio.run(scenario())
+    assert ws.sent
+
+
 def test_unregister_of_stale_socket_keeps_replacement_tunnel():
     old_ws = _register(1)
     new_ws = FakeWS()

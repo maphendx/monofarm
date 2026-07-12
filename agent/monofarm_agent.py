@@ -38,7 +38,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.6"
+AGENT_VERSION = "0.8.7"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -1876,6 +1876,7 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     """
     import ftplib
     import ssl as _ssl
+    import time
 
     class _ImplicitFTP_TLS(ftplib.FTP_TLS):
         """Bambu printers serve IMPLICIT FTPS on :990 — the socket must be TLS
@@ -1922,9 +1923,11 @@ async def handle_bambu_upload(ws, req: dict) -> None:
 
     async def _report_progress() -> None:
         last: tuple[str, int, int] | None = None
+        last_sent_at = 0.0
         while True:
             current = (progress["phase"], progress["sent"], progress["total"])
-            if current != last:
+            now = time.monotonic()
+            if current != last or now - last_sent_at >= 5.0:
                 try:
                     await ws.send(json.dumps({
                         "id": req_id,
@@ -1932,8 +1935,10 @@ async def handle_bambu_upload(ws, req: dict) -> None:
                         "phase": current[0],
                         "sent": current[1],
                         "total": current[2],
+                        "heartbeat": current == last,
                     }))
                     last = current
+                    last_sent_at = now
                 except Exception:
                     return
             await asyncio.sleep(1.0)
@@ -1944,7 +1949,7 @@ async def handle_bambu_upload(ws, req: dict) -> None:
         progress_task = asyncio.create_task(_report_progress())
 
         if url:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=30), verify=False) as client:  # noqa: S501
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180, connect=30), verify=False) as client:  # noqa: S501
                 async with client.stream("GET", url) as resp:
                     resp.raise_for_status()
                     progress["total"] = int(resp.headers.get("content-length") or 0)
@@ -2005,6 +2010,17 @@ async def handle_bambu_upload(ws, req: dict) -> None:
         # Run blocking FTP in a thread so asyncio event loop stays alive
         # (handles WS keepalive pings during upload)
         remote_path = await asyncio.to_thread(_ftp_upload)
+        progress["sent"] = progress["total"]
+        try:
+            await ws.send(json.dumps({
+                "id": req_id,
+                "type": "upload_progress",
+                "phase": "uploading",
+                "sent": progress["sent"],
+                "total": progress["total"],
+            }))
+        except Exception:
+            pass
 
         result = {
             "id": req_id, "status": 200,

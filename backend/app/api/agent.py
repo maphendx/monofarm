@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.8.6"
+AGENT_VERSION = "0.8.7"
 
 
 @router.get("/api/agent/version")

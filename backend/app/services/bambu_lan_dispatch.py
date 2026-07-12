@@ -61,6 +61,27 @@ def plate_gcode_from_metadata(metadata: dict | None) -> str | None:
     return None
 
 
+def bambu_upload_progress_update(
+    last_phase: str | None,
+    last_progress: int,
+    data: dict,
+    fallback_total: int | None = None,
+) -> tuple[str, int, bool]:
+    """Normalize agent progress and reset the percentage at phase changes."""
+    phase = str(data.get("phase") or "uploading")
+    total = int(data.get("total") or fallback_total or 0)
+    sent = int(data.get("sent") or 0)
+    if total <= 0:
+        return phase, last_progress, phase != last_phase
+    progress_pct = max(0, min(100, round(sent * 100 / total)))
+    should_record = (
+        phase != last_phase
+        or progress_pct == 100
+        or progress_pct - last_progress >= 5
+    )
+    return phase, progress_pct if should_record else last_progress, should_record
+
+
 def has_agent_tunnel(org_id: int) -> bool:
     return _tunnel.has_tunnel(org_id)
 
@@ -177,19 +198,21 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
 
         # ── uploading (FTPS via agent, direct LAN fallback) ──────────────────
         advance_job_status(job_id, BambuCloudJobStatus.uploading, progress_pct=0)
+        last_phase: str | None = None
         last_progress = -1
 
         async def on_upload_progress(data: dict) -> None:
-            nonlocal last_progress
-            total = int(data.get("total") or known_file_size or 0)
-            sent = int(data.get("sent") or 0)
-            if total <= 0:
+            nonlocal last_phase, last_progress
+            phase, progress_pct, should_record = bambu_upload_progress_update(
+                last_phase,
+                last_progress,
+                data,
+                known_file_size,
+            )
+            if not should_record:
                 return
-            progress_pct = max(0, min(100, round(sent * 100 / total)))
-            if progress_pct == last_progress or (progress_pct < 100 and progress_pct - last_progress < 5):
-                return
+            last_phase = phase
             last_progress = progress_pct
-            phase = data.get("phase") or "uploading"
             advance_job_status(
                 job_id,
                 BambuCloudJobStatus.uploading,

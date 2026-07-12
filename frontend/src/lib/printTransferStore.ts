@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 
 import type { BambuCloudJob, BambuCloudJobStatus } from "./types";
 
+const STORAGE_KEY = "monofarm_active_print_transfers";
+
 export type PrintTransfer = {
   jobId: number;
   printerId: number | null;
@@ -20,11 +22,31 @@ type TransferSeed = Pick<PrintTransfer, "jobId" | "printerId" | "printerName" | 
   status?: BambuCloudJobStatus;
 };
 
-let snapshot: PrintTransfer[] = [];
+function loadSnapshot(): PrintTransfer[] {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is PrintTransfer => (
+      item && typeof item.jobId === "number" && item.isActive === true
+    ));
+  } catch {
+    return [];
+  }
+}
+
+let snapshot: PrintTransfer[] = loadSnapshot();
 const listeners = new Set<() => void>();
 
 function notify() {
   snapshot = [...snapshot];
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot.filter((item) => item.isActive)));
+    }
+  } catch {
+    // Storage can be unavailable in private browsing or restricted webviews.
+  }
   listeners.forEach((listener) => listener());
 }
 
@@ -83,4 +105,3 @@ export function dismissPrintTransfer(jobId: number) {
   snapshot = snapshot.filter((transfer) => transfer.jobId !== jobId);
   notify();
 }
-

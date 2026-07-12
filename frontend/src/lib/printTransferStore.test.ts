@@ -22,4 +22,20 @@ describe("print transfer store", () => {
     dismissPrintTransfer(701);
     expect(getPrintTransfers()).toEqual([]);
   });
+
+  it("persists active transfers so a page reload can restore them", () => {
+    const writes: string[] = [];
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: { setItem: (_key: string, value: string) => writes.push(value) },
+    });
+
+    trackPrintTransfer({ jobId: 702, printerId: 5, printerName: "P1S", fileName: "big.3mf" });
+
+    expect(JSON.parse(writes.at(-1) ?? "[]")).toEqual([
+      expect.objectContaining({ jobId: 702, status: "queued" }),
+    ]);
+    dismissPrintTransfer(702);
+    Reflect.deleteProperty(globalThis, "localStorage");
+  });
 });
