@@ -1185,6 +1185,48 @@ def clear_print_error(dev_id: str) -> None:
     _publish(dev_id, {"print": {"command": "clean_print_error", "param": "", "sequence_id": _next_seq()}}, qos=1)
 
 
+def plate_gcode_entry(file_bytes: bytes) -> str | None:
+    """Return the `Metadata/plate_N.gcode` entry name inside a sliced .3mf.
+
+    A plate keeps its project index when exported ("Export plate sliced file"
+    of plate 2 contains only `Metadata/plate_2.gcode`), so the project_file
+    `param` must point at the real entry — a hardcoded plate_1 makes the
+    printer fail with "failed to parse file". Returns the lowest-numbered
+    plate when several are sliced, None for unsliced/invalid archives.
+    """
+    import io as _io
+    import re as _re
+    import zipfile as _zipfile
+    try:
+        with _zipfile.ZipFile(_io.BytesIO(file_bytes)) as zf:
+            plates = [
+                n for n in zf.namelist()
+                if _re.fullmatch(r"Metadata/plate_(\d+)\.gcode", n)
+            ]
+    except _zipfile.BadZipFile:
+        return None
+    if not plates:
+        return None
+    return min(plates, key=lambda n: int(_re.search(r"(\d+)\.gcode$", n).group(1)))
+
+
+def sanitize_sd_filename(name: str, fallback: str = "print") -> str:
+    """ASCII-safe temp name for the printer SD card.
+
+    The project_file `url` (`file:///sdcard/<name>` / `ftp:///cache/<name>`)
+    is sent unescaped, so spaces and non-ASCII in the uploaded name break URL
+    parsing on some firmware. The pretty original name stays in subtask_name.
+    """
+    import re as _re
+    import unicodedata as _unicodedata
+    lower = name.lower()
+    suffix = ".gcode.3mf" if lower.endswith(".gcode.3mf") else ".3mf"
+    stem = name[: -len(suffix)] if lower.endswith(suffix) else name
+    ascii_stem = _unicodedata.normalize("NFKD", stem).encode("ascii", "ignore").decode()
+    safe_stem = _re.sub(r"[^A-Za-z0-9._-]+", "_", ascii_stem).strip("._")
+    return f"{safe_stem or fallback}{suffix}"
+
+
 def build_start_print_payload(
     dev_id: str,
     subtask_name: str,
@@ -1194,6 +1236,7 @@ def build_start_print_payload(
     ftp_filename: str | None = None,
     task_id: str | None = None,
     plate_index: int = 1,
+    plate_gcode: str | None = None,
 ) -> dict[str, Any]:
     """Build a Bambu MQTT project_file command (OpenBambuAPI spec, §6.7).
 
@@ -1204,6 +1247,8 @@ def build_start_print_payload(
     A1 fw 1.03+ requires task_id / profile_id / project_id / bed_type.
     `task_id` is echoed back in push_status — pass a known value to correlate
     the print with a BambuCloudJob deterministically.
+    `plate_gcode` (from `plate_gcode_entry`) overrides the plate_index guess —
+    the entry keeps the project's plate number, not always plate_1.
     """
     import uuid as _uuid
     if http_url:
@@ -1220,7 +1265,7 @@ def build_start_print_payload(
             "profile_id": "0",
             "project_id": "0",
             "subtask_id": "0",
-            "param": f"Metadata/plate_{plate_index}.gcode",
+            "param": plate_gcode or f"Metadata/plate_{plate_index}.gcode",
             "subtask_name": subtask_name,
             "url": url,
             "file": "",

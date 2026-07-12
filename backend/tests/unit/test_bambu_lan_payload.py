@@ -1,7 +1,18 @@
 """Unit tests for the LAN project_file payload builder (OpenBambuAPI §6.7)."""
-from app.services.bambu import build_start_print_payload
+import io
+import zipfile
+
+from app.services.bambu import build_start_print_payload, plate_gcode_entry, sanitize_sd_filename
 from app.services.bambu_lan_dispatch import _bambu_upload_target_dir
 from app.services.bambu_mapping import build_ams_mapping
+
+
+def _3mf_bytes(*entries: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name in entries:
+            zf.writestr(name, b"G1 X0")
+    return buf.getvalue()
 
 
 class _Printer:
@@ -89,3 +100,41 @@ def test_ams_mapping_and_required_fields():
     assert p["bed_levelling"] is True
     assert p["file"] == ""
     assert p["md5"] == ""
+
+
+def test_param_uses_detected_plate_gcode():
+    cmd = build_start_print_payload(
+        "DEV1", "model.3mf", ftp_filename="m.3mf", plate_gcode="Metadata/plate_2.gcode"
+    )
+    assert cmd["print"]["param"] == "Metadata/plate_2.gcode"
+
+
+def test_plate_gcode_entry_keeps_project_plate_number():
+    data = _3mf_bytes("Metadata/plate_2.gcode", "Metadata/plate_2.gcode.md5", "Metadata/plate_1.png")
+    assert plate_gcode_entry(data) == "Metadata/plate_2.gcode"
+
+
+def test_plate_gcode_entry_picks_lowest_plate():
+    data = _3mf_bytes("Metadata/plate_10.gcode", "Metadata/plate_3.gcode")
+    assert plate_gcode_entry(data) == "Metadata/plate_3.gcode"
+
+
+def test_plate_gcode_entry_none_for_unsliced_or_garbage():
+    assert plate_gcode_entry(_3mf_bytes("3D/3dmodel.model", "Metadata/plate_1.png")) is None
+    assert plate_gcode_entry(b"not a zip") is None
+
+
+def test_sanitize_sd_filename_replaces_spaces():
+    assert (
+        sanitize_sd_filename("Hero Light Fury 04026000_PLA_11h25m.gcode.3mf")
+        == "Hero_Light_Fury_04026000_PLA_11h25m.gcode.3mf"
+    )
+
+
+def test_sanitize_sd_filename_drops_cyrillic_keeps_ascii_tail():
+    assert sanitize_sd_filename("Сборка_PLA_5h27m.gcode.3mf") == "PLA_5h27m.gcode.3mf"
+
+
+def test_sanitize_sd_filename_falls_back_when_stem_empties():
+    assert sanitize_sd_filename("Сборка.gcode.3mf", fallback="job-7") == "job-7.gcode.3mf"
+    assert sanitize_sd_filename("Сборка.3mf", fallback="job-7") == "job-7.3mf"

@@ -111,7 +111,9 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                 retryable=False,
             )
 
-        lan_filename = Path(file_name).name
+        # ASCII-safe SD name: the project_file URL is sent unescaped, so
+        # spaces/Cyrillic in the original name break parsing on some firmware.
+        lan_filename = bambu.sanitize_sd_filename(Path(file_name).name, fallback=f"job-{job_id}")
         has_tunnel = _tunnel.has_tunnel(org_id)
         platecycler = payload.get("platecycler")
 
@@ -140,6 +142,17 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                     retryable=False,
                 )
             lan_filename = f"autoprint-{job_id}.3mf"
+        # The project_file `param` must point at the real gcode entry: an
+        # exported plate keeps its project number (plate 2 → plate_2.gcode),
+        # and a hardcoded plate_1 makes the printer "fail to parse the file".
+        plate_gcode = bambu.plate_gcode_entry(file_bytes)
+        if plate_gcode is None:
+            return fail_job(
+                job_id, BambuErrorCode.INVALID_3MF,
+                f"У «{file_name}» немає слайснутого G-коду (Metadata/plate_N.gcode) — "
+                "експортуй з слайсера «sliced file», а не файл проєкту",
+                retryable=False,
+            )
         advance_job_status(
             job_id,
             BambuCloudJobStatus.validating,
@@ -195,6 +208,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             use_ams=stored_slots.get("use_ams", True),
             ftp_filename=remote_path,
             task_id=correlation_id,
+            plate_gcode=plate_gcode,
         )
         advance_job_status(job_id, BambuCloudJobStatus.task_creating, bambu_task_id=correlation_id)
         try:
