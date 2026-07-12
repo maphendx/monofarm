@@ -38,14 +38,30 @@ export function printerCover(printer: Printer): string | null {
   return null;
 }
 
+export function printerNeedsClearBed(
+  printer: Pick<Printer, "state" | "job" | "progress_pct">,
+): boolean {
+  return printer.state === "awaiting_bed_clear" || (
+    printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100)
+  );
+}
+
+export function printerCanStartPrint(
+  printer: Pick<Printer, "state" | "job" | "progress_pct" | "is_out_of_order">,
+): boolean {
+  return (
+    (printer.state === "idle" || printer.state === "operational") &&
+    !printerNeedsClearBed(printer) &&
+    !printer.is_out_of_order
+  );
+}
+
 export function getPrinterCardTone(printer: Printer): PrinterCardTone {
   if (!printer.is_active || printer.state === "offline" || printer.state === "not_connected") {
     return "offline";
   }
 
-  const needsClearBed = printer.state === "awaiting_bed_clear" ||
-    (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
-  if (needsClearBed) return "collect";
+  if (printerNeedsClearBed(printer)) return "collect";
 
   const flags = printer.flags ?? [];
   if (flags.includes("requires_attention") || flags.includes("ai_detected_high") || printer.state === "error") {

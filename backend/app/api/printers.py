@@ -1537,11 +1537,8 @@ async def print_clear_bed(
         bambu.mark_bed_cleared(row.bambu_dev_id, live.get("filename"))
 
     elif row.moonraker_url:
-        # Home the printer — typical Klipper post-print sequence
-        try:
-            await asyncio.to_thread(moonraker.send_gcode, row.moonraker_url, "G28")
-        except Exception:
-            pass
+        live = moonraker.get_cached_live_status(row.moonraker_url) or {}
+        moonraker.mark_bed_cleared(row.moonraker_url, live.get("filename"))
         moonraker.invalidate_status(row.moonraker_url)
 
     else:

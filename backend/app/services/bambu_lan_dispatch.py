@@ -40,6 +40,7 @@ _inflight_guard = threading.Lock()
 _UPLOAD_BASE_TIMEOUT_S = 180.0
 _UPLOAD_MIN_RATE_BYTES_S = 128 * 1024
 _UPLOAD_MAX_TIMEOUT_S = 900.0
+_CACHE_UPLOAD_SETTLE_SECONDS = 5.0
 
 
 def _upload_timeout(size_bytes: int) -> float:
@@ -198,6 +199,11 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                 f"FTPS upload на {dev_ip} не вдався: {e}",
                 retryable=True,
             )
+
+        # P1S/X-series firmware can acknowledge FTPS before the cache file is
+        # visible to project_file. Give the SD/cache index time to settle.
+        if upload_target_dir == "cache":
+            await asyncio.sleep(_CACHE_UPLOAD_SETTLE_SECONDS)
 
         # ── task_creating → project_file via LAN MQTT ────────────────────────
         stored_slots = payload or {}

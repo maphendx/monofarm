@@ -13,7 +13,7 @@ interface StreamState {
   loading: boolean;
 }
 
-export function usePrinterStream(): StreamState & { reload: () => void } {
+export function usePrinterStream(): StreamState & { reload: () => void; upsertPrinter: (printer: Printer) => void } {
   const [printers, setPrinters] = useState<Printer[]>(() => {
     try {
       const cached = localStorage.getItem("printers_cache");
@@ -31,6 +31,10 @@ export function usePrinterStream(): StreamState & { reload: () => void } {
 
   const reload = useCallback(() => {
     setReloadKey((k) => k + 1);
+  }, []);
+
+  const upsertPrinter = useCallback((updated: Printer) => {
+    setPrinters((current) => current.map((printer) => printer.id === updated.id ? updated : printer));
   }, []);
 
   useEffect(() => {
@@ -94,5 +98,5 @@ export function usePrinterStream(): StreamState & { reload: () => void } {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
-  return { printers, connected, loading, reload };
+  return { printers, connected, loading, reload, upsertPrinter };
 }

@@ -16,7 +16,9 @@ import {
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
 import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
+import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
+import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -543,9 +545,11 @@ function SpeedCard({ printer }: { printer: Printer }) {
 function JobHeroCard({
   printer,
   onUpdated,
+  onPrint,
 }: {
   printer: Printer;
-  onUpdated: () => void;
+  onUpdated: (printer?: Printer) => void;
+  onPrint?: () => void;
 }) {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
@@ -559,7 +563,8 @@ function JobHeroCard({
 
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
-  const isOperational = printer.state === "operational" || printer.state === "awaiting_bed_clear";
+  const needsClearBed = printerNeedsClearBed(printer);
+  const canStartPrint = printerCanStartPrint(printer);
   const isError = printer.state === "error";
   const hasMoonraker = !!printer.moonraker_url;
   const isBambuCam = printer.kind === "bambu" && !!printer.bambu_dev_ip;
@@ -594,7 +599,8 @@ function JobHeroCard({
     setConfirmClearBed(false);
     try {
       await api(`/api/printers/${printer.id}/print/${action}`, { method: "POST" });
-      onUpdated();
+      const refreshed = await api<Printer[]>("/api/printers");
+      onUpdated(refreshed.find((item) => item.id === printer.id));
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Помилка");
     } finally {
@@ -717,8 +723,14 @@ function JobHeroCard({
         </div>
       )}
 
-      {canEdit && (isPrinting || isPaused || isOperational || isError) && (
+      {canEdit && (canStartPrint || isPrinting || isPaused || needsClearBed || isError) && (
         <div className="flex flex-wrap items-center gap-2 px-5 py-3.5">
+          {canStartPrint && onPrint && (
+            <button onClick={onPrint} disabled={busy !== null}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
+              ▶ Друк
+            </button>
+          )}
           {isPrinting && (
             <button onClick={() => act("pause")} disabled={busy !== null}
               className="flex items-center gap-1.5 rounded-md border border-[var(--state-warn)] bg-[rgba(245,158,11,.10)] px-4 py-2 text-xs font-medium text-[var(--state-warn)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(245,158,11,.15)] disabled:opacity-40">
@@ -752,7 +764,7 @@ function JobHeroCard({
               </button>
             )
           )}
-          {isOperational && (
+          {needsClearBed && (
             confirmClearBed ? (
               <div className="flex items-center gap-2 rounded-md border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-3 py-2">
                 <span className="text-xs text-[var(--state-ok)]">Стіл справді очищено?</span>
@@ -2393,10 +2405,11 @@ export default function PrinterPage() {
   const router = useRouter();
   const printerId = Number(params.id);
 
-  const { printers, loading, reload } = usePrinterStream();
+  const { printers, loading, reload, upsertPrinter } = usePrinterStream();
   const printer = printers.find((p) => p.id === printerId) ?? null;
   const error = !loading && !printer ? "Принтер не знайдено" : null;
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
 
   if (loading) {
     return (
@@ -2479,7 +2492,11 @@ export default function PrinterPage() {
 
         {/* Col 1 — job, filaments, movement */}
         <div className="min-w-0 space-y-4">
-          <JobHeroCard printer={printer} onUpdated={reload} />
+          <JobHeroCard
+            printer={printer}
+            onUpdated={(updated) => updated ? upsertPrinter(updated) : void reload()}
+            onPrint={() => setPrintOpen(true)}
+          />
           {printer.current_filament_meta && <FilamentCard printer={printer} />}
           {printer.kind === "snapmaker_u1" ? (
             <U1SlotsCard printer={printer} onUpdated={reload} />
@@ -2499,6 +2516,14 @@ export default function PrinterPage() {
           <PrintHistoryCard printer={printer} />
         </div>
       </div>
+
+      {printOpen && (
+        <StartPrintModal
+          printer={printer}
+          printers={printers}
+          onClose={() => { setPrintOpen(false); void reload(); }}
+        />
+      )}
 
       {/* ── Settings modal ── */}
       {settingsOpen && (

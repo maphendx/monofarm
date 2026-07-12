@@ -1253,7 +1253,7 @@ def plate_gcode_entry(file_bytes: bytes) -> str | None:
 def sanitize_sd_filename(name: str, fallback: str = "print") -> str:
     """ASCII-safe temp name for the printer SD card.
 
-    The project_file `url` (`file:///sdcard/<name>` / `ftp:///cache/<name>`)
+    The project_file `url` (`file:///sdcard/<name>` / `file:///sdcard/cache/<name>`)
     is sent unescaped, so spaces and non-ASCII in the uploaded name break URL
     parsing on some firmware. The pretty original name stays in subtask_name.
     """
@@ -1284,8 +1284,8 @@ def build_start_print_payload(
 
     Prefers http_url (printer downloads from R2 — no LAN FTPS needed).
     `ftp_filename` is the path returned by the FTPS upload — `cache/x.3mf`
-    maps to `ftp:///cache/x.3mf` (firmware print-job dir, SimplyPrint flow),
-    a bare name maps to `file:///sdcard/x.3mf` (old-firmware SD-root upload).
+    maps to `file:///sdcard/cache/x.3mf` (the path used by Bambu Handy),
+    while a bare name maps to `file:///sdcard/x.3mf` (SD-root upload).
     A1 fw 1.03+ requires task_id / profile_id / project_id / bed_type.
     `task_id` is echoed back in push_status — pass a known value to correlate
     the print with a BambuCloudJob deterministically.
@@ -1296,7 +1296,7 @@ def build_start_print_payload(
     if http_url:
         url = http_url
     elif ftp_filename and ftp_filename.startswith("cache/"):
-        url = f"ftp:///{ftp_filename}"
+        url = f"file:///sdcard/{ftp_filename}"
     else:
         url = f"file:///sdcard/{ftp_filename}"
     cmd: dict[str, Any] = {

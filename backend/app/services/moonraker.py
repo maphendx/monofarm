@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -26,6 +27,7 @@ STATUS_CACHE_TTL = 35.0  # seconds — slightly above the 30s frontend poll inte
 STALE_CACHE_TTL = 300    # 5 min stale fallback for the very first load
 META_CACHE_TTL = 300.0  # file metadata is static for a given filename
 META_TAIL_BYTES = 96 * 1024  # how much to download from remote file for parsing
+BED_CLEARED_TTL_SECONDS = 24 * 60 * 60
 
 
 class MoonrakerError(Exception):
@@ -238,6 +240,64 @@ _STATE_MAP = {
 
 
 LIVE_STATUS_OBJECTS = "print_stats&display_status&virtual_sdcard&extruder&heater_bed&print_task_config"
+
+
+def apply_bed_cleared_override(status: dict, marker: dict | None) -> dict:
+    """Hide a completed Moonraker job after the operator confirms the bed is clear."""
+    if not marker:
+        return status
+
+    state = status.get("state")
+    expected_filename = marker.get("filename")
+    current_filename = status.get("filename")
+    if state in {"printing", "paused", "pausing", "resuming", "cancelling"}:
+        return status
+    if expected_filename and current_filename and current_filename != expected_filename:
+        return status
+    if state not in {"idle", "operational"}:
+        return status
+
+    return {
+        **status,
+        "state": "idle",
+        "filename": None,
+        "progress_pct": None,
+        "eta_minutes": None,
+        "error_msg": None,
+    }
+
+
+def mark_bed_cleared(moonraker_url: str, filename: str | None = None) -> dict:
+    """Persist operator confirmation until the next print starts."""
+    from app.services.cache import cache_set
+
+    marker = {
+        "cleared_at": datetime.now(timezone.utc).isoformat(),
+        "filename": filename,
+    }
+    cache_set(f"mr:bed_cleared:{moonraker_url}", marker, BED_CLEARED_TTL_SECONDS)
+    return marker
+
+
+def _apply_cached_bed_cleared(moonraker_url: str, status: dict) -> dict:
+    from app.services.cache import cache_delete, cache_get
+
+    key = f"mr:bed_cleared:{moonraker_url}"
+    marker = cache_get(key)
+    if not isinstance(marker, dict):
+        return status
+
+    overridden = apply_bed_cleared_override(status, marker)
+    if overridden is status and (
+        status.get("state") in {"printing", "paused", "pausing", "resuming", "cancelling"}
+        or (
+            marker.get("filename")
+            and status.get("filename")
+            and status.get("filename") != marker.get("filename")
+        )
+    ):
+        cache_delete(key)
+    return overridden
 
 
 def _parse_moonraker_status(status: dict) -> dict:
@@ -648,7 +708,7 @@ def get_live_status(moonraker_url: str) -> dict:
     cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
     cache_set(stale_key, status, STALE_CACHE_TTL)
     _status_cache[moonraker_url] = status
-    return status
+    return _apply_cached_bed_cleared(moonraker_url, status)
 
 
 def _unwrap_cached_status(value: object) -> dict | None:
@@ -674,13 +734,14 @@ def get_cached_live_status(moonraker_url: str) -> dict | None:
 
     fresh = cache_get(fresh_key)
     if isinstance(fresh, dict):
-        return fresh
+        return _apply_cached_bed_cleared(moonraker_url, fresh)
 
     stale = cache_get(stale_key)
     if isinstance(stale, dict):
-        return stale
+        return _apply_cached_bed_cleared(moonraker_url, stale)
 
-    return _unwrap_cached_status(_status_cache.get(moonraker_url))
+    cached = _unwrap_cached_status(_status_cache.get(moonraker_url))
+    return _apply_cached_bed_cleared(moonraker_url, cached) if cached is not None else None
 
 
 def invalidate_status(moonraker_url: str) -> None:
