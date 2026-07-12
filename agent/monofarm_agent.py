@@ -38,7 +38,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.8"
+AGENT_VERSION = "0.8.9"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -640,7 +640,9 @@ async def _u1_camera_keepalive(mr_ws, moonraker_url: str) -> None:
         "jsonrpc": "2.0",
         "method": "camera.start_monitor",
         "params": {"domain": "lan", "interval": 0},
-        "id": "monofarm-u1-camera",
+        # Stock U1 Moonraker converts req_id to int before dispatching camera
+        # commands; a string id is rejected with HTTP/WebSocket error 400.
+        "id": 9001,
     })
     while True:
         try:

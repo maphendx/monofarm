@@ -19,6 +19,7 @@ import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
+import { useSmoothSnapshot } from "@/hooks/useSmoothSnapshot";
 import { normalizedPrinterSlots } from "@/lib/printerSlots";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
@@ -558,9 +559,9 @@ function JobHeroCard({
   const [err, setErr] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmClearBed, setConfirmClearBed] = useState(false);
-  const [camLoaded, setCamLoaded] = useState(false);
-  const [camError, setCamError] = useState(false);
-  const [tick, setTick] = useState(0);
+  const [streamLoaded, setStreamLoaded] = useState(false);
+  const [streamError, setStreamError] = useState(false);
+  const [cameraRetry, setCameraRetry] = useState(0);
 
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
@@ -575,19 +576,14 @@ function JobHeroCard({
   const dotColor = TONE_COLOR[printerTone(printer)] ?? "var(--state-idle)";
   const token = getToken();
 
-  useEffect(() => {
-    if (isBambuCam || !hasCamera) return;
-    const id = setInterval(() => { if (!document.hidden) setTick((n) => n + 1); }, 2500);
-    return () => clearInterval(id);
-  }, [isBambuCam, hasCamera]);
-
-  useEffect(() => {
-    if (!isBambuCam) setCamLoaded(false);
-  }, [tick, isBambuCam]);
-
   const camSrc = isBambuCam
     ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${token}`
-    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${tick}&token=${token}`;
+    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?retry=${cameraRetry}&token=${token}`;
+  const snapshot = useSmoothSnapshot(
+    hasCamera && !isBambuCam ? camSrc : null,
+  );
+  const camLoaded = isBambuCam ? streamLoaded : snapshot.frameSrc !== null;
+  const camError = isBambuCam ? streamError : snapshot.error;
 
   const meta = printer.current_filament_meta;
   const totalGrams = meta?.used_g?.reduce((a, b) => a + b, 0);
@@ -637,21 +633,21 @@ function JobHeroCard({
               <path d="M15 10l4.553-2.069A1 1 0 0121 8.82V15.18a1 1 0 01-1.447.89L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
             </svg>
             <span className="text-xs">Камера недоступна</span>
-            <button onClick={() => { setCamError(false); setCamLoaded(false); }}
+            <button onClick={() => { setStreamError(false); setStreamLoaded(false); setCameraRetry((value) => value + 1); }}
               className="text-[11px] text-[var(--text-muted)] underline hover:text-[var(--text)]">
               Повторити
             </button>
           </div>
-        ) : (
+        ) : (isBambuCam || snapshot.frameSrc) ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={camSrc}
+            src={isBambuCam ? camSrc : snapshot.frameSrc!}
             alt="Camera"
             className={`h-full w-full object-cover transition-opacity duration-300 ${camLoaded ? "opacity-100" : "opacity-0"}`}
-            onLoad={() => setCamLoaded(true)}
-            onError={() => setCamError(true)}
+            onLoad={() => setStreamLoaded(true)}
+            onError={() => setStreamError(true)}
           />
-        )}
+        ) : null}
         {hasCamera && camLoaded && !camError && (
             <>
               <span className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] backdrop-blur-sm">

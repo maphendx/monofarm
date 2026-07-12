@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowLeft, Maximize, MoreHorizontal, Pause, Play, Settings, Square, Video } from "lucide-react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import { flagLabel, kindLabel, stateLabel } from "@/lib/printerLabels";
 import { normalizedPrinterSlots } from "@/lib/printerSlots";
+import { useSmoothSnapshot } from "@/hooks/useSmoothSnapshot";
 import type { Printer } from "@/lib/types";
 import {
   canSkipObject,
@@ -62,22 +63,18 @@ export function PrinterCard({
   const [confirmClearBed, setConfirmClearBed] = useState(false);
   const [menuPos, setMenuPos] = useState<QuickMenuPos | null>(null);
   const [camOpen, setCamOpen] = useState(false);
-  const [camTick, setCamTick] = useState(0);
-  const [camLoaded, setCamLoaded] = useState(false);
-  const [camError, setCamError] = useState(false);
+  const [streamLoaded, setStreamLoaded] = useState(false);
+  const [streamError, setStreamError] = useState(false);
   const inFlight = useRef(false);
-
-  useEffect(() => {
-    if (!camOpen || printer.kind === "bambu" || !hasCamera) return;
-    const id = setInterval(() => {
-      if (!document.hidden) setCamTick((n) => n + 1);
-    }, 2500);
-    return () => clearInterval(id);
-  }, [camOpen, hasCamera, printer.kind]);
 
   const camSrc = printer.kind === "bambu"
     ? `${API_URL}/api/printers/${printer.id}/camera/stream?token=${getToken()}`
-    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?t=${camTick}&token=${getToken()}`;
+    : `${API_URL}/api/printers/${printer.id}/webcam/snapshot?token=${getToken()}`;
+  const snapshot = useSmoothSnapshot(
+    camOpen && printer.kind !== "bambu" && hasCamera ? camSrc : null,
+  );
+  const camLoaded = printer.kind === "bambu" ? streamLoaded : snapshot.frameSrc !== null;
+  const camError = printer.kind === "bambu" ? streamError : snapshot.error;
 
   async function act(e: React.MouseEvent, action: string) {
     e.stopPropagation();
@@ -128,8 +125,8 @@ export function PrinterCard({
 
   function toggleCamera(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
-    setCamLoaded(false);
-    setCamError(false);
+    setStreamLoaded(false);
+    setStreamError(false);
     setCamOpen((open) => !open);
   }
 
@@ -373,9 +370,13 @@ export function PrinterCard({
       {camOpen && (
         <div className="pc-camera" onClick={(e) => e.stopPropagation()}>
           <div className="pc-camera-feed">
-            {!camError && (
+            {printer.kind === "bambu" && !streamError && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={camSrc} alt="" onLoad={() => setCamLoaded(true)} onError={() => setCamError(true)} />
+              <img src={camSrc} alt="" onLoad={() => setStreamLoaded(true)} onError={() => setStreamError(true)} />
+            )}
+            {printer.kind !== "bambu" && snapshot.frameSrc && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={snapshot.frameSrc} alt="" />
             )}
             {(!camLoaded || camError) && <span className="pc-camera-placeholder"><Video size={34} strokeWidth={1.5} aria-hidden="true" /></span>}
             {camLoaded && !camError && <span className="pc-camera-live"><span className="pc-camera-live-dot" />LIVE</span>}
