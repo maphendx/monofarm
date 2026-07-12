@@ -9,7 +9,7 @@ import { FlowView } from "@/components/dashboard/FlowView";
 import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
-import { printerCover as getPrinterCover } from "@/components/printers/printerCardModel";
+import { printerCanStartPrint, printerCover as getPrinterCover, printerNeedsClearBed } from "@/components/printers/printerCardModel";
 import { PrinterDetailModal } from "@/components/printers/PrinterDetailModal";
 import { PrinterGroupActionsMenu } from "@/components/printers/PrinterGroupActionsMenu";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
@@ -213,9 +213,8 @@ function PrinterPhotoCard({
   const isPrinting = printer.state === "printing";
   const isPaused   = printer.state === "paused";
   const isError    = printer.state === "error";
-  const needsClearBed = printer.state === "awaiting_bed_clear" ||
-    (printer.state === "operational" && (!!printer.job || (printer.progress_pct ?? 0) >= 100));
-  const canStartPrint = (printer.state === "idle" || printer.state === "operational") && !needsClearBed;
+  const needsClearBed = printerNeedsClearBed(printer);
+  const canStartPrint = printerCanStartPrint(printer);
   const pct        = printer.progress_pct ?? 0;
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmClearBed, setConfirmClearBed] = useState(false);
@@ -437,7 +436,7 @@ export default function DashboardPage() {
     { id: "state",   label: t("dashboard.byState") },
   ];
 
-  const { printers, connected, loading, reload } = usePrinterStream();
+  const { printers, connected, loading, reload, upsertPrinter } = usePrinterStream();
   const [filter, setFilter] = useState<Filter>("all");
   const [tagFilter, setTagFilter] = useState<number[]>([]);
   const [groupBy, setGroupBy] = useState<GroupBy>("mygroup");
@@ -566,8 +565,6 @@ export default function DashboardPage() {
     }
     return c;
   }, [printers]);
-
-  function upsertPrinter(_p: Printer) { /* WS pushes full state within 3 s */ }
 
   async function handlePrinterDropInGroup(groupKey: string, targetId: number) {
     if (!dragPrinterId || dragPrinterId === targetId) return;
@@ -858,7 +855,7 @@ export default function DashboardPage() {
       <PrinterDetailModal
         printer={selected}
         onClose={() => setSelected(null)}
-        onUpdated={() => { /* WS refreshes within 3 s */ }}
+        onUpdated={upsertPrinter}
         onDeleted={() => reload()}
       />
 

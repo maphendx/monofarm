@@ -17,6 +17,8 @@ import {
   formatFinishTime,
   getPrinterCardTone,
   printerCover,
+  printerCanStartPrint,
+  printerNeedsClearBed,
 } from "./printerCardModel";
 
 export function PrinterCard({
@@ -40,8 +42,8 @@ export function PrinterCard({
   const isPrinting = printer.state === "printing";
   const isPaused = printer.state === "paused";
   const isError = printer.state === "error";
-  const needsClearBed = tone === "collect";
-  const canStartPrint = (printer.state === "idle" || printer.state === "operational") && !needsClearBed && !printer.is_out_of_order;
+  const needsClearBed = printerNeedsClearBed(printer);
+  const canStartPrint = printerCanStartPrint(printer);
   const canEdit = user.role === "admin" || user.role === "operator";
   const hasCamera = printer.kind === "bambu" && !!printer.bambu_dev_ip || !!printer.moonraker_url;
   const cover = printerCover(printer);

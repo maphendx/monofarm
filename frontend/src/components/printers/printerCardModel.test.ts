@@ -5,8 +5,10 @@ import {
   canSkipObject,
   formatEtaShort,
   formatFinishTime,
+  printerCanStartPrint,
   getPrinterCardTone,
   getSlotNumber,
+  printerNeedsClearBed,
   printerCover,
 } from "./printerCardModel";
 
@@ -66,6 +68,14 @@ describe("printer card model", () => {
     expect(getPrinterCardTone(printer({ state: "awaiting_bed_clear" }))).toBe("collect");
     expect(getPrinterCardTone(printer({ state: "error" }))).toBe("error");
     expect(getPrinterCardTone(printer({ state: "offline" }))).toBe("offline");
+  });
+
+  it("shares clear-bed and print eligibility rules across printer surfaces", () => {
+    expect(printerNeedsClearBed(printer({ state: "awaiting_bed_clear" }))).toBe(true);
+    expect(printerNeedsClearBed(printer({ state: "operational", job: "done.gcode" }))).toBe(true);
+    expect(printerCanStartPrint(printer({ state: "idle" }))).toBe(true);
+    expect(printerCanStartPrint(printer({ state: "operational", job: "done.gcode" }))).toBe(false);
+    expect(printerCanStartPrint(printer({ state: "idle", is_out_of_order: true }))).toBe(false);
   });
 
   it("formats short and absolute finish times", () => {
