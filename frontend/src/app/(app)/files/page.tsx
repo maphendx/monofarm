@@ -183,7 +183,7 @@ function GroupCompatBadges({ file, groups, printers, onSend }: {
         } else if (hasMismatch) {
           cls = "bg-[rgba(234,179,8,.10)] text-[var(--state-warn)] border border-[rgba(234,179,8,.2)]";
           tip = `${p.name}: тип матеріалу`;
-        } else if (fit === "fits" || slots.some(s => s.match === "ok")) {
+        } else if (fit === "fits" || slots.some(s => s.match === "exact" || s.match === "close" || s.match === "type_only")) {
           cls = "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)] border border-[rgba(34,197,94,.2)]";
           tip = `${p.name}: сумісний`;
         } else {

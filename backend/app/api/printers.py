@@ -310,7 +310,16 @@ def _to_dto(
         live = _apply_bed_cleared_flag(printer, live, db)
         live = _apply_error_cleared_flag(printer, live, db)
         ams_trays = bambu.get_ams_filaments(printer.bambu_dev_id)
-        filaments = ams_trays if ams_trays else (printer.loaded_filaments or [])
+        persisted = printer.loaded_filaments or []
+        live_by_slot = {t["slot"]: t for t in ams_trays}
+        persisted_slots = {s["slot"] for s in persisted}
+        # Merge by slot: live MQTT data wins per-slot when present (self-heals once
+        # a manually-declared AMS unit starts reporting), otherwise keep the
+        # manually-configured slot — a printer with no AMS unit attached must not
+        # lose operator-entered AMS trays just because the external spool is live.
+        filaments = [live_by_slot.get(s["slot"], s) for s in persisted] + [
+            t for slot, t in live_by_slot.items() if slot not in persisted_slots
+        ]
         return PrinterOut(
             **{**base, "loaded_filaments": filaments},
             state=live.get("state") or "unknown",

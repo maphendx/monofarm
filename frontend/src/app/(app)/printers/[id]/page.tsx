@@ -1554,8 +1554,31 @@ function LoadedFilamentsCard({
     ]);
   }
 
+  /** Manually declare an AMS unit (4 trays) — for printers whose AMS hasn't reported live data yet. */
+  function addAmsUnit() {
+    setSlots((prev) => {
+      const usedUnits = prev.filter((s) => s.slot !== 254).map((s) => s.unit_id ?? Math.floor(s.slot / 4));
+      const unit = usedUnits.length ? Math.max(...usedUnits) + 1 : 0;
+      const newSlots: FilamentSlot[] = Array.from({ length: 4 }, (_, tray) => ({
+        slot: unit * 4 + tray, color: "#888888", color_name: null, type: "PLA", brand: null, filament_id: null, empty: true, unit_id: unit,
+      }));
+      return [...prev, ...newSlots];
+    });
+  }
+
+  function addExternalSlot() {
+    setSlots((prev) => prev.some((s) => s.slot === 254)
+      ? prev
+      : [...prev, { slot: 254, color: "#888888", color_name: null, type: "PLA", brand: null, filament_id: null, empty: true, unit_id: null }]);
+  }
+
   function removeSlot(i: number) {
-    setSlots((prev) => prev.filter((_, idx) => idx !== i).map((s, idx) => ({ ...s, slot: idx })));
+    setSlots((prev) => {
+      const next = prev.filter((_, idx) => idx !== i);
+      // Bambu slot numbers are addresses (unit*4+tray, 254=external), not a
+      // sequential index — renumbering here would scramble AMS/external identity.
+      return isBambu ? next : next.map((s, idx) => ({ ...s, slot: idx }));
+    });
   }
 
   function update(i: number, patch: Partial<FilamentSlot>) {
@@ -1614,22 +1637,9 @@ function LoadedFilamentsCard({
   }
 
   const groups = buildLoadedGroups(printer, inventory);
-  const editorPrinter = isBambu
-    ? {
-        ...printer,
-        loaded_filaments: slots,
-        bambu_has_ams: hasAms,
-        // A changed transport choice should immediately switch the editor;
-        // keep the live active tray only while the choice itself is unchanged.
-        active_tray: hasAms === printer.bambu_has_ams ? printer.active_tray : null,
-      }
-    : printer;
-  const visibleSlotIds = isBambu
-    ? new Set(normalizedPrinterSlots(editorPrinter).map((s) => s.slot))
-    : null;
-  const editableSlots = slots
-    .map((slot, index) => ({ slot, index }))
-    .filter(({ slot }) => !visibleSlotIds || visibleSlotIds.has(slot.slot));
+  // Edit mode shows every declared slot (AMS units + external) regardless of the
+  // current feed-source mode — that toggle only picks a print-time default.
+  const editableSlots = slots.map((slot, index) => ({ slot, index }));
   const paletteTarget = paletteSlot === null ? null : slots[paletteSlot];
 
   return (
@@ -1744,7 +1754,7 @@ function LoadedFilamentsCard({
             </div>
             {isBambu && editableSlots.length === 0 && (
               <p className="rounded-lg border border-dashed border-[var(--border)] px-3 py-3 text-xs text-[var(--text-muted)]">
-                Очікую дані про слоти від принтера. Після синхронізації з Handy тут з’являться актуальні кольори.
+                Дані про слоти від принтера ще не надходили. Додай AMS-юніт або зовнішню котушку вручну нижче — кольори підтягнуться самі, щойно принтер почне їх звітувати.
               </p>
             )}
             {editableSlots.map(({ slot: s, index: i }) => (
@@ -1843,7 +1853,27 @@ function LoadedFilamentsCard({
 
             {/* actions */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              {!isBambu && (
+              {isBambu ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={addAmsUnit}
+                    title="Додати вручну, якщо принтер ще не надіслав дані з AMS"
+                    className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] "
+                  >
+                    + Додати AMS-юніт
+                  </button>
+                  {!slots.some((s) => s.slot === 254) && (
+                    <button
+                      type="button"
+                      onClick={addExternalSlot}
+                      className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-1.5 text-sm text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)] "
+                    >
+                      + Зовнішня котушка
+                    </button>
+                  )}
+                </>
+              ) : (
                 <button
                   type="button"
                   onClick={addSlot}

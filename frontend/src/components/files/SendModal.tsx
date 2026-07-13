@@ -64,13 +64,38 @@ function loadSendOpts(): SavedSendOpts {
   }
 }
 
-type SlotMatch = "ok" | "type_mismatch" | "missing";
+type SlotMatch = "exact" | "close" | "type_only" | "type_mismatch" | "missing";
 
 function normalizeSlotColor(color: string | null | undefined): string | null {
   if (!color) return null;
   const raw = color.trim().replace(/^#/, "");
   if (!/^[0-9a-fA-F]{6,8}$/.test(raw)) return null;
   return `#${raw.slice(0, 6).toLowerCase()}`;
+}
+
+const COLOR_EXACT_THRESHOLD = 8;   // "redmean" distance below this = same color
+const COLOR_CLOSE_THRESHOLD = 60;  // below this = visually close, above = unrelated
+
+/** Perceptual-ish color distance ("redmean" formula) — 0 = identical, ~765 max. */
+export function colorDistance(a: string | null | undefined, b: string | null | undefined): number | null {
+  const ah = normalizeSlotColor(a);
+  const bh = normalizeSlotColor(b);
+  if (!ah || !bh) return null;
+  const [r1, g1, b1] = [ah.slice(1, 3), ah.slice(3, 5), ah.slice(5, 7)].map((h) => parseInt(h, 16));
+  const [r2, g2, b2] = [bh.slice(1, 3), bh.slice(3, 5), bh.slice(5, 7)].map((h) => parseInt(h, 16));
+  const rmean = (r1 + r2) / 2;
+  const dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+  return Math.sqrt((2 + rmean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rmean) / 256) * db * db);
+}
+
+export function matchTierLabel(match: SlotMatch): string {
+  switch (match) {
+    case "exact": return "Точний колір";
+    case "close": return "Близький колір";
+    case "type_only": return "Лише тип пластику";
+    case "type_mismatch": return "Тип не збігається";
+    case "missing": return "Немає слоту";
+  }
 }
 
 export function printerMaterialSlots(printer: PrinterType) {
@@ -98,6 +123,30 @@ export function isFileCompatibleWithPrinter(file: GcodeFile | null, printer: Pri
   return /\.(gcode|gco|g)$/i.test(file.original_name);
 }
 
+export function matchTierFor(
+  fileColor: string | null,
+  fileType: string | null,
+  targetColor: string | null,
+  targetType: string | null,
+  hasTarget: boolean,
+): SlotMatch {
+  if (!hasTarget) return "missing";
+  const dist = colorDistance(fileColor, targetColor);
+  const typeOk = !fileType || !targetType || normalizeMaterial(fileType) === normalizeMaterial(targetType);
+  if (!typeOk) return "type_mismatch";
+  if (dist !== null && dist <= COLOR_EXACT_THRESHOLD) return "exact";
+  if (dist !== null && dist <= COLOR_CLOSE_THRESHOLD) return "close";
+  return "type_only";
+}
+
+/** Best-candidate score for a source color/type against one printer slot — lower is better, null = no usable signal. */
+function candidateScore(fileColor: string | null, fileType: string | null, target: ReturnType<typeof printerMaterialSlots>[number]): number | null {
+  const dist = colorDistance(fileColor, target.color);
+  const typeMatches = !!(fileType && normalizeMaterial(target.type) === fileType);
+  if (dist === null && !typeMatches) return null;
+  return (dist ?? COLOR_CLOSE_THRESHOLD * 2) + (typeMatches ? 0 : 1000);
+}
+
 export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): Record<number, number> {
   const targets = printerMaterialSlots(printer);
   const usedTargets = new Set<number>();
@@ -107,15 +156,16 @@ export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): 
     const fileColor = normalizeSlotColor(meta?.colors?.[sourceSlot]);
     const fileType = normalizeMaterial(meta?.types?.[sourceSlot]);
     const candidates = targets.filter((t) => !usedTargets.has(t.slot));
-    const exact = candidates.find((t) =>
-      fileColor &&
-      normalizeSlotColor(t.color) === fileColor &&
-      (!fileType || !normalizeMaterial(t.type) || normalizeMaterial(t.type) === fileType)
-    );
-    const sameType = candidates.find((t) => fileType && normalizeMaterial(t.type) === fileType);
+
+    let best: (typeof candidates)[number] | undefined;
+    let bestScore = Infinity;
+    for (const t of candidates) {
+      const score = candidateScore(fileColor, fileType, t);
+      if (score !== null && score < bestScore) { bestScore = score; best = t; }
+    }
     const fallback = targets.find((t) => t.slot === sourceSlot && !usedTargets.has(t.slot))
       ?? candidates[0];
-    const picked = exact ?? sameType ?? fallback;
+    const picked = best ?? fallback;
     map[sourceSlot] = picked?.slot ?? sourceSlot;
     if (picked) usedTargets.add(picked.slot);
   }
@@ -125,19 +175,17 @@ export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): 
 
 export function checkSlots(meta: GcodeFileMeta | null, printer: PrinterType) {
   if (!meta) return [];
+  const mapped = autoMapSlots(meta, printer);
+  const printerSlots = printerMaterialSlots(printer);
   return usedSlotIndices(meta).map((i) => {
     const fileColor = meta.colors?.[i] ?? null;
     const fileType = meta.types?.[i] ?? null;
-    const mappedSlot = autoMapSlots(meta, printer)[i] ?? i;
-    const printerSlot = printerMaterialSlots(printer).find((s) => s.slot === mappedSlot);
+    const mappedSlot = mapped[i] ?? i;
+    const printerSlot = printerSlots.find((s) => s.slot === mappedSlot);
     const printerColor = printerSlot?.color ?? null;
     const printerType = printerSlot?.type ?? null;
-    let match: SlotMatch = "missing";
-    if (printerSlot) {
-      const typeOk = !fileType || !printerType || normalizeMaterial(fileType) === normalizeMaterial(printerType);
-      match = typeOk ? "ok" : "type_mismatch";
-    }
-    return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor, printerType };
+    const match = matchTierFor(fileColor, fileType, printerColor, printerType, !!printerSlot);
+    return { slot: i + 1, targetSlot: mappedSlot + 1, fileColor, fileType, match, printerColor, printerType, colorDistance: colorDistance(fileColor, printerColor) };
   });
 }
 
@@ -145,9 +193,11 @@ export function compatBadge(slots: ReturnType<typeof checkSlots>) {
   if (slots.length === 0) return { label: "немає даних", cls: "bg-[var(--surface-hi)] text-[var(--text-muted)]" };
   const missing = slots.filter((s) => s.match === "missing").length;
   const mismatch = slots.filter((s) => s.match === "type_mismatch").length;
-  if (missing === 0 && mismatch === 0) return { label: "сумісний ✓", cls: "badge badge-ok" };
+  const close = slots.filter((s) => s.match === "close" || s.match === "type_only").length;
+  if (missing === 0 && mismatch === 0 && close === 0) return { label: "сумісний ✓", cls: "badge badge-ok" };
   if (missing > 0) return { label: `${missing} слот${missing > 1 ? "и" : ""} відсутні`, cls: "badge badge-error" };
-  return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
+  if (mismatch > 0) return { label: `тип не збігається (${mismatch})`, cls: "badge badge-warn" };
+  return { label: `близький підбір (${close})`, cls: "badge badge-warn" };
 }
 
 export function fitCheck(meta: GcodeFileMeta | null, printer: PrinterType): "fits" | "oversize" | "unknown" {
@@ -306,10 +356,14 @@ function AmsSlotPicker({
   allSlots,
   selectedSlot,
   onSelect,
+  fileColor = null,
+  fileType = null,
 }: {
   allSlots: DisplaySlot[];
   selectedSlot: number;
   onSelect: (slot: number) => void;
+  fileColor?: string | null;
+  fileType?: string | null;
 }) {
   const byUnit = new Map<string, DisplaySlot[]>();
   for (const s of allSlots) {
@@ -334,19 +388,24 @@ function AmsSlotPicker({
             <div className="flex gap-1">
               {unitSlots.map((s) => {
                 const isSel = selectedSlot === s.slot;
+                const tier = !s.isEmpty ? matchTierFor(fileColor, fileType, s.color, s.type, true) : null;
                 return (
                   <button
                     key={s.slot}
                     type="button"
                     onClick={() => onSelect(s.slot)}
-                    title={`${slotLabel(s.slot)}${s.type ? ` · ${s.type}` : ""}${s.isEmpty ? " (порожній)" : ""}`}
+                    title={`${slotLabel(s.slot)}${s.type ? ` · ${s.type}` : ""}${s.isEmpty ? " (порожній)" : ""}${tier ? ` · ${matchTierLabel(tier)}` : ""}`}
                     className={[
                       "relative flex h-9 w-9 items-end justify-center rounded-lg border-2 pb-0.5 transition",
                       isSel
                         ? "border-[var(--accent)] shadow-lg"
-                        : s.isEmpty
-                          ? "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
-                          : "border-transparent hover:scale-105",
+                        : tier === "exact"
+                          ? "border-[var(--state-ok)]"
+                          : tier === "close"
+                            ? "border-[var(--state-warn)]"
+                            : s.isEmpty
+                              ? "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
+                              : "border-transparent hover:scale-105",
                     ].join(" ")}
                     style={{ backgroundColor: s.isEmpty ? undefined : (s.color ?? "#888888") }}
                   >
@@ -987,6 +1046,12 @@ export function SendModal({
                             const fileType  = file.filament_meta?.types?.[i] ?? null;
                             const grams     = file.filament_meta?.used_g?.[i];
                             const currentTarget = slotMap[i] ?? i;
+                            const targetSlot = primaryPrinterAllSlots.find((s) => s.slot === currentTarget);
+                            const tier = matchTierFor(fileColor, fileType, targetSlot?.color ?? null, targetSlot?.type ?? null, !!targetSlot && !targetSlot.isEmpty);
+                            const tierCls = tier === "exact" ? "text-[var(--state-ok)]"
+                              : tier === "close" ? "text-[var(--state-warn)]"
+                              : tier === "type_mismatch" ? "text-[var(--state-error)]"
+                              : "text-[var(--text-faint)]";
                             return (
                               <div key={i} className="space-y-2">
                                 <div className="flex items-center gap-2">
@@ -997,6 +1062,7 @@ export function SendModal({
                                   <span className="text-[11px] font-medium text-[var(--text)]">
                                     T{i + 1}{fileType ? ` · ${fileType}` : ""}
                                   </span>
+                                  <span className={`text-[10px] ${tierCls}`}>{matchTierLabel(tier)}</span>
                                   {grams != null && (
                                     <span className="ml-auto text-[10px] text-[var(--text-faint)]">{grams}г</span>
                                   )}
@@ -1006,6 +1072,8 @@ export function SendModal({
                                     allSlots={primaryPrinterAllSlots}
                                     selectedSlot={currentTarget}
                                     onSelect={(slot) => setSlotMap((prev) => ({ ...prev, [i]: slot }))}
+                                    fileColor={normalizeSlotColor(fileColor)}
+                                    fileType={normalizeMaterial(fileType)}
                                   />
                                 ) : primaryPrinterAllSlots.length > 0 ? (
                                   <div className="flex flex-wrap gap-1">
