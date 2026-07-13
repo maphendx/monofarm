@@ -67,6 +67,9 @@ export interface FilamentSlot {
   filament_id: number | null;
   empty: boolean;
   unit_id: number | null;
+  /** Confirmed by the printer's own MQTT report — false means operator-declared only,
+   *  not physically confirmed. Print dispatch must not target an unverified AMS slot. */
+  verified?: boolean;
 }
 
 export type SlotState = "empty" | "loaded" | "loading" | "unloading" | "error" | "runout";

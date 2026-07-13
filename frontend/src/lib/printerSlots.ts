@@ -12,6 +12,8 @@ export type NormalizedPrinterSlot = {
   empty: boolean;
   unitIndex: number | null;
   isExternal: boolean;
+  /** Confirmed by the printer's own MQTT report (Bambu). Always true outside that pathway. */
+  verified: boolean;
 };
 
 function fromLive(slot: FilamentSlot, persistent?: PrinterSlotInfo): NormalizedPrinterSlot {
@@ -27,6 +29,7 @@ function fromLive(slot: FilamentSlot, persistent?: PrinterSlotInfo): NormalizedP
     empty: slot.empty || (!material && !color && slot.filament_id == null),
     unitIndex: slot.unit_id ?? persistent?.unit_index ?? (slot.slot === EXTERNAL_SLOT ? null : 0),
     isExternal: slot.slot === EXTERNAL_SLOT,
+    verified: slot.verified ?? true,
   };
 }
 
@@ -41,6 +44,7 @@ function fromPersistent(slot: PrinterSlotInfo): NormalizedPrinterSlot {
     empty: slot.state === "empty" || (!slot.material && !slot.color && !slot.hex_color && slot.filament_id == null),
     unitIndex: slot.unit_index ?? (slot.is_external ? null : 0),
     isExternal: slot.is_external || slot.slot_index === EXTERNAL_SLOT,
+    verified: true,
   };
 }
 
@@ -82,6 +86,7 @@ export function normalizedPrinterSlots(
               empty: true,
               unitIndex: 0,
               isExternal: false,
+              verified: true,
             };
     });
   }

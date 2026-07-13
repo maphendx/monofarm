@@ -101,6 +101,10 @@ export function matchTierLabel(match: SlotMatch): string {
 export function printerMaterialSlots(printer: PrinterType) {
   return normalizedPrinterSlots(printer)
     .filter((s) => !s.empty && (s.filamentId || s.color || s.material))
+    // Sending ams_mapping for a slot the printer hasn't confirmed via MQTT makes
+    // the firmware reject the job ("Failed to get AMS mapping table") — the
+    // external spool is always physically safe to target, AMS trays are not.
+    .filter((s) => s.isExternal || s.verified)
     .map((s) => ({
       slot: s.slot,
       type: s.material,
@@ -166,7 +170,11 @@ export function autoMapSlots(meta: GcodeFileMeta | null, printer: PrinterType): 
     const fallback = targets.find((t) => t.slot === sourceSlot && !usedTargets.has(t.slot))
       ?? candidates[0];
     const picked = best ?? fallback;
-    map[sourceSlot] = picked?.slot ?? sourceSlot;
+    // targets is already filtered to verified-or-external slots, so any pick here
+    // is dispatch-safe. With nothing to pick, default to the external spool (254)
+    // rather than the file's raw source index — that index is not a confirmed
+    // printer slot and sending it as an AMS tray triggers a firmware rejection.
+    map[sourceSlot] = picked?.slot ?? 254;
     if (picked) usedTargets.add(picked.slot);
   }
 
@@ -291,14 +299,18 @@ type DisplaySlot = {
 };
 
 function printerAllSlotsForDisplay(printer: PrinterType): DisplaySlot[] {
-  return normalizedPrinterSlots(printer).map((s) => ({
-    slot: s.slot,
-    type: s.material,
-    color: s.color,
-    unit: s.unitIndex,
-    isEmpty: s.empty,
-    isExternal: s.isExternal,
-  }));
+  return normalizedPrinterSlots(printer)
+    // Same dispatch-safety rule as printerMaterialSlots — don't let the operator
+    // manually pick an AMS slot the printer hasn't confirmed exists.
+    .filter((s) => s.isExternal || s.verified)
+    .map((s) => ({
+      slot: s.slot,
+      type: s.material,
+      color: s.color,
+      unit: s.unitIndex,
+      isEmpty: s.empty,
+      isExternal: s.isExternal,
+    }));
 }
 
 // ── Tag compatibility check (mirrors backend _task_matches_printer) ───────────

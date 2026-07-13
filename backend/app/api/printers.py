@@ -317,8 +317,15 @@ def _to_dto(
         # a manually-declared AMS unit starts reporting), otherwise keep the
         # manually-configured slot — a printer with no AMS unit attached must not
         # lose operator-entered AMS trays just because the external spool is live.
-        filaments = [live_by_slot.get(s["slot"], s) for s in persisted] + [
-            t for slot, t in live_by_slot.items() if slot not in persisted_slots
+        # "verified" marks slots confirmed by the printer's own MQTT report — the
+        # print-dispatch path must never send ams_mapping for an unverified slot,
+        # or firmware rejects it with "Failed to get AMS mapping table".
+        filaments = [
+            {**live_by_slot[s["slot"]], "verified": True} if s["slot"] in live_by_slot
+            else {**s, "verified": False}
+            for s in persisted
+        ] + [
+            {**t, "verified": True} for slot, t in live_by_slot.items() if slot not in persisted_slots
         ]
         return PrinterOut(
             **{**base, "loaded_filaments": filaments},

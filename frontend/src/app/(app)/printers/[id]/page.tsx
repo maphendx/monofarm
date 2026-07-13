@@ -1310,6 +1310,8 @@ interface SpoolView {
   brand: string | null;
   grams: number | null;
   active: boolean;
+  rawSlot: number;         // real printer slot address (unit*4+tray, 254=external)
+  verified: boolean;       // confirmed by the printer's own MQTT report
 }
 
 interface SpoolGroup {
@@ -1358,13 +1360,19 @@ function NozzleBedChips({ printer }: { printer: Printer }) {
   );
 }
 
-function SpoolTile({ slot }: { slot: SpoolView }) {
+function SpoolTile({ slot, onClick }: { slot: SpoolView; onClick?: () => void }) {
+  const Wrapper = onClick ? "button" : "div";
   return (
-    <div className="flex w-[96px] shrink-0 flex-col items-center gap-1.5">
+    <Wrapper
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={["flex w-[96px] shrink-0 flex-col items-center gap-1.5", onClick ? "cursor-pointer" : ""].join(" ")}
+    >
       <div
         className={[
           "rounded-xl p-1 ring-2 transition",
           slot.active ? "bg-[rgba(56,189,248,.08)] ring-[var(--state-print)]" : "ring-transparent",
+          onClick ? "hover:ring-[var(--border-strong)]" : "",
         ].join(" ")}
       >
         {slot.empty ? <EmptySpoolIcon size={54} /> : <SpoolIcon color={slot.hex} size={54} />}
@@ -1391,12 +1399,17 @@ function SpoolTile({ slot }: { slot: SpoolView }) {
           )}
         </div>
       )}
-    </div>
+      {!slot.verified && (
+        <span title="Не підтверджено принтером — не буде використано для друку" className="text-[9px] text-[var(--state-warn)]">
+          не підтверджено
+        </span>
+      )}
+    </Wrapper>
   );
 }
 
 /** Renders one or more AMS unit boxes (+ external spool) with spool icons. */
-function SpoolSlotsView({ groups }: { groups: SpoolGroup[] }) {
+function SpoolSlotsView({ groups, onSlotClick }: { groups: SpoolGroup[]; onSlotClick?: (rawSlot: number) => void }) {
   if (groups.length === 0) return null;
   return (
     <div className="space-y-3">
@@ -1408,7 +1421,7 @@ function SpoolSlotsView({ groups }: { groups: SpoolGroup[] }) {
           </div>
           <div className="flex flex-wrap items-start justify-around gap-2">
             {g.slots.map((s) => (
-              <SpoolTile key={s.key} slot={s} />
+              <SpoolTile key={s.key} slot={s} onClick={onSlotClick ? () => onSlotClick(s.rawSlot) : undefined} />
             ))}
           </div>
         </div>
@@ -1434,6 +1447,7 @@ function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[
         filament_id: slot.filamentId,
         empty: slot.empty,
         unit_id: slot.unitIndex,
+        verified: slot.verified,
       }))
     : printer.loaded_filaments ?? [];
   const units = new Map<number, FilamentSlot[]>();
@@ -1460,6 +1474,8 @@ function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[
       brand: s.brand,
       grams: inv?.grams_remaining ?? null,
       active: printer.active_tray === s.slot,
+      rawSlot: s.slot,
+      verified: s.verified ?? true,
     };
   };
 
@@ -1473,17 +1489,21 @@ function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[
       view.push(
         s
           ? toView(s, i + 1)
-          : { key: `u${uid}-empty${i}`, label: i + 1, empty: true, hex: "#888888", colorName: null, material: null, brand: null, grams: null, active: false },
+          : { key: `u${uid}-empty${i}`, label: i + 1, empty: true, hex: "#888888", colorName: null, material: null, brand: null, grams: null, active: false, rawSlot: uid * 4 + i, verified: false },
       );
     }
     groups.push({ title: multi ? `AMS ${uid + 1}` : null, external: false, slots: view });
   }
 
+  // Always show the external group for Bambu, even before it's ever reported/declared —
+  // it's a fixed always-present port and needs a clickable tile to quick-assign a color.
   if (external.length) {
+    groups.push({ title: null, external: true, slots: external.map((s, i) => toView(s, i + 1)) });
+  } else if (isBambu) {
     groups.push({
       title: null,
       external: true,
-      slots: external.map((s, i) => toView(s, i + 1)),
+      slots: [{ key: "ext-empty0", label: 1, empty: true, hex: "#888888", colorName: null, material: null, brand: null, grams: null, active: false, rawSlot: 254, verified: false }],
     });
   }
   return groups;
@@ -1507,6 +1527,8 @@ function buildU1Groups(printer: Printer, slots: PrinterSlotInfo[], inventory: Fi
         brand: s.brand,
         grams: inv?.grams_remaining ?? null,
         active: printer.active_tray === s.slot_index,
+        rawSlot: s.slot_index,
+        verified: true,
       };
     });
   return [{ title: null, external: false, slots: view }];
@@ -1533,10 +1555,42 @@ function LoadedFilamentsCard({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [quickPickSlot, setQuickPickSlot] = useState<number | null>(null);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [modeBusy, setModeBusy] = useState(false);
 
   useEffect(() => {
     api<Filament[]>("/api/materials").then(setInventory).catch(() => {});
   }, []);
+
+  /** Click-a-spool-tile quick color pick — saves immediately, no edit mode needed. */
+  async function quickSetColor(rawSlot: number, c: FilamentColor) {
+    const current = printer.loaded_filaments ?? [];
+    const idx = current.findIndex((s) => s.slot === rawSlot);
+    const unit_id = rawSlot === 254 ? null : Math.floor(rawSlot / 4);
+    const updated: FilamentSlot[] = idx >= 0
+      ? current.map((s, i) => (i === idx ? { ...s, color: c.hex_color, color_name: c.name, filament_id: null, empty: false } : s))
+      : [...current, { slot: rawSlot, color: c.hex_color, color_name: c.name, type: "PLA", brand: null, filament_id: null, empty: false, unit_id }];
+    setQuickBusy(true);
+    try {
+      await api(`/api/printers/${printer.id}/loaded-filaments`, { method: "PUT", body: JSON.stringify(updated) });
+      onUpdated();
+    } finally {
+      setQuickBusy(false);
+      setQuickPickSlot(null);
+    }
+  }
+
+  /** Feed-source switcher (Авто/AMS/Зовнішня) — saves immediately, always visible. */
+  async function setFeedMode(mode: boolean | null) {
+    setModeBusy(true);
+    try {
+      await api(`/api/printers/${printer.id}`, { method: "PATCH", body: JSON.stringify({ bambu_has_ams: mode }) });
+      onUpdated();
+    } finally {
+      setModeBusy(false);
+    }
+  }
 
   // Display reads live data straight off the printer; the editor works on a draft.
   function startEdit() {
@@ -1653,6 +1707,15 @@ function LoadedFilamentsCard({
         />
       )}
 
+      {/* ── quick pick (click a spool tile directly, no edit mode) ── */}
+      {quickPickSlot !== null && (
+        <ColorPaletteModal
+          slotLabel={quickPickSlot === 254 ? "Зовнішня" : `AMS ${Math.floor(quickPickSlot / 4) + 1} · слот ${(quickPickSlot % 4) + 1}`}
+          onPick={(c) => quickSetColor(quickPickSlot, c)}
+          onClose={() => setQuickPickSlot(null)}
+        />
+      )}
+
       <Card title="Пластик в принтері">
         {/* ── chips + gear header (SimplyPrint style) ── */}
         <div className="mb-3 flex items-center gap-2">
@@ -1671,9 +1734,25 @@ function LoadedFilamentsCard({
             </button>
           )}
           {isBambu && !editing && (
-            <span className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)]">
-              {printer.bambu_has_ams === null ? "Авто" : printer.bambu_has_ams ? "AMS" : "Зовнішня котушка"}
-            </span>
+            <div className="flex gap-1">
+              {([[null, "Авто"], [true, "AMS"], [false, "Зовн."]] as const).map(([value, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={!canEdit || modeBusy}
+                  onClick={() => setFeedMode(value)}
+                  title="Джерело подачі філаменту для друку"
+                  className={[
+                    "rounded border px-1.5 py-0.5 text-[10px] transition disabled:cursor-default disabled:opacity-60",
+                    printer.bambu_has_ams === value
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      : "border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)]",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -1683,7 +1762,10 @@ function LoadedFilamentsCard({
             <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
         ) : (
-          <SpoolSlotsView groups={groups} />
+          <SpoolSlotsView
+            groups={groups}
+            onSlotClick={isBambu && canEdit && !editing && !quickBusy ? (rawSlot) => setQuickPickSlot(rawSlot) : undefined}
+          />
         )}
 
         {/* ── status bar ── */}

@@ -16,6 +16,7 @@ class FilamentSlot(BaseModel):
     filament_id: int | None = None  # optional link to Filament inventory row
     empty: bool = False          # no filament loaded in this slot
     unit_id: int | None = None   # AMS unit index (0, 1, 2, 3…); None = external
+    verified: bool = False       # confirmed by the printer's own MQTT report (vs. manually declared)
 
 
 class PrinterCreate(BaseModel):
