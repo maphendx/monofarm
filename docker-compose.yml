@@ -21,6 +21,7 @@ services:
     env_file: ./backend/.env
     environment:
       INLINE_WORKERS: "false"
+      DATABASE_URL: postgresql+psycopg://printfarm:printfarm@db:5432/printfarm
     ports:
       - "8000:8000"
     depends_on:
@@ -36,6 +37,7 @@ services:
     env_file: ./backend/.env
     environment:
       INLINE_WORKERS: "false"
+      DATABASE_URL: postgresql+psycopg://printfarm:printfarm@db:5432/printfarm
     depends_on:
       - db
     # No published ports — worker talks outbound only (MQTT, Telegram, APScheduler)

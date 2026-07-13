@@ -55,12 +55,27 @@ def summary(
         .scalar() or 0
     )
 
+    completed_tasks = (
+        db.query(PrintTask)
+        .filter(PrintTask.organization_id == org.id, PrintTask.status == PrintTaskStatus.done)
+        .all()
+    )
+    total_material_cost_uah = sum(t.material_cost_uah or 0 for t in completed_tasks)
+    total_pieces_ok = sum(t.pieces_ok or 0 for t in completed_tasks)
+    total_pieces_defective = sum(t.pieces_defective or 0 for t in completed_tasks)
+    total_pieces = total_pieces_ok + total_pieces_defective
+    defect_rate_pct = round(total_pieces_defective / total_pieces * 100, 1) if total_pieces else 0.0
+
     return {
         "tasks": task_counts,
         "plan_entries_done": len(done_entries),
         "total_print_minutes": total_minutes,
         "total_filament_g": round(total_filament_g, 1),
         "active_printers": active_printers,
+        "total_material_cost_uah": round(total_material_cost_uah, 2),
+        "total_pieces_ok": total_pieces_ok,
+        "total_pieces_defective": total_pieces_defective,
+        "defect_rate_pct": defect_rate_pct,
     }
 
 

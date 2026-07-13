@@ -24,6 +24,10 @@ interface Summary {
   total_print_minutes: number;
   total_filament_g: number;
   active_printers: number;
+  total_material_cost_uah: number;
+  total_pieces_ok: number;
+  total_pieces_defective: number;
+  defect_rate_pct: number;
 }
 
 interface DailyPoint {
@@ -88,9 +92,11 @@ export default function AnalyticsPage() {
   const [filament, setFilament] = useState<FilamentUsage | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     Promise.all([
       api<Summary>("/api/analytics/summary"),
       api<DailyPoint[]>(`/api/analytics/daily?days=${days}`),
@@ -103,10 +109,24 @@ export default function AnalyticsPage() {
         setPrinters(p);
         setFilament(f);
       })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [days]);
 
   if (loading) return <PageSkeleton cols={5} withStats statsCount={5} />;
+
+  if (error) {
+    return (
+      <div className="space-y-8">
+        <h1 className="text-lg font-semibold">{t("analytics.title")}</h1>
+        <EmptyState
+          icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>}
+          title={t("analytics.loadError")}
+          description={t("analytics.loadErrorHint")}
+        />
+      </div>
+    );
+  }
 
   const isEmpty = summary != null
     && summary.plan_entries_done === 0
@@ -154,6 +174,15 @@ export default function AnalyticsPage() {
           <StatCard
             label={t("dashboard.activePrinters")}
             value={summary.active_printers}
+          />
+          <StatCard
+            label={t("analytics.materialCost")}
+            value={`${summary.total_material_cost_uah.toFixed(0)} ₴`}
+          />
+          <StatCard
+            label={t("analytics.defectRate")}
+            value={`${summary.defect_rate_pct}%`}
+            sub={`${summary.total_pieces_ok}/${summary.total_pieces_ok + summary.total_pieces_defective} ${t("analytics.ok")}`}
           />
         </div>
       )}

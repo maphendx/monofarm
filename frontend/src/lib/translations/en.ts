@@ -429,6 +429,11 @@ const en = {
     noData: "No data",
     noDataHint: "Analytics appear once you run your first prints.",
     notFound: "Not found",
+    materialCost: "Material cost",
+    defectRate: "Defect rate",
+    ok: "ok",
+    loadError: "Failed to load analytics",
+    loadErrorHint: "Server unavailable. Try refreshing the page later.",
   },
   users: {
     title: "Users",
