@@ -257,7 +257,7 @@ export function PrinterCard({
           </div>
         ) : null}
 
-        {printer.error_msg && <div className="pc-error" title={printer.error_msg}>{printer.error_msg}</div>}
+        {printer.error_msg && <div className="pc-error">{printer.error_msg}</div>}
         {printer.is_out_of_order && <div className="pc-error">Не працює</div>}
         {printer.flags?.length > 0 && (
           <div className="pc-flags">
