@@ -57,7 +57,10 @@ function bambuSource(printer: Printer, slots: NormalizedPrinterSlot[]): "ams" | 
  * Bambu uses live Handy/MQTT colors and merges persistent inventory IDs;
  * U1 always exposes exactly T0..T3 and never an AMS/external slot.
  */
-export function normalizedPrinterSlots(printer: Printer): NormalizedPrinterSlot[] {
+export function normalizedPrinterSlots(
+  printer: Printer,
+  opts?: { allSources?: boolean },
+): NormalizedPrinterSlot[] {
   const persistent = new Map((printer.slots ?? []).map((slot) => [slot.slot_index, slot]));
 
   if (printer.kind === "snapmaker_u1") {
@@ -88,6 +91,8 @@ export function normalizedPrinterSlots(printer: Printer): NormalizedPrinterSlot[
     ? liveSlots
     : (printer.slots ?? []).map(fromPersistent);
   if (printer.kind !== "bambu") return all.sort((a, b) => a.slot - b.slot);
+
+  if (opts?.allSources) return all.sort((a, b) => a.slot - b.slot);
 
   const source = bambuSource(printer, all);
   return all

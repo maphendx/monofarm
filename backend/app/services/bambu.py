@@ -600,8 +600,12 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         )
 
     ams_data = print_data.get("ams")
+    vt_tray = print_data.get("vt_tray")
+    # P1-series printers without a physical AMS unit still report the external
+    # spool via vt_tray but may omit the "ams" key entirely — parse it either way.
+    if isinstance(ams_data, dict) or isinstance(vt_tray, dict):
+        _parse_ams(dev_id, ams_data if isinstance(ams_data, dict) else {}, vt_tray)
     if isinstance(ams_data, dict):
-        _parse_ams(dev_id, ams_data, print_data.get("vt_tray"))
         # Active tray: "255" = external spool (slot 254 in our convention)
         tray_now = ams_data.get("tray_now")
         if tray_now is not None:
@@ -610,6 +614,9 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
                 updated["active_tray"] = 254 if t == 255 else t
             except (ValueError, TypeError):
                 pass
+    elif isinstance(vt_tray, dict):
+        # No AMS unit reporting at all — the external spool is the only source.
+        updated["active_tray"] = 254
 
     # Persist to Redis on meaningful change, else at most every few seconds —
     # reports stream ~1/s per printing device and the payload rarely differs.

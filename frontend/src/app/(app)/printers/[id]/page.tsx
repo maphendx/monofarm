@@ -1039,6 +1039,28 @@ function BambuJobsCard({ printer }: { printer: Printer }) {
 
 const PRESET_TYPES = ["PLA", "PETG", "ABS", "ASA", "TPU", "PC", "Nylon", "PLA+", "PETG-CF", "ABS-CF"];
 
+/** Standard base filament colors (generic approximations, not exact manufacturer hex values). */
+const PRESET_COLORS: { name: string; hex: string }[] = [
+  { name: "Білий", hex: "#F5F5F0" },
+  { name: "Чорний", hex: "#1A1A1A" },
+  { name: "Сірий", hex: "#8C8C8C" },
+  { name: "Срібний", hex: "#C7C9CB" },
+  { name: "Червоний", hex: "#E4342E" },
+  { name: "Помаранчевий", hex: "#F2811D" },
+  { name: "Жовтий", hex: "#F4D03F" },
+  { name: "Зелений", hex: "#2FA84F" },
+  { name: "Темно-зелений", hex: "#1B5E3A" },
+  { name: "Синій", hex: "#1E5FBF" },
+  { name: "Блакитний", hex: "#21B6C4" },
+  { name: "Фіолетовий", hex: "#7B4FC9" },
+  { name: "Рожевий", hex: "#E85D9A" },
+  { name: "Бежевий", hex: "#E8D8B8" },
+  { name: "Коричневий", hex: "#7A4B28" },
+  { name: "Золотий", hex: "#D4AF37" },
+  { name: "Бронза", hex: "#8C6239" },
+  { name: "Натуральний", hex: "#E8E4D8" },
+];
+
 /** Modal colour-palette picker + manager */
 function ColorPaletteModal({
   slotLabel,
@@ -1131,6 +1153,29 @@ function ColorPaletteModal({
 
         {/* color grid */}
         <div className="flex-1 overflow-y-auto p-5">
+          <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Базові кольори</p>
+          <div className="mb-4 grid grid-cols-4 gap-2">
+            {PRESET_COLORS.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => { onPick({ id: 0, name: c.name, hex_color: c.hex, sort_order: 0 }); onClose(); }}
+                className="flex w-full flex-col items-center gap-1.5 rounded-xl p-2 text-center hover:bg-[var(--surface-hi)] "
+              >
+                <span
+                  className="block size-10 rounded-full ring-1 ring-black/15 dark:ring-white/15"
+                  style={{ backgroundColor: c.hex }}
+                />
+                <span className="w-full truncate text-[11px] leading-tight text-[var(--text)] ">
+                  {c.name}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {colors.length > 0 && (
+            <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Мої кольори</p>
+          )}
           {colors.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--text-faint)]">Збережених кольорів ще немає</p>
           ) : (
@@ -1380,7 +1425,7 @@ function spoolHex(color: string | null | undefined): string {
 /** Build SimplyPrint spool groups from a printer's live/loaded filaments (Bambu, other). */
 function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[] {
   const slots: FilamentSlot[] = printer.kind === "bambu"
-    ? normalizedPrinterSlots(printer).map((slot) => ({
+    ? normalizedPrinterSlots(printer, { allSources: true }).map((slot) => ({
         slot: slot.slot,
         color: slot.color ?? "#888888",
         color_name: slot.colorName,
