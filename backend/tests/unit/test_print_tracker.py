@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import app.models.tag  # noqa: F401 — registers printer_tags table
@@ -89,3 +92,67 @@ def test_paused_without_error_stays_open(monkeypatch):
     assert finalized == []
     assert len(notifications) == 0
     assert print_tracker._prev[printer.id]["state"] == "paused"
+
+
+def test_history_backfill_persistence_does_not_block_the_event_loop(monkeypatch):
+    class _ExistingHistoryQuery:
+        def filter(self, *_args, **_kwargs):
+            return self
+
+        def first(self):
+            return object()
+
+    class _SlowHistoryDb:
+        def query(self, *_args, **_kwargs):
+            return _ExistingHistoryQuery()
+
+        def add(self, _row):
+            return None
+
+        def commit(self):
+            return None
+
+    @contextmanager
+    def slow_session():
+        time.sleep(0.1)
+        yield _SlowHistoryDb()
+
+    async def proxy_request(*_args, **_kwargs):
+        return {
+            "body": {
+                "result": {
+                    "jobs": [
+                        {
+                            "start_time": 1_700_000_000,
+                            "status": "completed",
+                            "filename": "already-imported.gcode",
+                        }
+                    ]
+                }
+            }
+        }
+
+    monkeypatch.setattr(print_tracker, "SessionLocal", slow_session)
+
+    from app.services import tunnel
+
+    monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: True)
+    monkeypatch.setattr(tunnel, "proxy_request", proxy_request)
+
+    async def scenario() -> None:
+        backfill_task = asyncio.create_task(
+            print_tracker.backfill_moonraker_history(
+                org_id=1,
+                printer_id=7,
+                printer_name="U1",
+                printer_kind="snapmaker_u1",
+                moonraker_url="http://192.168.1.20:7125",
+            )
+        )
+        event_loop_tick = asyncio.create_task(asyncio.sleep(0))
+
+        await event_loop_tick
+        assert backfill_task.done() is False
+        await backfill_task
+
+    asyncio.run(scenario())

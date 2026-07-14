@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from uuid import uuid4
 
 from app.api import agent as agent_api
@@ -111,5 +112,67 @@ def test_legacy_socket_cannot_replace_a_live_v2_device() -> None:
             assert tunnel.is_device_connected(org_id, device_id) is True
         finally:
             await tunnel.unregister(org_id)
+
+    asyncio.run(scenario())
+
+
+def test_same_device_reconnect_keeps_only_one_history_backfill(monkeypatch) -> None:
+    async def scenario() -> None:
+        org_id = 91_004
+        device_id = uuid4()
+        first_socket = _FakeWebSocket()
+        replacement_socket = _FakeWebSocket()
+        release = asyncio.Event()
+        started: list[tuple[int, object]] = []
+
+        async def fake_subscribe(*_args, **_kwargs) -> None:
+            return None
+
+        async def fake_backfill(backfill_org_id: int, *, device_id=None) -> None:
+            started.append((backfill_org_id, device_id))
+            await release.wait()
+
+        monkeypatch.setattr(tunnel, "_subscribe_org_printers", fake_subscribe)
+        monkeypatch.setattr(tunnel, "_backfill_org_history", fake_backfill)
+
+        try:
+            assert await tunnel.register(org_id, first_socket, device_id=device_id)
+            assert await tunnel.register(org_id, replacement_socket, device_id=device_id)
+            await asyncio.sleep(0)
+
+            assert started == [(org_id, device_id)]
+        finally:
+            release.set()
+            await asyncio.sleep(0)
+            await tunnel.unregister(org_id)
+
+    asyncio.run(scenario())
+
+
+def test_v2_target_authorization_does_not_block_the_event_loop(monkeypatch) -> None:
+    async def scenario() -> None:
+        def slow_authorization(*_args, **_kwargs) -> None:
+            time.sleep(0.1)
+
+        monkeypatch.setattr(tunnel, "_authorize_v2_message_target", slow_authorization)
+        monkeypatch.setattr(tunnel, "_handle_status_push", lambda *_args: None)
+
+        message_task = asyncio.create_task(
+            tunnel.handle_agent_message(
+                {
+                    "type": "STATUS_PUSH",
+                    "url": "http://192.168.1.20:7125",
+                    "status": {"print_stats": {"state": "standby"}},
+                },
+                org_id=91_005,
+                device_id=uuid4(),
+                scopes=frozenset({"status:write"}),
+            )
+        )
+        event_loop_tick = asyncio.create_task(asyncio.sleep(0))
+
+        await event_loop_tick
+        assert message_task.done() is False
+        await message_task
 
     asyncio.run(scenario())
