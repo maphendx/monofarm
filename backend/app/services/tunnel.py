@@ -26,6 +26,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any, Awaitable, Callable
+from uuid import UUID
 
 from fastapi import WebSocket
 
@@ -33,8 +34,23 @@ from app.models.bambu_cloud_job import BambuCloudJobStatus
 
 log = logging.getLogger(__name__)
 
+
+class AgentMessageRejected(RuntimeError):
+    def __init__(self, reason: str, *, close_code: int = 4003) -> None:
+        super().__init__(reason)
+        self.close_code = close_code
+
+
+_STATUS_MESSAGE_TYPES = frozenset(
+    {"STATUS_PUSH", "BAMBU_STATUS_PUSH", "TG_BOT_USERNAME", "TG_CLAIM_LINK"}
+)
+
 # org_id → active WebSocket
 _tunnels: dict[int, WebSocket] = {}
+# org_id → (protocol-v2 device id, exact WebSocket). Legacy sockets never
+# populate this map, so durable commands cannot be assigned through a v1
+# connection merely because an organization-level tunnel exists.
+_device_tunnels: dict[int, tuple[UUID, WebSocket]] = {}
 _agent_capabilities: dict[int, set[str]] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
@@ -43,6 +59,12 @@ _pending_org: dict[str, int] = {}
 _pending_upload_progress: dict[str, Callable[[dict[str, Any]], Awaitable[None] | None]] = {}
 # request_id → Queue  (streaming)
 _pending_streams: dict[str, asyncio.Queue] = {}
+# request_id → org_id — used to end only the disconnected tenant's streams
+_pending_stream_org: dict[str, int] = {}
+
+# Camera producers can outpace browsers.  Keep only a short window so a slow
+# consumer sees the newest frames without growing the worker's memory forever.
+STREAM_QUEUE_MAX = 8
 
 # Uploads are bounded by a stall guard, not total time: a slow printer link
 # (U1 WiFi can drop to ~30 KB/s) may legitimately need many minutes per file.
@@ -50,8 +72,49 @@ UPLOAD_STALL_TIMEOUT = 180.0  # seconds without an agent progress message → de
 _UPLOAD_POLL = 5.0
 
 
+def _put_stream_item(q: asyncio.Queue, item: bytes | None) -> None:
+    """Queue a stream item, evicting the oldest buffered frame if necessary."""
+    while q.full():
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            break
+    q.put_nowait(item)
+
+
+async def _cancel_stream(ws: WebSocket, req_id: str) -> None:
+    """Best-effort cancellation for the matching producer on the farm agent."""
+    try:
+        await ws.send_text(json.dumps({"id": req_id, "method": "STREAM_CANCEL"}))
+    except Exception:
+        log.debug("Failed to cancel agent stream %s", req_id)
+
+
 def has_tunnel(org_id: int) -> bool:
     return org_id in _tunnels
+
+
+def connected_device_id(org_id: int) -> UUID | None:
+    """Return the v2 identity bound to the organization's current socket."""
+    current = _tunnels.get(org_id)
+    registered = _device_tunnels.get(org_id)
+    if current is None or registered is None or registered[1] is not current:
+        return None
+    return registered[0]
+
+
+def is_device_connected(org_id: int, device_id: UUID) -> bool:
+    return connected_device_id(org_id) == device_id
+
+
+def _moonraker_cache_key(org_id: int, moonraker_url: str) -> str:
+    """Process-local key for one tenant's LAN printer address."""
+    return f"org:{org_id}:{moonraker_url}"
+
+
+def _moonraker_redis_key(org_id: int, bucket: str, moonraker_url: str) -> str:
+    """Shared-cache key that cannot collide across identical customer LANs."""
+    return f"mr:org:{org_id}:{bucket}:{moonraker_url}"
 
 
 # ── Telegram helpers ──────────────────────────────────────────────────────────
@@ -88,18 +151,70 @@ async def send_telegram(
         return False
 
 
-async def register(org_id: int, ws: WebSocket) -> None:
-    if org_id in _tunnels:
-        log.info("Agent reconnected for org %s — replacing old connection", org_id)
+async def register(
+    org_id: int,
+    ws: WebSocket,
+    *,
+    device_id: UUID | None = None,
+) -> bool:
+    current = _tunnels.get(org_id)
+    registered_device = _device_tunnels.get(org_id)
+    if current is not None:
+        if current is ws and (
+            (device_id is None and registered_device is None)
+            or (registered_device is not None and registered_device[0] == device_id)
+        ):
+            return True
+        if (
+            device_id is not None
+            and registered_device is not None
+            and registered_device[0] == device_id
+        ):
+            # A process may keep the old TCP socket around briefly after a
+            # laptop resumes or the network changes. Bind the route to the new
+            # authenticated connection before fencing the ghost, so the old
+            # handler's eventual unregister() cannot remove the replacement.
+            _tunnels[org_id] = ws
+            _device_tunnels[org_id] = (device_id, ws)
+            _agent_capabilities[org_id] = set()
+            try:
+                await current.close(
+                    code=4008,
+                    reason="Superseded by a newer connection for this device",
+                )
+            except Exception:
+                log.debug("Failed to fence stale agent socket for org %s", org_id)
+            log.info("Agent device %s reconnected for org %s", device_id, org_id)
+            asyncio.create_task(_subscribe_org_printers(org_id, device_id=device_id))
+            asyncio.create_task(_backfill_org_history(org_id, device_id=device_id))
+            return True
+        if device_id is not None or registered_device is not None:
+            # There is no Printer.site_id/device assignment yet. Allowing a
+            # second v2 identity (or a v1 socket over a live v2 identity) to
+            # replace this route could deliver physical commands to the wrong
+            # farm. The WebSocket caller closes the rejected socket with 4009.
+            log.warning(
+                "Rejected concurrent agent socket for org %s (existing_device=%s, requested_device=%s)",
+                org_id,
+                registered_device[0] if registered_device else None,
+                device_id,
+            )
+            return False
+        log.info("Legacy agent reconnected for org %s — replacing old connection", org_id)
     _tunnels[org_id] = ws
+    if device_id is None:
+        _device_tunnels.pop(org_id, None)
+    else:
+        _device_tunnels[org_id] = (device_id, ws)
     _agent_capabilities[org_id] = set()
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
-    asyncio.create_task(_subscribe_org_printers(org_id))
-    asyncio.create_task(_backfill_org_history(org_id))
+    asyncio.create_task(_subscribe_org_printers(org_id, device_id=device_id))
+    asyncio.create_task(_backfill_org_history(org_id, device_id=device_id))
+    return True
 
 
-async def _subscribe_org_printers(org_id: int) -> None:
-    """Send MOONRAKER_SUBSCRIBE for every active Moonraker printer in the org."""
+async def _subscribe_org_printers(org_id: int, *, device_id: UUID | None = None) -> None:
+    """Subscribe the socket only to printers routed to its device identity."""
     await asyncio.sleep(0.5)  # let the agent finish its own setup first
     ws = _tunnels.get(org_id)
     if not ws:
@@ -107,12 +222,16 @@ async def _subscribe_org_printers(org_id: int) -> None:
     from app.core.db import SessionLocal
     from app.models.printer import Printer
     with SessionLocal() as db:
-        printers = (
-            db.query(Printer)
-            .filter_by(organization_id=org_id, is_active=True)
-            .filter(Printer.moonraker_url.isnot(None))
-            .all()
-        )
+        query = db.query(Printer).filter_by(organization_id=org_id, is_active=True)
+        if device_id is not None:
+            from app.models.agent import AgentDevice
+            from app.services.agent_routing import printer_query_for_device
+
+            device = db.get(AgentDevice, device_id)
+            if device is None or device.organization_id != org_id:
+                return
+            query = printer_query_for_device(db, device).filter(Printer.is_active.is_(True))
+        printers = query.filter(Printer.moonraker_url.isnot(None)).all()
     for p in printers:
         ws = _tunnels.get(org_id)
         if not ws:
@@ -131,8 +250,8 @@ async def _subscribe_org_printers(org_id: int) -> None:
             break
 
 
-async def _backfill_org_history(org_id: int) -> None:
-    """Backfill Moonraker print history for all printers when the agent connects."""
+async def _backfill_org_history(org_id: int, *, device_id: UUID | None = None) -> None:
+    """Backfill only Moonraker printers routed to the connected device."""
     await asyncio.sleep(3)  # let subscriptions settle first
     try:
         from app.core.db import SessionLocal
@@ -140,12 +259,16 @@ async def _backfill_org_history(org_id: int) -> None:
         from app.services.print_tracker import backfill_moonraker_history
 
         with SessionLocal() as db:
-            printers = (
-                db.query(Printer)
-                .filter_by(organization_id=org_id, is_active=True)
-                .filter(Printer.moonraker_url.isnot(None))
-                .all()
-            )
+            query = db.query(Printer).filter_by(organization_id=org_id, is_active=True)
+            if device_id is not None:
+                from app.models.agent import AgentDevice
+                from app.services.agent_routing import printer_query_for_device
+
+                device = db.get(AgentDevice, device_id)
+                if device is None or device.organization_id != org_id:
+                    return
+                query = printer_query_for_device(db, device).filter(Printer.is_active.is_(True))
+            printers = query.filter(Printer.moonraker_url.isnot(None)).all()
             rows = [(p.id, p.name, p.kind.value, p.moonraker_url) for p in printers]
 
         for pid, pname, pkind, purl in rows:
@@ -167,6 +290,9 @@ async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
         log.info("Agent stale socket closed for org %s — replacement kept", org_id)
         return
     _tunnels.pop(org_id, None)
+    registered_device = _device_tunnels.get(org_id)
+    if registered_device is not None and (ws is None or registered_device[1] is ws):
+        _device_tunnels.pop(org_id, None)
     _agent_capabilities.pop(org_id, None)
     # Fail only this org's futures — other orgs' in-flight requests stay alive
     for req_id, fut in list(_pending.items()):
@@ -175,14 +301,18 @@ async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
         if not fut.done():
             fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
         _pending_upload_progress.pop(req_id, None)
+    for req_id, q in list(_pending_streams.items()):
+        if _pending_stream_org.get(req_id) != org_id:
+            continue
+        _put_stream_item(q, None)
+        _pending_stream_org.pop(req_id, None)
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
-async def _handle_tg_bot_username(data: dict) -> None:
+async def _handle_tg_bot_username(data: dict, org_id: int) -> None:
     """Agent reported its bot username after a successful getMe."""
-    org_id   = data.get("org_id")
     username = (data.get("username") or "").strip()
-    if not org_id or not username:
+    if not username:
         return
     from app.core.db import SessionLocal
     from app.models.organization import Organization
@@ -206,7 +336,14 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     reply_text: str
     parse_mode: str | None = None
     with SessionLocal() as db:
-        user = db.query(User).filter(User.telegram_link_code == code).first()
+        user = (
+            db.query(User)
+            .filter(
+                User.organization_id == org_id_tunnel,
+                User.telegram_link_code == code,
+            )
+            .first()
+        )
         if not user:
             reply_text = "Невірний код. Попроси адміна надіслати нове посилання."
         elif user.telegram_link_expires_at and user.telegram_link_expires_at < datetime.now(timezone.utc):
@@ -227,7 +364,7 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     await send_telegram(org_id_tunnel, int(chat_id), reply_text, parse_mode)
 
 
-def _handle_status_push(data: dict) -> None:
+def _handle_status_push(data: dict, org_id: int) -> None:
     """Cache a Moonraker status pushed by the agent's WS subscription."""
     url = data.get("url") or ""
     raw = data.get("status") or {}
@@ -237,10 +374,11 @@ def _handle_status_push(data: dict) -> None:
     from app.services.cache import cache_set
     status = _parse_moonraker_status(raw)
     # _status_cache is shared with moonraker module; tunnel path expects (timestamp, status)
-    _status_cache[url] = (time.monotonic(), status)
+    cache_key = _moonraker_cache_key(org_id, url)
+    _status_cache[cache_key] = (time.monotonic(), status)
     # Redis path used by moonraker.get_live_status (fresh + stale keys)
-    cache_set(f"mr:status:{url}", status, int(STATUS_CACHE_TTL))
-    cache_set(f"mr:stale:{url}", status, int(STATUS_CACHE_TTL * 10))
+    cache_set(_moonraker_redis_key(org_id, "status", url), status, int(STATUS_CACHE_TTL))
+    cache_set(_moonraker_redis_key(org_id, "stale", url), status, int(STATUS_CACHE_TTL * 10))
     log.debug("STATUS_PUSH: cached %s state=%s", url, status.get("state"))
 
 
@@ -252,6 +390,24 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     dev_id = (data.get("dev_id") or "").strip()
     payload = data.get("payload") or {}
     if not dev_id or not isinstance(payload, dict):
+        return
+    from app.core.db import SessionLocal
+    from app.models.printer import Printer, PrinterKind
+
+    with SessionLocal() as db:
+        owns_device = (
+            db.query(Printer.id)
+            .filter(
+                Printer.organization_id == org_id,
+                Printer.kind == PrinterKind.bambu,
+                Printer.bambu_dev_id == dev_id,
+                Printer.is_active.is_(True),
+            )
+            .first()
+            is not None
+        )
+    if not owns_device:
+        log.warning("Rejected Bambu status for an unregistered org device")
         return
     from app.services import bambu
     job = bambu.handle_agent_report(org_id, dev_id, payload)
@@ -281,9 +437,70 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     log.debug("BAMBU_STATUS_PUSH: cached %s", dev_id)
 
 
-async def handle_agent_message(data: dict, org_id: int = 0) -> None:
+def _required_scope_for_message(data: dict) -> str:
+    msg_type = data.get("type")
+    if msg_type == "AGENT_HELLO":
+        return "agent:connect"
+    if msg_type in _STATUS_MESSAGE_TYPES:
+        return "status:write"
+    if data.get("id"):
+        return "commands:read"
+    raise AgentMessageRejected("Unsupported agent message", close_code=4004)
+
+
+def _authorize_v2_message_target(data: dict, org_id: int, device_id: UUID) -> None:
+    from app.core.db import SessionLocal
+    from app.models.agent import AgentDevice
+    from app.services.agent_routing import (
+        device_can_handle_org_services,
+        printer_for_device_by_bambu_dev_id,
+        printer_for_device_by_moonraker_url,
+    )
+
+    with SessionLocal() as db:
+        device = (
+            db.query(AgentDevice)
+            .filter(
+                AgentDevice.id == device_id,
+                AgentDevice.organization_id == org_id,
+                AgentDevice.revoked_at.is_(None),
+                AgentDevice.paired_at.isnot(None),
+                AgentDevice.credential_hash.isnot(None),
+            )
+            .first()
+        )
+        if device is None:
+            raise AgentMessageRejected("Agent device is no longer active")
+
+        msg_type = data.get("type")
+        if msg_type == "STATUS_PUSH":
+            url = str(data.get("url") or "")
+            if not url or printer_for_device_by_moonraker_url(db, device, url) is None:
+                raise AgentMessageRejected("Moonraker printer is not assigned to this agent", close_code=4004)
+        elif msg_type == "BAMBU_STATUS_PUSH":
+            dev_id = str(data.get("dev_id") or "").strip()
+            if not dev_id or printer_for_device_by_bambu_dev_id(db, device, dev_id) is None:
+                raise AgentMessageRejected("Bambu printer is not assigned to this agent", close_code=4004)
+        elif msg_type in {"TG_BOT_USERNAME", "TG_CLAIM_LINK"}:
+            if not device_can_handle_org_services(db, device):
+                raise AgentMessageRejected("Org-wide Telegram service requires one unscoped agent", close_code=4004)
+
+
+async def handle_agent_message(
+    data: dict,
+    org_id: int = 0,
+    *,
+    device_id: UUID | None = None,
+    scopes: frozenset[str] | None = None,
+) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
     msg_type = data.get("type")
+
+    if device_id is not None:
+        required_scope = _required_scope_for_message(data)
+        if scopes is None or required_scope not in scopes:
+            raise AgentMessageRejected(f"Agent message requires {required_scope}")
+        _authorize_v2_message_target(data, org_id, device_id)
 
     if msg_type == "AGENT_HELLO":
         _agent_capabilities[org_id] = set(data.get("capabilities") or [])
@@ -291,7 +508,7 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "STATUS_PUSH":
-        _handle_status_push(data)
+        _handle_status_push(data, org_id)
         return
 
     if msg_type == "BAMBU_STATUS_PUSH":
@@ -299,7 +516,7 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "TG_BOT_USERNAME":
-        await _handle_tg_bot_username({**data, "org_id": data.get("org_id") or org_id})
+        await _handle_tg_bot_username(data, org_id)
         return
 
     if msg_type == "TG_CLAIM_LINK":
@@ -316,13 +533,13 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         q = _pending_streams.get(req_id)
         if q:
             raw = data.get("data", "")
-            q.put_nowait(base64.b64decode(raw) if raw else b"")
+            _put_stream_item(q, base64.b64decode(raw) if raw else b"")
         return
 
     if msg_type == "stream_end":
         q = _pending_streams.get(req_id)
         if q:
-            q.put_nowait(None)  # sentinel → generator stops
+            _put_stream_item(q, None)  # sentinel → generator stops
         return
 
     if msg_type == "stream_start":
@@ -383,8 +600,9 @@ async def bambu_camera_stream(
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=STREAM_QUEUE_MAX)
     _pending_streams[req_id] = q
+    _pending_stream_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({
@@ -399,7 +617,9 @@ async def bambu_camera_stream(
     except asyncio.TimeoutError:
         log.warning("Bambu camera stream timed out for org %s ip %s", org_id, ip)
     finally:
+        await _cancel_stream(ws, req_id)
         _pending_streams.pop(req_id, None)
+        _pending_stream_org.pop(req_id, None)
 
 
 async def ffmpeg_stream(
@@ -417,8 +637,9 @@ async def ffmpeg_stream(
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=STREAM_QUEUE_MAX)
     _pending_streams[req_id] = q
+    _pending_stream_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({
@@ -432,7 +653,9 @@ async def ffmpeg_stream(
     except asyncio.TimeoutError:
         log.warning("FFmpeg stream timed out for org %s", org_id)
     finally:
+        await _cancel_stream(ws, req_id)
         _pending_streams.pop(req_id, None)
+        _pending_stream_org.pop(req_id, None)
 
 
 async def proxy_stream(
@@ -449,8 +672,9 @@ async def proxy_stream(
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=STREAM_QUEUE_MAX)
     _pending_streams[req_id] = q
+    _pending_stream_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({"id": req_id, "method": "STREAM", "url": url}))
@@ -462,7 +686,9 @@ async def proxy_stream(
     except asyncio.TimeoutError:
         log.warning("Stream timed out for org %s url %s", org_id, url)
     finally:
+        await _cancel_stream(ws, req_id)
         _pending_streams.pop(req_id, None)
+        _pending_stream_org.pop(req_id, None)
 
 
 # ── File upload helpers ───────────────────────────────────────────────────────
@@ -719,7 +945,8 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
     )
 
     now = time.monotonic()
-    cached = _status_cache.get(moonraker_url)
+    cache_key = _moonraker_cache_key(org_id, moonraker_url)
+    cached = _status_cache.get(cache_key)
     if isinstance(cached, tuple) and len(cached) == 2:
         cached_at, cached_status = cached
         if isinstance(cached_at, (int, float)) and isinstance(cached_status, dict):
@@ -739,7 +966,7 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
         log.debug("Tunnel Moonraker status failed %s: %s", moonraker_url, e)
         status = cached[1] if cached else {"state": "offline"}
 
-    _status_cache[moonraker_url] = (now, status)
+    _status_cache[cache_key] = (now, status)
     return status
 
 

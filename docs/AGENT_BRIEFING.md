@@ -1,4 +1,8 @@
-# monofarm — Agent Briefing (updated 2026-05-18)
+# monofarm — Agent Briefing (updated 2026-07-14)
+
+> Current architecture and operations: [AGENT_RUNTIME_V2.md](AGENT_RUNTIME_V2.md).
+> This briefing retains camera notes; authentication and dispatch now use the
+> Agent v2 runtime described there.
 
 ## Camera — DONE ✅
 
@@ -17,14 +21,15 @@ Source: github.com/Doridian/OpenBambuAPI/blob/main/video.md
 
 Browser ← Backend :8000 ← WS tunnel ← Agent (farm PC) ← Printer LAN
 
-Agent methods: GET/POST (HTTP proxy), STREAM (httpx), BAMBU_CAMERA, FFMPEG_STREAM, DISCOVER_BAMBU
+Typed commands use Backend → durable command lease → Agent SQLite journal →
+fixed provider adapter → printer. The WebSocket tunnel remains for live state,
+cameras, discovery and the v1 migration path.
 
 ## Credentials
 
-- oytoy@gmail.com / monofarm2026 (org 2, admin)
-- vladakinpro@gmail.com / 123456Qwerty (org 2, admin)
-- Tailscale Mac: 100.83.31.41
-- A1: 192.168.31.39, code: 41434469
+Never store production emails, passwords, LAN access codes, tokens or private
+addresses in tracked documentation. Use the deployment secret manager and the
+local agent config. Any credential previously committed here must be rotated.
 
 ## Pending
 

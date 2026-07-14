@@ -16,7 +16,14 @@ from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 from app.models.gcode_file import GcodeFile
 from app.models.print_history import PrintHistory
 from app.models.printer import Printer, PrinterKind
-from app.services import bambu_dispatch, moonraker, moonraker_dispatch, print_tracker, storage
+from app.services import (
+    agent_print_dispatch,
+    bambu_dispatch,
+    moonraker,
+    moonraker_dispatch,
+    print_tracker,
+    storage,
+)
 from app.services.bambu_errors import BambuErrorCode
 from app.services.storage import LOCAL_DIR
 
@@ -84,12 +91,23 @@ def test_dispatch_moonraker_job_acknowledges_start_before_live_printing(db_sessi
     job = _make_moonraker_job(db_session, org_id=test_org.id, printer_id=printer.id, gcode_file_id=gcode.id)
 
     sent: dict = {}
+    bridge_calls: list[tuple[int, str]] = []
+
+    def fake_v2_bridge(job_id: int, *, dispatch_kind: str):
+        bridge_calls.append((job_id, dispatch_kind))
+        return None
 
     async def fake_send(**kwargs):
         sent.update(kwargs)
         return {"start_requested": True, "upload_state": "started"}
 
     monkeypatch.setattr(moonraker_dispatch, "send_file_to_moonraker", fake_send)
+    monkeypatch.setattr(
+        agent_print_dispatch,
+        "try_dispatch_job_to_agent",
+        fake_v2_bridge,
+        raising=False,
+    )
 
     try:
         asyncio.run(moonraker_dispatch.dispatch_moonraker_job(job.id))
@@ -105,6 +123,7 @@ def test_dispatch_moonraker_job_acknowledges_start_before_live_printing(db_sessi
     assert sent["moonraker_url"] == "http://moonraker.local"
     assert sent["slot_map"] == {0: 1, 1: 0}
     assert sent["timelapse"] is False
+    assert bridge_calls == [(job.id, "moonraker")]
 
     assert db_session.query(PrintHistory).filter(PrintHistory.bambu_cloud_job_id == job.id).count() == 0
 

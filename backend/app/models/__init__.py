@@ -12,6 +12,7 @@ from app.models.print_history import PrintHistory
 from app.models.printer_slot import PrinterSlot, SlotEvent, SlotState, SlotEventType
 from app.models.api_key import ApiKey
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
+from app.models.agent import AgentCommand, AgentCommandState, AgentDevice, AgentEvent
 from app.models.warehouse import (
     ProductCategory, Warehouse, Counterparty, Product, ProductImage,
     Specification, SpecComponent, SpecOperation, StockEntry,
@@ -43,6 +44,10 @@ __all__ = [
     "ApiKey",
     "BambuCloudJob",
     "BambuCloudJobStatus",
+    "AgentDevice",
+    "AgentCommand",
+    "AgentCommandState",
+    "AgentEvent",
     "PrinterSlot",
     "SlotEvent",
     "SlotState",

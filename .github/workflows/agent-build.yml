@@ -1,23 +1,32 @@
 name: Build agent exe
 
 # Builds monofarm-agent.exe on a Windows runner and uploads it as a
-# GitHub Actions artifact.  When R2 secrets are configured it also
-# publishes the binary to Cloudflare R2 so the backend can serve it at
+# GitHub Actions artifact and publishes the binary to Cloudflare R2 so
+# the backend can serve it at
 # GET /agent/monofarm-agent.exe.
 #
 # Trigger: push a tag like  agent-v0.8.1  or use workflow_dispatch.
 
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     tags:
       - 'agent-v*'
+
+concurrency:
+  group: agent-windows-release
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: windows-latest
     env:
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+      R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      AGENT_UPDATE_BASE_URL: ${{ vars.AGENT_UPDATE_BASE_URL || 'https://api.monofarm.app' }}
     permissions:
       contents: read
 
@@ -45,15 +54,218 @@ jobs:
           path: agent/dist/monofarm-agent.exe
           if-no-files-found: error
 
+      - name: Validate release inputs
+        env:
+          AGENT_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.AGENT_RELEASE_ATTESTATION_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            R2_ENDPOINT \
+            R2_ACCESS_KEY \
+            R2_SECRET_KEY \
+            R2_BUCKET \
+            AGENT_UPDATE_BASE_URL \
+            AGENT_RELEASE_ATTESTATION_PRIVATE_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::$name is required for an agent release"
+              exit 1
+            fi
+          done
+          ARTIFACT="agent/dist/monofarm-agent.exe"
+          test -s "$ARTIFACT"
+
       - name: Publish to R2
-        if: env.R2_ENDPOINT != ''
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_KEY }}
           AWS_DEFAULT_REGION: auto
+          AGENT_RELEASE_ATTESTATION_PRIVATE_KEY: ${{ secrets.AGENT_RELEASE_ATTESTATION_PRIVATE_KEY }}
         shell: bash
         run: |
-          aws s3 cp agent/dist/monofarm-agent.exe \
-            "s3://${{ secrets.R2_BUCKET }}/agent/monofarm-agent.exe" \
-            --endpoint-url "${{ secrets.R2_ENDPOINT }}" \
-            --content-type application/vnd.microsoft.portable-executable
+          set -euo pipefail
+          ARTIFACT="agent/dist/monofarm-agent.exe"
+          SHA256="$(python -c 'import hashlib, pathlib; print(hashlib.sha256(pathlib.Path("agent/dist/monofarm-agent.exe").read_bytes()).hexdigest())')"
+          VERSION="$(python -c 'import pathlib, re; text = pathlib.Path("agent/monofarm_agent.py").read_text(encoding="utf-8"); match = re.search(r"^AGENT_VERSION = \"([^\"]+)\"$", text, re.MULTILINE); print(match.group(1) if match else "")')"
+          SIZE="$(python -c 'import pathlib; print(pathlib.Path("agent/dist/monofarm-agent.exe").stat().st_size)')"
+          OBJECT_KEY="agent/releases/${VERSION}/monofarm-agent.exe"
+          MANIFEST_KEY="agent/releases/${VERSION}/manifest.json"
+          RELEASE_MANIFEST="${RUNNER_TEMP}/agent-release-manifest.json"
+          RELEASE_PLAN="${RUNNER_TEMP}/agent-release-plan.json"
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$SIZE" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AGENT_UPDATE_BASE_URL" == https://* ]]
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME}" != "agent-v${VERSION}" ]]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match agent version ${VERSION}"
+            exit 1
+          fi
+
+          export VERSION SIZE SHA256 OBJECT_KEY MANIFEST_KEY RELEASE_MANIFEST RELEASE_PLAN
+          ATTESTATION_ENV="${RUNNER_TEMP}/agent-release-attestation.env"
+          python - <<'PY' > "$ATTESTATION_ENV"
+          import base64
+          import datetime
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import runpy
+          import urllib.parse
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          private_raw = base64.b64decode(
+              os.environ["AGENT_RELEASE_ATTESTATION_PRIVATE_KEY"],
+              validate=True,
+          )
+          private_key = Ed25519PrivateKey.from_private_bytes(private_raw)
+          public_raw = private_key.public_key().public_bytes(
+              encoding=serialization.Encoding.Raw,
+              format=serialization.PublicFormat.Raw,
+          )
+          committed_public_raw = base64.b64decode(
+              pathlib.Path("agent/release_public_key.b64").read_text().strip(),
+              validate=True,
+          )
+          if public_raw != committed_public_raw:
+              raise SystemExit(
+                  "release signing private key does not match committed release public key"
+              )
+          key_id = hashlib.sha256(public_raw).hexdigest()[:16]
+          attestation = {
+              "schema_version": 1,
+              "algorithm": "Ed25519",
+              "key_id": key_id,
+              "object_key": os.environ["OBJECT_KEY"],
+              "version": os.environ["VERSION"],
+              "platform": "windows-x86_64",
+              "size": int(os.environ["SIZE"]),
+              "sha256": os.environ["SHA256"],
+          }
+          canonical = json.dumps(
+              attestation,
+              sort_keys=True,
+              separators=(",", ":"),
+              ensure_ascii=False,
+          ).encode("utf-8")
+          signature = base64.b64encode(private_key.sign(canonical)).decode("ascii")
+          print(f"ATTESTATION_KEY_ID={key_id}")
+          print(f"ATTESTATION_SIGNATURE={signature}")
+
+          base_url = os.environ["AGENT_UPDATE_BASE_URL"].rstrip("/")
+          parsed_base = urllib.parse.urlsplit(base_url)
+          if parsed_base.scheme != "https" or not parsed_base.hostname:
+              raise SystemExit("AGENT_UPDATE_BASE_URL must be an absolute HTTPS URL")
+          policy = runpy.run_path("agent/update_policy.py")
+          source_files = sorted(policy["RELEASE_SOURCE_FILES"])
+          artifacts = {}
+          plan = []
+          for filename in source_files:
+              path = pathlib.Path("agent").joinpath(*filename.split("/"))
+              if not path.is_file():
+                  raise SystemExit(f"missing runtime source file: {filename}")
+              data = path.read_bytes()
+              sha256 = hashlib.sha256(data).hexdigest()
+              object_key = f"agent/releases/{os.environ['VERSION']}/runtime/{filename}"
+              artifacts[f"source-{filename}"] = {
+                  "url": f"{base_url}/agent/releases/{os.environ['VERSION']}/runtime/{filename}",
+                  "size": len(data),
+                  "sha256": sha256,
+              }
+              plan.append(
+                  {
+                      "path": str(path),
+                      "object_key": object_key,
+                      "size": len(data),
+                      "sha256": sha256,
+                  }
+              )
+          artifacts["windows-x86_64"] = {
+              "url": (
+                  f"{base_url}/agent/releases/{os.environ['VERSION']}/"
+                  "monofarm-agent.exe"
+              ),
+              "size": int(os.environ["SIZE"]),
+              "sha256": os.environ["SHA256"],
+          }
+          manifest = {
+              "schema_version": 2,
+              "algorithm": "Ed25519",
+              "key_id": key_id,
+              "version": os.environ["VERSION"],
+              "issued_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "expires_at": "9999-12-31T23:59:59+00:00",
+              "artifacts": artifacts,
+          }
+          manifest_canonical = json.dumps(
+              manifest,
+              sort_keys=True,
+              separators=(",", ":"),
+              ensure_ascii=False,
+          ).encode("utf-8")
+          manifest["signature"] = base64.b64encode(
+              private_key.sign(manifest_canonical)
+          ).decode("ascii")
+          pathlib.Path(os.environ["RELEASE_MANIFEST"]).write_text(
+              json.dumps(
+                  manifest,
+                  sort_keys=True,
+                  separators=(",", ":"),
+                  ensure_ascii=False,
+              ),
+              encoding="utf-8",
+          )
+          pathlib.Path(os.environ["RELEASE_PLAN"]).write_text(
+              json.dumps(plan, sort_keys=True, separators=(",", ":")),
+              encoding="utf-8",
+          )
+          PY
+          source "$ATTESTATION_ENV"
+
+          require_absent() {
+            local key="$1"
+            local error_file="${RUNNER_TEMP}/agent-release-head.err"
+            if aws s3api head-object \
+              --bucket "$R2_BUCKET" \
+              --key "$key" \
+              --endpoint-url "$R2_ENDPOINT" >/dev/null 2>"$error_file"; then
+              echo "::error::immutable release already exists: ${key}"
+              exit 1
+            elif ! grep -Eqi '(404|not found|nosuchkey)' "$error_file"; then
+              echo "::error::could not prove immutable release key is absent: ${key}"
+              exit 1
+            fi
+          }
+
+          require_absent "$OBJECT_KEY"
+          require_absent "$MANIFEST_KEY"
+          while IFS=$'\t' read -r _path source_key _size _sha256; do
+            require_absent "$source_key"
+          done < <(python -c 'import json, os; [print(item["path"], item["object_key"], item["size"], item["sha256"], sep="\t") for item in json.load(open(os.environ["RELEASE_PLAN"], encoding="utf-8"))]')
+
+          aws s3 cp "$ARTIFACT" \
+            "s3://${R2_BUCKET}/${OBJECT_KEY}" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type application/vnd.microsoft.portable-executable \
+            --metadata "schema_version=1,algorithm=Ed25519,key_id=${ATTESTATION_KEY_ID},object_key=${OBJECT_KEY},version=${VERSION},platform=windows-x86_64,size=${SIZE},sha256=${SHA256},signature=${ATTESTATION_SIGNATURE}"
+
+          while IFS=$'\t' read -r source_path source_key source_size source_sha256; do
+            aws s3 cp "$source_path" \
+              "s3://${R2_BUCKET}/${source_key}" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --content-type text/plain \
+              --metadata "version=${VERSION},sha256=${source_sha256}"
+          done < <(python -c 'import json, os; [print(item["path"], item["object_key"], item["size"], item["sha256"], sep="\t") for item in json.load(open(os.environ["RELEASE_PLAN"], encoding="utf-8"))]')
+
+          MANIFEST_SHA256="$(python -c 'import hashlib, os, pathlib; print(hashlib.sha256(pathlib.Path(os.environ["RELEASE_MANIFEST"]).read_bytes()).hexdigest())')"
+          aws s3 cp "$RELEASE_MANIFEST" \
+            "s3://${R2_BUCKET}/${MANIFEST_KEY}" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type application/json \
+            --metadata "version=${VERSION},key_id=${ATTESTATION_KEY_ID},sha256=${MANIFEST_SHA256}"
+
+          aws s3api head-object \
+            --bucket "$R2_BUCKET" \
+            --key "$MANIFEST_KEY" \
+            --endpoint-url "$R2_ENDPOINT" >/dev/null
