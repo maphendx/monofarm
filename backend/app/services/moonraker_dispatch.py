@@ -96,6 +96,23 @@ async def dispatch_moonraker_job(job_id: int) -> BambuCloudJob | None:
         _inflight.add(job_id)
 
     try:
+        from app.services import agent_print_dispatch
+
+        # The shared gate returns before any DB lookup for Moonraker until its
+        # provider-specific durable command contract is implemented.
+        durable_dispatch = await asyncio.to_thread(
+            agent_print_dispatch.try_dispatch_job_to_agent,
+            job_id,
+            dispatch_kind="moonraker",
+        )
+        if durable_dispatch is not None:
+            with SessionLocal() as db:
+                job = db.get(BambuCloudJob, job_id)
+                if job is None:
+                    return None
+                db.expunge(job)
+                return job
+
         with SessionLocal() as db:
             job = db.get(BambuCloudJob, job_id)
             if job is None:

@@ -15,7 +15,7 @@ Wire protocol:
              Agent→Server  {"id":"…","type":"stream_end"}
 
 Usage:
-    python monofarm_agent.py --server https://api.monofarm.app --token YOUR_JWT_TOKEN
+    python monofarm_agent.py --server https://api.monofarm.app --pairing-code mf_pair_...
 """
 from __future__ import annotations
 
@@ -23,22 +23,62 @@ import argparse
 import asyncio
 import base64
 import collections
+import compileall
 import hashlib
 import html as _htmlmod
 import io
 import json
 import os
 import random
+import secrets
+import shutil
 import socket
 import ssl
 import logging
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse as _urlparse_mod
+from collections.abc import Mapping
 from pathlib import Path
 
-AGENT_VERSION = "0.8.9"
+from device_identity import (
+    DeviceCredentials,
+    DevicePairingResult,
+    DeviceTokenProvider,
+    pair_device,
+)
+from command_runtime import CommandExecutionResult, LeasedAgentCommand
+from command_worker import ProtocolV2CommandWorker
+from edge_runtime.artifact_spool import ArtifactDownloader
+from edge_runtime.journal import SQLiteCommandJournal
+from edge_runtime.transfer import journal_transition_sink
+from network_policy import (
+    NetworkPolicyError,
+    configured_tcp_targets,
+    require_cloud_server_url,
+    require_loopback_web_request,
+    require_public_https_url,
+    require_registered_http_url,
+    require_registered_tcp_target,
+    tls_verification_for_local_url,
+)
+from printer_runtime import (
+    InvalidRuntimePayload,
+    PrinterCommandDispatcher,
+    RuntimePrinter,
+    RuntimePrinterRegistry,
+)
+from provider_adapters import build_provider_adapter
+from update_policy import (
+    BUILTIN_RELEASE_PUBLIC_KEY,
+    UpdatePolicyError,
+    verify_artifact_bytes,
+    verify_signed_manifest,
+)
+
+AGENT_VERSION = "0.9.1"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
@@ -89,6 +129,10 @@ _moonraker_upload_buffers: dict[str, dict] = {}
 _current_server = ""
 _main_loop: "asyncio.AbstractEventLoop | None" = None
 _update_task: "asyncio.Task | None" = None  # single auto-update loop, owned by run()
+_active_stream_tasks: dict[str, asyncio.Task] = {}
+_device_token_provider: DeviceTokenProvider | None = None
+_device_token_provider_key: tuple[str, str, str, int] | None = None
+_runtime_printer_registry = RuntimePrinterRegistry()
 
 WEB_PORT_DEFAULT = 8723  # local setup UI; set MONOFARM_WEB_PORT=0 to disable
 
@@ -96,9 +140,78 @@ RECONNECT_DELAY = 5    # initial seconds between reconnect attempts
 _RECONNECT_MAX  = 60   # cap for exponential reconnect backoff
 REQUEST_TIMEOUT = 10   # seconds per regular proxied request
 STREAM_CHUNK    = 32768  # bytes per chunk for streaming
+MAX_ARTIFACT_BYTES_DEFAULT = 2 * 1024 * 1024 * 1024
+
+AGENT_CAPABILITIES = (
+    "artifact_spool_v2",
+    "durable_commands_v2",
+    "moonraker_upload_chunks",
+    "moonraker_upload_url",
+    "protocol_v2",
+    "provider_adapters_v2",
+    "stream_cancel",
+    "signed_updates",
+)
 
 CONFIG_DIR  = Path.home() / ".monofarm-agent"
 CONFIG_FILE = CONFIG_DIR / ".env"
+
+
+def _max_artifact_bytes() -> int:
+    raw = os.environ.get("MONOFARM_MAX_ARTIFACT_BYTES", "")
+    try:
+        configured = int(raw) if raw else MAX_ARTIFACT_BYTES_DEFAULT
+    except ValueError:
+        configured = MAX_ARTIFACT_BYTES_DEFAULT
+    return max(1024 * 1024, min(configured, 10 * 1024 * 1024 * 1024))
+
+
+def _require_spool_quota(*, command_id: str, bytes_required: int, staging_dir: Path) -> None:
+    import shutil
+
+    del command_id
+    usage = shutil.disk_usage(staging_dir)
+    reserve = max(256 * 1024 * 1024, usage.total // 20)
+    if bytes_required > max(0, usage.free - reserve):
+        raise RuntimeError("insufficient disk space for the printer artifact spool")
+
+
+def _start_stream_task(ws, req: dict, handler) -> asyncio.Task:
+    """Start one cancellable stream producer, keyed by its protocol request ID."""
+    req_id = str(req.get("id") or "")
+    if not req_id:
+        raise ValueError("stream request is missing id")
+    previous = _active_stream_tasks.pop(req_id, None)
+    if previous and not previous.done():
+        previous.cancel()
+    task = asyncio.create_task(handler(ws, req))
+    _active_stream_tasks[req_id] = task
+
+    def _remove_finished(finished: asyncio.Task) -> None:
+        if _active_stream_tasks.get(req_id) is finished:
+            _active_stream_tasks.pop(req_id, None)
+
+    task.add_done_callback(_remove_finished)
+    return task
+
+
+def _cancel_stream_task(req_id: str) -> bool:
+    """Cancel the exact active stream requested by the cloud."""
+    task = _active_stream_tasks.pop(str(req_id), None)
+    if task is None:
+        return False
+    if not task.done():
+        task.cancel()
+    return True
+
+
+def _cancel_all_stream_tasks() -> None:
+    """Stop every active stream when the cloud connection disappears."""
+    tasks = list(_active_stream_tasks.values())
+    _active_stream_tasks.clear()
+    for task in tasks:
+        if not task.done():
+            task.cancel()
 
 # ── Telegram bot state (per-agent, started after receiving token from SaaS) ───
 
@@ -121,10 +234,13 @@ async def _tg_cmd_handler(update: "Update", _ctx: "ContextTypes.DEFAULT_TYPE") -
     args    = parts[1:] if len(parts) > 1 else []
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                f"{_tg_server}/api/agent/tg-command",
+            resp = await _agent_api_request(
+                client,
+                "POST",
+                _tg_server,
+                _tg_jwt,
+                "tg-command",
                 json={"command": raw_cmd, "chat_id": chat_id, "args": args},
-                headers={"Authorization": f"Bearer {_tg_jwt}"},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -165,10 +281,13 @@ async def _tg_start(token: str) -> None:
     # Report username back to SaaS so it can cache it for deep-link generation
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                f"{_tg_server}/api/agent/tg-report-username",
+            await _agent_api_request(
+                client,
+                "POST",
+                _tg_server,
+                _tg_jwt,
+                "tg-report-username",
                 json={"username": me.username},
-                headers={"Authorization": f"Bearer {_tg_jwt}"},
             )
     except Exception as exc:
         log.debug("Failed to report bot username to SaaS: %s", exc)
@@ -415,7 +534,7 @@ async def _bambu_grab_frame(ip: str, access_code: str, timeout: float = 12.0) ->
             reader, writer = await asyncio.wait_for(_open(), timeout=timeout)
         except ssl.SSLError as exc:
             _bambu_mark_tls_failure(ip, exc)
-            reader, writer = await asyncio.wait_for(_open(), timeout=timeout)
+            raise
         writer.write(bytes(auth))
         await writer.drain()
 
@@ -452,7 +571,12 @@ async def _moonraker_grab_snapshot(moonraker_url: str, timeout: float = 8.0) -> 
 
     candidates: list[str] = []
     try:
-        async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            verify=tls_verification_for_local_url(
+                base, "MONOFARM_MOONRAKER_INSECURE_TARGETS"
+            ),
+        ) as client:
             r = await client.get(f"{base}/server/webcams/list")
             if r.status_code == 200:
                 for cam in ((r.json().get("result") or {}).get("webcams") or []):
@@ -467,14 +591,20 @@ async def _moonraker_grab_snapshot(moonraker_url: str, timeout: float = 8.0) -> 
         pass
     candidates += [f"http://{host}/webcam/?action=snapshot", f"http://{host}:8080/?action=snapshot"]
 
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:  # noqa: S501
-        for url in candidates:
-            try:
+    for url in candidates:
+        try:
+            require_registered_http_url(url, {host})
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                verify=tls_verification_for_local_url(
+                    url, "MONOFARM_MOONRAKER_INSECURE_TARGETS"
+                ),
+            ) as client:
                 r = await client.get(url)
-            except Exception:
-                continue
-            if r.status_code == 200 and r.content and r.headers.get("content-type", "").startswith("image"):
-                return r.content
+        except Exception:
+            continue
+        if r.status_code == 200 and r.content and r.headers.get("content-type", "").startswith("image"):
+            return r.content
     return None
 
 
@@ -591,21 +721,30 @@ Blbjg3obpHo9
 -----END CERTIFICATE-----
 """
 
-# Targets where BBL-CA verification failed — fall back to unverified TLS
-# (matches pre-0.6.0 behaviour, so no printer can regress to "offline").
+# Targets using a locally configured, explicit insecure-TLS exception. This is
+# never populated automatically after a handshake failure.
 _bambu_tls_insecure: set[str] = set()
-# ip → consecutive verified-connect timeouts; ≥2 flips the target to insecure
-# (paho's async loop hides handshake errors, a timeout is all we observe).
+# ip → consecutive verified-connect failures, kept only for diagnostics.
 _bambu_tls_timeouts: dict[str, int] = {}
+
+
+def _bambu_insecure_targets() -> set[str]:
+    return {
+        item.strip().lower()
+        for item in os.environ.get("MONOFARM_BAMBU_INSECURE_TARGETS", "").split(",")
+        if item.strip()
+    }
 
 
 def _bambu_ssl_context(ip: str) -> ssl.SSLContext:
     """TLS context for Bambu LAN services: pinned BBL CA, hostname checks off."""
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
-    if ip in _bambu_tls_insecure:
+    if ip.lower() in _bambu_insecure_targets():
+        _bambu_tls_insecure.add(ip)
         ctx.verify_mode = ssl.CERT_NONE
         return ctx
+    _bambu_tls_insecure.discard(ip)
     ctx.verify_mode = ssl.CERT_REQUIRED
     ctx.load_verify_locations(cadata=_BAMBU_CA_PEM)
     if hasattr(ssl, "VERIFY_X509_STRICT"):
@@ -615,18 +754,17 @@ def _bambu_ssl_context(ip: str) -> ssl.SSLContext:
 
 
 def _bambu_mark_tls_failure(ip: str, exc: Exception) -> None:
-    """Demote a target to unverified TLS after an SSL error or repeated timeouts."""
-    if ip in _bambu_tls_insecure:
-        return
+    """Record a TLS failure without silently weakening certificate checks."""
     if isinstance(exc, ssl.SSLError) or "SSL" in str(exc) or "certificate" in str(exc).lower():
-        log.warning("Bambu TLS verify failed for %s — falling back to unverified", ip)
-        _bambu_tls_insecure.add(ip)
+        log.error(
+            "Bambu TLS verification failed for %s; connection rejected. "
+            "A per-device MONOFARM_BAMBU_INSECURE_TARGETS override is required to bypass verification.",
+            ip,
+        )
         return
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError, RuntimeError)):
         _bambu_tls_timeouts[ip] = _bambu_tls_timeouts.get(ip, 0) + 1
-        if _bambu_tls_timeouts[ip] >= 2:
-            log.info("Bambu connect kept timing out for %s — retrying with unverified TLS", ip)
-            _bambu_tls_insecure.add(ip)
+        log.warning("Bambu verified TLS connection failed for %s: %s", ip, exc)
 
 
 async def _u1_camera_keepalive(mr_ws, moonraker_url: str) -> None:
@@ -755,6 +893,18 @@ async def handle_moonraker_subscribe(cloud_ws, req: dict) -> None:
         }))
         return
 
+    parsed = _urlparse_mod.urlparse(url)
+    try:
+        require_registered_http_url(url, {parsed.hostname or ""})
+    except NetworkPolicyError as exc:
+        await cloud_ws.send(json.dumps({
+            "id": req_id,
+            "status": 403,
+            "body": None,
+            "error": f"forbidden printer target: {exc}",
+        }))
+        return
+
     name = (req.get("name") or "").strip()
     if name:
         _moonraker_names[url] = name
@@ -785,23 +935,13 @@ def _mqtt_rc_value(rc) -> int:
 
 
 def ensure_bambu_mqtt_dependency() -> None:
-    """Best-effort self-heal for agents auto-updated from pre-LAN-MQTT builds."""
+    """Report a broken installation without executing mutable package code."""
     try:
         import paho.mqtt.client  # noqa: F401
-        return
     except ImportError:
-        pass
-
-    try:
-        import subprocess
-        log.info("Installing paho-mqtt for Bambu LAN support…")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
-            check=False,
-            timeout=60,
+        log.warning(
+            "paho-mqtt is missing; reinstall the agent from its signed runtime bundle"
         )
-    except Exception as exc:
-        log.debug("paho-mqtt install skipped: %s", exc)
 
 
 def _mqtt_connect_hint(rc: int) -> str:
@@ -867,8 +1007,7 @@ def _bambu_mqtt_publish_blocking(dev_id: str, ip: str, access_code: str, payload
             client.connect(ip, 8883, 60)
         except ssl.SSLError as exc:
             _bambu_mark_tls_failure(ip, exc)
-            client.tls_set_context(_bambu_ssl_context(ip))
-            client.connect(ip, 8883, 60)
+            raise
         client.loop_start()
         if not connected.wait(10):
             raise RuntimeError("connect timeout")
@@ -1053,21 +1192,47 @@ def _cancel_all_bambu_lan_subscriptions() -> None:
 
 
 async def _bambu_lan_config_loop(cloud_ws, server: str, token: str) -> None:
-    headers = {"Authorization": f"Bearer {token}"}
     last_discover = 0.0
     while True:
         try:
             now = asyncio.get_running_loop().time()
-            async with httpx.AsyncClient(timeout=10) as client:
-                if now - last_discover >= 60:
-                    try:
-                        await client.get(f"{server}/api/printers/bambu-discover", headers=headers)
-                        last_discover = now
-                    except Exception as exc:
-                        log.debug("Bambu LAN discovery refresh failed: %s", exc)
-                resp = await client.get(f"{server}/api/agent/bambu-lan-config", headers=headers)
+            paired = _configured_device_credentials() is not None
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                if paired:
+                    resp = await _agent_api_request(
+                        client,
+                        "GET",
+                        server,
+                        token,
+                        "runtime-config",
+                    )
+                else:
+                    access_token = await _get_runtime_access_token(server, token)
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    if now - last_discover >= 60:
+                        try:
+                            await client.get(
+                                f"{server}/api/printers/bambu-discover",
+                                headers=headers,
+                            )
+                            last_discover = now
+                        except Exception as exc:
+                            log.debug("Bambu LAN discovery refresh failed: %s", exc)
+                    resp = await client.get(
+                        f"{server}/api/agent/bambu-lan-config",
+                        headers=headers,
+                    )
             if resp.status_code == 200:
-                printers = (resp.json() or {}).get("printers") or []
+                payload = resp.json() or {}
+                if paired:
+                    _runtime_printer_registry.replace(payload)
+                    printers = [
+                        printer
+                        for printer in (payload.get("printers") or [])
+                        if printer.get("transport") == "bambu_lan"
+                    ]
+                else:
+                    printers = payload.get("printers") or []
                 await _sync_bambu_lan_subscriptions(cloud_ws, printers)
         except asyncio.CancelledError:
             raise
@@ -1106,6 +1271,246 @@ def _save_config(server: str, token: str) -> None:
     _write_config(cfg)
 
 
+def _configured_device_credentials() -> DeviceCredentials | None:
+    return DeviceCredentials.from_mapping(_load_config())
+
+
+def _save_device_pairing(server: str, result: DevicePairingResult) -> None:
+    """Persist device identity and remove the deprecated long-lived user JWT."""
+    cfg = _load_config()
+    cfg["MONOFARM_SERVER"] = server.rstrip("/")
+    cfg.pop("MONOFARM_TOKEN", None)
+    cfg.pop("MONOFARM_PAIRING_CODE", None)
+    cfg["MONOFARM_DEVICE_ID"] = result.credentials.device_id
+    cfg["MONOFARM_DEVICE_SECRET"] = result.credentials.device_secret
+    cfg["MONOFARM_DEVICE_PRIVATE_KEY"] = result.private_key
+    _write_config(cfg)
+
+
+async def _get_runtime_access_token(
+    server: str,
+    legacy_token: str,
+    *,
+    force_refresh: bool = False,
+) -> str:
+    """Return a scoped v2 token when paired, otherwise the legacy migration token."""
+    global _device_token_provider, _device_token_provider_key
+    server = require_cloud_server_url(server)
+    credentials = _configured_device_credentials()
+    if credentials is None:
+        if not legacy_token:
+            raise RuntimeError("agent is not paired")
+        return legacy_token
+    key = (
+        server.rstrip("/"),
+        credentials.device_id,
+        credentials.device_secret,
+        id(asyncio.get_running_loop()),
+    )
+    if _device_token_provider is None or _device_token_provider_key != key:
+        _device_token_provider = DeviceTokenProvider(server, credentials)
+        _device_token_provider_key = key
+    async with httpx.AsyncClient(timeout=15) as client:
+        return await _device_token_provider.get(client, force_refresh=force_refresh)
+
+
+async def _websocket_credentials(server: str, legacy_token: str) -> tuple[str, str]:
+    token = await _get_runtime_access_token(server, legacy_token)
+    paired = _configured_device_credentials() is not None
+    path = "/api/agent/v2/connect" if paired else "/api/agent/connect"
+    scheme_server = server.replace("https://", "wss://").replace("http://", "ws://")
+    if paired:
+        return f"{scheme_server}{path}", token
+    return f"{scheme_server}{path}?token={_urlparse_mod.quote(token, safe='')}", token
+
+
+def _agent_api_path(suffix: str) -> str:
+    """Select scoped AgentDevice APIs while preserving the v1 migration path."""
+    prefix = "/api/agent/v2" if _configured_device_credentials() else "/api/agent"
+    return f"{prefix}/{suffix.lstrip('/')}"
+
+
+async def _agent_api_request(
+    client: "httpx.AsyncClient",
+    method: str,
+    server: str,
+    legacy_token: str,
+    suffix: str,
+    **kwargs,
+) -> "httpx.Response":
+    """Make one agent-authenticated API call and refresh a v2 token once."""
+    access_token = await _get_runtime_access_token(server, legacy_token)
+    response = await client.request(
+        method,
+        f"{server}{_agent_api_path(suffix)}",
+        headers={"Authorization": f"Bearer {access_token}"},
+        follow_redirects=False,
+        **kwargs,
+    )
+    if response.status_code == 401 and _configured_device_credentials() is not None:
+        access_token = await _get_runtime_access_token(
+            server,
+            legacy_token,
+            force_refresh=True,
+        )
+        response = await client.request(
+            method,
+            f"{server}{_agent_api_path(suffix)}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            follow_redirects=False,
+            **kwargs,
+        )
+    return response
+
+
+async def _refresh_v2_runtime_config(server: str, legacy_token: str) -> dict:
+    """Refresh fixed printer/artifact targets before accepting durable commands."""
+    credentials = _configured_device_credentials()
+    if credentials is None:
+        raise RuntimeError("protocol-v2 runtime config requires a paired AgentDevice")
+    async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+        response = await _agent_api_request(
+            client,
+            "GET",
+            server,
+            legacy_token,
+            "runtime-config",
+        )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or str(payload.get("device_id")) != credentials.device_id:
+        raise RuntimeError("runtime config is not bound to this AgentDevice")
+    _runtime_printer_registry.replace(payload)
+    return payload
+
+
+async def _runtime_bambu_mqtt_publish(
+    printer: RuntimePrinter,
+    payload: Mapping[str, object],
+    qos: int,
+) -> None:
+    """Publish through the fixed Bambu target from authenticated runtime config."""
+    if qos != 1:
+        raise ValueError("Bambu runtime commands require an object payload at QoS 1")
+    if not printer.dev_id or not printer.ip or not printer.access_code:
+        raise ValueError("Bambu runtime target is incomplete")
+    await asyncio.to_thread(
+        _bambu_mqtt_publish_blocking,
+        printer.dev_id,
+        printer.ip,
+        printer.access_code,
+        dict(payload),
+    )
+
+
+async def _runtime_bambu_state(printer: RuntimePrinter) -> dict:
+    if not printer.dev_id:
+        raise ValueError("Bambu runtime target is missing dev_id")
+    return dict(_bambu_print_state.get(printer.dev_id, {}))
+
+
+def _runtime_adapter_factory(
+    printer: RuntimePrinter,
+    command: LeasedAgentCommand,
+):
+    moonraker_verify: bool | ssl.SSLContext = True
+    if printer.moonraker_url:
+        moonraker_verify = tls_verification_for_local_url(
+            printer.moonraker_url,
+            "MONOFARM_MOONRAKER_INSECURE_TARGETS",
+        )
+    return build_provider_adapter(
+        printer,
+        command,
+        bambu_ssl_context=lambda: _bambu_ssl_context(printer.ip or ""),
+        bambu_mqtt_publish=_runtime_bambu_mqtt_publish,
+        bambu_state_provider=_runtime_bambu_state,
+        moonraker_tls_verify=moonraker_verify,
+    )
+
+
+async def _runtime_control_handler(
+    printer: RuntimePrinter,
+    command: LeasedAgentCommand,
+) -> CommandExecutionResult:
+    if command.command_type == "printer.snapshot":
+        if printer.provider == "bambu":
+            frame = await _bambu_grab_frame(
+                printer.ip or "",
+                printer.access_code or "",
+            )
+        else:
+            frame = await _moonraker_grab_snapshot(printer.moonraker_url or "")
+        if not frame:
+            raise RuntimeError("printer snapshot is unavailable")
+        return CommandExecutionResult(
+            {
+                "provider": printer.provider,
+                "captured": True,
+                "size": len(frame),
+                "sha256": hashlib.sha256(frame).hexdigest(),
+            }
+        )
+
+    adapter = _runtime_adapter_factory(printer, command)
+    return await adapter.execute_control(command.command_type)
+
+
+def _build_protocol_v2_runtime(
+    server: str,
+    legacy_token: str,
+) -> tuple[
+    ProtocolV2CommandWorker,
+    SQLiteCommandJournal,
+    "httpx.AsyncClient",
+]:
+    """Build one reconnect-scoped worker over a device-isolated durable journal."""
+    credentials = _configured_device_credentials()
+    if credentials is None:
+        raise RuntimeError("protocol-v2 runtime requires a paired AgentDevice")
+
+    runtime_dir = CONFIG_DIR / "runtime" / credentials.device_id
+    journal = SQLiteCommandJournal(runtime_dir / "commands.sqlite3")
+    artifact_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(120, connect=15),
+        follow_redirects=False,
+    )
+    downloader = ArtifactDownloader(
+        runtime_dir / "spool",
+        max_artifact_bytes=_max_artifact_bytes(),
+        quota_hook=_require_spool_quota,
+        transition_sink=journal_transition_sink(journal),
+        source_policy=_runtime_printer_registry.require_artifact_source,
+    )
+    dispatcher = PrinterCommandDispatcher(
+        registry=_runtime_printer_registry,
+        adapter_factory=_runtime_adapter_factory,
+        control_handler=_runtime_control_handler,
+        artifact_downloader=downloader,
+        artifact_client=artifact_client,
+    )
+
+    async def _execute(command: LeasedAgentCommand) -> CommandExecutionResult:
+        try:
+            return await dispatcher.execute(command)
+        except InvalidRuntimePayload as exc:
+            if "is not assigned" not in str(exc):
+                raise
+            await _refresh_v2_runtime_config(server, legacy_token)
+            return await dispatcher.execute(command)
+
+    worker = ProtocolV2CommandWorker(
+        server=server,
+        device_id=credentials.device_id,
+        journal=journal,
+        token_provider=DeviceTokenProvider(server, credentials),
+        handler=_execute,
+        pull_batch_size=10,
+        lease_seconds=300,
+    )
+    return worker, journal, artifact_client
+
+
 def _load_alert_chat_ids() -> list[int]:
     out: list[int] = []
     for part in (_load_config().get("ALERT_CHAT_IDS", "") or "").split(","):
@@ -1127,10 +1532,8 @@ def _save_alert_chat_ids(ids: list[int]) -> None:
 
 # ── Local web UI (stdlib only — no Flask, works on a headless Pi) ────────────
 #
-# Same role as the SimplyPrint client's local web interface: open
-# http://<agent-host>:8723 from any machine on the farm LAN to check status,
-# scan for printers, pair with the cloud and read logs. Trusted-LAN model,
-# like SimplyPrint's: the UI never displays the saved token.
+# Local control plane is loopback-only.  Host/Origin validation also blocks a
+# malicious website from using the operator's browser to POST to localhost.
 
 
 def _schedule_restart(delay: float = 0.7) -> None:
@@ -1157,7 +1560,9 @@ def _web_state() -> dict:
         "version": AGENT_VERSION,
         "server": _current_server or _load_config().get("MONOFARM_SERVER", ""),
         "cloud_connected": _cloud_connected,
-        "has_token": bool(_load_config().get("MONOFARM_TOKEN")),
+        "has_identity": bool(
+            _configured_device_credentials() or _load_config().get("MONOFARM_TOKEN")
+        ),
         "tg_running": _tg_app is not None,
         "bambu": bambu,
         "moonraker": moonraker,
@@ -1205,7 +1610,11 @@ def _render_dashboard() -> bytes:
         else "<span class='chip bad'>немає зв'язку</span>"
     )
     tg_chip = "<span class='chip ok'>працює</span>" if st["tg_running"] else "<span class='chip idle'>вимкнено</span>"
-    token_chip = "<span class='chip ok'>збережено</span>" if st["has_token"] else "<span class='chip bad'>немає</span>"
+    identity_chip = (
+        "<span class='chip ok'>збережено</span>"
+        if st["has_identity"]
+        else "<span class='chip bad'>немає</span>"
+    )
 
     bambu_rows = "".join(
         f"<tr><td>{_h(p['dev_id'])}</td><td>{_h(p['ip'])}</td>"
@@ -1225,7 +1634,7 @@ def _render_dashboard() -> bytes:
 <div class='card'>
   <table>
     <tr><td>Хмара ({_h(st['server'])})</td><td>{cloud_chip}</td></tr>
-    <tr><td>Токен</td><td>{token_chip}</td></tr>
+    <tr><td>Ідентичність агента</td><td>{identity_chip}</td></tr>
     <tr><td>Telegram-бот</td><td>{tg_chip}</td></tr>
   </table>
   <div style='margin-top:10px'>
@@ -1253,7 +1662,7 @@ def _render_dashboard() -> bytes:
 <div class='card'>
   <form method='post' action='/pair'>
     <label>Server URL</label><input name='server' value='{_h(st['server'])}'>
-    <label>Token (JWT — лиши порожнім, щоб не змінювати)</label><input name='token' type='password' autocomplete='off'>
+    <label>Одноразовий pairing code</label><input name='pairing_code' type='password' autocomplete='off'>
     <div style='margin-top:10px'><button>Зберегти й перезапустити</button></div>
   </form>
 </div>
@@ -1285,6 +1694,20 @@ def _start_web_ui(port: int) -> None:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     class _Handler(BaseHTTPRequestHandler):
+        def _authorized(self, *, require_origin: bool = False) -> bool:
+            try:
+                require_loopback_web_request(
+                    client_host=self.client_address[0],
+                    host_header=self.headers.get("Host", ""),
+                    origin_header=self.headers.get("Origin"),
+                    require_origin=require_origin,
+                )
+                return True
+            except NetworkPolicyError as exc:
+                log.warning("Blocked local UI request: %s", exc)
+                self._send(b"forbidden", code=403, ctype="text/plain")
+                return False
+
         def _send(self, payload: bytes, code: int = 200, ctype: str = "text/html; charset=utf-8") -> None:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
@@ -1303,6 +1726,8 @@ def _start_web_ui(port: int) -> None:
             return {k: v[0] for k, v in _urlparse_mod.parse_qs(raw).items()}
 
         def do_GET(self) -> None:  # noqa: N802
+            if not self._authorized():
+                return
             if self.path == "/" or self.path.startswith("/?"):
                 self._send(_render_dashboard())
             elif self.path == "/logs":
@@ -1314,14 +1739,20 @@ def _start_web_ui(port: int) -> None:
                 self._send(b"not found", code=404, ctype="text/plain")
 
         def do_POST(self) -> None:  # noqa: N802
+            if not self._authorized(require_origin=True):
+                return
             if self.path == "/scan":
                 self._send(_render_scan())
             elif self.path == "/pair":
                 form = self._form()
                 cfg = _load_config()
                 server = (form.get("server") or cfg.get("MONOFARM_SERVER") or "").strip().rstrip("/")
-                token = (form.get("token") or "").strip() or cfg.get("MONOFARM_TOKEN", "")
-                _save_config(server, token)
+                pairing_code = (form.get("pairing_code") or "").strip()
+                cfg["MONOFARM_SERVER"] = server
+                if pairing_code:
+                    cfg["MONOFARM_PAIRING_CODE"] = pairing_code
+                    cfg.pop("MONOFARM_TOKEN", None)
+                _write_config(cfg)
                 self._send(_web_page("Збережено", "<div class='card'>Налаштування збережено — агент перезапускається…</div><a href='/'>← на головну</a>"))
                 _schedule_restart()
             elif self.path == "/update":
@@ -1354,59 +1785,255 @@ def _start_web_ui(port: int) -> None:
             pass  # keep the agent log clean of HTTP access noise
 
     try:
-        httpd = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     except OSError as e:
         log.warning("Web UI not started on :%s (%s)", port, e)
         return
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    log.info("Web UI: http://localhost:%s (доступний у локальній мережі)", port)
+    log.info("Web UI: http://localhost:%s (loopback only)", port)
 
 
 async def check_for_update(server: str) -> None:
-    """Download and apply a new agent version, then restart.
+    """Verify a signed manifest, apply a strict upgrade, then restart.
 
     Frozen (PyInstaller .exe): download and hot-swap the running .exe on Windows.
     Source (venv / dev): rewrite the .py files and re-exec the interpreter.
     """
     try:
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        server = require_cloud_server_url(server)
+        async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
             resp = await client.get(f"{server}/api/agent/version")
             if resp.status_code != 200:
                 return
-            remote = resp.json().get("version", "")
-            if not remote or remote == AGENT_VERSION:
+            payload = resp.json()
+            if payload.get("version") == AGENT_VERSION:
                 return
+            manifest = payload.get("manifest")
+            trusted_keys = _configured_update_public_keys()
+            verified = verify_signed_manifest(
+                manifest,
+                trusted_public_keys=trusted_keys,
+                current_version=AGENT_VERSION,
+            )
+            remote = verified["version"]
             log.info("Update available: %s → %s. Downloading…", AGENT_VERSION, remote)
             if getattr(sys, "frozen", False):
-                await _apply_frozen_update(client, server, remote)
+                await _apply_frozen_update(client, server, verified)
             else:
-                await _apply_source_update(client, server, remote)
+                await _apply_source_update(client, server, verified)
+    except UpdatePolicyError as e:
+        log.error("Update rejected: %s", e)
     except Exception as e:
         log.debug("Update check skipped: %s", e)
 
 
-async def _apply_source_update(client: "httpx.AsyncClient", server: str, remote: str) -> None:
-    """venv/dev path: rewrite .py files beside us and re-exec the interpreter."""
-    here = Path(__file__).resolve().parent
-    for fname in ("monofarm_agent.py", "monofarm_tray.py"):
-        target = here / fname
-        if fname == "monofarm_agent.py" or target.exists():
-            r = await client.get(f"{server}/agent/{fname}")
-            if r.status_code == 200:
-                target.write_bytes(r.content)
+def _configured_update_public_keys() -> list[str]:
+    """Load operator keys plus the committed production trust root."""
+
+    configured = os.environ.get("MONOFARM_UPDATE_PUBLIC_KEYS", "").strip()
+    if not configured:
+        configured = _load_config().get("MONOFARM_UPDATE_PUBLIC_KEYS", "").strip()
+    keys = [item.strip() for item in configured.split(",") if item.strip()]
+    return list(dict.fromkeys([*keys, BUILTIN_RELEASE_PUBLIC_KEY]))
+
+
+async def _download_verified_artifact(
+    client: "httpx.AsyncClient",
+    artifact: dict,
+) -> bytes:
+    response = await client.get(artifact["url"], follow_redirects=False)
+    if 300 <= response.status_code < 400:
+        location = response.headers.get("location")
+        try:
+            redirect_url = require_public_https_url(location)
+        except (NetworkPolicyError, TypeError) as exc:
+            raise UpdatePolicyError("artifact redirect must use a public HTTPS URL") from exc
+        response = await client.get(redirect_url, follow_redirects=False)
+        if 300 <= response.status_code < 400:
+            raise UpdatePolicyError("artifact redirect chain is forbidden")
+    response.raise_for_status()
+    data = response.content
+    verify_artifact_bytes(
+        data,
+        expected_size=artifact["size"],
+        expected_sha256=artifact["sha256"],
+    )
+    return data
+
+
+_SOURCE_UPDATE_FILES = {
+    "monofarm_agent.py",
+    "monofarm_tray.py",
+    "command_worker.py",
+    "command_runtime.py",
+    "device_identity.py",
+    "network_policy.py",
+    "printer_runtime.py",
+    "provider_adapters.py",
+    "update_policy.py",
+    "requirements.txt",
+    "edge_runtime/__init__.py",
+    "edge_runtime/adapters.py",
+    "edge_runtime/artifact_spool.py",
+    "edge_runtime/journal.py",
+    "edge_runtime/registry.py",
+    "edge_runtime/transfer.py",
+}
+
+
+def _install_source_requirements(requirements_path: Path) -> None:
+    import subprocess
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "--requirement",
+            str(requirements_path),
+        ],
+        check=True,
+        timeout=300,
+    )
+
+
+def _preflight_source_release(release: Path) -> None:
+    """Compile and import the staged runtime before it becomes current."""
+
+    if not compileall.compile_dir(release, quiet=1, force=True):
+        raise UpdatePolicyError("candidate health check failed Python compilation")
+    import subprocess
+
     try:
-        import subprocess
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--quiet", "paho-mqtt"],
-            check=False, timeout=60,
+            [
+                sys.executable,
+                str(release / "monofarm_agent.py"),
+                "--update-health-check",
+            ],
+            cwd=release,
+            check=True,
+            timeout=45,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-    except Exception as dep_exc:
-        log.debug("Dependency refresh skipped: %s", dep_exc)
-    log.info("Updated to %s. Restarting…", remote)
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise UpdatePolicyError("candidate health check failed runtime import") from exc
 
 
-async def _apply_frozen_update(client: "httpx.AsyncClient", server: str, remote: str) -> None:
+def _activate_source_release(current_link: Path, release: Path) -> None:
+    next_link = current_link.with_name(f".{current_link.name}.new-{os.getpid()}")
+    next_link.unlink(missing_ok=True)
+    try:
+        next_link.symlink_to(release.resolve(), target_is_directory=True)
+        os.replace(next_link, current_link)
+    finally:
+        next_link.unlink(missing_ok=True)
+
+
+async def _stage_source_release(
+    client: "httpx.AsyncClient",
+    manifest: dict,
+    *,
+    active_dir: Path,
+    releases_dir: Path,
+    current_link: Path,
+) -> Path:
+    """Download, health-check and atomically activate an exact source bundle."""
+
+    source_artifacts = {
+        name.removeprefix("source-"): artifact
+        for name, artifact in manifest["artifacts"].items()
+        if name.startswith("source-")
+    }
+    if set(source_artifacts) != _SOURCE_UPDATE_FILES:
+        raise UpdatePolicyError("signed source artifact set is incomplete or unexpected")
+    if not current_link.is_symlink() or current_link.resolve() != active_dir.resolve():
+        raise UpdatePolicyError("managed source release pointer changed during update")
+
+    downloads: dict[str, bytes] = {}
+    for filename in sorted(_SOURCE_UPDATE_FILES):
+        downloads[filename] = await _download_verified_artifact(
+            client,
+            source_artifacts[filename],
+        )
+
+    releases_dir.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".incoming-", dir=releases_dir))
+    release: Path | None = None
+    try:
+        for filename, data in downloads.items():
+            target = staging.joinpath(*filename.split("/"))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("wb") as output:
+                output.write(data)
+                output.flush()
+                os.fsync(output.fileno())
+
+        await asyncio.to_thread(
+            _install_source_requirements,
+            staging / "requirements.txt",
+        )
+        await asyncio.to_thread(_preflight_source_release, staging)
+        with (staging / ".complete").open("w", encoding="utf-8") as marker:
+            marker.write(f"{manifest['version']}\n")
+            marker.flush()
+            os.fsync(marker.fileno())
+
+        release = releases_dir / f"{manifest['version']}-{time.time_ns()}"
+        os.replace(staging, release)
+        _activate_source_release(current_link, release)
+        return release
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        if release is not None and release.exists():
+            shutil.rmtree(release, ignore_errors=True)
+        raise
+
+
+async def _apply_source_update(
+    client: "httpx.AsyncClient",
+    _server: str,
+    manifest: dict,
+) -> None:
+    """Activate a complete managed release; unsafe in-place updates are refused."""
+    here = Path(__file__).resolve().parent
+    releases_dir = CONFIG_DIR / "releases"
+    current_link = CONFIG_DIR / "current"
+    if (
+        not current_link.is_symlink()
+        or current_link.resolve() != here
+        or here.parent.resolve() != releases_dir.resolve()
+    ):
+        raise UpdatePolicyError(
+            "source auto-update requires the managed release layout; reinstall the agent"
+        )
+    release = await _stage_source_release(
+        client,
+        manifest,
+        active_dir=here,
+        releases_dir=releases_dir,
+        current_link=current_link,
+    )
+    try:
+        log.info("Updated to %s. Restarting…", manifest["version"])
+        entrypoint = current_link / "monofarm_agent.py"
+        os.execv(sys.executable, [sys.executable, str(entrypoint), *sys.argv[1:]])
+    except Exception:
+        _activate_source_release(current_link, here)
+        shutil.rmtree(release, ignore_errors=True)
+        raise
+
+
+async def _apply_frozen_update(
+    client: "httpx.AsyncClient",
+    server: str,
+    manifest: dict,
+) -> None:
     """Windows .exe self-update: download the new exe, hot-swap it, relaunch.
 
     Windows allows renaming a running .exe, so we move the live exe aside, drop
@@ -1416,16 +2043,21 @@ async def _apply_frozen_update(client: "httpx.AsyncClient", server: str, remote:
     exe = Path(sys.executable).resolve()
     new = exe.parent / (exe.stem + ".new.exe")
     old = exe.parent / (exe.stem + ".old.exe")
-    r = await client.get(f"{server}/agent/monofarm-agent.exe")
-    r.raise_for_status()
-    new.write_bytes(r.content)
+    artifact = manifest["artifacts"].get("windows-x86_64")
+    if not artifact:
+        raise UpdatePolicyError("signed manifest is missing windows-x86_64")
+    data = await _download_verified_artifact(client, artifact)
+    with new.open("wb") as output:
+        output.write(data)
+        output.flush()
+        os.fsync(output.fileno())
     try:
         old.unlink(missing_ok=True)
     except Exception:
         pass
     os.replace(exe, old)   # move the running exe aside (allowed on Windows)
     os.replace(new, exe)   # put the new exe in place
-    log.info("Updated to %s. Relaunching…", remote)
+    log.info("Updated to %s. Relaunching…", manifest["version"])
     import subprocess
     subprocess.Popen([str(exe)], close_fds=True)
     os._exit(0)
@@ -1448,6 +2080,15 @@ async def _update_loop(server: str) -> None:
         await check_for_update(server)
 
 
+def _registered_moonraker_hosts() -> set[str]:
+    hosts: set[str] = set()
+    for url in set(_moonraker_names) | set(_moonraker_sub_tasks):
+        host = _urlparse_mod.urlparse(url).hostname
+        if host:
+            hosts.add(host)
+    return hosts
+
+
 async def handle_request(ws, req: dict) -> None:
     """Proxy a single HTTP request/response."""
     req_id = req.get("id")
@@ -1456,7 +2097,15 @@ async def handle_request(ws, req: dict) -> None:
     body   = req.get("body")
 
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, verify=False) as client:  # noqa: S501
+        if method not in {"GET", "POST"}:
+            raise NetworkPolicyError(f"HTTP method {method} is not allowed")
+        require_registered_http_url(url, _registered_moonraker_hosts())
+        async with httpx.AsyncClient(
+            timeout=REQUEST_TIMEOUT,
+            verify=tls_verification_for_local_url(
+                url, "MONOFARM_MOONRAKER_INSECURE_TARGETS"
+            ),
+        ) as client:
             resp = await client.request(method, url, json=body)
             content_type = resp.headers.get("content-type", "")
             if "json" in content_type or resp.content.startswith(b"{") or resp.content.startswith(b"["):
@@ -1475,6 +2124,14 @@ async def handle_request(ws, req: dict) -> None:
                     "content_type": content_type,
                     "error": None,
                 }
+    except NetworkPolicyError as exc:
+        log.warning("Blocked proxy request %s %s: %s", method, url, exc)
+        result = {
+            "id": req_id,
+            "status": 403,
+            "body": None,
+            "error": f"forbidden target: {exc}",
+        }
     except httpx.TimeoutException:
         log.warning("Timeout proxying %s %s", method, url)
         result = {"id": req_id, "status": 504, "body": None, "error": "timeout"}
@@ -1725,7 +2382,13 @@ async def handle_stream(ws, req: dict) -> None:
     url    = req.get("url", "")
 
     try:
-        async with httpx.AsyncClient(timeout=None, verify=False) as client:  # noqa: S501
+        require_registered_http_url(url, _registered_moonraker_hosts())
+        async with httpx.AsyncClient(
+            timeout=None,
+            verify=tls_verification_for_local_url(
+                url, "MONOFARM_MOONRAKER_INSECURE_TARGETS"
+            ),
+        ) as client:
             async with client.stream("GET", url) as resp:
                 await ws.send(json.dumps({
                     "id": req_id,
@@ -1778,9 +2441,7 @@ async def handle_bambu_camera(ws, req: dict) -> None:
             )
         except ssl.SSLError as exc:
             _bambu_mark_tls_failure(ip, exc)
-            reader, writer = await asyncio.open_connection(
-                ip, port, ssl=_bambu_ssl_context(ip), server_hostname=ip,
-            )
+            raise
         log.info("BAMBU_CAMERA: TLS connected, sending auth")
         writer.write(bytes(auth))
         await writer.drain()
@@ -1828,6 +2489,8 @@ async def handle_ffmpeg_stream(ws, req: dict) -> None:
     import shutil
     req_id = req.get("id")
     rtsps_url = req.get("url", "")
+    rtsps_host = (_urlparse_mod.urlparse(rtsps_url).hostname or "").lower()
+    tls_verify = "0" if rtsps_host in _bambu_insecure_targets() else "1"
 
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -1839,7 +2502,7 @@ async def handle_ffmpeg_stream(ws, req: dict) -> None:
 
     cmd = [
         ffmpeg, "-loglevel", "quiet",
-        "-rtsp_transport", "tcp", "-tls_verify", "0",
+        "-rtsp_transport", "tcp", "-tls_verify", tls_verify,
         "-i", rtsps_url,
         "-vf", "fps=5",
         "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "3",
@@ -1981,16 +2644,45 @@ async def handle_bambu_upload(ws, req: dict) -> None:
         progress_task = asyncio.create_task(_report_progress())
 
         if url:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(180, connect=30), verify=False) as client:  # noqa: S501
-                async with client.stream("GET", url) as resp:
+            require_public_https_url(url)
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(180, connect=30),
+                follow_redirects=False,
+            ) as client:
+                async with client.stream(
+                    "GET",
+                    url,
+                    headers={"Accept-Encoding": "identity"},
+                ) as resp:
                     resp.raise_for_status()
                     progress["total"] = int(resp.headers.get("content-length") or 0)
+                    if progress["total"] > _max_artifact_bytes():
+                        raise ValueError("artifact exceeds the configured spool limit")
+                    if progress["total"]:
+                        _require_spool_quota(
+                            command_id=str(req_id),
+                            bytes_required=progress["total"],
+                            staging_dir=temp_path.parent,
+                        )
                     with temp_path.open("wb") as file_obj:
                         async for chunk in resp.aiter_bytes(1024 * 1024):
+                            if progress["sent"] + len(chunk) > _max_artifact_bytes():
+                                raise ValueError("artifact exceeds the configured spool limit")
                             file_obj.write(chunk)
                             progress["sent"] += len(chunk)
+                        file_obj.flush()
+                        os.fsync(file_obj.fileno())
+                    if progress["total"] and progress["sent"] != progress["total"]:
+                        raise ValueError("truncated artifact download")
         else:
             file_bytes = base64.b64decode(data_b64)
+            if len(file_bytes) > _max_artifact_bytes():
+                raise ValueError("artifact exceeds the configured spool limit")
+            _require_spool_quota(
+                command_id=str(req_id),
+                bytes_required=len(file_bytes),
+                staging_dir=temp_path.parent,
+            )
             progress["total"] = len(file_bytes)
             temp_path.write_bytes(file_bytes)
         progress["phase"] = "uploading"
@@ -2013,7 +2705,7 @@ async def handle_bambu_upload(ws, req: dict) -> None:
                 ftp = _ftp_connect()
             except _ssl.SSLError as exc:
                 _bambu_mark_tls_failure(ip, exc)
-                ftp = _ftp_connect()
+                raise
             ftp.prot_p()
             remote_path = filename
             if target_dir != "sdcard":
@@ -2075,50 +2767,114 @@ async def handle_bambu_upload(ws, req: dict) -> None:
 
 
 async def handle_moonraker_upload(ws, req: dict) -> None:
-    """Upload a gcode/3mf file to Moonraker via multipart POST.
-
-    Cloud backend sends bytes as base64; agent does the actual LAN upload.
-    """
+    """Spool then stream a gcode/3mf file to Moonraker without whole-file RAM."""
     import time
 
-    req_id      = req.get("id")
+    req_id      = str(req.get("id") or "")
     url         = req.get("url", "")         # bare Moonraker base URL
     filename    = req.get("filename", "file.gcode")
     data_b64    = req.get("data_b64", "")
     data_bytes  = req.get("_data_bytes")
+    data_path   = req.get("_data_path")
     download_url = req.get("download_url", "")
     start_print = req.get("start_print", False)
     upload_timeout = max(300.0, min(3600.0, float(req.get("upload_timeout", 300.0))))
+    # Only an in-process Path object from the chunk assembler is accepted.
+    # JSON from the cloud can only produce a string and cannot select local files.
+    temp_path: Path | None = data_path if isinstance(data_path, Path) else None
 
     try:
-        if isinstance(data_bytes, bytes):
-            file_bytes = data_bytes
+        if not req_id:
+            raise ValueError("upload request id is required")
+        if (
+            not isinstance(filename, str)
+            or Path(filename).name != filename
+            or any(character in filename for character in ('\x00', '\r', '\n', '"'))
+        ):
+            raise ValueError("unsafe upload filename")
+        require_registered_http_url(url, _registered_moonraker_hosts())
+        if temp_path is not None:
+            if not temp_path.is_file():
+                raise ValueError("spooled upload file is missing")
+        elif isinstance(data_bytes, bytes):
+            if len(data_bytes) > _max_artifact_bytes():
+                raise ValueError("artifact exceeds the configured spool limit")
+            _require_spool_quota(
+                command_id=req_id,
+                bytes_required=len(data_bytes),
+                staging_dir=Path(tempfile.gettempdir()),
+            )
+            with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as tmp:
+                temp_path = Path(tmp.name)
+                tmp.write(data_bytes)
         elif download_url:
             # Cloud sent a presigned URL — pull the file directly (much faster
-            # than base64 chunks through the tunnel). Heartbeat progress keeps
-            # the cloud stall-guard alive during a slow download.
-            parts: list[bytes] = []
+            # than base64 chunks through the tunnel). Keep it on disk so large
+            # files do not become one Python bytes object.
+            require_public_https_url(download_url)
+            expected_size = int(req.get("total_bytes") or 0)
+            if expected_size < 1 or expected_size > _max_artifact_bytes():
+                raise ValueError("artifact size is outside the configured spool limit")
+            _require_spool_quota(
+                command_id=req_id,
+                bytes_required=expected_size,
+                staging_dir=Path(tempfile.gettempdir()),
+            )
+            with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as tmp:
+                temp_path = Path(tmp.name)
             last_beat = time.monotonic()
+            received = 0
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(upload_timeout, connect=30.0)
+                timeout=httpx.Timeout(upload_timeout, connect=30.0),
+                follow_redirects=False,
             ) as dl:
-                async with dl.stream("GET", download_url) as resp_dl:
+                async with dl.stream("GET", download_url, headers={"Accept-Encoding": "identity"}) as resp_dl:
                     resp_dl.raise_for_status()
                     total_dl = int(resp_dl.headers.get("content-length") or 0)
-                    async for part in resp_dl.aiter_bytes(1024 * 1024):
-                        parts.append(part)
-                        now = time.monotonic()
-                        if now - last_beat >= 2.0:
-                            await ws.send(json.dumps({
-                                "id": req_id,
-                                "type": "upload_progress",
-                                "sent": 0,
-                                "total": total_dl,
-                            }))
-                            last_beat = now
-            file_bytes = b"".join(parts)
+                    if total_dl and total_dl != expected_size:
+                        raise ValueError(
+                            f"artifact Content-Length mismatch: expected {expected_size}, got {total_dl}"
+                        )
+                    with temp_path.open("wb") as output:
+                        async for part in resp_dl.aiter_bytes(1024 * 1024):
+                            if received + len(part) > expected_size:
+                                raise ValueError("artifact body exceeds declared total_bytes")
+                            output.write(part)
+                            received += len(part)
+                            now = time.monotonic()
+                            if now - last_beat >= 2.0:
+                                await ws.send(json.dumps({
+                                    "id": req_id,
+                                    "type": "upload_progress",
+                                    "phase": "downloading",
+                                    "sent": received,
+                                    "total": total_dl,
+                                }))
+                                last_beat = now
+                        output.flush()
+                        os.fsync(output.fileno())
+            if total_dl and received != total_dl:
+                raise ValueError(f"truncated artifact: expected {total_dl}, received {received}")
+            if expected_size and received != expected_size:
+                raise ValueError(
+                    f"artifact size mismatch: expected {expected_size}, received {received}"
+                )
         else:
             file_bytes = base64.b64decode(data_b64)
+            if len(file_bytes) > _max_artifact_bytes():
+                raise ValueError("artifact exceeds the configured spool limit")
+            _require_spool_quota(
+                command_id=req_id,
+                bytes_required=len(file_bytes),
+                staging_dir=Path(tempfile.gettempdir()),
+            )
+            with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as tmp:
+                temp_path = Path(tmp.name)
+                tmp.write(file_bytes)
+            del file_bytes
+        if temp_path is None:
+            raise ValueError("upload did not produce a local spool file")
+        file_size = temp_path.stat().st_size
         boundary = "----monofarm-upload-" + hashlib.sha256(req_id.encode()).hexdigest()[:16]
         prefix = (
             f"--{boundary}\r\n"
@@ -2132,7 +2888,7 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
             "Content-Type: application/octet-stream\r\n\r\n"
         ).encode()
         suffix = f"\r\n--{boundary}--\r\n".encode()
-        total = len(prefix) + len(file_bytes) + len(suffix)
+        total = len(prefix) + file_size + len(suffix)
         chunk_size = 256 * 1024
 
         async def multipart_body():
@@ -2142,27 +2898,30 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
             # Report on time as well as percent: the cloud stall-guard needs a
             # heartbeat even when 5% of a big file takes minutes on slow WiFi.
             last_report_at = time.monotonic()
-            for offset in range(0, len(file_bytes), chunk_size):
-                chunk = file_bytes[offset:offset + chunk_size]
-                sent += len(chunk)
-                progress = round(sent * 100 / max(len(file_bytes), 1))
-                now = time.monotonic()
-                if progress == 100 or progress - last_report >= 5 or now - last_report_at >= 2.0:
-                    await ws.send(json.dumps({
-                        "id": req_id,
-                        "type": "upload_progress",
-                        "sent": sent,
-                        "total": len(file_bytes),
-                    }))
-                    last_report = progress
-                    last_report_at = now
-                yield chunk
+            with temp_path.open("rb") as source:
+                while chunk := source.read(chunk_size):
+                    sent += len(chunk)
+                    progress = round(sent * 100 / max(file_size, 1))
+                    now = time.monotonic()
+                    if progress == 100 or progress - last_report >= 5 or now - last_report_at >= 2.0:
+                        await ws.send(json.dumps({
+                            "id": req_id,
+                            "type": "upload_progress",
+                            "phase": "uploading",
+                            "sent": sent,
+                            "total": file_size,
+                        }))
+                        last_report = progress
+                        last_report_at = now
+                    yield chunk
             yield suffix
 
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(upload_timeout, connect=30.0, pool=30.0),
-            verify=False,
-        ) as client:  # noqa: S501
+            verify=tls_verification_for_local_url(
+                url, "MONOFARM_MOONRAKER_INSECURE_TARGETS"
+            ),
+        ) as client:
             resp = await client.post(
                 f"{url}/server/files/upload",
                 content=multipart_body(),
@@ -2180,6 +2939,9 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
     except Exception as e:
         log.warning("MOONRAKER_UPLOAD error %s: %s", url, e)
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
     try:
         await ws.send(json.dumps(result))
@@ -2188,7 +2950,7 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
 
 
 async def handle_moonraker_upload_chunk(ws, req: dict) -> None:
-    """Collect a chunked cloud upload and start the LAN upload on the final chunk."""
+    """Append one bounded cloud chunk to disk and start upload after fsync."""
     req_id = req.get("id")
     if not req_id:
         return
@@ -2201,20 +2963,44 @@ async def handle_moonraker_upload_chunk(ws, req: dict) -> None:
         offset = int(req.get("offset", -1))
         data = base64.b64decode(req.get("data_b64", ""))
         expected = int(state["next_offset"])
+        total_bytes = int(state["total_bytes"])
+        if total_bytes < 1 or total_bytes > _max_artifact_bytes():
+            raise ValueError("upload size is outside the configured spool limit")
+        if expected == 0:
+            path_for_quota = state.get("path")
+            if not isinstance(path_for_quota, Path):
+                raise ValueError("invalid upload spool state")
+            _require_spool_quota(
+                command_id=str(req_id),
+                bytes_required=total_bytes,
+                staging_dir=path_for_quota.parent,
+            )
         if offset != expected:
             raise ValueError(f"unexpected upload chunk offset {offset}, expected {expected}")
-        state["data"].extend(data)
+        if expected + len(data) > total_bytes:
+            raise ValueError("upload chunk exceeds declared total_bytes")
+        path = state["path"]
+        if not isinstance(path, Path):
+            raise ValueError("invalid upload spool state")
+        with path.open("ab") as output:
+            output.write(data)
+            if req.get("final"):
+                output.flush()
+                os.fsync(output.fileno())
         state["next_offset"] = expected + len(data)
         if not req.get("final"):
             return
-        if state["next_offset"] != int(state["total_bytes"]):
+        if state["next_offset"] != total_bytes:
             raise ValueError("incomplete upload")
         upload_req = dict(state["meta"])
-        upload_req["_data_bytes"] = bytes(state["data"])
+        upload_req["_data_path"] = path
         _moonraker_upload_buffers.pop(req_id, None)
         asyncio.create_task(handle_moonraker_upload(ws, upload_req))
     except Exception as e:
-        _moonraker_upload_buffers.pop(req_id, None)
+        failed = _moonraker_upload_buffers.pop(req_id, None)
+        failed_path = failed.get("path") if isinstance(failed, dict) else None
+        if isinstance(failed_path, Path):
+            failed_path.unlink(missing_ok=True)
         log.warning("MOONRAKER_UPLOAD chunk error: %s", e)
         await ws.send(json.dumps({"id": req_id, "status": 400, "error": str(e)}))
 
@@ -2237,6 +3023,11 @@ async def handle_print_zpl(ws, req: dict) -> None:
     port   = int(body.get("port", 9100))
     zpl    = body.get("zpl", "")
     try:
+        allowed_targets = configured_tcp_targets(
+            "MONOFARM_ZPL_TARGETS",
+            default_port=9100,
+        )
+        require_registered_tcp_target(ip, port, allowed_targets)
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(ip, port), timeout=5
         )
@@ -2246,16 +3037,56 @@ async def handle_print_zpl(ws, req: dict) -> None:
         await writer.wait_closed()
         result = {"id": req_id, "status": 200, "body": {"ok": True}, "error": None}
         log.info("PRINT_ZPL: sent %d bytes to %s:%s", len(zpl), ip, port)
+    except NetworkPolicyError as e:
+        log.warning("PRINT_ZPL blocked %s:%s: %s", ip, port, e)
+        result = {"id": req_id, "status": 403, "body": None, "error": str(e)}
     except Exception as e:
         log.warning("PRINT_ZPL error %s:%s: %s", ip, port, e)
         result = {"id": req_id, "status": 502, "body": None, "error": str(e)}
     await ws.send(json.dumps(result))
 
 
+def _parse_browser_pairing_payload(raw: bytes, *, expected_state: str) -> str:
+    """Validate the browser callback without ever accepting a user token."""
+    if not raw or len(raw) > 4096:
+        raise ValueError("Pairing callback payload is empty or too large")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Pairing callback payload is invalid JSON") from exc
+    if not isinstance(payload, dict) or set(payload) != {"pairing_code", "state"}:
+        raise ValueError("Pairing callback has unexpected fields")
+    state = payload.get("state")
+    pairing_code = payload.get("pairing_code")
+    if not isinstance(state, str) or not secrets.compare_digest(state, expected_state):
+        raise ValueError("Pairing callback state does not match")
+    if (
+        not isinstance(pairing_code, str)
+        or not pairing_code.startswith("mf_pair_")
+        or not 16 <= len(pairing_code) <= 128
+    ):
+        raise ValueError("Pairing callback code is invalid")
+    return pairing_code
+
+
+def _web_origin(url: str) -> str:
+    parsed = _urlparse_mod.urlsplit(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ValueError("Frontend URL must have a trusted HTTP(S) origin")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("Frontend URL has an invalid port") from exc
+    return _urlparse_mod.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
 async def _pair_flow(server: str) -> str:
-    """Open browser to monofarm Settings and wait for the user to click 'Connect Agent'.
-    The frontend sends the JWT to our localhost callback; we save it and return it.
-    """
+    """Ask the authenticated web app for a one-time AgentDevice pairing code."""
     import socket as _sock
     import threading as _t
     import urllib.parse as _up
@@ -2263,29 +3094,75 @@ async def _pair_flow(server: str) -> str:
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
     loop = asyncio.get_running_loop()
-    token_fut: asyncio.Future[str] = loop.create_future()
+    pairing_fut: asyncio.Future[str] = loop.create_future()
+    callback_state = secrets.token_urlsafe(32)
+
+    cfg = _load_config()
+    fe_url = cfg.get("MONOFARM_FRONTEND") or server.replace(":8000", ":3000")
+    allowed_origin = _web_origin(fe_url)
 
     with _sock.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
     class _H(BaseHTTPRequestHandler):
+        def _request_allowed(self) -> bool:
+            try:
+                require_loopback_web_request(
+                    client_host=str(self.client_address[0]),
+                    host_header=self.headers.get("Host", ""),
+                    origin_header=None,
+                )
+            except NetworkPolicyError:
+                return False
+            return self.headers.get("Origin") == allowed_origin
+
+        def _cors(self) -> None:
+            self.send_header("Access-Control-Allow-Origin", allowed_origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            if self.headers.get("Access-Control-Request-Private-Network") == "true":
+                self.send_header("Access-Control-Allow-Private-Network", "true")
+
         def do_OPTIONS(self) -> None:
+            if not self._request_allowed():
+                self.send_error(403)
+                return
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self._cors()
             self.end_headers()
 
-        def do_GET(self) -> None:
-            qs  = _up.parse_qs(_up.urlparse(self.path).query)
-            tok = qs.get("token", [""])[0]
+        def do_POST(self) -> None:
+            if self.path != "/pair" or not self._request_allowed():
+                self.send_error(403)
+                return
+            if self.headers.get_content_type() != "application/json":
+                self.send_error(415)
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length", ""))
+                if not 1 <= content_length <= 4096:
+                    raise ValueError
+                pairing_code = _parse_browser_pairing_payload(
+                    self.rfile.read(content_length),
+                    expected_state=callback_state,
+                )
+            except (TypeError, ValueError):
+                self.send_error(400)
+                return
+            body = b'{"ok":true}'
             self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self._cors()
             self.end_headers()
-            self.wfile.write(b"ok")
-            if tok and not token_fut.done():
-                loop.call_soon_threadsafe(token_fut.set_result, tok)
+            self.wfile.write(body)
+            if not pairing_fut.done():
+                loop.call_soon_threadsafe(pairing_fut.set_result, pairing_code)
+
+        def do_GET(self) -> None:
+            self.send_error(405)
 
         def log_message(self, *_) -> None:
             pass
@@ -2293,24 +3170,40 @@ async def _pair_flow(server: str) -> str:
     srv = HTTPServer(("127.0.0.1", port), _H)
     _t.Thread(target=srv.serve_forever, daemon=True).start()
 
-    cfg      = _load_config()
-    fe_url   = cfg.get("MONOFARM_FRONTEND") or server.replace(":8000", ":3000")
-    pair_url = f"{fe_url}/settings?agent_pair={port}"
-    log.info("Opening browser to pair agent: %s", pair_url)
+    pair_url = (
+        f"{fe_url}/settings?section=integrations&integration=agent&agent_pair={port}"
+        f"&agent_state={_up.quote(callback_state, safe='')}"
+    )
+    log.info("Opening browser to create a one-time agent pairing code")
     _wb.open(pair_url)
     log.info("Waiting for approval in browser (120s)…")
 
     try:
-        token = await asyncio.wait_for(token_fut, timeout=120)
+        pairing_code = await asyncio.wait_for(pairing_fut, timeout=120)
     except asyncio.TimeoutError:
-        srv.shutdown()
-        log.error("Pairing timed out. Run with --token to skip.")
+        await asyncio.to_thread(srv.shutdown)
+        srv.server_close()
+        log.error("Pairing timed out. Create a new one-time pairing code and retry.")
         sys.exit(1)
 
-    srv.shutdown()
-    _save_config(server, token)
-    log.info("Token saved to %s — future runs need no arguments.", CONFIG_FILE)
-    return token
+    await asyncio.to_thread(srv.shutdown)
+    srv.server_close()
+    return pairing_code
+
+
+async def _pair_device_flow(server: str, pairing_code: str) -> None:
+    """Pair as a dedicated AgentDevice; no user JWT is retained on the farm PC."""
+    server = require_cloud_server_url(server)
+    async with httpx.AsyncClient(timeout=20) as client:
+        result = await pair_device(
+            client,
+            server=server,
+            pairing_code=pairing_code,
+            name=socket.gethostname() or "Monofarm Agent",
+            capabilities=AGENT_CAPABILITIES,
+        )
+    _save_device_pairing(server, result)
+    log.info("Dedicated agent device paired and saved to %s", CONFIG_FILE)
 
 
 async def run(server: str, token: str, *, on_state=None, run_updates: bool = True) -> None:
@@ -2321,6 +3214,7 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
     host disable the built-in auto-updater if it manages updates itself.
     """
     global _tg_server, _tg_jwt, _main_loop, _current_server, _cloud_connected, _alert_chat_ids, _update_task
+    server = require_cloud_server_url(server)
     _tg_server = server
     _tg_jwt    = token
     _main_loop = asyncio.get_running_loop()
@@ -2334,10 +3228,6 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
             except Exception:
                 pass
 
-    ws_url = (
-        server.replace("https://", "wss://").replace("http://", "ws://")
-        + f"/api/agent/connect?token={token}"
-    )
     log.info("monofarm-agent v%s connecting to %s …", AGENT_VERSION, server)
     ensure_bambu_mqtt_dependency()
     if _update_task and not _update_task.done():
@@ -2351,8 +3241,15 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
     while True:
         try:
             _emit("connecting")
+            ws_url, _access_token = await _websocket_credentials(server, token)
+            websocket_headers = (
+                {"Authorization": f"Bearer {_access_token}"}
+                if _configured_device_credentials() is not None
+                else None
+            )
             async with websockets.connect(
                 ws_url,
+                additional_headers=websocket_headers,
                 ping_interval=20,
                 # Large uploads can temporarily starve a WAN relay. Do not
                 # kill an otherwise active tunnel after a short 10s pause.
@@ -2367,16 +3264,30 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                 await ws.send(json.dumps({
                     "type": "AGENT_HELLO",
                     "version": AGENT_VERSION,
-                    "capabilities": ["moonraker_upload_chunks", "moonraker_upload_url"],
+                    "capabilities": list(AGENT_CAPABILITIES),
                 }))
+                command_worker_task: asyncio.Task | None = None
+                command_journal: SQLiteCommandJournal | None = None
+                artifact_client: httpx.AsyncClient | None = None
+                if _configured_device_credentials() is not None:
+                    await _refresh_v2_runtime_config(server, token)
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
+                if _configured_device_credentials() is not None:
+                    worker, command_journal, artifact_client = _build_protocol_v2_runtime(
+                        server,
+                        token,
+                    )
+                    command_worker_task = asyncio.create_task(worker.run())
 
                 # Fetch TG config on every connect (token may have changed while disconnected)
                 try:
                     async with httpx.AsyncClient(timeout=10) as client:
-                        r = await client.get(
-                            f"{server}/api/agent/tg-config",
-                            headers={"Authorization": f"Bearer {token}"},
+                        r = await _agent_api_request(
+                            client,
+                            "GET",
+                            server,
+                            token,
+                            "tg-config",
                         )
                         if r.status_code == 200:
                             tg_cfg = r.json()
@@ -2416,9 +3327,11 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                         if method == "MOONRAKER_SUBSCRIBE":
                             asyncio.create_task(handle_moonraker_subscribe(ws, req))
                         elif method == "BAMBU_CAMERA":
-                            asyncio.create_task(handle_bambu_camera(ws, req))
+                            _start_stream_task(ws, req, handle_bambu_camera)
                         elif method == "FFMPEG_STREAM":
-                            asyncio.create_task(handle_ffmpeg_stream(ws, req))
+                            _start_stream_task(ws, req, handle_ffmpeg_stream)
+                        elif method == "STREAM_CANCEL":
+                            _cancel_stream_task(req.get("id", ""))
                         elif method == "DISCOVER_BAMBU":
                             asyncio.create_task(handle_discover_bambu(ws, req))
                         elif method == "DISCOVER_MOONRAKER":
@@ -2429,9 +3342,14 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                             asyncio.create_task(handle_bambu_mqtt(ws, req))
                         elif method == "MOONRAKER_UPLOAD":
                             if req.get("chunked"):
+                                with tempfile.NamedTemporaryFile(
+                                    suffix=".upload",
+                                    delete=False,
+                                ) as upload_spool:
+                                    spool_path = Path(upload_spool.name)
                                 _moonraker_upload_buffers[req["id"]] = {
                                     "meta": req,
-                                    "data": bytearray(),
+                                    "path": spool_path,
                                     "next_offset": 0,
                                     "total_bytes": int(req.get("total_bytes", 0)),
                                 }
@@ -2444,7 +3362,7 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                         elif method == "AGENT_LOGS":
                             asyncio.create_task(handle_agent_logs(ws, req))
                         elif method == "STREAM":
-                            asyncio.create_task(handle_stream(ws, req))
+                            _start_stream_task(ws, req, handle_stream)
                         else:
                             asyncio.create_task(handle_request(ws, req))
                 finally:
@@ -2452,8 +3370,24 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                     _cloud_connected = False
                     _cancel_all_subscriptions()
                     _cancel_all_bambu_lan_subscriptions()
+                    _cancel_all_stream_tasks()
+                    for upload_state in _moonraker_upload_buffers.values():
+                        spool_path = upload_state.get("path")
+                        if isinstance(spool_path, Path):
+                            spool_path.unlink(missing_ok=True)
                     _moonraker_upload_buffers.clear()
                     bambu_lan_task.cancel()
+                    if command_worker_task is not None:
+                        command_worker_task.cancel()
+                    await asyncio.gather(
+                        bambu_lan_task,
+                        *([command_worker_task] if command_worker_task is not None else []),
+                        return_exceptions=True,
+                    )
+                    if artifact_client is not None:
+                        await artifact_client.aclose()
+                    if command_journal is not None:
+                        command_journal.close()
 
         except asyncio.CancelledError:
             _emit("disconnected")
@@ -2528,19 +3462,24 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python monofarm_agent.py                                    # pair via browser (first run)
-  python monofarm_agent.py --server http://192.168.1.10:8000 # custom server, pair via browser
-  python monofarm_agent.py --token eyJ...                    # skip pairing, use token directly
+  python monofarm_agent.py --pairing-code mf_pair_...        # recommended device pairing
+  python monofarm_agent.py --server http://192.168.1.10:8000 --pairing-code mf_pair_...
+  python monofarm_agent.py --token eyJ...                    # deprecated v1 migration only
 
-On first run without --token the browser opens to monofarm Settings automatically.
-Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
+Device identity is saved to ~/.monofarm-agent/.env; the user JWT is not retained.
         """,
     )
     parser.add_argument("--server", default=None,
                         help="monofarm server URL (default: from saved config or https://api.monofarm.app)")
     parser.add_argument("--token", default=None,
-                        help="JWT token — omit to use saved config or pair via browser")
+                        help="deprecated user JWT for protocol-v1 migration only")
+    parser.add_argument("--pairing-code", default=None,
+                        help="single-use AgentDevice pairing code created by an organization admin")
+    parser.add_argument("--update-health-check", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    if args.update_health_check:
+        return
 
     _cleanup_old_exe()
     setup_file_logging()
@@ -2551,6 +3490,7 @@ Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
     cfg    = _load_config()
     server = args.server or cfg["MONOFARM_SERVER"]
     token  = args.token  or cfg["MONOFARM_TOKEN"]
+    pairing_code = args.pairing_code or cfg.get("MONOFARM_PAIRING_CODE", "")
 
     # Local setup/status UI (SimplyPrint-style). MONOFARM_WEB_PORT=0 disables.
     try:
@@ -2562,8 +3502,12 @@ Token is saved to ~/.monofarm-agent/.env — subsequent runs need no arguments.
 
     async def _run() -> None:
         nonlocal token
-        if not token:
-            token = await _pair_flow(server)
+        if pairing_code:
+            await _pair_device_flow(server, pairing_code)
+            token = ""
+        if not token and _configured_device_credentials() is None:
+            browser_pairing_code = await _pair_flow(server)
+            await _pair_device_flow(server, browser_pairing_code)
         await run(server, token)
 
     async def _run_with_cleanup() -> None:

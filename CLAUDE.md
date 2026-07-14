@@ -80,8 +80,9 @@ Tests use a separate `printfarm_test` Postgres database. Override with `TEST_DAT
 | `warehouse.py` | `/warehouse` | full ERP — see Warehouse module section |
 | `keycrm.py` | `/keycrm` | KeyCRM webhook receiver (orders → warehouse orders) |
 | `billing.py` | `/api/billing` | Lemon Squeezy checkout, webhook, cancel |
-| `agent.py` | `/api/agent` | WebSocket tunnel for local farm agent; version check |
-| `agent_tg.py` | `/api/agent` | agent Telegram endpoints (tg-config, tg-command) |
+| `agent.py` | `/api/agent` | paired Agent v2 live tunnel, runtime config and signed update manifest |
+| `agent_devices.py` | `/api/agent` | device pairing/revocation, durable command lease/ACK/event APIs |
+| `agent_tg.py` | `/api/agent` | scoped v2 + legacy migration Telegram endpoints |
 | `octoprint.py` | `/api` | OctoPrint shim for OrcaSlicer |
 
 **`core/`:**
@@ -102,7 +103,8 @@ Tests use a separate `printfarm_test` Postgres database. Override with `TEST_DAT
 - `daily_report.py` — `build_status_text()` / `build_daily_report()` for 09:00 Kyiv broadcast.
 - `scheduler.py` — APScheduler wrapper: daily report job, Bambu token refresh.
 - `print_tracker.py` — tracks active print jobs, writes to `PrintHistory` on completion.
-- `tunnel.py` — WebSocket manager for farm agent connections. Agents authenticate with JWT and proxy HTTP to local Moonraker/services.
+- `agent_auth.py` / `agent_commands.py` — dedicated device credentials, short-lived scoped JWTs, durable command leases/ACKs and idempotent event ingest.
+- `tunnel.py` — live WebSocket manager for paired agents; status/cameras plus a restricted legacy relay during migration.
 - `go2rtc.py` — camera stream proxy via go2rtc sidecar (`GO2RTC_URL`). Used for Bambu camera streams.
 - `bootstrap.py` — seeds admin user and default org on first start.
 

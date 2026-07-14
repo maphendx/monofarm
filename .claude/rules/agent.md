@@ -2,72 +2,156 @@
 paths:
   - "agent/**"
   - "backend/app/api/agent.py"
+  - "backend/app/api/agent_devices.py"
   - "backend/app/api/agent_tg.py"
+  - "backend/app/models/agent.py"
+  - "backend/app/services/agent_auth.py"
+  - "backend/app/services/agent_commands.py"
   - "backend/app/services/tunnel.py"
 ---
 
 # Local farm agent
 
-Long-form context in root `CLAUDE.md`. Rules specific to agent code:
-
 ## Version bump — three files, always together
 
-When changing agent behaviour, bump `AGENT_VERSION` in **all three**:
-- `agent/monofarm_agent.py` — `AGENT_VERSION = "x.y.z"`
-- `agent/monofarm_tray.py` — `AGENT_VERSION = "x.y.z"`
-- `backend/app/api/agent.py` — `AGENT_VERSION = "x.y.z"`
+When changing shipped agent behaviour, bump `AGENT_VERSION` in all three files:
 
-Forgetting one causes the agent to self-update in a loop.
+- `agent/monofarm_agent.py`
+- `agent/monofarm_tray.py`
+- `backend/app/api/agent.py`
 
-## Wire protocol — do not change message shapes
+Forgetting one causes an update loop. A release is not complete until the exact
+source-runtime allowlists, PyInstaller hidden imports, installers and signed
+manifest all contain every imported runtime module; `agent/test_distribution.py`
+and `backend/tests/integration/test_agent_exe.py` enforce that set.
 
-Request/response envelope is fixed (used by both agent and backend tunnel):
+## Authentication and pairing
+
+New installs use a one-time pairing code and a dedicated `AgentDevice` identity.
+The long-lived device secret stays in `~/.monofarm-agent/.env`; the agent mints a
+five-minute scoped JWT via `/api/agent/v2/token`. Never persist a user JWT in the
+tray, return it to browser JavaScript, or add credentials to log messages.
+
+`/api/agent/connect` with a user JWT is migration-only. New clients connect to
+`/api/agent/v2/connect`. Revocation and credential rotation must fail closed;
+the server watchdog revalidates the device from a fresh DB session.
+
+## Two protocol planes
+
+The v2 control plane is the source of truth for physical side effects:
+
+1. admin creates a typed command;
+2. the agent leases it from `/api/agent/v2/commands/pull`;
+3. the command is persisted to SQLite before execution;
+4. the provider adapter uses only fixed targets from `/api/agent/v2/runtime-config`;
+5. ACK milestones and a monotonic event outbox are sent back to the cloud;
+6. ambiguous starts enter `needs_reconcile` and must never be blindly replayed.
+
+Long-running commands renew their active lease. Expired active leases are
+recoverable after a crash, while `printer.start` remains quarantined for an
+explicit semantic reconcile.
+
+The WebSocket relay remains for live state, cameras, discovery and legacy
+calls. Its historical envelope is fixed:
 
 ```python
 # Regular
-server→agent: {"id": "…", "method": "GET|POST|…", "url": "…", "body": null}
-agent→server: {"id": "…", "status": 200, "body": {…}, "error": null}
+server_to_agent = {"id": "…", "method": "GET|POST|…", "url": "…", "body": None}
+agent_to_server = {"id": "…", "status": 200, "body": {}, "error": None}
 
-# Streaming (camera / mjpeg)
-server→agent: {"id": "…", "method": "STREAM", "url": "…"}
-agent→server: {"id": "…", "type": "stream_start", "status": 200}
-agent→server: {"id": "…", "type": "chunk", "data": "<base64>"}  # repeated
-agent→server: {"id": "…", "type": "stream_end"}
-
-# Bambu camera
-method: "BAMBU_CAMERA", body: {"dev_ip": "…", "access_code": "…"}
+# Streaming
+server_to_agent = {"id": "…", "method": "STREAM", "url": "…"}
+agent_to_server = {"id": "…", "type": "stream_start", "status": 200}
+agent_to_server = {"id": "…", "type": "chunk", "data": "<base64>"}
+agent_to_server = {"id": "…", "type": "stream_end"}
 ```
 
-Adding new methods: implement in `tunnel.py` dispatch and the corresponding agent handler in `monofarm_agent.py`.
+Do not add a general-purpose LAN proxy. Legacy HTTP requests are restricted to
+registered private printer targets and explicit methods; raw TCP is restricted
+to configured ZPL targets. The local setup UI is loopback-only with Host/Origin
+validation.
 
-## Agent auth
+## Provider adapters
 
-Agent authenticates via `?token=<JWT>` query param on the WebSocket URL. The JWT is a regular user JWT — validated by `decode_token()` in `tunnel.py`. Do not add a separate auth scheme.
+Operational and tested-in-code adapters are:
 
-## Reconnect behaviour
+- Bambu LAN: P1S, A1 and A1 mini over implicit FTPS + MQTT;
+- Moonraker/Klipper: generic Klipper and Snapmaker U1.
 
-Agent auto-reconnects every `RECONNECT_DELAY=5s` on disconnect. It also checks for updates every `UPDATE_INTERVAL=6h` via `GET /api/agent/version`. Do not add reconnect logic inside individual request handlers — it lives in the outer connection loop.
+Provider implementations live in `agent/provider_adapters.py`; fixed target and
+strict command dispatch live in `agent/printer_runtime.py`. Adding a brand means
+adding a typed adapter, descriptor, capability/transport metadata, contract
+tests, protocol fixtures and live hardware certification. Do not label a brand
+operational based only on discovery or a guessed payload.
 
-## Per-org TG bot (agent_tg.py)
+Slot indexing remains 0-based. Bambu starts require semantic task correlation;
+Moonraker starts require exact filename plus printer state. MQTT PUBACK or an
+HTTP 2xx alone is not proof that printing started.
 
-`GET /api/agent/tg-config` → returns decrypted `tg_bot_token` + cached username for the org.
-`POST /api/agent/tg-command` → handles bot commands and returns reply text (no network call from server — the agent sends the reply).
-The agent runs a local `python-telegram-bot` instance using the per-org token. Do not call Telegram from `agent_tg.py` directly — return the text, the agent sends it.
+Durable Moonraker dispatch is byte-for-byte only. Identity slot maps on generic
+Moonraker printers are allowed; any non-identity remap, print-option override,
+`calibrate_slots`, metadata-driven unused-slot filtering, or Snapmaker U1 slot
+mapping must fall back before file reads or job mutation to the existing
+transforming dispatcher. Validate upload/start/reconcile against
+`provider=moonraker` and the exact filename. Leave an agent-confirmed job in
+`acknowledged` so `print_tracker` remains the lifecycle owner.
 
-## Config storage
+Printer ownership is explicit through `Printer.agent_device_id`. A site-scoped
+device must never receive an unassigned printer. The sole unscoped device may
+inherit unassigned printers only as the migration compatibility path.
 
-Agent stores config in `~/.monofarm-agent/.env`. Never hardcode paths — always use `CONFIG_DIR / CONFIG_FILE`. On Windows the tray app (`monofarm_tray.py`) uses the same config dir. Writes go through the atomic `_write_config` / `save_config` (temp + `os.replace`) and **merge** existing keys — never overwrite the file with a subset (that once wiped `ALERT_CHAT_IDS`).
+## Artifacts and durability
 
-## One canonical loop — tray is a thin host
+Artifacts download to a per-device spool using HTTPS, a server-provided host
+allowlist, expected size, SHA-256, quota checks, bounded 64 KiB reads, `.part`
+resume and atomic rename. Never buffer a print file in RAM. Command and event
+state lives in the per-device SQLite journal under `CONFIG_DIR/runtime/`.
 
-`monofarm_agent.run(server, token, *, on_state=None, run_updates=True)` is the **single** WebSocket relay + dispatch loop (TG bot, `MOONRAKER_SUBSCRIBE`, Bambu LAN, alerts, updates). The tray (`monofarm_tray.py`) must **host** `run()` and only add GUI (tray icon, local browser UI, autostart, printer discovery). Do **not** re-add a parallel dispatch loop to the tray — the old duplicate silently dropped the Telegram bot and Moonraker live state on Windows. New server→agent methods go in `run()`'s dispatch only.
+## One canonical loop
 
-## Relay purity — nothing processed on our server
+`monofarm_agent.run(...)` is the only relay/runtime loop. The tray is a thin GUI
+host. Do not add a second dispatch loop to the tray.
 
-The agent is the smart edge: it receives commands and relays them to local printers, and receives printer state and relays it to the cloud. The server is **relay + cache only** — do not move printer/alert/photo processing onto the server. Failure-alert detection, camera snapshots and Telegram sending all happen on the agent (see [[project_printer_alerts]]).
+Reconnect logic belongs to the outer loop. A reconnect creates a new command
+worker over the same device journal, refreshes runtime config, restarts local
+printer subscriptions and flushes the durable event outbox.
 
-## Distribution — exe-first on Windows
+## Configuration storage
 
-- Windows: a frozen PyInstaller **.exe** (`monofarm-agent.spec`, entry `monofarm_tray.py`). Built on a Windows CI runner (`.github/workflows/agent-build.yml`) — **cannot build on Linux/macOS** — and uploaded to R2 at `agent/monofarm-agent.exe`. Served by `GET /agent/monofarm-agent.exe` (302 → presigned). `install.ps1` is exe-first (no Python).
-- Linux/Pi/dev: Python source via `install.sh` / `requirements.txt`.
-- Auto-update (`check_for_update`) is **frozen-aware**: `.exe` self-swaps (`*.old.exe` cleaned next launch); source path rewrites `.py` + re-execs. Still bump `AGENT_VERSION` in all three files together; tag `agent-v*` to publish a new exe.
+All local writes go through atomic merge-based config helpers. Never replace
+`~/.monofarm-agent/.env` with a partial mapping. Device identity, update trust
+keys and alert chat IDs must survive updates and re-pairing.
+
+TLS verification is the default. Per-target insecure exceptions are explicit
+operator configuration (`MONOFARM_BAMBU_INSECURE_TARGETS` and
+`MONOFARM_MOONRAKER_INSECURE_TARGETS`), never an automatic retry path.
+
+## Distribution and OTA
+
+- Windows: PyInstaller executable built by `.github/workflows/agent-build.yml`.
+- Linux/Pi: atomic versioned source releases installed by `agent/install.sh`.
+- Legacy single-file installs migrate through `agent/legacy_bootstrap.py`.
+- OTA manifests are Ed25519-signed and every artifact has exact size + SHA-256.
+
+The update signing private key is CI-only and must never be available to the
+backend. The matching public trust root is committed in
+`agent/release_public_key.b64` and must stay byte-for-byte identical in the
+legacy bootstrap, runtime, installers, backend and frontend. CI writes one
+immutable, full-release manifest after all versioned artifacts; the backend
+verifies it and serves it verbatim. Existing single-file agents receive the
+one-time bootstrap over the historical HTTPS route; that bootstrap pins the
+committed key before activating any modular runtime. All subsequent installs
+and updates reject unsigned, stale, downgraded or partial bundles. Keep the
+historical bootstrap route until the deployed v1 fleet has migrated.
+
+On a `main` push, CI must publish a changed agent version before the existing
+production deploy workflow may run. Runtime changes without an
+`AGENT_VERSION` bump fail CI. Never bypass that gate or overwrite an immutable
+release object.
+
+## Telegram and cameras
+
+Paired devices use `/api/agent/v2/tg-*`; v1 endpoints exist only for migration.
+Telegram sending, failure detection and local snapshots stay on the agent.
+Camera/live streams are bounded and cancellable; disconnect cleanup must cancel
+all producers and printer subscriptions.

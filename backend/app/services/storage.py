@@ -12,7 +12,7 @@ import tempfile
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Generator
+from typing import Generator, TypedDict
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,12 @@ _BASE = Path(__file__).resolve().parent.parent.parent / "data"
 # Legacy alias kept for files.py backward compatibility
 LOCAL_DIR = _BASE / "gcodes"
 LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class RawObjectHead(TypedDict):
+    key: str
+    size: int
+    metadata: dict[str, str]
 
 
 def _local_dir(prefix: str) -> Path:
@@ -148,6 +154,64 @@ def presigned_url_raw(key: str, expires: int = 3600) -> str | None:
         Params={"Bucket": settings.S3_BUCKET, "Key": key},
         ExpiresIn=expires,
     )
+
+
+def head_raw_object(key: str) -> RawObjectHead | None:
+    """Return untrusted HEAD data for a non-org-scoped R2 object."""
+    if not is_s3():
+        return None
+    from app.core.config import settings
+    try:
+        response = _client().head_object(Bucket=settings.S3_BUCKET, Key=key)
+    except Exception:
+        return None
+
+    size = response.get("ContentLength")
+    raw_metadata = response.get("Metadata")
+    if not isinstance(size, int) or size <= 0 or not isinstance(raw_metadata, dict):
+        return None
+
+    return {
+        "key": key,
+        "size": size,
+        "metadata": {
+            str(name).lower(): str(value)
+            for name, value in raw_metadata.items()
+        },
+    }
+
+
+def get_raw_object_bytes(key: str, max_bytes: int) -> bytes:
+    """Read one small global object with an explicit hard size bound."""
+
+    if max_bytes <= 0:
+        raise ValueError("raw object size limit must be positive")
+    if not is_s3():
+        raise FileNotFoundError(key)
+    from app.core.config import settings
+
+    try:
+        response = _client().get_object(Bucket=settings.S3_BUCKET, Key=key)
+    except Exception as exc:
+        raise FileNotFoundError(key) from exc
+    declared_size = response.get("ContentLength")
+    body = response.get("Body")
+    if (
+        not isinstance(declared_size, int)
+        or declared_size < 0
+        or declared_size > max_bytes
+        or body is None
+    ):
+        raise ValueError("raw object exceeds configured size limit")
+    try:
+        data = body.read(max_bytes + 1)
+    finally:
+        close = getattr(body, "close", None)
+        if callable(close):
+            close()
+    if len(data) != declared_size or len(data) > max_bytes:
+        raise ValueError("raw object size does not match storage metadata")
+    return data
 
 
 @contextmanager

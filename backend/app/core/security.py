@@ -28,7 +28,12 @@ def create_access_token(subject: str, role: str, org_id: int | None) -> str:
 
 def decode_token(token: str) -> dict | None:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        # User access tokens are currently untyped. Typed credentials (agent,
+        # password reset, verify, invite) must use their dedicated decoder.
+        if payload.get("typ") is not None:
+            return None
+        return payload
     except jwt.PyJWTError:
         return None
 
@@ -82,4 +87,3 @@ def create_reset_token(user: object) -> str:
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
-

@@ -7,6 +7,46 @@ on:
     branches: [main, dev]
 
 jobs:
+  release_plan:
+    name: Agent release plan
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: plan
+        name: Enforce agent version boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" != "push" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          if [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]]; then
+            BEFORE="$(git rev-parse HEAD^)"
+          fi
+          CURRENT_VERSION="$(python -c 'import pathlib, re; text=pathlib.Path("agent/monofarm_agent.py").read_text(); match=re.search(r"^AGENT_VERSION = \"([^\"]+)\"$", text, re.MULTILINE); print(match.group(1) if match else "")')"
+          PREVIOUS_VERSION="$(git show "${BEFORE}:agent/monofarm_agent.py" | python -c 'import re, sys; match=re.search(r"^AGENT_VERSION = \"([^\"]+)\"$", sys.stdin.read(), re.MULTILINE); print(match.group(1) if match else "")')"
+          test -n "$CURRENT_VERSION"
+          test -n "$PREVIOUS_VERSION"
+
+          RUNTIME_PATTERN='^agent/(monofarm_agent\.py|monofarm_tray\.py|command_worker\.py|command_runtime\.py|device_identity\.py|network_policy\.py|printer_runtime\.py|provider_adapters\.py|update_policy\.py|requirements\.txt|monofarm-agent\.spec|edge_runtime/)'
+          RUNTIME_CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" -- agent/ | grep -E "$RUNTIME_PATTERN" || true)"
+          if [[ -n "$RUNTIME_CHANGED" && "$CURRENT_VERSION" == "$PREVIOUS_VERSION" ]]; then
+            echo "::error::Agent runtime changed without AGENT_VERSION bump"
+            printf '%s\n' "$RUNTIME_CHANGED"
+            exit 1
+          fi
+          if [[ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
     name: Backend (lint + tests)
     runs-on: ubuntu-latest
@@ -104,3 +144,10 @@ jobs:
           # the API and fails in CI.
           NEXT_PUBLIC_API_URL: http://localhost:8000
         run: bun run build
+
+  agent_release:
+    name: Publish signed agent release
+    needs: [backend, frontend, release_plan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.release_plan.outputs.publish == 'true'
+    uses: ./.github/workflows/agent-build.yml
+    secrets: inherit
