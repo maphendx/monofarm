@@ -52,6 +52,10 @@ _tunnels: dict[int, WebSocket] = {}
 # connection merely because an organization-level tunnel exists.
 _device_tunnels: dict[int, tuple[UUID, WebSocket]] = {}
 _agent_capabilities: dict[int, set[str]] = {}
+# Reconnects replace, rather than accumulate, delayed setup work. Without this
+# guard a flapping agent can start the same 200-job history scan many times.
+_subscription_tasks: dict[int, asyncio.Task[None]] = {}
+_backfill_tasks: dict[int, asyncio.Task[None]] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
 # request_id → org_id — lets unregister() fail only its own org's requests
@@ -185,8 +189,7 @@ async def register(
             except Exception:
                 log.debug("Failed to fence stale agent socket for org %s", org_id)
             log.info("Agent device %s reconnected for org %s", device_id, org_id)
-            asyncio.create_task(_subscribe_org_printers(org_id, device_id=device_id))
-            asyncio.create_task(_backfill_org_history(org_id, device_id=device_id))
+            _schedule_connection_setup(org_id, device_id=device_id)
             return True
         if device_id is not None or registered_device is not None:
             # There is no Printer.site_id/device assignment yet. Allowing a
@@ -208,9 +211,40 @@ async def register(
         _device_tunnels[org_id] = (device_id, ws)
     _agent_capabilities[org_id] = set()
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
-    asyncio.create_task(_subscribe_org_printers(org_id, device_id=device_id))
-    asyncio.create_task(_backfill_org_history(org_id, device_id=device_id))
+    _schedule_connection_setup(org_id, device_id=device_id)
     return True
+
+
+def _replace_org_task(
+    tasks: dict[int, asyncio.Task[None]],
+    org_id: int,
+    coroutine,
+) -> None:
+    previous = tasks.get(org_id)
+    if previous is not None and not previous.done():
+        previous.cancel()
+
+    task = asyncio.create_task(coroutine)
+    tasks[org_id] = task
+
+    def cleanup(finished: asyncio.Task[None]) -> None:
+        if tasks.get(org_id) is finished:
+            tasks.pop(org_id, None)
+
+    task.add_done_callback(cleanup)
+
+
+def _schedule_connection_setup(org_id: int, *, device_id: UUID | None) -> None:
+    _replace_org_task(
+        _subscription_tasks,
+        org_id,
+        _subscribe_org_printers(org_id, device_id=device_id),
+    )
+    _replace_org_task(
+        _backfill_tasks,
+        org_id,
+        _backfill_org_history(org_id, device_id=device_id),
+    )
 
 
 async def _subscribe_org_printers(org_id: int, *, device_id: UUID | None = None) -> None:
@@ -294,6 +328,10 @@ async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
     if registered_device is not None and (ws is None or registered_device[1] is ws):
         _device_tunnels.pop(org_id, None)
     _agent_capabilities.pop(org_id, None)
+    for tasks in (_subscription_tasks, _backfill_tasks):
+        task = tasks.pop(org_id, None)
+        if task is not None and not task.done():
+            task.cancel()
     # Fail only this org's futures — other orgs' in-flight requests stay alive
     for req_id, fut in list(_pending.items()):
         if _pending_org.get(req_id) != org_id:
@@ -500,7 +538,7 @@ async def handle_agent_message(
         required_scope = _required_scope_for_message(data)
         if scopes is None or required_scope not in scopes:
             raise AgentMessageRejected(f"Agent message requires {required_scope}")
-        _authorize_v2_message_target(data, org_id, device_id)
+        await asyncio.to_thread(_authorize_v2_message_target, data, org_id, device_id)
 
     if msg_type == "AGENT_HELLO":
         _agent_capabilities[org_id] = set(data.get("capabilities") or [])
