@@ -246,9 +246,16 @@ async def send_file_to_moonraker(
         or used_set is not None
         or calibrate_set is not None
     )
+    local_agent_transform = (
+        is_u1
+        and has_options
+        and bool(presigned_url)
+        and _tunnel.has_tunnel(org_id)
+        and _tunnel.has_capability(org_id, "moonraker_upload_local_transform")
+    )
 
     working: bytes | None = None
-    if has_options:
+    if has_options and not local_agent_transform:
         working = await asyncio.to_thread(
             mr.apply_print_options,
             src,
@@ -285,6 +292,15 @@ async def send_file_to_moonraker(
             # Rewritten gcode differs from the stored object — R2 direct
             # download is only valid when the file goes out unmodified.
             presigned_url=presigned_url if working is None else None,
+            print_options={
+                "auto_bed_leveling": auto_bed_leveling,
+                "timelapse": timelapse,
+                "ai_detection": ai_detection,
+                "used_slots": sorted(used_set) if used_set is not None else None,
+                "calibrate_slots": (
+                    sorted(calibrate_set) if calibrate_set is not None else None
+                ),
+            } if local_agent_transform else None,
         )
     elif working is not None:
         with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:

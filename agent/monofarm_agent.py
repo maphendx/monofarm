@@ -38,7 +38,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.10"
+AGENT_VERSION = "0.8.11"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
@@ -2075,6 +2075,79 @@ async def handle_bambu_upload(ws, req: dict) -> None:
     await ws.send(json.dumps(result))
 
 
+def apply_moonraker_print_options(file_bytes: bytes, options: dict) -> bytes:
+    """Apply U1 print options after the Agent downloads the file directly."""
+    import re
+
+    content = file_bytes.decode("utf-8", errors="ignore")
+    out = content
+    if options.get("auto_bed_leveling") is False:
+        out = re.sub(
+            r"^(BED_MESH_CALIBRATE\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+    if options.get("timelapse") is False:
+        out = re.sub(
+            r"^(TIMELAPSE_(?:START|TAKE_FRAME)\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+    if options.get("ai_detection") is False:
+        out = re.sub(
+            r"^((?:DEFECT_DETECTION_(?:START|DETECT(?:_BED)?)|DETECT_BED_PLATE)\b.*)$",
+            r"; SKIPPED \1",
+            out,
+            flags=re.MULTILINE,
+        )
+
+    raw_used_slots = options.get("used_slots")
+    used_slots = (
+        {int(slot) for slot in raw_used_slots}
+        if raw_used_slots is not None
+        else None
+    )
+    raw_calibrate_slots = options.get("calibrate_slots")
+    calibrate_slots = (
+        {int(slot) for slot in raw_calibrate_slots}
+        if raw_calibrate_slots is not None
+        else None
+    )
+    if used_slots is not None:
+        out = re.sub(
+            r"^SM_PRINT_(?:EXTRUDER_PREHEAT|AUTO_FEED)\s+EXTRUDER=(\d+).*$",
+            lambda match: (
+                match.group(0)
+                if int(match.group(1)) in used_slots
+                else "; SKIPPED " + match.group(0)
+            ),
+            out,
+            flags=re.MULTILINE,
+        )
+
+    effective_slots: set[int] | None = None
+    if calibrate_slots is not None and used_slots is not None:
+        effective_slots = calibrate_slots & used_slots
+    elif calibrate_slots is not None:
+        effective_slots = calibrate_slots
+    elif used_slots is not None:
+        effective_slots = used_slots
+    if effective_slots is not None:
+        out = re.sub(
+            r"^SM_PRINT_FLOW_CALIBRATE\s+EXTRUDER=(\d+).*$",
+            lambda match: (
+                match.group(0)
+                if int(match.group(1)) in effective_slots
+                else "; SKIPPED " + match.group(0)
+            ),
+            out,
+            flags=re.MULTILINE,
+        )
+    return file_bytes if out == content else out.encode("utf-8")
+
+
 async def handle_moonraker_upload(ws, req: dict) -> None:
     """Upload a gcode/3mf file to Moonraker via multipart POST.
 
@@ -2120,6 +2193,9 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
             file_bytes = b"".join(parts)
         else:
             file_bytes = base64.b64decode(data_b64)
+        print_options = req.get("print_options")
+        if isinstance(print_options, dict):
+            file_bytes = apply_moonraker_print_options(file_bytes, print_options)
         boundary = "----monofarm-upload-" + hashlib.sha256(req_id.encode()).hexdigest()[:16]
         prefix = (
             f"--{boundary}\r\n"
@@ -2390,7 +2466,11 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                 await ws.send(json.dumps({
                     "type": "AGENT_HELLO",
                     "version": AGENT_VERSION,
-                    "capabilities": ["moonraker_upload_chunks", "moonraker_upload_url"],
+                    "capabilities": [
+                        "moonraker_upload_chunks",
+                        "moonraker_upload_url",
+                        "moonraker_upload_local_transform",
+                    ],
                 }))
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
 

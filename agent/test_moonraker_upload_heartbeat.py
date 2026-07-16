@@ -58,3 +58,28 @@ def test_moonraker_upload_heartbeats_while_waiting_for_printer(monkeypatch) -> N
     assert len(progress) >= 2
     assert all(m.get("heartbeat") is True for m in progress)
     assert ws.messages[-1]["status"] == 201
+
+
+def test_moonraker_print_options_are_applied_locally() -> None:
+    source = (
+        b"BED_MESH_CALIBRATE PROFILE=default\n"
+        b"TIMELAPSE_START\n"
+        b"TIMELAPSE_TAKE_FRAME\n"
+        b"DEFECT_DETECTION_START\n"
+        b"SM_PRINT_FLOW_CALIBRATE EXTRUDER=0\n"
+        b"SM_PRINT_FLOW_CALIBRATE EXTRUDER=1\n"
+    )
+
+    result = monofarm_agent.apply_moonraker_print_options(source, {
+        "auto_bed_leveling": False,
+        "timelapse": False,
+        "ai_detection": False,
+        "used_slots": [0, 1],
+        "calibrate_slots": [],
+    })
+
+    assert b"; SKIPPED BED_MESH_CALIBRATE" in result
+    assert b"; SKIPPED TIMELAPSE_START" in result
+    assert b"; SKIPPED DEFECT_DETECTION_START" in result
+    assert b"; SKIPPED SM_PRINT_FLOW_CALIBRATE EXTRUDER=0" in result
+    assert b"; SKIPPED SM_PRINT_FLOW_CALIBRATE EXTRUDER=1" in result

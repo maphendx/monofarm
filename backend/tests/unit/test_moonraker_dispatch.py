@@ -75,3 +75,56 @@ def test_u1_upload_maps_then_explicitly_starts_without_rewriting_logical_tools(t
     assert calls[2] == ("gcode", 'SDCARD_PRINT_FILE FILENAME="part.gcode"')
     assert result["start_requested"] is True
     assert source.read_bytes() == b"T0\nT1\n"
+
+
+def test_u1_options_use_agent_local_transform_with_direct_url(tmp_path, monkeypatch):
+    from app.services import moonraker, tunnel
+
+    source = tmp_path / "large.gcode"
+    source.write_bytes(b"TIMELAPSE_START\nG1 X1\n")
+    upload: dict = {}
+
+    async def fake_tunnel_upload(
+        _org_id,
+        _url,
+        _filename,
+        _file_bytes,
+        **kwargs,
+    ):
+        upload.update(kwargs)
+        return {"result": {"print_started": False}}
+
+    async def fake_action(_org_id, _url, path, body, **_kwargs):
+        return {"path": path, "script": body["script"]}
+
+    monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: True)
+    monkeypatch.setattr(tunnel, "has_capability", lambda _org_id, _capability: True)
+    monkeypatch.setattr(tunnel, "send_moonraker_upload", fake_tunnel_upload)
+    monkeypatch.setattr(tunnel, "moonraker_action", fake_action)
+    monkeypatch.setattr(
+        moonraker,
+        "apply_print_options",
+        lambda *_args, **_kwargs: pytest.fail("cloud must not rewrite the large file"),
+    )
+
+    asyncio.run(send_file_to_moonraker(
+        org_id=1,
+        moonraker_url="http://u1.local",
+        src=source,
+        file_name="large.gcode",
+        filament_meta={"used_g": [1, 1], "types": ["PLA", "PLA"]},
+        slot_map={0: 0, 1: 1},
+        printer_kind=PrinterKind.snapmaker_u1,
+        timelapse=False,
+        calibrate_slots=[],
+        presigned_url="https://r2.example/large.gcode?sig=x",
+    ))
+
+    assert upload["presigned_url"] == "https://r2.example/large.gcode?sig=x"
+    assert upload["print_options"] == {
+        "auto_bed_leveling": None,
+        "timelapse": False,
+        "ai_detection": None,
+        "used_slots": None,
+        "calibrate_slots": [],
+    }

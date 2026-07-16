@@ -54,6 +54,10 @@ def has_tunnel(org_id: int) -> bool:
     return org_id in _tunnels
 
 
+def has_capability(org_id: int, capability: str) -> bool:
+    return capability in _agent_capabilities.get(org_id, set())
+
+
 # ── Telegram helpers ──────────────────────────────────────────────────────────
 
 async def send_tg_config(org_id: int, token: str | None) -> None:
@@ -606,6 +610,7 @@ async def send_moonraker_upload(
     timeout: float | None = None,
     progress_callback: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
     presigned_url: str | None = None,
+    print_options: dict[str, Any] | None = None,
 ) -> dict:
     """Upload a gcode/3mf to Moonraker via the agent's LAN connection.
 
@@ -655,6 +660,8 @@ async def send_moonraker_upload(
             "start_print": start_print,
             "upload_timeout": agent_timeout,
         }
+        if print_options is not None:
+            payload["print_options"] = print_options
         capabilities = _agent_capabilities.get(org_id, set())
         if presigned_url and "moonraker_upload_url" in capabilities:
             # Fastest path: the agent downloads straight from R2 at its own ISP

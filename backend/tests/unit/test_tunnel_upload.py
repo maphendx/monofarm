@@ -145,6 +145,7 @@ def test_presigned_url_skips_chunk_transfer_when_agent_supports_it(monkeypatch):
         upload = asyncio.create_task(tunnel.send_moonraker_upload(
             1, "http://192.168.31.24/", "part.gcode", b"G28\n" * 100,
             presigned_url="https://r2.example/part.gcode?sig=x",
+            print_options={"timelapse": False},
         ))
         await asyncio.sleep(0.05)
         await tunnel.handle_agent_message(
@@ -154,6 +155,7 @@ def test_presigned_url_skips_chunk_transfer_when_agent_supports_it(monkeypatch):
     assert asyncio.run(scenario()) == {"ok": True}
     assert len(ws.sent) == 1  # single request message — no chunk messages
     assert ws.sent[0]["download_url"] == "https://r2.example/part.gcode?sig=x"
+    assert ws.sent[0]["print_options"] == {"timelapse": False}
     assert "data_b64" not in ws.sent[0]
 
 
