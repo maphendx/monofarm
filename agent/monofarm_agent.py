@@ -38,8 +38,9 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.9"
+AGENT_VERSION = "0.8.10"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
+MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
 # Bambu FTPS (:990): connect fast, but tolerate long per-write stalls — A1
 # SD-card flushes block the data socket well beyond the handshake timeout.
@@ -2134,8 +2135,21 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
         suffix = f"\r\n--{boundary}--\r\n".encode()
         total = len(prefix) + len(file_bytes) + len(suffix)
         chunk_size = 256 * 1024
+        upload_sent = 0
+
+        async def upload_heartbeat() -> None:
+            while True:
+                await asyncio.sleep(MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL)
+                await ws.send(json.dumps({
+                    "id": req_id,
+                    "type": "upload_progress",
+                    "sent": upload_sent,
+                    "total": len(file_bytes),
+                    "heartbeat": True,
+                }))
 
         async def multipart_body():
+            nonlocal upload_sent
             yield prefix
             sent = 0
             last_report = -1
@@ -2145,6 +2159,7 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
             for offset in range(0, len(file_bytes), chunk_size):
                 chunk = file_bytes[offset:offset + chunk_size]
                 sent += len(chunk)
+                upload_sent = sent
                 progress = round(sent * 100 / max(len(file_bytes), 1))
                 now = time.monotonic()
                 if progress == 100 or progress - last_report >= 5 or now - last_report_at >= 2.0:
@@ -2159,18 +2174,26 @@ async def handle_moonraker_upload(ws, req: dict) -> None:
                 yield chunk
             yield suffix
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(upload_timeout, connect=30.0, pool=30.0),
-            verify=False,
-        ) as client:  # noqa: S501
-            resp = await client.post(
-                f"{url}/server/files/upload",
-                content=multipart_body(),
-                headers={
-                    "Content-Type": f"multipart/form-data; boundary={boundary}",
-                    "Content-Length": str(total),
-                },
-            )
+        heartbeat_task = asyncio.create_task(upload_heartbeat())
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(upload_timeout, connect=30.0, pool=30.0),
+                verify=False,
+            ) as client:  # noqa: S501
+                resp = await client.post(
+                    f"{url}/server/files/upload",
+                    content=multipart_body(),
+                    headers={
+                        "Content-Type": f"multipart/form-data; boundary={boundary}",
+                        "Content-Length": str(total),
+                    },
+                )
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
         result = {
             "id": req_id,
             "status": resp.status_code,
