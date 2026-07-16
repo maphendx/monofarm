@@ -91,9 +91,9 @@ describe("printer card model", () => {
   });
 
   it("only enables Skip for an active Moonraker print", () => {
-    expect(canSkipObject(printer({ kind: "other", state: "printing", moonraker_url: "http://m.local" }))).toBe(true);
-    expect(canSkipObject(printer({ kind: "other", state: "paused", moonraker_url: "http://m.local" }))).toBe(false);
-    expect(canSkipObject(printer({ kind: "other", state: "printing", moonraker_url: null }))).toBe(false);
+    expect(canSkipObject(printer({ state: "printing", moonraker_url: "http://m.local" }))).toBe(true);
+    expect(canSkipObject(printer({ state: "paused", moonraker_url: "http://m.local" }))).toBe(false);
+    expect(canSkipObject(printer({ state: "printing", moonraker_url: null }))).toBe(false);
   });
 
   it("resolves known printer assets and leaves unknown models for a placeholder", () => {

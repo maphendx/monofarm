@@ -4,9 +4,8 @@ Runs as an APScheduler job every 30 seconds. Compares current printer state
 to the previously observed state and opens/closes history entries accordingly.
 Works for all printer types (Bambu via MQTT cache, Moonraker via polling cache).
 """
-import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import or_
@@ -397,15 +396,46 @@ _MOONRAKER_RESULT_MAP = {
 }
 
 
-def _persist_moonraker_history(
-    jobs: list[dict],
-    *,
+async def backfill_moonraker_history(
     org_id: int,
     printer_id: int,
     printer_name: str,
     printer_kind: str,
-) -> int:
-    """Persist one Moonraker history page outside the async server loop."""
+    moonraker_url: str,
+) -> None:
+    """Import completed jobs from Moonraker /server/history/list into PrintHistory.
+
+    Called once when the farm agent connects so the calendar shows past U1 prints.
+    Deduplicates via (printer_id, started_at ±60 s) — no migration needed.
+    """
+    from datetime import timedelta
+
+    from app.services import tunnel as _tunnel
+    from app.services.moonraker import _api_base
+
+    try:
+        base = _api_base(moonraker_url)
+    except Exception:
+        return
+
+    history_url = f"{base}/server/history/list?limit=200"
+
+    try:
+        if _tunnel.has_tunnel(org_id):
+            resp = await _tunnel.proxy_request(org_id, "GET", history_url, timeout=15.0)
+            jobs = (resp.get("body") or {}).get("result", {}).get("jobs", [])
+        else:
+            import requests as _req
+            r = _req.get(history_url, timeout=10)
+            r.raise_for_status()
+            jobs = r.json().get("result", {}).get("jobs", [])
+    except Exception:
+        log.debug("backfill_moonraker_history: could not reach printer %s", printer_id)
+        return
+
+    if not jobs:
+        return
+
     with SessionLocal() as db:
         imported = 0
         for job in jobs:
@@ -414,6 +444,7 @@ def _persist_moonraker_history(
                 continue
 
             started_at = datetime.fromtimestamp(float(start_ts), tz=timezone.utc)
+
             already = db.query(PrintHistory).filter(
                 PrintHistory.printer_id == printer_id,
                 PrintHistory.started_at >= started_at - timedelta(seconds=60),
@@ -445,54 +476,4 @@ def _persist_moonraker_history(
 
         if imported:
             db.commit()
-        return imported
-
-
-async def backfill_moonraker_history(
-    org_id: int,
-    printer_id: int,
-    printer_name: str,
-    printer_kind: str,
-    moonraker_url: str,
-) -> None:
-    """Import completed jobs from Moonraker /server/history/list into PrintHistory.
-
-    Called once when the farm agent connects so the calendar shows past U1 prints.
-    Deduplicates via (printer_id, started_at ±60 s) — no migration needed.
-    """
-    from app.services import tunnel as _tunnel
-    from app.services.moonraker import _api_base
-
-    try:
-        base = _api_base(moonraker_url)
-    except Exception:
-        return
-
-    history_url = f"{base}/server/history/list?limit=200"
-
-    try:
-        if _tunnel.has_tunnel(org_id):
-            resp = await _tunnel.proxy_request(org_id, "GET", history_url, timeout=15.0)
-            jobs = (resp.get("body") or {}).get("result", {}).get("jobs", [])
-        else:
-            import requests as _req
-            r = _req.get(history_url, timeout=10)
-            r.raise_for_status()
-            jobs = r.json().get("result", {}).get("jobs", [])
-    except Exception:
-        log.debug("backfill_moonraker_history: could not reach printer %s", printer_id)
-        return
-
-    if not jobs:
-        return
-
-    imported = await asyncio.to_thread(
-        _persist_moonraker_history,
-        jobs,
-        org_id=org_id,
-        printer_id=printer_id,
-        printer_name=printer_name,
-        printer_kind=printer_kind,
-    )
-    if imported:
-        log.info("backfill_moonraker_history: imported %d jobs for printer %s", imported, printer_id)
+            log.info("backfill_moonraker_history: imported %d jobs for printer %s", imported, printer_id)

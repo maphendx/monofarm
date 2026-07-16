@@ -15,7 +15,7 @@ Full-stack 3D print farm management SaaS ("monofarm"). Multi-tenant: each custom
 ```text
 backend/        FastAPI app (app/api, app/models, app/services, app/core, app/workers)
 frontend/       Next.js (src/app, src/components, src/lib)
-agent/          Local edge runtime (paired device auth, durable commands, printer adapters, cameras)
+agent/          Local farm agent (WebSocket tunnel + Bambu camera + U1 alerts)
 bruno/          Bruno API collection
 docs/           Architecture docs
 .claude/rules/  Detailed conventions (shared with Claude Code — read them, see below)
@@ -86,8 +86,7 @@ Tests use a separate `printfarm_test` Postgres DB (override with `TEST_DATABASE_
 | `/warehouse` | warehouse.py | full ERP — see Warehouse module |
 | `/keycrm` | keycrm.py | KeyCRM webhook receiver (orders → warehouse orders) |
 | `/api/billing` | billing.py | Lemon Squeezy checkout, webhook, cancel |
-| `/api/agent` | agent.py + agent_tg.py | live tunnel, scoped Agent v2 runtime config/TG, version/update manifest |
-| `/agent` | agent_devices.py | pairing, device admin, durable commands, ACKs and event outbox ingest |
+| `/api/agent` | agent.py + agent_tg.py | farm agent WebSocket tunnel + TG endpoints; version check |
 | `/api` | octoprint.py | OctoPrint shim for OrcaSlicer |
 
 **`core/`:** `security.py` — PyJWT + bcrypt (NOT passlib/python-jose — broken on Python 3.14). `config.py` — pydantic-settings; auto-fixes `postgres://` → `postgresql+psycopg://`; requires `ENCRYPTION_KEY` when `ENV=production`. `db.py` — session factory.
@@ -105,8 +104,7 @@ Tests use a separate `printfarm_test` Postgres DB (override with `TEST_DATABASE_
 - `telegram_bot.py` — PTB 21+. Cyrillic commands via `MessageHandler(Regex(...))` (PTB rejects non-ASCII in CommandHandler). Magic-link `/start <code>`. Per-org bot tokens stored encrypted.
 - `scheduler.py` — APScheduler: daily 09:00 Kyiv report, Bambu token refresh.
 - `print_tracker.py` — tracks active jobs, writes `PrintHistory` on completion.
-- `agent_auth.py` / `agent_commands.py` — dedicated device credentials, short-lived scoped JWTs, durable command leases/ACKs and idempotent event ingest.
-- `tunnel.py` — live WebSocket manager for paired farm agents; cameras/status plus restricted legacy relay during migration.
+- `tunnel.py` — WebSocket manager for farm agents (JWT auth, proxy HTTP to local Moonraker).
 - `go2rtc.py` — camera stream proxy via go2rtc sidecar (`GO2RTC_URL`).
 - `bootstrap.py` — seeds admin user + default org on first start.
 
@@ -120,7 +118,7 @@ Categories → Products (SKU, barcode, cost/sale price, thresholds; CSV import/e
 
 **Print farm:** `Printer` (kind: snapmaker_u1|bambu|other; `loaded_filaments` JSONB, 0-based slots; manual_status for non-API printers), `PrintTask` (kanban card; `filament_meta` JSONB), `FarmTask`, `PlanEntry` (Printer × PrintTask × date; cascade-deleted with printer), `PrintHistory`, `PrinterGroup`, `Filament` (`grams_remaining`, `min_grams`, `is_low`, `cost_per_kg`), `FilamentLog`, `FilamentColor`, `GcodeFile` (`stored_name` UUID; local `data/gcodes/` or S3 `orgs/{org_id}/gcodes/`), `GcodeFolder`, `ApiKey`.
 
-**Org:** `Organization` (plan: free|starter|pro|farm, `plan_expires_at`, encrypted Bambu/TG credentials, `keycrm_webhook_secret`, `extra_printer_slots`), `User` (role: admin|operator|manager, `telegram_chat_id`), `AgentDevice` (paired edge identity/scopes/revocation), `AgentCommand` (leased physical action), `AgentEvent` (monotonic device outbox ingest).
+**Org:** `Organization` (plan: free|starter|pro|farm, `plan_expires_at`, encrypted Bambu/TG credentials, `keycrm_webhook_secret`, `extra_printer_slots`), `User` (role: admin|operator|manager, `telegram_chat_id`).
 
 **Warehouse:** `ProductCategory`, `Product`, `Specification` + `SpecComponent` + `SpecOperation`, `Warehouse`, `WarehouseZone`, `WarehouseCell`, `CellStock`, `StockEntry`, `WarehouseMovement`, `ProductionBatch`, `Order` + `OrderItem`, `Counterparty`, `CashTransaction`.
 
@@ -151,9 +149,6 @@ Categories → Products (SKU, barcode, cost/sale price, thresholds; CSV import/e
 - **OctoPrint shim:** OrcaSlicer → Host Type OctoPrint, Hostname = backend URL, API Key = JWT. Upload → parse meta → frontend auto-opens SendModal.
 - **Double-submit guard:** `useRef` inFlight guard (not `useState`) for plan actions.
 - **Encryption:** Fernet (`ENCRYPTION_KEY`) for Bambu credentials + per-org TG tokens. Required in production, skipped in dev.
-- **Agent v2:** new installs use one-time pairing + dedicated device secret; user JWT WebSocket auth is migration-only. Physical commands persist to the per-device SQLite journal before side effects.
-- **Agent targets:** durable commands may select only fixed printers returned by authenticated runtime config. Artifacts require HTTPS, allowlisted host, exact size/SHA-256 and bounded disk spool.
-- **Agent adapters:** operational scope is Bambu P1S/A1/A1 mini and Moonraker/Klipper/Snapmaker U1. Do not claim a new brand without a typed adapter, contract fixtures and hardware lab certification.
 - **Python 3.14:** never use `passlib`, `python-jose`, `psycopg-binary` — broken. Use `bcrypt`, `PyJWT`, `psycopg[binary]>=3.3.0`.
 - **Migrations:** sequential naming `0001_`, `0002_`, … — never leave auto-generated UUID names, never edit applied migrations.
 - **No magic strings** — use constants/enums. Small single-responsibility functions. No speculative abstractions.

@@ -2,11 +2,6 @@
 > Документ для Claude Code: як саме SimplyPrint організовує print dispatch,
 > щоб monofarm не будував "сторонню чергу", а дотримувався тієї ж логіки.
 
-> **Historical product/API note.** Не використовувати цей файл як поточну
-> специфікацію Monofarm Agent або як доказ внутрішньої реалізації SimplyPrint.
-> Поточний clean-room аудит: [AGENT_SIMPLYPRINT_ENGINEERING_AUDIT.md](AGENT_SIMPLYPRINT_ENGINEERING_AUDIT.md).
-> Реалізована Monofarm архітектура: [AGENT_RUNTIME_V2.md](AGENT_RUNTIME_V2.md).
-
 ---
 
 ## TL;DR — Головна ідея SimplyPrint

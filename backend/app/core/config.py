@@ -39,10 +39,6 @@ class Settings(BaseSettings):
     MOONRAKER_QUEUE_ENABLED: bool = True
 
     FARM_PUBLIC_URL: str = "https://monofarm.app"
-    # Agent releases are signed only in CI. The backend stores the raw Ed25519
-    # public key and may verify/serve releases, but cannot mint one.
-    AGENT_UPDATE_BASE_URL: str = "https://api.monofarm.app"
-    AGENT_RELEASE_ATTESTATION_PUBLIC_KEY: str = ""
 
     TIMEZONE: str = "Europe/Kiev"
     CORS_ORIGINS: str = "https://monofarm.app,http://localhost:3000"

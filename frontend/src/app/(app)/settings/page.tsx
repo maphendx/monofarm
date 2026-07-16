@@ -7,19 +7,12 @@ import { CreateTagModal } from "@/components/ui/CreateTagModal";
 import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import { PrintersManager } from "@/components/printers/PrintersManager";
 import { UsersSection } from "@/components/users/UsersSection";
-import { ApiError, api, clearToken } from "@/lib/api";
-import {
-  buildAgentPairCallback,
-  parseAgentPairRequest,
-  type AgentPairRequest,
-} from "@/lib/agentPairing";
-import { getAgentReleaseHealth, togglePrinterAssignment } from "@/lib/agentFleet";
-import { AGENT_RELEASE_PUBLIC_KEY } from "@/lib/agentReleaseTrust";
+import { ApiError, api, clearToken, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { useLocale } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { usePageTitle } from "@/lib/usePageTitle";
-import type { BambuHealthOut, Printer } from "@/lib/types";
+import type { BambuHealthOut } from "@/lib/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -76,36 +69,6 @@ interface SlicerApiKey {
 
 interface SlicerApiKeyCreated extends SlicerApiKey {
   key: string;
-}
-
-interface AgentDeviceSummary {
-  id: string;
-  name: string;
-  site_id: string | null;
-  version: string | null;
-  last_seen_at: string | null;
-  paired_at: string | null;
-  revoked_at: string | null;
-  is_paired: boolean;
-  is_revoked: boolean;
-}
-
-interface AgentPairingCodeCreated {
-  device: AgentDeviceSummary;
-  pairing_code: string;
-  expires_at: string;
-}
-
-interface AgentPrinterAssignment {
-  device_id: string;
-  printer_ids: number[];
-}
-
-interface AgentVersionStatus {
-  version: string;
-  build: string | null;
-  manifest: { version: string } | null;
-  update_public_key: string | null;
 }
 
 type SectionId =
@@ -499,6 +462,7 @@ const API_BASE =
   (typeof window !== "undefined"
     ? window.location.origin.replace(":3000", ":8000")
     : "http://localhost:8000");
+
 const IS_LOCAL = typeof window !== "undefined" && (
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1"
@@ -721,142 +685,40 @@ function DiscoverSection({ orgPlan }: { orgPlan?: string }) {
 }
 
 function AgentSection() {
+  const token = getToken() ?? "";
   const [copied, setCopied] = useState<string | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [pairStatus, setPairStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
-  const [pairError, setPairError] = useState<string | null>(null);
-  const [pairingCode, setPairingCode] = useState<string | null>(null);
-  const [pairingExpiresAt, setPairingExpiresAt] = useState<string | null>(null);
-  const [devices, setDevices] = useState<AgentDeviceSummary[]>([]);
-  const [printers, setPrinters] = useState<Printer[]>([]);
-  const [assignments, setAssignments] = useState<Record<string, number[]>>({});
-  const [release, setRelease] = useState<AgentVersionStatus | null>(null);
-  const [savingAssignment, setSavingAssignment] = useState<string | null>(null);
-  const [revokingDevice, setRevokingDevice] = useState<string | null>(null);
-  const [pairRequest, setPairRequest] = useState<AgentPairRequest | null>(null);
-  const pairInFlight = useRef(false);
-  const revokeInFlight = useRef(false);
 
-  async function loadDevices() {
-    try {
-      const loadedDevices = await api<AgentDeviceSummary[]>("/api/agent/devices");
-      setDevices(loadedDevices);
-      const loadedAssignments = await Promise.all(
-        loadedDevices.map(async (device) => {
-          if (device.is_revoked) return [device.id, []] as const;
-          try {
-            const value = await api<AgentPrinterAssignment>(
-              `/api/agent/devices/${device.id}/printers`,
-            );
-            return [device.id, value.printer_ids] as const;
-          } catch {
-            return [device.id, []] as const;
-          }
-        }),
-      );
-      setAssignments(Object.fromEntries(loadedAssignments));
-    } catch {
-      setDevices([]);
-      setAssignments({});
-    }
-  }
-
-  async function savePrinterAssignments(deviceId: string) {
-    setSavingAssignment(deviceId);
-    try {
-      await api<AgentPrinterAssignment>(`/api/agent/devices/${deviceId}/printers`, {
-        method: "PUT",
-        body: JSON.stringify({ printer_ids: assignments[deviceId] ?? [] }),
-      });
-      await loadDevices();
-      toast.success("Принтери агента синхронізовано");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не вдалося зберегти принтери");
-    } finally {
-      setSavingAssignment(null);
-    }
-  }
+  const pairPort = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("agent_pair")
+    : null;
 
   async function connectAgent() {
-    if (pairInFlight.current) return;
-    pairInFlight.current = true;
+    if (!pairPort || !token) return;
     setPairStatus("busy");
-    setPairError(null);
     try {
-      const pairing = await api<AgentPairingCodeCreated>("/api/agent/devices/pairing-codes", {
-        method: "POST",
-        body: JSON.stringify({
-          name: "Monofarm Agent",
-          scopes: ["agent:connect", "commands:read", "events:write", "status:write"],
-        }),
-      });
-      setPairingCode(pairing.pairing_code);
-      setPairingExpiresAt(pairing.expires_at);
-
-      if (pairRequest) {
-        const callback = buildAgentPairCallback(pairRequest, pairing.pairing_code);
-        const response = await fetch(callback.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(callback.body),
-        });
-        if (!response.ok) {
-          throw new Error("Локальний агент відхилив pairing code");
-        }
-        setPairingCode(null);
-        setPairingExpiresAt(null);
-      }
+      await fetch(`http://127.0.0.1:${pairPort}/?token=${encodeURIComponent(token)}`);
       setPairStatus("done");
       const url = new URL(window.location.href);
       url.searchParams.delete("agent_pair");
-      url.searchParams.delete("agent_state");
       window.history.replaceState({}, "", url.toString());
-      setPairRequest(null);
-      await loadDevices();
-    } catch (error) {
+    } catch {
       setPairStatus("error");
-      setPairError(error instanceof Error ? error.message : "Не вдалося створити pairing code");
-    } finally {
-      pairInFlight.current = false;
     }
   }
 
-  async function revokeDevice(deviceId: string) {
-    if (revokeInFlight.current) return;
-    revokeInFlight.current = true;
-    setRevokingDevice(deviceId);
-    try {
-      await api(`/api/agent/devices/${deviceId}/revoke`, { method: "POST" });
-      await loadDevices();
-      toast.success("Доступ агента відкликано");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не вдалося відкликати агент");
-    } finally {
-      setRevokingDevice(null);
-      revokeInFlight.current = false;
-    }
-  }
-
-  const linuxCommand = `curl -sSL ${API_BASE}/agent/install.sh | bash -s -- --server ${API_BASE} --release-public-key ${AGENT_RELEASE_PUBLIC_KEY}`;
-  const releaseAvailable = Boolean(
-    release?.manifest
-      && release.manifest.version === release.version
-      && release.update_public_key === AGENT_RELEASE_PUBLIC_KEY,
-  );
+  const cmds = {
+    linux:   `curl -sSL ${API_BASE}/agent/install.sh | sudo bash -s -- --server ${API_BASE}`,
+    docker:  `docker run --network host --restart unless-stopped \\\n  monofarm/agent \\\n  --server ${API_BASE}`,
+  };
 
   useEffect(() => {
-    const requestedPairing = parseAgentPairRequest(window.location.search);
-    if (requestedPairing) {
-      queueMicrotask(() => setPairRequest(requestedPairing));
-    }
     const poll = () =>
       api<{ connected: boolean }>("/api/agent/status")
         .then((r) => setConnected(r.connected))
         .catch(() => setConnected(false));
     poll();
-    void loadDevices();
-    api<Printer[]>("/api/printers").then(setPrinters).catch(() => setPrinters([]));
-    api<AgentVersionStatus>("/api/agent/version").then(setRelease).catch(() => setRelease(null));
     const id = setInterval(() => { if (!document.hidden) void poll(); }, 10_000);
     return () => clearInterval(id);
   }, []);
@@ -907,15 +769,15 @@ function AgentSection() {
       </div>
 
       {/* ── Pairing banner ── */}
-      {pairRequest && (
-        <div className="rounded-2xl border-2 border-[var(--accent)] bg-[var(--accent-soft)] p-6">
+      {pairPort && (
+        <div className="rounded-2xl border-2 border-violet-300 bg-violet-50 p-6 dark:border-violet-700/60 dark:bg-violet-950/20">
           <div className="flex items-center justify-between gap-6">
             <div>
-              <p className="mb-1 text-sm font-semibold text-[var(--text)]">
+              <p className="mb-1 text-sm font-semibold text-violet-900 dark:text-violet-200">
                 Агент очікує підключення
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
-                Натисни кнопку — передамо лише одноразовий pairing code. Пароль і токен акаунта не залишають браузер.
+              <p className="text-xs text-violet-600 dark:text-violet-400">
+                Натисни кнопку — токен передасться агенту автоматично, більше нічого вводити не потрібно.
               </p>
             </div>
             {pairStatus === "done" ? (
@@ -925,15 +787,7 @@ function AgentSection() {
               </div>
             ) : pairStatus === "error" ? (
               <div className="shrink-0 text-right">
-                <p className="mb-1 text-xs text-[var(--state-error)]">{pairError ?? "Не вдалося підключити агент"}</p>
-                {pairingCode && (
-                  <button
-                    onClick={() => copy(pairingCode, "pairing-code")}
-                    className="mr-3 text-xs text-[var(--accent)] hover:underline"
-                  >
-                    {copied === "pairing-code" ? "Скопійовано" : "Скопіювати code вручну"}
-                  </button>
-                )}
+                <p className="mb-1 text-xs text-[var(--state-error)]">Агент більше не чекає — перезапусти його.</p>
                 <button onClick={() => setPairStatus("idle")} className="text-xs text-[var(--text-muted)] hover:underline">Скинути</button>
               </div>
             ) : (
@@ -950,13 +804,7 @@ function AgentSection() {
       )}
 
       {/* ── Setup cards grid ── */}
-      <div className={`rounded-xl border px-4 py-3 text-xs ${releaseAvailable ? "border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] text-[var(--state-ok)]" : "border-[rgba(245,158,11,.25)] bg-[rgba(245,158,11,.08)] text-[var(--state-warn)]"}`}>
-        {releaseAvailable
-          ? `Signed release v${release?.version}${release?.build ? ` · backend ${release.build}` : ""} готовий для Windows і Linux.`
-          : "Signed release ще не опублікований. Production deploy буде заблокований CI, доки агент не буде готовий."}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
         {/* Windows — download button, no commands */}
         <div className="relative flex flex-col rounded-2xl border border-[var(--accent)]/30 bg-gradient-to-b from-[var(--bg-elevated)] to-[var(--bg)] p-5">
@@ -978,10 +826,9 @@ function AgentSection() {
             Скачай, запусти — агент з&apos;явиться в треї. Далі підключення через браузер, без команд.
           </p>
           <a
-            href={releaseAvailable ? `${API_BASE}/agent/monofarm-agent.exe` : undefined}
-            download={releaseAvailable}
-            aria-disabled={!releaseAvailable}
-            className={`mt-auto flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition ${releaseAvailable ? "bg-[var(--accent)] hover:opacity-90" : "pointer-events-none bg-[var(--text-faint)] opacity-60"}`}
+            href={`${API_BASE}/agent/monofarm-agent.exe`}
+            download
+            className="mt-auto flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -1009,58 +856,44 @@ function AgentSection() {
           <p className="mb-1 text-xs text-[var(--text-muted)]">
             Одна команда — встановлює залежності, агент і systemd-сервіс.
           </p>
-          <CmdBlock cmd={linuxCommand} id="linux" copied={copied} onCopy={copy} />
+          <CmdBlock cmd={cmds.linux} id="linux" copied={copied} onCopy={copy} />
           <p className="mt-3 text-[11px] text-[var(--text-faint)]">
             Логи: <code className="rounded bg-[var(--surface-hi)] px-1 py-0.5">journalctl --user -u monofarm-agent -f</code>
           </p>
         </div>
 
-      </div>
-
-      {!pairRequest && (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        {/* Docker */}
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--surface-hi)]">
+              <svg width="18" height="14" viewBox="0 0 24 19" fill="currentColor">
+                <path d="M13 7h2V5h-2v2zm-3 0h2V5h-2v2zM7 7h2V5H7v2zm3-3h2V2h-2v2zM7 4h2V2H7v2zM2.6 19C1.2 19 0 17.9 0 16.6c0-.2 0-.4.1-.6L1.5 9h21l1.4 6c0 .2.1.4.1.6 0 1.3-1.2 2.4-2.6 2.4H2.6zM22 7H4c-.6 0-1 .4-1 1v.5L1.5 9h21L21 8.5V8c0-.6-.4-1-1-1z"/>
+              </svg>
+            </span>
             <div>
-              <p className="text-sm font-semibold">Підключити новий farm PC</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Створи одноразовий code і встав його у локальне вікно Monofarm Agent. Code діє максимум 10 хвилин.
-              </p>
+              <p className="text-sm font-semibold">Docker</p>
+              <p className="text-[11px] text-[var(--text-faint)]">--network host потрібен</p>
             </div>
-            <button
-              onClick={connectAgent}
-              disabled={pairStatus === "busy"}
-              className="btn btn-primary shrink-0 disabled:opacity-50"
-            >
-              {pairStatus === "busy" ? "Створення…" : "Створити pairing code"}
-            </button>
           </div>
-          {pairingCode && (
-            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 sm:flex-row sm:items-center">
-              <code className="min-w-0 flex-1 break-all text-xs text-[var(--text)]">{pairingCode}</code>
-              <button onClick={() => copy(pairingCode, "pairing-code")} className="btn btn-sm shrink-0">
-                {copied === "pairing-code" ? "Скопійовано" : "Копіювати"}
-              </button>
-              {pairingExpiresAt && (
-                <span className="shrink-0 text-[11px] text-[var(--text-faint)]">
-                  до {new Date(pairingExpiresAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              )}
-            </div>
-          )}
-          {pairStatus === "error" && (
-            <p className="mt-3 text-xs text-[var(--state-error)]">{pairError}</p>
-          )}
+          <p className="mb-1 text-xs text-[var(--text-muted)]">
+            Якщо на Pi вже є Docker — найпростіший варіант.
+          </p>
+          <CmdBlock cmd={cmds.docker} id="docker" copied={copied} onCopy={copy} />
+          <p className="mt-3 text-[11px] text-[var(--text-faint)]">
+            <code>--network host</code> потрібен щоб агент дістався до Moonraker у LAN.
+          </p>
         </div>
-      )}
+
+      </div>
 
       {/* ── How it works ── */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-5  ">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-faint)]">Як це працює</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
-            { n: "1", t: "Запусти агент", d: "Він відкриє захищений pairing у браузері" },
-            { n: "2", t: "Підтвердь", d: "Monofarm створить одноразовий device code" },
-            { n: "3", t: "Готово", d: "На farm PC збережеться лише окрема AgentDevice identity" },
+            { n: "1", t: "Запусти агент", d: "Без токена — браузер відкривається автоматично" },
+            { n: "2", t: "Натисни кнопку", d: "У вкладці Settings → натисни «Підключити агент»" },
+            { n: "3", t: "Готово", d: "Токен збережено, наступні запуски — без аргументів" },
           ].map(({ n, t, d }) => (
             <div key={n} className="flex gap-3">
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-hi)] text-xs font-bold text-[var(--text-muted)]  ">
@@ -1073,100 +906,6 @@ function AgentSection() {
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold">Підключені агенти</p>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">Окремі device credentials можна відкликати без зміни пароля акаунта.</p>
-          </div>
-          <button onClick={() => void loadDevices()} className="btn btn-sm">Оновити</button>
-        </div>
-        {devices.length === 0 ? (
-          <p className="text-xs text-[var(--text-faint)]">Ще немає створених AgentDevice.</p>
-        ) : (
-          <div className="space-y-2">
-            {devices.map((device) => {
-              const health = getAgentReleaseHealth(
-                device.version,
-                release?.version ?? "",
-                Boolean(releaseAvailable),
-              );
-              const healthLabel = {
-                current: "актуальний",
-                update_required: "потрібне оновлення",
-                not_connected: "немає версії",
-                release_unavailable: "release недоступний",
-              }[health];
-              return (
-              <div key={device.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-[var(--text)]">{device.name}</span>
-                    <span className={`badge text-[10px] ${device.is_revoked ? "badge-error" : device.is_paired ? "badge-ok" : ""}`}>
-                      {device.is_revoked ? "відкликано" : device.is_paired ? "підключено" : "очікує pairing"}
-                    </span>
-                    {device.version && <span className="text-[11px] text-[var(--text-faint)]">v{device.version}</span>}
-                    <span className={`badge text-[10px] ${health === "current" ? "badge-ok" : health === "update_required" ? "badge-error" : ""}`}>
-                      {healthLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate text-[11px] text-[var(--text-faint)]">
-                    {device.last_seen_at
-                      ? `Останній зв’язок: ${new Date(device.last_seen_at).toLocaleString("uk-UA")}`
-                      : "Ще не виходив на зв’язок"}
-                    {device.site_id ? ` · site ${device.site_id}` : ""}
-                  </p>
-                </div>
-                {!device.is_revoked && (
-                  <button
-                    onClick={() => void revokeDevice(device.id)}
-                    disabled={revokingDevice === device.id}
-                    className="btn btn-danger btn-sm shrink-0 disabled:opacity-50"
-                  >
-                    {revokingDevice === device.id ? "Відкликання…" : "Відкликати"}
-                  </button>
-                )}
-                </div>
-                {!device.is_revoked && printers.length > 0 && (
-                  <div className="mt-4 border-t border-[var(--border)] pt-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-xs font-medium text-[var(--text)]">Принтери цього farm PC</p>
-                      <button
-                        onClick={() => void savePrinterAssignments(device.id)}
-                        disabled={savingAssignment === device.id}
-                        className="btn btn-sm disabled:opacity-50"
-                      >
-                        {savingAssignment === device.id ? "Збереження…" : "Зберегти"}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {printers.map((printer) => {
-                        const selected = (assignments[device.id] ?? []).includes(printer.id);
-                        return (
-                          <label key={printer.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs ${selected ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]" : "border-[var(--border)] text-[var(--text-muted)]"}`}>
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => setAssignments((current) => ({
-                                ...current,
-                                [device.id]: togglePrinterAssignment(current[device.id] ?? [], printer.id),
-                              }))}
-                            />
-                            {printer.name}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* ── Discover printers (only when agent connected) ── */}
@@ -2616,9 +2355,6 @@ function IntegrationsSection() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("integration") === "agent") {
-      queueMicrotask(() => setOpen("agent"));
-    }
     api<{ keycrm_configured: boolean }>("/api/orgs/me/keycrm-settings")
       .then((d) => setStatus((s) => ({ ...s, keycrm: d.keycrm_configured }))).catch(() => {});
     api<{ configured: boolean }>("/api/horoshop/settings")
@@ -2701,10 +2437,11 @@ function IntegrationsSection() {
 }
 
 function defaultSection(): SectionId {
+  if (typeof window === "undefined") return "profile";
   const params = new URLSearchParams(window.location.search);
   if (params.get("billing")) return "billing";
   const section = params.get("section") as SectionId | null;
-  if (section && NAV_ITEMS.some((item) => item.id === section)) return section;
+  if (section) return section;
   return "profile";
 }
 
@@ -2713,15 +2450,8 @@ export default function SettingsPage() {
   const user = useUser();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [active, setActive] = useState<SectionId>("profile");
+  const [active, setActive] = useState<SectionId>(defaultSection);
   const isAdmin = user?.role === "admin";
-
-  useEffect(() => {
-    const requested = defaultSection();
-    if (requested !== "profile") {
-      queueMicrotask(() => setActive(requested));
-    }
-  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;

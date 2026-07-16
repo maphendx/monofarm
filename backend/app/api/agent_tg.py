@@ -6,157 +6,96 @@ POST /api/agent/tg-command   — handle a bot command (/start, /план, /ст�
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.user import User
-from app.schemas.agent import AgentOkOut, TgCommandOut, TgCommandRequest, TgConfigOut, TgUsernameReport
-from app.services.agent_auth import AgentPrincipal, require_agent_principal
-from app.services.agent_routing import device_can_handle_org_services
 
 router = APIRouter(prefix="/api/agent", tags=["agent-tg"])
 
 
-def _require_org_service_device(db: Session, principal: AgentPrincipal) -> None:
-    if not device_can_handle_org_services(db, principal.device):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Org-wide Telegram service requires one unscoped agent",
-        )
+class TgCommandRequest(BaseModel):
+    command: str          # "start" | "plan" | "status"
+    chat_id: int
+    args: list[str] = []
 
 
-def _tg_config_for_org(org: Organization) -> TgConfigOut:
-    token: str | None = None
-    if org.tg_bot_token:
-        from app.services.encryption import decrypt
-
-        try:
-            token = decrypt(org.tg_bot_token)
-        except Exception:
-            token = None
-    return TgConfigOut(token=token, username=org.tg_bot_username or None)
+class TgUsernameReport(BaseModel):
+    username: str
 
 
-@router.get("/tg-config", response_model=TgConfigOut)
+@router.get("/tg-config")
 def tg_config(
     org: Organization = Depends(get_current_org),
-) -> TgConfigOut:
+) -> dict:
     """Return the org's decrypted bot token and cached username.
 
     Agent calls this on every WS connect so it can start the bot
     even before the server pushes a TG_CONFIG tunnel message.
     """
-    return _tg_config_for_org(org)
+    token: str | None = None
+    if org.tg_bot_token:
+        from app.services.encryption import decrypt
+        try:
+            token = decrypt(org.tg_bot_token)
+        except Exception:
+            token = None
+    return {
+        "token": token,
+        "username": org.tg_bot_username or None,
+    }
 
 
-@router.get("/v2/tg-config", response_model=TgConfigOut)
-def tg_config_v2(
-    db: Session = Depends(get_db),
-    principal: AgentPrincipal = Depends(require_agent_principal("status:write")),
-) -> TgConfigOut:
-    _require_org_service_device(db, principal)
-    return _tg_config_for_org(principal.organization)
-
-
-def _tg_report_username_for_org(
-    payload: TgUsernameReport,
-    org: Organization,
-    db: Session,
-) -> AgentOkOut:
-    org.tg_bot_username = payload.username.lstrip("@")
-    db.commit()
-    return AgentOkOut()
-
-
-@router.post("/tg-report-username", response_model=AgentOkOut)
+@router.post("/tg-report-username")
 def tg_report_username(
     payload: TgUsernameReport,
     org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db),
-) -> AgentOkOut:
+) -> dict:
     """Agent calls this after a successful getMe to cache the bot username for deep-link generation."""
-    return _tg_report_username_for_org(payload, org, db)
+    org.tg_bot_username = payload.username.lstrip("@")
+    db.commit()
+    return {"ok": True}
 
 
-@router.post("/v2/tg-report-username", response_model=AgentOkOut)
-def tg_report_username_v2(
-    payload: TgUsernameReport,
-    db: Session = Depends(get_db),
-    principal: AgentPrincipal = Depends(require_agent_principal("status:write")),
-) -> AgentOkOut:
-    _require_org_service_device(db, principal)
-    return _tg_report_username_for_org(payload, principal.organization, db)
-
-
-def _tg_command_for_org(
-    payload: TgCommandRequest,
-    org: Organization,
-    db: Session,
-) -> TgCommandOut:
-    cmd = payload.command.lower().strip("/")
-    chat_id = payload.chat_id
-
-    if cmd == "start":
-        return TgCommandOut(**_handle_start(db, org, chat_id, payload.args))
-    if cmd in ("план", "plan"):
-        return TgCommandOut(**_handle_plan(db, org, chat_id))
-    if cmd in ("статус", "status"):
-        return TgCommandOut(**_handle_status(db, org, chat_id))
-
-    return TgCommandOut(text="Невідома команда.", parse_mode=None)
-
-
-@router.post("/tg-command", response_model=TgCommandOut)
+@router.post("/tg-command")
 def tg_command(
     payload: TgCommandRequest,
     org: Organization = Depends(get_current_org),
     db: Session = Depends(get_db),
-) -> TgCommandOut:
+) -> dict:
     """Handle a Telegram bot command from the local agent.
 
     Returns {"text": ..., "parse_mode": "Markdown" | null}.
     """
-    return _tg_command_for_org(payload, org, db)
+    cmd      = payload.command.lower().strip("/")
+    chat_id  = payload.chat_id
 
+    if cmd == "start":
+        return _handle_start(db, org, chat_id, payload.args)
+    if cmd in ("план", "plan"):
+        return _handle_plan(db, org, chat_id)
+    if cmd in ("статус", "status"):
+        return _handle_status(db, org, chat_id)
 
-@router.post("/v2/tg-command", response_model=TgCommandOut)
-def tg_command_v2(
-    payload: TgCommandRequest,
-    db: Session = Depends(get_db),
-    principal: AgentPrincipal = Depends(require_agent_principal("status:write")),
-) -> TgCommandOut:
-    _require_org_service_device(db, principal)
-    return _tg_command_for_org(payload, principal.organization, db)
+    return {"text": "Невідома команда.", "parse_mode": None}
 
 
 # ── handlers ──────────────────────────────────────────────────────────────────
 
-def _user_by_chat(db: Session, organization_id: int, chat_id: int) -> User | None:
-    return (
-        db.query(User)
-        .filter(
-            User.organization_id == organization_id,
-            User.telegram_chat_id == chat_id,
-        )
-        .first()
-    )
+def _user_by_chat(db: Session, chat_id: int) -> User | None:
+    return db.query(User).filter(User.telegram_chat_id == chat_id).first()
 
 
 def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str]) -> dict:
     if args:
         from datetime import datetime, timezone
         code = (args[0] or "").strip()
-        user = (
-            db.query(User)
-            .filter(
-                User.organization_id == org.id,
-                User.telegram_link_code == code,
-            )
-            .first()
-        )
+        user = db.query(User).filter(User.telegram_link_code == code).first()
         if not user:
             return {"text": "Невірний код. Попроси адміна надіслати нове посилання.", "parse_mode": None}
         if user.telegram_link_expires_at and user.telegram_link_expires_at < datetime.now(timezone.utc):
@@ -177,7 +116,7 @@ def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str])
             "parse_mode": None,
         }
 
-    user = _user_by_chat(db, org.id, chat_id)
+    user = _user_by_chat(db, chat_id)
     if user:
         name = user.name or user.email
         text = f"Вітаю, {name}.\nКоманди: /план, /статус."
@@ -190,7 +129,7 @@ def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str])
 
 
 def _handle_plan(db: Session, org: Organization, chat_id: int) -> dict:
-    user = _user_by_chat(db, org.id, chat_id)
+    user = _user_by_chat(db, chat_id)
     if not user:
         return {"text": "Не зареєстрований. Попроси адміна посилання.", "parse_mode": None}
     from app.services.daily_report import build_daily_plan_text
@@ -199,7 +138,7 @@ def _handle_plan(db: Session, org: Organization, chat_id: int) -> dict:
 
 
 def _handle_status(db: Session, org: Organization, chat_id: int) -> dict:
-    user = _user_by_chat(db, org.id, chat_id)
+    user = _user_by_chat(db, chat_id)
     if not user:
         return {"text": "Не зареєстрований.", "parse_mode": None}
     from app.services.daily_report import build_status_text

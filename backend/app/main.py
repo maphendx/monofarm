@@ -11,7 +11,6 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.agent import router as agent_router
-from app.api.agent_devices import router as agent_devices_router
 from app.api.agent_tg import router as agent_tg_router
 from app.api.admin import router as admin_router
 from app.api.api_keys import router as api_keys_router
@@ -158,112 +157,35 @@ async def send_plan_now(
     return {"ok": True}
 
 
-def _find_agent_distribution_dir() -> Path:
-    fallback = Path(__file__).resolve().parent.parent / "agent"
-    for ancestor in Path(__file__).resolve().parents:
-        candidate = ancestor / "agent"
-        if (candidate / "monofarm_agent.py").is_file():
-            return candidate
-    return fallback
-
-
-_AGENT_DIR = _find_agent_distribution_dir()
-_AGENT_RUNTIME_FILES = frozenset(
-    {
-        "monofarm_agent.py",
-        "monofarm_tray.py",
-        "command_runtime.py",
-        "command_worker.py",
-        "device_identity.py",
-        "network_policy.py",
-        "printer_runtime.py",
-        "provider_adapters.py",
-        "update_policy.py",
-        "edge_runtime/__init__.py",
-        "edge_runtime/adapters.py",
-        "edge_runtime/artifact_spool.py",
-        "edge_runtime/journal.py",
-        "edge_runtime/registry.py",
-        "edge_runtime/transfer.py",
-        "requirements.txt",
-    }
-)
-_AGENT_PUBLIC_FILES = frozenset(
-    {
-        "install.sh",
-        "install.ps1",
-        "bambu_camera_test.py",
-    }
-)
-
-
-def _agent_file_response(path: Path, filename: str) -> FileResponse:
-    if not path.is_file():
-        raise HTTPException(status_code=404)
-    if filename.endswith(".sh"):
-        media_type = "text/x-shellscript"
-    elif filename.endswith(".py"):
-        media_type = "text/x-python"
-    else:
-        media_type = "text/plain"
-    return FileResponse(path, media_type=media_type)
+_AGENT_DIR = Path(__file__).parent.parent / "agent"
+_AGENT_FILES = {"monofarm_agent.py", "monofarm_tray.py", "install.sh", "install.ps1", "Dockerfile", "requirements.txt", "bambu_camera_test.py"}
 
 
 @app.get("/agent/monofarm-agent.exe")
 async def serve_agent_exe() -> RedirectResponse:
-    """Redirect to the attested immutable agent .exe uploaded by CI.
+    """Redirect to the latest agent .exe in object storage (uploaded by CI).
 
     The binary lives in R2 — never committed to the repo or baked into the Docker
     image. Frozen agents (self-update) and the Windows installer pull from this
     stable URL, which 302-redirects to a short-lived presigned download.
     Declared before /agent/{filename} so it takes routing priority.
     """
-    from app.api import agent as agent_api
-
-    url = agent_api.agent_windows_download_url()
+    from app.services import storage
+    url = storage.presigned_url_raw("agent/monofarm-agent.exe")
     if not url:
         raise HTTPException(status_code=404)
     return RedirectResponse(url, status_code=302)
-
-
-@app.get("/agent/releases/{version}/monofarm-agent.exe")
-async def serve_versioned_agent_exe(version: str) -> RedirectResponse:
-    from app.api import agent as agent_api
-
-    url = agent_api.agent_release_download_url(version, "windows-x86_64")
-    if not url:
-        raise HTTPException(status_code=404)
-    return RedirectResponse(url, status_code=302)
-
-
-@app.get("/agent/releases/{version}/runtime/{filename:path}")
-async def serve_versioned_agent_source(version: str, filename: str) -> RedirectResponse:
-    from app.api import agent as agent_api
-
-    url = agent_api.agent_release_download_url(version, f"source-{filename}")
-    if not url:
-        raise HTTPException(status_code=404)
-    return RedirectResponse(url, status_code=302)
-
-
-@app.get("/agent/monofarm_agent.py")
-async def serve_legacy_agent_bootstrap() -> FileResponse:
-    """Migrate legacy single-file source agents to the signed runtime bundle."""
-    return _agent_file_response(_AGENT_DIR / "legacy_bootstrap.py", "legacy_bootstrap.py")
-
-
-@app.get("/agent/runtime/{filename:path}")
-async def serve_agent_runtime_file(filename: str) -> FileResponse:
-    if filename not in _AGENT_RUNTIME_FILES:
-        raise HTTPException(status_code=404)
-    return _agent_file_response(_AGENT_DIR / filename, filename)
 
 
 @app.get("/agent/{filename}")
-async def serve_agent_public_file(filename: str) -> FileResponse:
-    if filename not in _AGENT_PUBLIC_FILES:
+async def serve_agent_file(filename: str) -> FileResponse:
+    if filename not in _AGENT_FILES:
         raise HTTPException(status_code=404)
-    return _agent_file_response(_AGENT_DIR / filename, filename)
+    path = _AGENT_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    media_type = "text/x-shellscript" if filename.endswith(".sh") else "text/plain"
+    return FileResponse(path, media_type=media_type)
 
 
 app.include_router(auth_router, prefix="/api")
@@ -288,7 +210,6 @@ app.include_router(orca_router)       # printer-scoped: /orca/{printer_id}/api/.
 app.include_router(moonraker_router)  # Moonraker shim: /server/files/upload
 app.include_router(plan_router, prefix="/api")
 app.include_router(agent_router)      # WebSocket + status endpoint
-app.include_router(agent_devices_router, prefix="/api")
 app.include_router(agent_tg_router)   # Telegram bot data endpoints for local agent
 
 app.include_router(analytics_router, prefix="/api")

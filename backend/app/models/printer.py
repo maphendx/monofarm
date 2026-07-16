@@ -1,10 +1,9 @@
 import enum
-import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -26,12 +25,6 @@ class Printer(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     organization_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    agent_device_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("agent_devices.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
     )
     name: Mapped[str] = mapped_column(String(120))
     kind: Mapped[PrinterKind] = mapped_column(Enum(PrinterKind), default=PrinterKind.other)
