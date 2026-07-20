@@ -17,6 +17,11 @@ without opening another application or refreshing the Monofarm page.
   passed `7` tests.
 - Regression: `. .venv/bin/activate && pytest tests/unit -q` passed `164` tests.
 - Static checks: `ruff check .` passed and `bun run build` completed successfully.
+- Screenshot follow-up RED: `bun test src/lib/printerSlots.test.ts` failed because
+  the U1 page had no printer-first display adapter and rendered only persistent
+  `printer.slots`.
+- Screenshot follow-up GREEN: the same target passed `10` tests after the U1
+  display switched to normalized live slots; `bun run build` passed again.
 
 ## Test specification
 
@@ -25,6 +30,7 @@ without opening another application or refreshing the Monofarm page.
 | 1 | A DB URL ending in `/` reads the agent snapshot stored under the canonical Moonraker URL | `test_cached_status_matches_agent_url_without_trailing_slash` | unit | PASS |
 | 2 | A status packet without `print_task_config` cannot erase the last complete U1 colors | `test_status_push_keeps_last_u1_colors_when_packet_is_incomplete` | unit | PASS |
 | 3 | A real U1 slot change immediately broadcasts a fresh printer snapshot to open browsers | `test_u1_color_change_pushes_fresh_printer_snapshot` | unit | PASS |
+| 4 | The U1 printer page shows live printer colors even when its persistent inventory slots are empty | `renders U1 printer colors even when persistent inventory slots are empty` | unit | PASS |
 
 ## Coverage and known gaps
 

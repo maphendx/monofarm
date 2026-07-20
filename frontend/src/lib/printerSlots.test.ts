@@ -4,6 +4,7 @@ import type { Printer } from "./types";
 import {
   normalizedPrinterSlots,
   preferRealtimePrinters,
+  printerSpoolDisplaySlots,
   printerSlotStateKey,
 } from "./printerSlots";
 
@@ -176,6 +177,38 @@ describe("normalized printer slots", () => {
     expect(slots.map((slot) => slot.slot)).toEqual([0, 1, 2, 3]);
     expect(slots.filter((slot) => slot.empty).map((slot) => slot.slot)).toEqual([0, 1, 3]);
     expect(slots.every((slot) => !slot.isExternal && slot.unitIndex === 0)).toBe(true);
+  });
+
+  it("renders U1 printer colors even when persistent inventory slots are empty", () => {
+    const slots = printerSpoolDisplaySlots(basePrinter({
+      kind: "snapmaker_u1",
+      bambu_dev_id: null,
+      bambu_dev_ip: null,
+      bambu_model: null,
+      moonraker_url: "http://u1.local/",
+      source: "moonraker",
+      slots: Array.from({ length: 4 }, (_, slot_index) => ({
+        slot_index,
+        filament_id: null,
+        material: null,
+        color: null,
+        hex_color: null,
+        brand: null,
+        grams_at_load: null,
+        state: "empty" as const,
+        unit_index: 0,
+        is_external: false,
+      })),
+      loaded_filaments: [
+        { slot: 0, color: "#8BD5EE", color_name: null, type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null, verified: true },
+        { slot: 1, color: "#F55A7C", color_name: null, type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null, verified: true },
+        { slot: 2, color: "#FFFFFF", color_name: null, type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null, verified: true },
+        { slot: 3, color: "#000000", color_name: null, type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null, verified: true },
+      ],
+    }));
+
+    expect(slots.map((slot) => slot.color)).toEqual(["#8BD5EE", "#F55A7C", "#FFFFFF", "#000000"]);
+    expect(slots.every((slot) => !slot.empty && slot.verified)).toBe(true);
   });
 });
 

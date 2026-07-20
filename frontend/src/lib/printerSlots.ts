@@ -25,6 +25,17 @@ export type NormalizedPrinterSlot = {
   verified: boolean;
 };
 
+export type PrinterSpoolDisplaySlot = {
+  slot: number;
+  empty: boolean;
+  color: string;
+  colorName: string | null;
+  material: string | null;
+  brand: string | null;
+  filamentId: number | null;
+  verified: boolean;
+};
+
 function fromLive(slot: FilamentSlot, persistent?: PrinterSlotInfo): NormalizedPrinterSlot {
   const color = slot.color || persistent?.hex_color || persistent?.color || null;
   const material = slot.type || persistent?.material || null;
@@ -125,6 +136,20 @@ export function normalizedPrinterSlots(
   return all
     .filter((slot) => source === "external" ? slot.isExternal : !slot.isExternal)
     .sort((a, b) => a.slot - b.slot);
+}
+
+/** Printer-first slot data shaped for reel/spool presentation components. */
+export function printerSpoolDisplaySlots(printer: Printer): PrinterSpoolDisplaySlot[] {
+  return normalizedPrinterSlots(printer, { allSources: true }).map((slot) => ({
+    slot: slot.slot,
+    empty: slot.empty,
+    color: slot.color ?? "#888888",
+    colorName: slot.colorName,
+    material: slot.material,
+    brand: slot.brand,
+    filamentId: slot.filamentId,
+    verified: slot.verified,
+  }));
 }
 
 /** Stable key for changes that can alter AMS display/mapping, excluding print progress. */

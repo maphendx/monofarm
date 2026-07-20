@@ -21,7 +21,7 @@ import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
 import { useSmoothSnapshot } from "@/hooks/useSmoothSnapshot";
-import { normalizedPrinterSlots } from "@/lib/printerSlots";
+import { normalizedPrinterSlots, printerSpoolDisplaySlots } from "@/lib/printerSlots";
 import type { BambuCloudJob, Filament, FilamentColor, FilamentSlot, Printer, PrinterGroup, PrinterSlotInfo } from "@/lib/types";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -1511,25 +1511,24 @@ function buildLoadedGroups(printer: Printer, inventory: Filament[]): SpoolGroup[
 }
 
 /** Build SimplyPrint spool groups from U1 / Klipper toolhead slots. */
-function buildU1Groups(printer: Printer, slots: PrinterSlotInfo[], inventory: Filament[]): SpoolGroup[] {
+function buildU1Groups(printer: Printer, inventory: Filament[]): SpoolGroup[] {
+  const slots = printerSpoolDisplaySlots(printer);
   if (slots.length === 0) return [];
-  const view: SpoolView[] = [...slots]
-    .sort((a, b) => a.slot_index - b.slot_index)
+  const view: SpoolView[] = slots
     .map((s) => {
-      const empty = s.state === "empty" || !s.filament_id;
-      const inv = s.filament_id ? inventory.find((f) => f.id === s.filament_id) : null;
+      const inv = s.filamentId ? inventory.find((f) => f.id === s.filamentId) : null;
       return {
-        key: `t${s.slot_index}`,
-        label: s.slot_index + 1,
-        empty,
-        hex: spoolHex(s.hex_color ?? s.color),
-        colorName: s.color,
+        key: `t${s.slot}`,
+        label: s.slot + 1,
+        empty: s.empty,
+        hex: spoolHex(s.color),
+        colorName: s.colorName,
         material: s.material,
         brand: s.brand,
         grams: inv?.grams_remaining ?? null,
-        active: printer.active_tray === s.slot_index,
-        rawSlot: s.slot_index,
-        verified: true,
+        active: printer.active_tray === s.slot,
+        rawSlot: s.slot,
+        verified: s.verified,
       };
     });
   return [{ title: null, external: false, slots: view }];
@@ -2106,7 +2105,7 @@ function U1SlotsCard({
     }
   }
 
-  const groups = buildU1Groups(printer, slots, inventory);
+  const groups = buildU1Groups(printer, inventory);
 
   return (
     <>
