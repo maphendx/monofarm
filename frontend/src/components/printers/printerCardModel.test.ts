@@ -8,6 +8,7 @@ import {
   printerCanStartPrint,
   getPrinterCardTone,
   getSlotNumber,
+  printerCardUsesPersistentSlots,
   printerNeedsClearBed,
   printerCover,
 } from "./printerCardModel";
@@ -88,6 +89,24 @@ describe("printer card model", () => {
   it("keeps slot labels one-based in the UI", () => {
     expect(getSlotNumber({ slot_index: 0 })).toBe("1");
     expect(getSlotNumber({ slot_index: 3 })).toBe("4");
+  });
+
+  it("uses live U1 filament presentation even when persistent slots exist", () => {
+    const persistentSlots = Array.from({ length: 4 }, (_, slot_index) => ({
+      slot_index,
+      filament_id: null,
+      material: null,
+      color: null,
+      hex_color: null,
+      brand: null,
+      grams_at_load: null,
+      state: "empty" as const,
+      unit_index: 0,
+      is_external: false,
+    }));
+
+    expect(printerCardUsesPersistentSlots(printer({ slots: persistentSlots }))).toBe(false);
+    expect(printerCardUsesPersistentSlots(printer({ kind: "other", slots: persistentSlots }))).toBe(true);
   });
 
   it("only enables Skip for an active Moonraker print", () => {

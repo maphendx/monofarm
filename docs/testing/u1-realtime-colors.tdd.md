@@ -22,6 +22,12 @@ without opening another application or refreshing the Monofarm page.
   `printer.slots`.
 - Screenshot follow-up GREEN: the same target passed `10` tests after the U1
   display switched to normalized live slots; `bun run build` passed again.
+- Dashboard follow-up RED: the focused printer-card test failed at compile time
+  because no card-source selector existed and the card unconditionally preferred
+  persistent DB slots for every non-Bambu printer.
+- Dashboard follow-up GREEN: the focused printer-card test passed after only
+  generic/manual printers kept the editable DB-slot strip; U1 cards now render
+  normalized live slots from the same WebSocket snapshot as the printer page.
 
 ## Test specification
 
@@ -31,6 +37,7 @@ without opening another application or refreshing the Monofarm page.
 | 2 | A status packet without `print_task_config` cannot erase the last complete U1 colors | `test_status_push_keeps_last_u1_colors_when_packet_is_incomplete` | unit | PASS |
 | 3 | A real U1 slot change immediately broadcasts a fresh printer snapshot to open browsers | `test_u1_color_change_pushes_fresh_printer_snapshot` | unit | PASS |
 | 4 | The U1 printer page shows live printer colors even when its persistent inventory slots are empty | `renders U1 printer colors even when persistent inventory slots are empty` | unit | PASS |
+| 5 | A U1 dashboard card cannot hide live colors behind four empty persistent DB slots | `uses live U1 filament presentation even when persistent slots exist` | unit | PASS |
 
 ## Coverage and known gaps
 

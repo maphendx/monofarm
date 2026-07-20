@@ -19,6 +19,7 @@ import {
   formatFinishTime,
   getPrinterCardTone,
   printerCover,
+  printerCardUsesPersistentSlots,
   printerCanStartPrint,
   printerNeedsClearBed,
 } from "./printerCardModel";
@@ -232,10 +233,10 @@ export function PrinterCard({
           </div>
         </div>
 
-        {printer.kind !== "bambu" && printer.slots?.length ? (
+        {printerCardUsesPersistentSlots(printer) ? (
           <div className="pc-slots" aria-label={t("common.slots")}>
             <SlotStrip
-              slots={printer.slots}
+              slots={printer.slots ?? []}
               kind={printer.kind}
               showLabels
               editable={canEdit}

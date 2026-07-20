@@ -110,6 +110,13 @@ export function getSlotNumber(slot: { slot_index: number }): string {
   return String(slot.slot_index + 1);
 }
 
+/** Only generic/manual printers edit DB-backed slots directly on the card. */
+export function printerCardUsesPersistentSlots(
+  printer: Pick<Printer, "kind" | "slots">,
+): boolean {
+  return printer.kind === "other" && Boolean(printer.slots?.length);
+}
+
 export function canSkipObject(printer: Pick<Printer, "state" | "moonraker_url" | "kind">): boolean {
   return printer.state === "printing" && !!printer.moonraker_url && printer.kind !== "snapmaker_u1";
 }
