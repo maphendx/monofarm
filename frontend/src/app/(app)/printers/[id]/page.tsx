@@ -16,6 +16,7 @@ import {
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
 import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
+import { PrinterAmsOverview } from "@/components/printers/PrinterAmsOverview";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
@@ -615,7 +616,7 @@ function JobHeroCard({
       </div>
 
       {/* ── camera panel — one consistent UI/placeholder regardless of source ── */}
-      <div className="relative aspect-video w-full overflow-hidden border-b border-[var(--border)] bg-[var(--bg)]">
+      <div data-camera-size="compact" className="relative h-40 w-full overflow-hidden border-b border-[var(--border)] bg-[var(--bg)] sm:h-48 lg:h-52">
         {!hasCamera ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[var(--text-muted)]">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1722,8 +1723,8 @@ function LoadedFilamentsCard({
         />
       )}
 
-      <Card title="Пластик в принтері">
-        {/* ── chips + gear header (SimplyPrint style) ── */}
+      <Card title={isBambu ? "Філамент" : "Пластик в принтері"}>
+        {/* ── nozzle, source and editing controls ── */}
         <div className="mb-3 flex items-center gap-2">
           <NozzleBedChips printer={printer} />
           {canEdit && !editing && (
@@ -1767,11 +1768,13 @@ function LoadedFilamentsCard({
             <EmptySpoolIcon size={56} />
             <p className="text-sm text-[var(--text-faint)]">Пластик не вказано</p>
           </div>
-        ) : (
-          <SpoolSlotsView
+        ) : isBambu ? (
+          <PrinterAmsOverview
             groups={groups}
-            onSlotClick={isBambu && canEdit && !editing && !quickBusy ? (rawSlot) => setQuickPickSlot(rawSlot) : undefined}
+            onSlotClick={canEdit && !editing && !quickBusy ? (rawSlot) => setQuickPickSlot(rawSlot) : undefined}
           />
+        ) : (
+          <SpoolSlotsView groups={groups} />
         )}
 
         {/* ── status bar ── */}
@@ -2695,8 +2698,11 @@ export default function PrinterPage() {
       {/* ── main grid — 2 columns ── */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
 
-        {/* Col 1 — job, filaments, movement */}
+        {/* Col 1 — AMS first for Bambu, then compact camera/job and movement */}
         <div className="min-w-0 space-y-4">
+          {printer.kind === "bambu" && (
+            <LoadedFilamentsCard printer={printer} onUpdated={upsertPrinter} />
+          )}
           <JobHeroCard
             printer={printer}
             onUpdated={(updated) => updated ? upsertPrinter(updated) : void reload()}
@@ -2705,9 +2711,9 @@ export default function PrinterPage() {
           {printer.current_filament_meta && <FilamentCard printer={printer} />}
           {printer.kind === "snapmaker_u1" ? (
             <U1SlotsCard printer={printer} onUpdated={reload} />
-          ) : (
+          ) : printer.kind !== "bambu" ? (
             <LoadedFilamentsCard printer={printer} onUpdated={upsertPrinter} />
-          )}
+          ) : null}
           <JogCard printer={printer} />
         </div>
 
