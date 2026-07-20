@@ -1376,7 +1376,6 @@ def set_loaded_filaments(
             if changed:
                 bambu.sync_filament_slots(row.bambu_dev_id, changed)
         except bambu.BambuError as exc:
-            db.rollback()
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
     row.loaded_filaments = normalized
     db.commit()

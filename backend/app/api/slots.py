@@ -94,66 +94,65 @@ def assign_slot(
     if printer.kind == PrinterKind.bambu and not (0 <= slot_index <= 253 or slot_index == 254):
         raise HTTPException(400, detail="Невірний індекс Bambu слота")
 
-    slot = _get_or_create_slot(db, printer_id, slot_index)
-    if printer.kind == PrinterKind.bambu:
-        slot.is_external = slot_index == 254
-        slot.unit_index = None if slot.is_external else slot_index // 4
-    now = datetime.now(timezone.utc)
+    try:
+        with db.begin_nested():
+            slot = _get_or_create_slot(db, printer_id, slot_index)
+            if printer.kind == PrinterKind.bambu:
+                slot.is_external = slot_index == 254
+                slot.unit_index = None if slot.is_external else slot_index // 4
+            now = datetime.now(timezone.utc)
 
-    if payload.filament_id is not None:
-        filament = db.query(Filament).filter_by(
-            id=payload.filament_id, organization_id=org.id
-        ).first()
-        if not filament:
-            raise HTTPException(404, detail="Філамент не знайдено")
+            if payload.filament_id is not None:
+                filament = db.query(Filament).filter_by(
+                    id=payload.filament_id, organization_id=org.id
+                ).first()
+                if not filament:
+                    raise HTTPException(404, detail="Філамент не знайдено")
 
-        slot.filament_id = filament.id
-        _snapshot_from_filament(slot, filament)
-        slot.state = SlotState.loaded
-        slot.updated_at = now
+                slot.filament_id = filament.id
+                _snapshot_from_filament(slot, filament)
+                slot.state = SlotState.loaded
+                slot.updated_at = now
 
-        db.add(SlotEvent(
-            printer_id=printer_id,
-            slot_index=slot_index,
-            event=SlotEventType.load,
-            filament_id=filament.id,
-            user_id=user.id,
-        ))
-    else:
-        # Unload
-        old_filament_id = slot.filament_id
-        slot.filament_id = None
-        slot.material = None
-        slot.color = None
-        slot.hex_color = None
-        slot.brand = None
-        slot.grams_at_load = None
-        slot.state = SlotState.empty
-        slot.updated_at = now
+                db.add(SlotEvent(
+                    printer_id=printer_id,
+                    slot_index=slot_index,
+                    event=SlotEventType.load,
+                    filament_id=filament.id,
+                    user_id=user.id,
+                ))
+            else:
+                old_filament_id = slot.filament_id
+                slot.filament_id = None
+                slot.material = None
+                slot.color = None
+                slot.hex_color = None
+                slot.brand = None
+                slot.grams_at_load = None
+                slot.state = SlotState.empty
+                slot.updated_at = now
 
-        db.add(SlotEvent(
-            printer_id=printer_id,
-            slot_index=slot_index,
-            event=SlotEventType.unload,
-            filament_id=old_filament_id,
-            user_id=user.id,
-        ))
+                db.add(SlotEvent(
+                    printer_id=printer_id,
+                    slot_index=slot_index,
+                    event=SlotEventType.unload,
+                    filament_id=old_filament_id,
+                    user_id=user.id,
+                ))
 
-    if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
-        try:
-            bambu.sync_filament_slot(
-                printer.bambu_dev_id,
-                {
-                    "slot": slot.slot_index,
-                    "type": slot.material,
-                    "color": slot.hex_color or slot.color,
-                    "hex_color": slot.hex_color,
-                    "empty": slot.state == SlotState.empty,
-                },
-            )
-        except bambu.BambuError as exc:
-            db.rollback()
-            raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc
+            if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
+                bambu.sync_filament_slot(
+                    printer.bambu_dev_id,
+                    {
+                        "slot": slot.slot_index,
+                        "type": slot.material,
+                        "color": slot.hex_color or slot.color,
+                        "hex_color": slot.hex_color,
+                        "empty": slot.state == SlotState.empty,
+                    },
+                )
+    except bambu.BambuError as exc:
+        raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc
     db.commit()
     db.refresh(slot)
     if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
