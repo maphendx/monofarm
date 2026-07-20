@@ -364,7 +364,49 @@ function tagCompatCheck(file: GcodeFile | null, printer: PrinterType): TagIssue[
 
 // ── AMS / slot visual grid ────────────────────────────────────────────────────
 
-function AmsSlotPicker({
+function SpoolReel({ color, empty }: { color: string | null; empty: boolean }) {
+  const filamentColor = empty ? "var(--bg)" : (color ?? "var(--text-faint)");
+  return (
+    <svg
+      data-spool-reel="true"
+      viewBox="0 0 48 58"
+      aria-hidden="true"
+      className="h-12 w-10 drop-shadow-sm"
+    >
+      <path
+        d="M9 4C5.5 4 4 9.5 4 29s1.5 25 5 25h8V4H9Z"
+        fill="var(--surface-hi)"
+        stroke="var(--border-strong)"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M39 4c3.5 0 5 5.5 5 25s-1.5 25-5 25h-8V4h8Z"
+        fill="var(--surface-hi)"
+        stroke="var(--border-strong)"
+        strokeWidth="1.5"
+      />
+      <rect x="13" y="8" width="22" height="42" rx="8" fill={filamentColor} />
+      {!empty && (
+        <g opacity="0.3" stroke="var(--bg-elevated)" strokeWidth="1">
+          <path d="M14 15h20M13 21h22M13 27h22M13 33h22M13 39h22M14 45h20" />
+        </g>
+      )}
+      <ellipse
+        cx="24"
+        cy="29"
+        rx="7"
+        ry="9"
+        fill="var(--bg-elevated)"
+        stroke="var(--border-strong)"
+        strokeWidth="1.5"
+        strokeDasharray={empty ? "2 2" : undefined}
+      />
+      <circle cx="24" cy="29" r="2.5" fill="var(--text-faint)" />
+    </svg>
+  );
+}
+
+export function AmsSlotPicker({
   allSlots,
   selectedSlot,
   onSelect,
@@ -386,64 +428,70 @@ function AmsSlotPicker({
   if (byUnit.size === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-3 pt-0.5">
+    <div className="space-y-2.5 pt-0.5">
       {[...byUnit.entries()].map(([key, unitSlots]) => {
+        const unitIndex = key.startsWith("u") ? parseInt(key.slice(1)) : null;
+        const unitLetter = unitIndex === null ? null : String.fromCharCode(65 + unitIndex);
         const unitLabel =
-          key === "ext" ? "Зовн." : key === "flat" ? null : `AMS ${parseInt(key.slice(1)) + 1}`;
+          key === "ext" ? "Зовнішня котушка" : key === "flat" ? "Філамент" : `AMS-${unitLetter}`;
+        const loadedCount = unitSlots.filter((slot) => !slot.isEmpty).length;
         return (
-          <div key={key} className="flex flex-col gap-1.5">
-            {unitLabel && (
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">
+          <div key={key} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2">
+            <div className="mb-1.5 flex items-center justify-between px-0.5">
+              <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                 {unitLabel}
               </span>
-            )}
-            <div className="flex gap-1">
+              {key !== "ext" && (
+                <span className="text-[9px] tabular-nums text-[var(--text-faint)]">
+                  {loadedCount}/{unitSlots.length}
+                </span>
+              )}
+            </div>
+            <div className={key === "ext" ? "flex" : "grid grid-cols-4 gap-1"}>
               {unitSlots.map((s) => {
                 const isSel = selectedSlot === s.slot;
                 const tier = !s.isEmpty ? matchTierFor(fileColor, fileType, s.color, s.type, true) : null;
+                const trayLabel = s.isExternal
+                  ? "EXT"
+                  : `${unitLetter ?? "T"}${(s.slot % 4) + 1}`;
+                const statusLabel = s.isEmpty ? "Порожньо" : (s.type ?? "Філамент");
+                const accessibleLabel = `${unitLabel}, слот ${trayLabel}: ${statusLabel}`;
                 return (
                   <button
                     key={s.slot}
                     type="button"
+                    disabled={s.isEmpty}
                     onClick={() => onSelect(s.slot)}
-                    title={`${slotLabel(s.slot)}${s.type ? ` · ${s.type}` : ""}${s.isEmpty ? " (порожній)" : ""}${tier ? ` · ${matchTierLabel(tier)}` : ""}`}
+                    aria-label={accessibleLabel}
+                    aria-pressed={isSel}
+                    title={`${accessibleLabel}${tier ? ` · ${matchTierLabel(tier)}` : ""}`}
                     className={[
-                      "relative flex h-9 w-9 items-end justify-center rounded-lg border-2 pb-0.5 transition",
+                      "group relative flex min-w-0 flex-col items-center rounded-lg border px-1 py-1.5 text-center transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                      key === "ext" ? "w-16" : "w-full",
                       isSel
-                        ? "border-[var(--accent)] shadow-lg"
+                        ? "border-[var(--accent)] bg-[var(--surface-hi)] shadow-sm"
                         : tier === "exact"
                           ? "border-[var(--state-ok)]"
                           : tier === "close"
                             ? "border-[var(--state-warn)]"
                             : s.isEmpty
-                              ? "border-[var(--border)] bg-[var(--bg)] hover:border-[var(--border-strong)]"
-                              : "border-transparent hover:scale-105",
+                              ? "cursor-not-allowed border-transparent opacity-55"
+                              : "border-transparent hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hi)]",
                     ].join(" ")}
-                    style={{ backgroundColor: s.isEmpty ? undefined : (s.color ?? "#888888") }}
                   >
-                    {s.isEmpty && (
-                      <span className="absolute inset-0 flex items-center justify-center">
-                        <span className="h-5 w-5 rounded-full border-2 border-dashed border-[var(--border-strong)]" />
-                      </span>
-                    )}
+                    <span className="h-3 truncate text-[8px] font-medium leading-3 text-[var(--text-faint)]">
+                      {statusLabel}
+                    </span>
+                    <SpoolReel color={s.color} empty={s.isEmpty} />
                     {isSel && (
-                      <span className="absolute inset-0 flex items-center justify-center">
-                        <Check
-                          className="h-4 w-4 drop-shadow-sm"
-                          style={{ color: s.isEmpty ? "var(--accent)" : "rgba(255,255,255,0.95)" }}
-                          strokeWidth={3}
-                        />
+                      <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-sm">
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
                       </span>
                     )}
                     <span
-                      className={[
-                        "relative z-10 text-[8px] font-bold leading-none",
-                        s.isEmpty
-                          ? "text-[var(--text-faint)]"
-                          : "text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]",
-                      ].join(" ")}
+                      className="mt-0.5 text-[9px] font-bold leading-none tracking-wide text-[var(--text-muted)]"
                     >
-                      {s.slot === 254 ? "EXT" : `T${s.slot + 1}`}
+                      {trayLabel}
                     </span>
                   </button>
                 );

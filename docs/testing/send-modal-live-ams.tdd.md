@@ -14,12 +14,13 @@ No source plan was provided. The journey was derived from the reported productio
 | Print progress does not reset a manual mapping, while an actual AMS material/color change does | `printerSlotStateKey` tests in `src/lib/printerSlots.test.ts` | Unit | Compile-time RED: `printerSlotStateKey` export was missing | PASS: stable for progress, different for AMS change |
 | All confirmed AMS trays remain selectable even when the external spool is the current `active_tray` | `bun test src/components/files/SendModal.test.ts` | Unit | Expected `[0, 1, 254]`, received `[254]` | PASS |
 | Auto-mapping uses the matching physical AMS tray instead of defaulting to the active external spool | `bun test src/components/files/SendModal.test.ts` | Unit | Expected `{0: 1}`, received `{0: 254}` | PASS |
+| AMS trays render as labeled filament reels with loaded, empty, selected, unit, and external-spool states | `SendModal Bambu mapping > renders AMS trays as Handy-style filament reels` | Component SSR | Compile-time RED: `AmsSlotPicker` export was missing | PASS: semantic reel markup rendered |
 
 Focused GREEN command:
 
 ```text
 bun test src/components/files/SendModal.test.ts src/lib/printerSlots.test.ts
-11 pass, 0 fail, 19 expect() calls
+12 pass, 0 fail, 24 expect() calls
 ```
 
 ## Regression validation

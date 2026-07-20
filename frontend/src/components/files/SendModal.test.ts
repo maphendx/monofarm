@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import type { GcodeFileMeta, Printer } from "@/lib/types";
-import { autoMapSlots, printerMaterialSlots } from "./SendModal";
+import { AmsSlotPicker, autoMapSlots, printerMaterialSlots } from "./SendModal";
 
 const printer = (overrides: Partial<Printer> = {}): Printer => ({
   id: 1,
@@ -71,5 +73,23 @@ describe("SendModal Bambu mapping", () => {
     } as GcodeFileMeta;
 
     expect(autoMapSlots(meta, printer())).toEqual({ 0: 1 });
+  });
+
+  it("renders AMS trays as Handy-style filament reels", () => {
+    const markup = renderToStaticMarkup(createElement(AmsSlotPicker, {
+      allSlots: [
+        { slot: 0, type: "PLA", color: "#ff0000", unit: 0, isEmpty: false, isExternal: false },
+        { slot: 1, type: null, color: null, unit: 0, isEmpty: true, isExternal: false },
+        { slot: 254, type: "PETG", color: "#00ff00", unit: null, isEmpty: false, isExternal: true },
+      ],
+      selectedSlot: 0,
+      onSelect: () => {},
+    }));
+
+    expect(markup).toContain("AMS-A");
+    expect(markup).toContain("A1");
+    expect(markup).toContain("Порожньо");
+    expect(markup).toContain("Зовнішня котушка");
+    expect(markup).toContain('data-spool-reel="true"');
   });
 });
