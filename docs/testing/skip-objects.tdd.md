@@ -46,5 +46,9 @@
   disk, avoiding a second full-file RAM allocation for large files.
 - `backend/.venv/bin/pytest tests/unit/test_skip_objects.py -q`: `8 passed`.
 - `backend/.venv/bin/ruff check app/services/skip_objects.py app/api/printers.py tests/unit/test_skip_objects.py tests/integration/test_bambu_skip_objects.py`: passed.
-- The parameterized API regression covers both `failed` and `lost`; it will run
-  in CI where the dedicated PostgreSQL service is available.
+- The parameterized API regression covers both `failed` and `lost`.
+- GitHub CI: `345 passed`; PostgreSQL integration tests and Alembic migration
+  verification passed.
+- Production read-only verification: active Bambu A3 resolved its matching
+  `failed` Monofarm job, parsed a `49,898,116` byte 3MF from disk, and returned
+  `18` selectable objects with `available=true` and `source=bambu_mqtt`.
