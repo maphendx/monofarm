@@ -183,7 +183,19 @@ async def start_next_for_printer(
                 ams_mapping = None
             run_index = entry.runs_completed + 1
             eject_after_print = printer.autoprint_eject_last_plate or _has_more_runs(db, entry)
-            dispatch_mode = "lan" if printer.bambu_lan_mode else "cloud"
+            # Mirror files.py:send_to_printer's hybrid path: Bambu Cloud's own
+            # upload/preview pipeline does not reliably process PlateCycler's
+            # re-zipped 3MF, so a cloud-mode printer with an agent tunnel still
+            # uploads over agent FTPS and only sends the start command via
+            # cloud MQTT.
+            hybrid_cloud_command = (
+                not printer.bambu_lan_mode
+                and printer.bambu_dev_ip
+                and printer.bambu_access_code
+                and has_agent_tunnel(printer.organization_id)
+            )
+            use_lan_dispatch = printer.bambu_lan_mode or hybrid_cloud_command
+            start_via = "lan" if printer.bambu_lan_mode else "cloud"
             job = create_cloud_job(
                 db,
                 org_id=printer.organization_id,
@@ -191,11 +203,11 @@ async def start_next_for_printer(
                 printer_bambu_dev_id=printer.bambu_dev_id,
                 gcode_file_id=gcode.id,
                 file_name=gcode.original_name,
-                dispatch_mode=dispatch_mode,
+                dispatch_mode="lan" if use_lan_dispatch else "cloud",
                 idempotency_key=f"autoprint:{printer.organization_id}:{entry.id}:{run_index}",
                 request_payload={
                     "source": "platecycler_autoprint",
-                    "start_via": dispatch_mode,
+                    "start_via": start_via,
                     "ams_mapping": ams_mapping,
                     "use_ams": use_ams,
                     "platecycler": {
@@ -213,7 +225,7 @@ async def start_next_for_printer(
 
         result = (
             await dispatch_lan_job(job_id)
-            if dispatch_mode == "lan"
+            if use_lan_dispatch
             else await asyncio.to_thread(dispatch_cloud_job, job_id)
         )
         if result and result.status == BambuCloudJobStatus.failed:

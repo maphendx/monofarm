@@ -1,13 +1,30 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 
+from app.core import db as core_db
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 from app.models.gcode_file import GcodeFile
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
 from app.models.task import PrintTask
+from app.services import autoprint, bambu, bambu_dispatch, bambu_lan_dispatch
 from app.services.autoprint import record_completed_run
+
+
+class _SessionContext:
+    """Lets service code that opens its own `SessionLocal()` reuse the test's
+    transactional `db_session` instead of a real, separately-committed one."""
+
+    def __init__(self, session):
+        self.session = session
+
+    def __enter__(self):
+        return self.session
+
+    def __exit__(self, *_exc):
+        return False
 
 
 def _printer(db, org_id: int, **overrides) -> Printer:
@@ -333,3 +350,59 @@ def test_advance_queue_skips_platecycler_printers(db_session, test_org) -> None:
     _advance_queue(db_session, printer, datetime.now(timezone.utc))
     assert entry.runs_completed == 0
     assert entry.done is False
+
+
+def test_start_next_for_printer_uses_hybrid_lan_dispatch_when_tunnel_available(
+    db_session, test_org, monkeypatch
+) -> None:
+    """A cloud-mode printer (bambu_lan_mode=False) with LAN credentials and an
+    active agent tunnel must dispatch through the working agent FTPS + MQTT
+    path (bambu_lan_dispatch.dispatch_lan_job), the same hybrid route
+    files.py:send_to_printer already uses successfully. Routing it through
+    dispatch_cloud_job instead fails in production: Bambu Cloud's own upload
+    pipeline does not reliably process PlateCycler's re-zipped 3MF."""
+    monkeypatch.setattr(core_db, "SessionLocal", lambda: _SessionContext(db_session))
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: {"state": "idle"})
+    monkeypatch.setattr(bambu_lan_dispatch, "has_agent_tunnel", lambda _org_id: True)
+
+    def _fail_if_called(_job_id):
+        raise AssertionError("dispatch_cloud_job must not be used when the agent tunnel is available")
+
+    monkeypatch.setattr(bambu_dispatch, "dispatch_cloud_job", _fail_if_called)
+
+    lan_calls: list[int] = []
+
+    async def fake_dispatch_lan_job(job_id):
+        lan_calls.append(job_id)
+        return None
+
+    monkeypatch.setattr(bambu_lan_dispatch, "dispatch_lan_job", fake_dispatch_lan_job)
+
+    printer = _printer(db_session, test_org.id, bambu_lan_mode=False)
+    gcode = GcodeFile(
+        organization_id=test_org.id,
+        stored_name="hybrid-source.3mf",
+        original_name="part.3mf",
+        size_bytes=100,
+    )
+    task = PrintTask(organization_id=test_org.id, title="Part")
+    db_session.add_all([gcode, task])
+    db_session.flush()
+    task.gcode_file_id = gcode.id
+    entry = PlanEntry(
+        organization_id=test_org.id,
+        plan_date=date.today(),
+        printer_id=printer.id,
+        task_id=task.id,
+        runs_total=1,
+    )
+    db_session.add(entry)
+    db_session.commit()
+
+    asyncio.run(autoprint.start_next_for_printer(printer.id))
+
+    assert lan_calls, "AutoPrint should dispatch via the agent FTPS+MQTT hybrid path"
+
+    job = db_session.query(BambuCloudJob).filter(BambuCloudJob.printer_id == printer.id).one()
+    assert job.dispatch_mode == "lan"
+    assert job.request_payload_json["start_via"] == "cloud"
