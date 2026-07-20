@@ -27,3 +27,24 @@
   pre-existing warnings in the printer-detail page).
 - The API integration test is present, but the local run requires PostgreSQL on
   `localhost:5432`; Docker/OrbStack was unavailable in this environment.
+
+## Large-file delayed-start regression
+
+- Journey: a Bambu print started from Monofarm must retain its source 3MF even
+  when a long upload causes the dispatch job to time out before the printer
+  begins reporting `RUNNING`.
+- Production evidence: live Bambu printers were reporting `printing` while the
+  matching Monofarm job had become `failed`; the filename and `gcode_file_id`
+  were still intact.
+- RED selector test: `pytest tests/unit/test_skip_objects.py -q` failed during
+  collection because `select_bambu_source_job` did not exist.
+- RED disk-backed parser test: the parser raised `TypeError` when given a 3MF
+  path, proving that the previous path required the whole file in memory.
+- GREEN: matching `failed` or `lost` jobs are recoverable for seven days only
+  when their normalized filename exactly matches the live Bambu print.
+- GREEN: S3-backed 3MF files are downloaded to a temporary file and parsed from
+  disk, avoiding a second full-file RAM allocation for large files.
+- `backend/.venv/bin/pytest tests/unit/test_skip_objects.py -q`: `8 passed`.
+- `backend/.venv/bin/ruff check app/services/skip_objects.py app/api/printers.py tests/unit/test_skip_objects.py tests/integration/test_bambu_skip_objects.py`: passed.
+- The parameterized API regression covers both `failed` and `lost`; it will run
+  in CI where the dedicated PostgreSQL service is available.

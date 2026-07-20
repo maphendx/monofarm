@@ -44,6 +44,7 @@ from app.services.skip_objects import (
     build_bambu_skip_payload,
     merge_bambu_excluded_state,
     parse_bambu_plate_objects,
+    select_bambu_source_job,
     validate_skip_request,
 )
 
@@ -1907,15 +1908,6 @@ async def print_skip_object(
     raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
 
 
-def _bambu_job_name(value: str | None) -> str:
-    name = (value or "").strip().lower()
-    for suffix in (".gcode.3mf", ".3mf", ".gcode"):
-        if name.endswith(suffix):
-            name = name[: -len(suffix)]
-            break
-    return re.sub(r"[^a-z0-9а-яіїєґ]+", "", name)
-
-
 async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> dict:
     if row.kind != PrinterKind.bambu or not row.bambu_dev_id:
         raise HTTPException(status_code=400, detail="Skip Objects доступний лише для Bambu Lab")
@@ -1929,16 +1921,18 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
             "updated_at": live.get("last_message_at"),
         }
 
-    job = (
+    jobs = (
         db.query(BambuCloudJob)
         .filter(
             BambuCloudJob.organization_id == org_id,
             BambuCloudJob.printer_id == row.id,
-            BambuCloudJob.status.in_(ACTIVE_STATUSES),
+            BambuCloudJob.gcode_file_id.isnot(None),
         )
         .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
-        .first()
+        .limit(50)
+        .all()
     )
+    job = select_bambu_source_job(jobs, live.get("filename"))
     if job is None or job.gcode_file_id is None:
         return {
             "available": False,
@@ -1956,16 +1950,6 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
             "updated_at": live.get("last_message_at"),
         }
 
-    live_name = _bambu_job_name(live.get("filename"))
-    file_name = _bambu_job_name(job.file_name or gcode_file.original_name)
-    if live_name and file_name and live_name != file_name:
-        return {
-            "available": False,
-            "reason": "not_started_from_monofarm",
-            "objects": [],
-            "updated_at": live.get("last_message_at"),
-        }
-
     excluded_ids = {
         int(value)
         for value in live.get("skipped_object_ids", [])
@@ -1977,8 +1961,12 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
     object_cache_key = f"bambu:skip_objects:file:v1:{gcode_file.id}"
     object_template = cache_get(object_cache_key)
     if not isinstance(object_template, list):
+        def parse_stored_objects() -> list[dict]:
+            with storage.local_path_for(gcode_file.stored_name, org_id) as source_path:
+                return parse_bambu_plate_objects(source_path)
+
         try:
-            file_bytes = await asyncio.to_thread(storage.get_bytes, gcode_file.stored_name, org_id)
+            object_template = await asyncio.to_thread(parse_stored_objects)
         except (FileNotFoundError, OSError):
             return {
                 "available": False,
@@ -1986,7 +1974,6 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
                 "objects": [],
                 "updated_at": live.get("last_message_at"),
             }
-        object_template = await asyncio.to_thread(parse_bambu_plate_objects, file_bytes)
         cache_set(object_cache_key, object_template, 7 * 24 * 60 * 60)
 
     objects = merge_bambu_excluded_state(object_template, excluded_ids)

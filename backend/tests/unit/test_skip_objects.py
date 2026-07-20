@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +13,7 @@ from app.services.skip_objects import (
     build_bambu_skip_payload,
     merge_bambu_excluded_state,
     parse_bambu_plate_objects,
+    select_bambu_source_job,
     validate_skip_request,
 )
 
@@ -65,6 +68,22 @@ def test_parses_bambu_identify_ids_for_the_active_plate():
     ]
 
 
+def test_parses_bambu_objects_from_disk_without_loading_whole_file(tmp_path):
+    source_path = tmp_path / "large-model.gcode.3mf"
+    with zipfile.ZipFile(source_path, "w") as zf:
+        zf.writestr(
+            "Metadata/slice_info.config",
+            '<config><plate><metadata key="index" value="1"/>'
+            '<object identify_id="155" name="Cube" skipped="false"/>'
+            '<object identify_id="165" name="Cube 2" skipped="false"/>'
+            "</plate></config>",
+        )
+
+    objects = parse_bambu_plate_objects(source_path)
+
+    assert [obj["id"] for obj in objects] == ["155", "165"]
+
+
 def test_bambu_report_tracks_skipped_objects_in_realtime(monkeypatch):
     bambu._state_cache.clear()
     bambu._last_state_redis_write.clear()
@@ -101,3 +120,45 @@ def test_merges_live_skipped_ids_without_reparsing_the_3mf():
     assert merged[0]["excluded"] is False
     assert merged[1]["excluded"] is True
     assert objects[1]["excluded"] is False
+
+
+def test_select_bambu_source_job_recovers_matching_large_file_after_timeout():
+    now = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)
+    unrelated_active = SimpleNamespace(
+        id=8,
+        status="printing",
+        file_name="next-job.3mf",
+        created_at=now,
+    )
+    matching_failed = SimpleNamespace(
+        id=7,
+        status="failed",
+        file_name="Large Model_PLA_2d4h.gcode.3mf",
+        created_at=now - timedelta(hours=4),
+    )
+
+    selected = select_bambu_source_job(
+        [unrelated_active, matching_failed],
+        "cache/Large+Model_PLA_2d4h.gcode.3mf",
+        now=now,
+    )
+
+    assert selected is matching_failed
+
+
+def test_select_bambu_source_job_does_not_reuse_stale_or_completed_print():
+    now = datetime(2026, 7, 20, 13, 0, tzinfo=timezone.utc)
+    jobs = [
+        SimpleNamespace(
+            status="failed",
+            file_name="same-name.3mf",
+            created_at=now - timedelta(days=8),
+        ),
+        SimpleNamespace(
+            status="completed",
+            file_name="same-name.3mf",
+            created_at=now - timedelta(minutes=5),
+        ),
+    ]
+
+    assert select_bambu_source_job(jobs, "same-name.3mf", now=now) is None

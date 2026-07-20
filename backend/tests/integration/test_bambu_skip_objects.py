@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -91,3 +92,67 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
     )
     assert skip_response.status_code == 200
     assert sent == [("SKIP-DEV-1", [165])]
+
+
+@pytest.mark.parametrize(
+    "terminal_status",
+    [BambuCloudJobStatus.failed, BambuCloudJobStatus.lost],
+)
+def test_bambu_skip_objects_keeps_large_monofarm_file_after_delayed_start(
+    terminal_status: BambuCloudJobStatus,
+    db_session: Session,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_org,
+    monkeypatch,
+):
+    printer = Printer(
+        organization_id=test_org.id,
+        name="Bambu large file",
+        kind=PrinterKind.bambu,
+        bambu_dev_id=f"SKIP-LARGE-{terminal_status.value}",
+        is_active=True,
+    )
+    file = GcodeFile(
+        organization_id=test_org.id,
+        stored_name=f"large-{terminal_status.value}.gcode.3mf",
+        original_name="Large Model_PLA_2d4h.gcode.3mf",
+        size_bytes=250_000_000,
+    )
+    db_session.add_all([printer, file])
+    db_session.flush()
+    db_session.add(
+        BambuCloudJob(
+            organization_id=test_org.id,
+            printer_id=printer.id,
+            gcode_file_id=file.id,
+            printer_bambu_dev_id=printer.bambu_dev_id,
+            file_name=file.original_name,
+            status=terminal_status,
+            correlation_id=f"skip-large-correlation-{terminal_status.value}",
+            idempotency_key=f"skip-large-idempotency-{terminal_status.value}",
+            dispatch_mode="lan",
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        bambu,
+        "get_cached_state",
+        lambda _dev_id: {
+            "state": "printing",
+            "filename": "Large+Model_PLA_2d4h.gcode.3mf",
+            "skipped_object_ids": [],
+            "last_message_at": "2026-07-20T13:00:00+00:00",
+        },
+    )
+    monkeypatch.setattr(storage, "get_bytes", lambda *_args: _sliced_3mf())
+
+    response = client.get(
+        f"/api/printers/{printer.id}/print/skip-objects",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available"] is True
+    assert [obj["id"] for obj in response.json()["objects"]] == ["155", "165"]

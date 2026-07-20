@@ -1,14 +1,85 @@
 from __future__ import annotations
 
 import io
+import re
 import time
 import xml.etree.ElementTree as ET
 import zipfile
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, TypeVar
+
+
+_JobT = TypeVar("_JobT")
+_ACTIVE_SOURCE_STATUSES = {
+    "queued",
+    "validating",
+    "creating_project",
+    "uploading",
+    "task_creating",
+    "task_created",
+    "acknowledged",
+    "printing",
+    "paused",
+}
+_RECOVERABLE_SOURCE_STATUSES = {"failed", "lost"}
+BAMBU_SOURCE_RECOVERY_WINDOW = timedelta(days=7)
 
 
 class InvalidSkipRequest(ValueError):
     pass
+
+
+def _normalized_bambu_file_name(value: str | None) -> str:
+    name = Path(value or "").name.strip().lower()
+    for suffix in (".gcode.3mf", ".3mf", ".gcode"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return re.sub(r"[^a-z0-9а-яіїєґ]+", "", name)
+
+
+def select_bambu_source_job(
+    jobs: list[_JobT],
+    live_filename: str | None,
+    *,
+    now: datetime | None = None,
+) -> _JobT | None:
+    """Select the Monofarm job whose stored 3MF matches the live Bambu print.
+
+    A large upload can reach the printer after its job has already timed out as
+    ``failed`` or ``lost``. Keep that source association for a bounded window
+    instead of claiming the print was started outside Monofarm.
+    """
+    live_name = _normalized_bambu_file_name(live_filename)
+    active_jobs = [
+        job
+        for job in jobs
+        if str(getattr(getattr(job, "status", None), "value", getattr(job, "status", "")))
+        in _ACTIVE_SOURCE_STATUSES
+    ]
+    if live_name:
+        for job in active_jobs:
+            if _normalized_bambu_file_name(getattr(job, "file_name", None)) == live_name:
+                return job
+    elif len(active_jobs) == 1:
+        return active_jobs[0]
+
+    cutoff = (now or datetime.now(timezone.utc)) - BAMBU_SOURCE_RECOVERY_WINDOW
+    for job in jobs:
+        status = str(getattr(getattr(job, "status", None), "value", getattr(job, "status", "")))
+        created_at = getattr(job, "created_at", None)
+        if created_at is not None and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        if (
+            live_name
+            and status in _RECOVERABLE_SOURCE_STATUSES
+            and created_at is not None
+            and created_at >= cutoff
+            and _normalized_bambu_file_name(getattr(job, "file_name", None)) == live_name
+        ):
+            return job
+    return None
 
 
 def _pick_bounds(zf: zipfile.ZipFile, plate_index: int, object_ids: set[int]) -> dict[int, list[float]]:
@@ -45,7 +116,7 @@ def _pick_bounds(zf: zipfile.ZipFile, plate_index: int, object_ids: set[int]) ->
 
 
 def parse_bambu_plate_objects(
-    file_bytes: bytes,
+    source: bytes | Path,
     *,
     plate_index: int | None = None,
     excluded_ids: set[int] | None = None,
@@ -53,7 +124,8 @@ def parse_bambu_plate_objects(
     """Read native Bambu skip IDs from a sliced 3MF's active plate."""
     excluded = excluded_ids or set()
     try:
-        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        archive_source = io.BytesIO(source) if isinstance(source, bytes) else source
+        with zipfile.ZipFile(archive_source) as zf:
             root = ET.fromstring(zf.read("Metadata/slice_info.config"))
             plates: list[tuple[int, ET.Element]] = []
             for plate in root.findall(".//plate"):
