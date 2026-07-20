@@ -7,6 +7,8 @@ import { ApiError, api, getToken } from "@/lib/api";
 import { SendModal, checkSlots, compatBadge, fitCheck, modelCheck, nozzleCheck } from "@/components/files/SendModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
+import { usePrinterStream } from "@/hooks/usePrinterStream";
+import { preferRealtimePrinters } from "@/lib/printerSlots";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer, PrinterGroup } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 
@@ -505,7 +507,9 @@ export default function FilesPage() {
 
   const [files, setFiles] = useState<GcodeFile[]>([]);
   const [folders, setFolders] = useState<GcodeFolder[]>([]);
-  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [restPrinters, setRestPrinters] = useState<Printer[]>([]);
+  const { printers: realtimePrinters, loading: realtimePrintersLoading } = usePrinterStream();
+  const printers = preferRealtimePrinters(restPrinters, realtimePrinters, realtimePrintersLoading);
   const [printerGroups, setPrinterGroups] = useState<PrinterGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -543,7 +547,7 @@ export default function FilesPage() {
         api<GcodeFolder[]>("/api/folders"),
         api<PrinterGroup[]>("/api/printer-groups"),
       ]);
-      setFiles(f); setPrinters(p); setFolders(fols); setPrinterGroups(grps);
+      setFiles(f); setRestPrinters(p); setFolders(fols); setPrinterGroups(grps);
     } catch { /* ignore */ }
     finally { setLoading(false); }
   }, []);

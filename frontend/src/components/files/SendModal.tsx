@@ -10,7 +10,7 @@ import { API_URL, ApiError, api } from "@/lib/api";
 import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
 import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
 import { trackPrintTransfer, usePrintTransfers } from "@/lib/printTransferStore";
-import { normalizedPrinterSlots } from "@/lib/printerSlots";
+import { normalizedPrinterSlots, printerSlotStateKey } from "@/lib/printerSlots";
 import { printerCanStartPrint } from "@/components/printers/printerCardModel";
 
 // ── helpers (exported for use by other components) ────────────────────────────
@@ -99,7 +99,7 @@ export function matchTierLabel(match: SlotMatch): string {
 }
 
 export function printerMaterialSlots(printer: PrinterType) {
-  return normalizedPrinterSlots(printer)
+  return normalizedPrinterSlots(printer, { allSources: true })
     .filter((s) => !s.empty && (s.filamentId || s.color || s.material))
     // Sending ams_mapping for a slot the printer hasn't confirmed via MQTT makes
     // the firmware reject the job ("Failed to get AMS mapping table") — the
@@ -299,7 +299,7 @@ type DisplaySlot = {
 };
 
 function printerAllSlotsForDisplay(printer: PrinterType): DisplaySlot[] {
-  return normalizedPrinterSlots(printer)
+  return normalizedPrinterSlots(printer, { allSources: true })
     // Same dispatch-safety rule as printerMaterialSlots — don't let the operator
     // manually pick an AMS slot the printer hasn't confirmed exists.
     .filter((s) => s.isExternal || s.verified)
@@ -543,6 +543,7 @@ export function SendModal({
     defaultPrinterId ? new Set([defaultPrinterId]) : new Set(),
   );
   const [slotMap, setSlotMap] = useState<Record<number, number>>({});
+  const autoMapSourceRef = useRef("");
   const [savedOpts] = useState(loadSendOpts);
   const [autoBedLeveling, setAutoBedLeveling] = useState(savedOpts.bed_leveling);
   const [timelapse, setTimelapse] = useState(savedOpts.timelapse);
@@ -593,6 +594,12 @@ export function SendModal({
     () => selectedPrinters[0] ?? null,
     [selectedPrinters],
   );
+  const primaryPrinterSlotState = primaryPrinter ? printerSlotStateKey(primaryPrinter) : "";
+  const fileSlotState = JSON.stringify({
+    colors: file?.filament_meta?.colors ?? [],
+    types: file?.filament_meta?.types ?? [],
+    usedG: file?.filament_meta?.used_g ?? [],
+  });
   const usedSlots = useMemo(() => usedSlotIndices(file?.filament_meta ?? null), [file?.filament_meta]);
   const isMoonraker = numSelected === 1 && !!primaryPrinter?.moonraker_url;
   const isBambu = numSelected === 1 && primaryPrinter?.kind === "bambu";
@@ -620,10 +627,16 @@ export function SendModal({
 
   // ── auto-map slots ──
   useEffect(() => {
-    if (!file || !primaryPrinter) return;
+    if (!file || !primaryPrinter) {
+      autoMapSourceRef.current = "";
+      return;
+    }
+    const source = `${file.id}:${primaryPrinter.id}:${fileSlotState}:${primaryPrinterSlotState}`;
+    if (autoMapSourceRef.current === source) return;
+    autoMapSourceRef.current = source;
     setSlotMap(autoMapSlots(file.filament_meta, primaryPrinter));
     setCalibrateSlots(savedOpts.u1_flow_calibrate ? new Set(usedSlots) : new Set());
-  }, [file?.filament_meta, primaryPrinter?.id, usedSlots, savedOpts.u1_flow_calibrate]);
+  }, [file, fileSlotState, primaryPrinter, primaryPrinterSlotState, usedSlots, savedOpts.u1_flow_calibrate]);
 
   // ── cleanup logic ──
   function keepFile() { keepFileRef.current = true; }

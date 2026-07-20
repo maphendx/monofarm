@@ -2,6 +2,15 @@ import type { FilamentSlot, Printer, PrinterSlotInfo } from "./types";
 
 export const EXTERNAL_SLOT = 254;
 
+/** Prefer the first complete WebSocket snapshot over a page's one-time REST fallback. */
+export function preferRealtimePrinters(
+  restPrinters: Printer[],
+  realtimePrinters: Printer[],
+  realtimeLoading: boolean,
+): Printer[] {
+  return realtimeLoading ? restPrinters : realtimePrinters;
+}
+
 export type NormalizedPrinterSlot = {
   slot: number;
   material: string | null;
@@ -116,4 +125,19 @@ export function normalizedPrinterSlots(
   return all
     .filter((slot) => source === "external" ? slot.isExternal : !slot.isExternal)
     .sort((a, b) => a.slot - b.slot);
+}
+
+/** Stable key for changes that can alter AMS display/mapping, excluding print progress. */
+export function printerSlotStateKey(printer: Printer): string {
+  return normalizedPrinterSlots(printer, { allSources: true })
+    .map((slot) => [
+      slot.slot,
+      slot.unitIndex,
+      slot.isExternal ? 1 : 0,
+      slot.verified ? 1 : 0,
+      slot.empty ? 1 : 0,
+      slot.material ?? "",
+      slot.color ?? "",
+    ].join(":"))
+    .join("|");
 }

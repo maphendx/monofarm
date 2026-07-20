@@ -1,7 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Printer } from "./types";
-import { normalizedPrinterSlots } from "./printerSlots";
+import {
+  normalizedPrinterSlots,
+  preferRealtimePrinters,
+  printerSlotStateKey,
+} from "./printerSlots";
 
 const basePrinter = (overrides: Partial<Printer>): Printer => ({
   id: 7,
@@ -172,5 +176,40 @@ describe("normalized printer slots", () => {
     expect(slots.map((slot) => slot.slot)).toEqual([0, 1, 2, 3]);
     expect(slots.filter((slot) => slot.empty).map((slot) => slot.slot)).toEqual([0, 1, 3]);
     expect(slots.every((slot) => !slot.isExternal && slot.unitIndex === 0)).toBe(true);
+  });
+});
+
+describe("realtime printer snapshots", () => {
+  it("keeps the REST snapshot until the first WebSocket snapshot is ready", () => {
+    const rest = [basePrinter({ loaded_filaments: [
+      { slot: 0, color: "#ff0000", color_name: "Red", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: 0 },
+    ] })];
+    const cachedStream = [basePrinter({ loaded_filaments: [] })];
+
+    expect(preferRealtimePrinters(rest, cachedStream, true)).toBe(rest);
+  });
+
+  it("uses the WebSocket snapshot once it contains the printer's current AMS", () => {
+    const rest = [basePrinter({ loaded_filaments: [] })];
+    const realtime = [basePrinter({ loaded_filaments: [
+      { slot: 1, color: "#0000ff", color_name: "Blue", type: "PETG", brand: null, filament_id: null, empty: false, unit_id: 0, verified: true },
+    ] })];
+
+    const selected = preferRealtimePrinters(rest, realtime, false);
+
+    expect(selected).toBe(realtime);
+    expect(selected[0]?.loaded_filaments[0]?.color).toBe("#0000ff");
+  });
+
+  it("changes the mapping key for AMS changes but not print progress", () => {
+    const printer = basePrinter({ loaded_filaments: [
+      { slot: 0, color: "#ff0000", color_name: "Red", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: 0, verified: true },
+    ] });
+    const changedAms = basePrinter({ loaded_filaments: [
+      { slot: 0, color: "#0000ff", color_name: "Blue", type: "PETG", brand: null, filament_id: null, empty: false, unit_id: 0, verified: true },
+    ] });
+
+    expect(printerSlotStateKey({ ...printer, progress_pct: 50 })).toBe(printerSlotStateKey(printer));
+    expect(printerSlotStateKey(changedAms)).not.toBe(printerSlotStateKey(printer));
   });
 });
