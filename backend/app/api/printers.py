@@ -2031,7 +2031,8 @@ async def print_skip_objects(
         sequence_id=str(int(datetime.now(timezone.utc).timestamp() * 1000)),
     )
     use_agent = bool(
-        row.bambu_dev_ip
+        row.bambu_lan_mode
+        and row.bambu_dev_ip
         and row.bambu_access_code
         and _tunnel.has_tunnel(org.id)
     )

@@ -40,6 +40,9 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
         name="Bambu X1C",
         kind=PrinterKind.bambu,
         bambu_dev_id="SKIP-DEV-1",
+        bambu_dev_ip="192.168.1.8",
+        bambu_access_code="12345678",
+        bambu_lan_mode=False,
         is_active=True,
     )
     file = GcodeFile(
@@ -77,7 +80,12 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
     source_path = tmp_path / "skip-test.gcode.3mf"
     source_path.write_bytes(_sliced_3mf())
     monkeypatch.setattr(storage, "local_path_for", lambda *_args: nullcontext(source_path))
-    monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: False)
+    monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: True)
+
+    async def unexpected_agent_command(*_args, **_kwargs):
+        raise AssertionError("cloud-mode printer must not send skip through the LAN agent")
+
+    monkeypatch.setattr(tunnel, "send_bambu_mqtt", unexpected_agent_command)
     sent: list[tuple[str, list[int]]] = []
     monkeypatch.setattr(bambu, "skip_objects", lambda dev_id, ids: sent.append((dev_id, ids)))
 
@@ -113,6 +121,7 @@ def test_bambu_skip_objects_reconciles_lost_agent_ack(
         bambu_dev_id="SKIP-A9",
         bambu_dev_ip="192.168.1.9",
         bambu_access_code="12345678",
+        bambu_lan_mode=True,
         is_active=True,
     )
     file = GcodeFile(

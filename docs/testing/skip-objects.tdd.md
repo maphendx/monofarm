@@ -77,6 +77,10 @@
 - GREEN: if the agent response is lost, the API reconciles for three seconds
   against live `skipped_object_ids` and returns success when the printer state
   confirms every requested object.
+- GREEN: cloud-mode printers such as A9 no longer enter the LAN-agent command
+  path merely because an IP and access code are stored; they publish through
+  the existing Redis-to-worker Bambu Cloud MQTT route. The agent path is now
+  gated by `bambu_lan_mode=true`.
 - `pytest agent/test_bambu_mqtt_publish.py -q`: `1 passed`.
 - Targeted backend Ruff and unit tests: passed (`18 passed`).
 - The new PostgreSQL integration regression is committed for CI; local execution
