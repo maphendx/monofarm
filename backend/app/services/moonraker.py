@@ -54,6 +54,18 @@ def _api_base(url: str) -> str:
     return urlunsplit((s.scheme, s.netloc, "", "", ""))
 
 
+def _status_cache_url(url: str) -> str:
+    """Use one status-cache identity for DB URLs and agent-pushed URLs."""
+    try:
+        return _api_base(url)
+    except MoonrakerError:
+        return url.strip().rstrip("/")
+
+
+def _status_cache_key(kind: str, url: str) -> str:
+    return f"mr:{kind}:{_status_cache_url(url)}"
+
+
 def _request(method: str, base: str, path: str, **kw) -> dict:
     url = f"{base}{path}"
     try:
@@ -703,11 +715,12 @@ def get_live_status(moonraker_url: str) -> dict:
         return {"state": "offline"}
 
     from app.services.cache import cache_set
-    fresh_key = f"mr:status:{moonraker_url}"
-    stale_key = f"mr:stale:{moonraker_url}"
+    cache_url = _status_cache_url(moonraker_url)
+    fresh_key = _status_cache_key("status", cache_url)
+    stale_key = _status_cache_key("stale", cache_url)
     cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
     cache_set(stale_key, status, STALE_CACHE_TTL)
-    _status_cache[moonraker_url] = status
+    _status_cache[cache_url] = status
     return _apply_cached_bed_cleared(moonraker_url, status)
 
 
@@ -729,8 +742,9 @@ def get_cached_live_status(moonraker_url: str) -> dict | None:
         return None
 
     from app.services.cache import cache_get
-    fresh_key = f"mr:status:{moonraker_url}"
-    stale_key = f"mr:stale:{moonraker_url}"
+    cache_url = _status_cache_url(moonraker_url)
+    fresh_key = _status_cache_key("status", cache_url)
+    stale_key = _status_cache_key("stale", cache_url)
 
     fresh = cache_get(fresh_key)
     if isinstance(fresh, dict):
@@ -740,12 +754,13 @@ def get_cached_live_status(moonraker_url: str) -> dict | None:
     if isinstance(stale, dict):
         return _apply_cached_bed_cleared(moonraker_url, stale)
 
-    cached = _unwrap_cached_status(_status_cache.get(moonraker_url))
+    cached = _unwrap_cached_status(_status_cache.get(cache_url))
     return _apply_cached_bed_cleared(moonraker_url, cached) if cached is not None else None
 
 
 def invalidate_status(moonraker_url: str) -> None:
     """Force the next poll to fetch fresh state (call after pause/resume/cancel)."""
     from app.services.cache import cache_delete
-    cache_delete(f"mr:status:{moonraker_url}")
-    _status_cache.pop(moonraker_url, None)
+    cache_url = _status_cache_url(moonraker_url)
+    cache_delete(_status_cache_key("status", cache_url))
+    _status_cache.pop(cache_url, None)

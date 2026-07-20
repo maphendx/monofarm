@@ -231,21 +231,42 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     await send_telegram(org_id_tunnel, int(chat_id), reply_text, parse_mode)
 
 
-def _handle_status_push(data: dict) -> None:
-    """Cache a Moonraker status pushed by the agent's WS subscription."""
+def _handle_status_push(data: dict) -> bool:
+    """Cache an agent status and report whether its U1 slots changed."""
     url = data.get("url") or ""
     raw = data.get("status") or {}
     if not url or not raw:
-        return
-    from app.services.moonraker import _parse_moonraker_status, _status_cache, STATUS_CACHE_TTL
-    from app.services.cache import cache_set
+        return False
+    from app.services.moonraker import (
+        STATUS_CACHE_TTL,
+        _parse_moonraker_status,
+        _status_cache,
+        _status_cache_key,
+        _status_cache_url,
+        _unwrap_cached_status,
+    )
+    from app.services.cache import cache_get, cache_set
+
+    cache_url = _status_cache_url(url)
+    fresh_key = _status_cache_key("status", cache_url)
+    stale_key = _status_cache_key("stale", cache_url)
+    previous = cache_get(stale_key)
+    if not isinstance(previous, dict):
+        previous = _unwrap_cached_status(_status_cache.get(cache_url)) or {}
+
     status = _parse_moonraker_status(raw)
+    previous_slots = previous.get("u1_filaments")
+    current_slots = status.get("u1_filaments")
+    if current_slots is None and previous_slots:
+        status["u1_filaments"] = previous_slots
+
     # _status_cache is shared with moonraker module; tunnel path expects (timestamp, status)
-    _status_cache[url] = (time.monotonic(), status)
+    _status_cache[cache_url] = (time.monotonic(), status)
     # Redis path used by moonraker.get_live_status (fresh + stale keys)
-    cache_set(f"mr:status:{url}", status, int(STATUS_CACHE_TTL))
-    cache_set(f"mr:stale:{url}", status, int(STATUS_CACHE_TTL * 10))
-    log.debug("STATUS_PUSH: cached %s state=%s", url, status.get("state"))
+    cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
+    cache_set(stale_key, status, int(STATUS_CACHE_TTL * 10))
+    log.debug("STATUS_PUSH: cached %s state=%s", cache_url, status.get("state"))
+    return current_slots is not None and current_slots != previous_slots
 
 
 _autoprint_idle_kicks: dict[str, float] = {}
@@ -295,7 +316,14 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "STATUS_PUSH":
-        _handle_status_push(data)
+        slots_changed = _handle_status_push(data)
+        if slots_changed:
+            try:
+                from app.api.ws import broadcast_printer_snapshot
+
+                await broadcast_printer_snapshot(org_id)
+            except Exception:
+                log.exception("STATUS_PUSH: failed to broadcast U1 slot change for org %s", org_id)
         return
 
     if msg_type == "BAMBU_STATUS_PUSH":
@@ -722,11 +750,12 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
     """Fetch and cache Moonraker live status via the tunnel."""
     from app.services.moonraker import (
         _api_base, _parse_moonraker_status,
-        LIVE_STATUS_OBJECTS, STATUS_CACHE_TTL, _status_cache,
+        _status_cache_url, LIVE_STATUS_OBJECTS, STATUS_CACHE_TTL, _status_cache,
     )
 
     now = time.monotonic()
-    cached = _status_cache.get(moonraker_url)
+    cache_url = _status_cache_url(moonraker_url)
+    cached = _status_cache.get(cache_url)
     if isinstance(cached, tuple) and len(cached) == 2:
         cached_at, cached_status = cached
         if isinstance(cached_at, (int, float)) and isinstance(cached_status, dict):
@@ -746,7 +775,7 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
         log.debug("Tunnel Moonraker status failed %s: %s", moonraker_url, e)
         status = cached[1] if cached else {"state": "offline"}
 
-    _status_cache[moonraker_url] = (now, status)
+    _status_cache[cache_url] = (now, status)
     return status
 
 

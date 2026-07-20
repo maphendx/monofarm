@@ -23,7 +23,7 @@ export function ImpersonationBanner() {
           <button
             type="button"
             onClick={clearImpersonation}
-            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-xs font-semibold text-[var(--text-hi)] hover:bg-[var(--surface-hi)]"
+            className="inline-flex h-7 shrink-0 items-center gapo-1.5 rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 text-xs font-semibold text-[var(--text-hi)] hover:bg-[var(--surface-hi)]"
           >
             <LogOut size={14} aria-hidden="true" />
             Exit

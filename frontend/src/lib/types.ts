@@ -18,7 +18,6 @@ export interface User {
   created_at: string;
   email_verified_at: string | null;
   telegram_chat_id: number | null;
-  // null = unrestricted; string[] = explicit allowlist (admins always bypass)
   allowed_modules: string[] | null;
 }
 
