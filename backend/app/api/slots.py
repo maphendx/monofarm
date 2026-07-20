@@ -139,8 +139,6 @@ def assign_slot(
             user_id=user.id,
         ))
 
-    db.commit()
-    db.refresh(slot)
     if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
         try:
             bambu.sync_filament_slot(
@@ -154,7 +152,11 @@ def assign_slot(
                 },
             )
         except bambu.BambuError as exc:
+            db.rollback()
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc
+    db.commit()
+    db.refresh(slot)
+    if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
         bambu.publish_printer_refresh(org.id, printer.bambu_dev_id, "slot_assignment")
     return slot
 

@@ -1558,6 +1558,7 @@ function LoadedFilamentsCard({
   const [err, setErr] = useState<string | null>(null);
   const [quickPickSlot, setQuickPickSlot] = useState<number | null>(null);
   const [quickBusy, setQuickBusy] = useState(false);
+  const quickBusyRef = useRef(false);
   const [modeBusy, setModeBusy] = useState(false);
 
   useEffect(() => {
@@ -1566,17 +1567,26 @@ function LoadedFilamentsCard({
 
   /** Click-a-spool-tile quick color pick — saves immediately, no edit mode needed. */
   async function quickSetColor(rawSlot: number, c: FilamentColor) {
+    if (quickBusyRef.current) return;
+    quickBusyRef.current = true;
     const current = printer.loaded_filaments ?? [];
     const idx = current.findIndex((s) => s.slot === rawSlot);
     const unit_id = rawSlot === 254 ? null : Math.floor(rawSlot / 4);
     const updated: FilamentSlot[] = idx >= 0
-      ? current.map((s, i) => (i === idx ? { ...s, color: c.hex_color, color_name: c.name, filament_id: null, empty: false } : s))
+      ? current.map((s, i) => (i === idx ? { ...s, color: c.hex_color, color_name: c.name, type: s.type || "PLA", filament_id: null, empty: false } : s))
       : [...current, { slot: rawSlot, color: c.hex_color, color_name: c.name, type: "PLA", brand: null, filament_id: null, empty: false, unit_id }];
+    setErr(null);
+    setSaved(false);
     setQuickBusy(true);
     try {
-      await api(`/api/printers/${printer.id}/loaded-filaments`, { method: "PUT", body: JSON.stringify(updated) });
-      onUpdated({ ...printer, loaded_filaments: updated });
+      const synced = await api<Printer>(`/api/printers/${printer.id}/loaded-filaments`, { method: "PUT", body: JSON.stringify(updated) });
+      onUpdated(synced);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Не вдалося синхронізувати AMS");
     } finally {
+      quickBusyRef.current = false;
       setQuickBusy(false);
       setQuickPickSlot(null);
     }
@@ -1656,18 +1666,19 @@ function LoadedFilamentsCard({
       color_name: f.color,
       type: f.material,
       brand: f.brand ?? null,
+      empty: false,
     });
   }
 
   async function save() {
     setBusy(true); setErr(null); setSaved(false);
     try {
-      await api(`/api/printers/${printer.id}/loaded-filaments`, {
+      let synced = await api<Printer>(`/api/printers/${printer.id}/loaded-filaments`, {
         method: "PUT",
         body: JSON.stringify(slots),
       });
       if (isBambu) {
-        await api(`/api/printers/${printer.id}`, {
+        synced = await api<Printer>(`/api/printers/${printer.id}`, {
           method: "PATCH",
           body: JSON.stringify({ bambu_has_ams: hasAms }),
         });
@@ -1675,18 +1686,12 @@ function LoadedFilamentsCard({
       const nz = nozzle.trim() ? Number(nozzle) : null;
       const bt = bedType.trim() || null;
       if (nz !== (printer.nozzle_diameter ?? null) || bt !== (printer.bed_type ?? null)) {
-        await api(`/api/printers/${printer.id}`, {
+        synced = await api<Printer>(`/api/printers/${printer.id}`, {
           method: "PATCH",
           body: JSON.stringify({ nozzle_diameter: nz, bed_type: bt }),
         });
       }
-      onUpdated({
-        ...printer,
-        loaded_filaments: slots,
-        bambu_has_ams: hasAms,
-        nozzle_diameter: nozzle.trim() ? Number(nozzle) : null,
-        bed_type: bedType.trim() || null,
-      });
+      onUpdated(synced);
       setSaved(true);
       setEditing(false);
       setTimeout(() => setSaved(false), 2000);
@@ -1709,7 +1714,7 @@ function LoadedFilamentsCard({
       {paletteSlot !== null && (
         <ColorPaletteModal
           slotLabel={isBambu && paletteTarget ? bambuSlotLabel(paletteTarget) : `#${paletteSlot + 1}`}
-          onPick={(c) => update(paletteSlot, { color: c.hex_color, color_name: c.name, filament_id: null })}
+          onPick={(c) => update(paletteSlot, { color: c.hex_color, color_name: c.name, type: paletteTarget?.type || "PLA", filament_id: null, empty: false })}
           onClose={() => setPaletteSlot(null)}
         />
       )}
@@ -1778,8 +1783,9 @@ function LoadedFilamentsCard({
         )}
 
         {/* ── status bar ── */}
-        {(saved || err) && (
+        {(quickBusy || saved || err) && (
           <div className="mt-3 flex items-center gap-3">
+            {quickBusy && <span className="text-sm text-[var(--text-muted)]">Синхронізація з Bambu…</span>}
             {saved && <span className="text-sm text-[var(--state-ok)]">✓ Збережено</span>}
             {err && <span className="text-sm text-[var(--state-error)]">{err}</span>}
           </div>
@@ -1873,7 +1879,7 @@ function LoadedFilamentsCard({
                     <input
                       type="color"
                       value={colorHex(s.color)}
-                      onChange={(e) => update(i, { color: e.target.value, color_name: null, filament_id: null })}
+                      onChange={(e) => update(i, { color: e.target.value, color_name: null, type: s.type || "PLA", filament_id: null, empty: false })}
                       className="absolute inset-0 size-full cursor-pointer opacity-0"
                     />
                   </div>
@@ -1883,7 +1889,7 @@ function LoadedFilamentsCard({
                 <input
                   type="text"
                   value={s.color}
-                  onChange={(e) => update(i, { color: e.target.value, color_name: null, filament_id: null })}
+                  onChange={(e) => update(i, { color: e.target.value, color_name: null, type: s.type || "PLA", filament_id: null, empty: false })}
                   onBlur={() => update(i, { color: normalizeHex(s.color) || "#888888" })}
                   placeholder="#RRGGBB"
                   maxLength={7}

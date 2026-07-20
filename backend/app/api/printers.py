@@ -259,6 +259,53 @@ def _merge_bambu_filament(persisted: dict, live: dict) -> dict:
     return merged
 
 
+def _bambu_filament_state(slot: dict) -> tuple[bool, str, str]:
+    empty = bool(slot.get("empty"))
+    if empty:
+        return True, "", ""
+    return (
+        False,
+        str(slot.get("type") or "PLA").strip().upper(),
+        str(slot.get("color") or "").strip().lower()[:7],
+    )
+
+
+def _normalize_bambu_filaments(slots: list[FilamentSlot]) -> list[dict]:
+    normalized: list[dict] = []
+    for slot in slots:
+        item = slot.model_dump()
+        if not item["empty"] and not str(item.get("type") or "").strip():
+            item["type"] = "PLA"
+        if item["slot"] != 254 and item.get("unit_id") is None:
+            item["unit_id"] = item["slot"] // 4
+        normalized.append(item)
+    return normalized
+
+
+def _changed_bambu_filaments(
+    persisted: list[dict], live: list[dict], requested: list[dict]
+) -> list[dict]:
+    baseline = {
+        int(slot["slot"]): slot
+        for slot in persisted
+        if isinstance(slot, dict) and slot.get("slot") is not None
+    }
+    baseline.update(
+        {
+            int(slot["slot"]): slot
+            for slot in live
+            if isinstance(slot, dict) and slot.get("slot") is not None
+        }
+    )
+    return [
+        slot
+        for slot in requested
+        if int(slot["slot"]) not in baseline
+        or _bambu_filament_state(baseline[int(slot["slot"])])
+        != _bambu_filament_state(slot)
+    ]
+
+
 def _to_dto(
     printer: Printer,
     db: Session | None = None,
@@ -1318,17 +1365,23 @@ def set_loaded_filaments(
     row = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Printer not found")
-    row.loaded_filaments = [s.model_dump() for s in slots]
+    normalized = _normalize_bambu_filaments(slots) if row.kind == PrinterKind.bambu else [s.model_dump() for s in slots]
+    if row.kind == PrinterKind.bambu and row.bambu_dev_id:
+        changed = _changed_bambu_filaments(
+            row.loaded_filaments or [],
+            bambu.get_ams_filaments(row.bambu_dev_id),
+            normalized,
+        )
+        try:
+            if changed:
+                bambu.sync_filament_slots(row.bambu_dev_id, changed)
+        except bambu.BambuError as exc:
+            db.rollback()
+            raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
+    row.loaded_filaments = normalized
     db.commit()
     db.refresh(row)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
-        try:
-            bambu.sync_filament_slots(
-                row.bambu_dev_id,
-                [slot.model_dump() for slot in slots],
-            )
-        except bambu.BambuError as exc:
-            raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
         bambu.publish_printer_refresh(org.id, row.bambu_dev_id, "slot_assignment")
     return _to_dto(row, db)
 

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.filament import Filament
 from app.models.printer import Printer, PrinterKind
-from app.models.printer_slot import SlotEvent
+from app.models.printer_slot import PrinterSlot, SlotEvent
 
 
 @pytest.fixture
@@ -54,6 +54,7 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     captured = []
     refreshes = []
     monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args: None)
     monkeypatch.setattr(
         bambu,
         "publish_printer_refresh",
@@ -98,6 +99,80 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     assert refreshes == [(test_org.id, "BAMBU-SYNC", "slot_assignment")]
 
 
+def test_bambu_loaded_filaments_only_sends_changed_slots(
+    client, auth_headers, db_session, monkeypatch
+):
+    from app.services import bambu
+
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu P1S", "kind": "bambu", "bambu_dev_id": "BAMBU-DIFF"},
+    )
+    assert created.status_code == 201
+    printer_id = created.json()["id"]
+    printer = db_session.get(Printer, printer_id)
+    printer.loaded_filaments = [
+        {"slot": 0, "color": "#ff0000", "type": "PLA", "empty": False, "unit_id": 0},
+        {"slot": 1, "color": "#00ff00", "type": "PLA", "empty": False, "unit_id": 0},
+    ]
+    db_session.commit()
+    captured: list[list[dict]] = []
+    monkeypatch.setattr(
+        bambu,
+        "sync_filament_slots",
+        lambda _dev_id, slots: captured.append(slots),
+    )
+
+    resp = client.put(
+        f"/api/printers/{printer_id}/loaded-filaments",
+        headers=auth_headers,
+        json=[
+            {"slot": 0, "color": "#ff0000", "type": "PLA", "empty": False, "unit_id": 0},
+            {"slot": 1, "color": "#0000ff", "type": "PLA", "empty": False, "unit_id": 0},
+        ],
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [[slot["slot"] for slot in batch] for batch in captured] == [[1]]
+
+
+def test_bambu_loaded_filaments_are_not_persisted_without_printer_ack(
+    client, auth_headers, db_session, monkeypatch
+):
+    from app.services import bambu
+
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu P1S", "kind": "bambu", "bambu_dev_id": "BAMBU-REJECT"},
+    )
+    assert created.status_code == 201
+    printer_id = created.json()["id"]
+    printer = db_session.get(Printer, printer_id)
+    original = [
+        {"slot": 0, "color": "#ff0000", "type": "PLA", "empty": False, "unit_id": 0}
+    ]
+    printer.loaded_filaments = original
+    db_session.commit()
+
+    def reject(*_args, **_kwargs):
+        raise bambu.BambuError("printer rejected command")
+
+    monkeypatch.setattr(bambu, "sync_filament_slots", reject)
+    resp = client.put(
+        f"/api/printers/{printer_id}/loaded-filaments",
+        headers=auth_headers,
+        json=[
+            {"slot": 0, "color": "#0000ff", "type": "PLA", "empty": False, "unit_id": 0}
+        ],
+    )
+
+    assert resp.status_code == 502
+    db_session.expire_all()
+    assert db_session.get(Printer, printer_id).loaded_filaments == original
+
+
 def test_bambu_slot_list_does_not_fabricate_u1_slots(client, auth_headers):
     created = client.post(
         "/api/printers",
@@ -120,6 +195,7 @@ def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, t
     captured = []
     refreshes = []
     monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args: None)
     monkeypatch.setattr(
         bambu,
         "publish_printer_refresh",
@@ -148,6 +224,34 @@ def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, t
     assert resp.json()["unit_index"] is None
     assert resp.json()["is_external"] is True
     assert refreshes == [(test_org.id, "BAMBU-HANDY", "slot_assignment")]
+
+
+def test_assign_bambu_slot_rolls_back_when_printer_rejects(
+    client, auth_headers, db_session, test_filament, monkeypatch
+):
+    from app.services import bambu
+
+    created = client.post(
+        "/api/printers",
+        headers=auth_headers,
+        json={"name": "Bambu P1S", "kind": "bambu", "bambu_dev_id": "BAMBU-SLOT-REJECT"},
+    )
+    assert created.status_code == 201
+    printer_id = created.json()["id"]
+
+    def reject(*_args, **_kwargs):
+        raise bambu.BambuError("printer rejected command")
+
+    monkeypatch.setattr(bambu, "sync_filament_slot", reject)
+    resp = client.put(
+        f"/api/printers/{printer_id}/slots/0",
+        headers=auth_headers,
+        json={"filament_id": test_filament.id},
+    )
+
+    assert resp.status_code == 502
+    assert db_session.query(PrinterSlot).filter_by(printer_id=printer_id).count() == 0
+    assert db_session.query(SlotEvent).filter_by(printer_id=printer_id).count() == 0
 
 
 def test_assign_filament_to_slot(client: TestClient, auth_headers, u1_printer, test_filament):

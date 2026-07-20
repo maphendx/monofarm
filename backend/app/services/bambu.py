@@ -57,9 +57,24 @@ BAMBU_FULL_REFRESH_INTERVAL_SECONDS = 5 * 60
 # P1/A1 reports are delta-based, so AMS fields may be absent for minutes at a
 # time. Keep last-known trays beyond the periodic full refresh interval.
 AMS_CACHE_TTL_SECONDS = 15 * 60
+FILAMENT_COMMAND_TTL_SECONDS = 30
+FILAMENT_ACK_TIMEOUT_SECONDS = 8.0
+FILAMENT_ACK_POLL_SECONDS = 0.05
+FILAMENT_CONFIRMATION_GRACE_SECONDS = 12.0
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
 TRANSIENT_FAILURE_RECOVERY_WINDOW = timedelta(minutes=30)
 BED_CLEARED_TTL_SECONDS = 12 * 3600
+
+_GENERIC_FILAMENT_PROFILES: dict[str, tuple[str, int, int]] = {
+    "PLA": ("GFL99", 190, 240),
+    "PETG": ("GFG99", 220, 270),
+    "ABS": ("GFB99", 240, 280),
+    "ASA": ("GFB98", 240, 280),
+    "TPU": ("GFU99", 200, 250),
+    "PA": ("GFN99", 240, 280),
+    "PC": ("GFC99", 260, 290),
+    "PVA": ("GFS99", 190, 240),
+}
 
 _REGION_HOSTS: dict[str, dict[str, str]] = {
     "us": {"api": "https://api.bambulab.com", "mqtt": "us.mqtt.bambulab.com"},
@@ -123,6 +138,10 @@ _seq_lock = threading.Lock()
 _state_cache: dict[str, dict[str, Any]] = {}
 # dev_id → list[dict]  — AMS tray data
 _ams_cache: dict[str, list[dict]] = {}
+# A successful setting ACK can arrive just before an older full AMS snapshot.
+# Hold the confirmed value briefly so that stale in-flight telemetry cannot
+# make the spool flash back to its previous colour in the UI.
+_confirmed_filament_slots: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
 # dev_id → monotonic ts of last Redis write (throttling, see REDIS_*_WRITE_INTERVAL)
 _last_state_redis_write: dict[str, float] = {}
 _last_ams_redis_write: dict[str, float] = {}
@@ -615,17 +634,17 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
             new_status=updated.get("state"),
         )
 
+    ams_changed = _handle_filament_setting_ack(dev_id, print_data)
     ams_data = print_data.get("ams")
     vt_tray = print_data.get("vt_tray")
     # P1-series printers without a physical AMS unit still report the external
     # spool via vt_tray but may omit the "ams" key entirely — parse it either way.
-    ams_changed = False
     if isinstance(ams_data, dict) or isinstance(vt_tray, dict):
         ams_changed = _parse_ams(
             dev_id,
             ams_data if isinstance(ams_data, dict) else {},
             vt_tray,
-        )
+        ) or ams_changed
     if isinstance(ams_data, dict):
         # Active tray: "255" = external spool (slot 254 in our convention)
         tray_now = ams_data.get("tray_now")
@@ -1051,10 +1070,23 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
     if not authoritative:
         return False
 
+    now_mono = time.monotonic()
+    for key, (expires_at, confirmed) in list(_confirmed_filament_slots.items()):
+        confirmed_dev_id, slot = key
+        if confirmed_dev_id != dev_id:
+            continue
+        if expires_at <= now_mono:
+            _confirmed_filament_slots.pop(key, None)
+            continue
+        reported = trays_by_slot.get(slot)
+        if reported is not None and _same_filament_state(reported, confirmed):
+            _confirmed_filament_slots.pop(key, None)
+        else:
+            trays_by_slot[slot] = confirmed
+
     trays = [trays_by_slot[slot] for slot in sorted(trays_by_slot)]
     changed = previous != trays
     _ams_cache[dev_id] = trays
-    now_mono = time.monotonic()
     if changed or now_mono - _last_ams_redis_write.get(dev_id, 0.0) >= REDIS_AMS_WRITE_INTERVAL:
         cache_set(f"bambu:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
         _last_ams_redis_write[dev_id] = now_mono
@@ -1300,30 +1332,169 @@ def set_speed_profile(dev_id: str, profile: int) -> None:
     })
 
 
+def _generic_filament_profile(material: str) -> tuple[str, int, int]:
+    if not material:
+        return "", 0, 0
+    normalized = material.strip().upper()
+    for prefix, profile in _GENERIC_FILAMENT_PROFILES.items():
+        if normalized == prefix or normalized.startswith(f"{prefix}-") or normalized.startswith(f"{prefix}+"):
+            return profile
+    return "", 190, 300
+
+
+def _filament_pending_key(dev_id: str, sequence_id: str) -> str:
+    return f"bambu:ams:pending:{dev_id}:{sequence_id}"
+
+
+def _filament_ack_key(dev_id: str, sequence_id: str) -> str:
+    return f"bambu:ams:ack:{dev_id}:{sequence_id}"
+
+
+def _filament_cache_entry(slot: dict[str, Any]) -> dict[str, Any]:
+    slot_index = int(slot.get("slot", 254))
+    empty = bool(slot.get("empty"))
+    raw_color = str(slot.get("hex_color") or slot.get("color") or "").strip()
+    if len(raw_color.lstrip("#")) not in (6, 8):
+        raw_color = "#888888"
+    else:
+        raw_color = f"#{raw_color.lstrip('#')[:6].upper()}"
+    material = "" if empty else str(slot.get("type") or "PLA").strip().upper()
+    return {
+        "slot": slot_index,
+        "color": "#888888" if empty else raw_color,
+        "type": material,
+        "color_name": None,
+        "brand": None,
+        "filament_id": None,
+        "empty": empty,
+        "unit_id": None if slot_index == 254 else slot_index // 4,
+    }
+
+
+def _same_filament_state(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if bool(left.get("empty")) != bool(right.get("empty")):
+        return False
+    if bool(left.get("empty")):
+        return True
+    return (
+        str(left.get("type") or "").strip().upper()
+        == str(right.get("type") or "").strip().upper()
+        and str(left.get("color") or "").strip().lower()[:7]
+        == str(right.get("color") or "").strip().lower()[:7]
+    )
+
+
+def _store_confirmed_filament_slot(dev_id: str, slot: dict[str, Any]) -> bool:
+    from app.services.cache import cache_set
+
+    previous = get_ams_filaments(dev_id)
+    by_slot = {
+        int(item["slot"]): item
+        for item in previous
+        if isinstance(item, dict) and item.get("slot") is not None
+    }
+    slot_index = int(slot["slot"])
+    changed = by_slot.get(slot_index) != slot
+    by_slot[slot_index] = slot
+    trays = [by_slot[index] for index in sorted(by_slot)]
+    _ams_cache[dev_id] = trays
+    cache_set(f"bambu:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
+    _last_ams_redis_write[dev_id] = time.monotonic()
+    _confirmed_filament_slots[(dev_id, slot_index)] = (
+        time.monotonic() + FILAMENT_CONFIRMATION_GRACE_SECONDS,
+        slot,
+    )
+    return changed
+
+
+def _handle_filament_setting_ack(dev_id: str, print_data: dict[str, Any]) -> bool:
+    if print_data.get("command") != "ams_filament_setting":
+        return False
+    sequence_id = str(print_data.get("sequence_id") or "")
+    if not sequence_id:
+        return False
+
+    from app.services.cache import cache_delete, cache_get, cache_set
+
+    result = str(print_data.get("result") or "").strip().lower()
+    ok = result in {"success", "ok"}
+    pending_key = _filament_pending_key(dev_id, sequence_id)
+    pending = cache_get(pending_key)
+    changed = False
+    if ok and isinstance(pending, dict):
+        changed = _store_confirmed_filament_slot(dev_id, pending)
+    cache_set(
+        _filament_ack_key(dev_id, sequence_id),
+        {
+            "ok": ok,
+            "result": result,
+            "reason": print_data.get("reason") or print_data.get("reason_code"),
+        },
+        FILAMENT_COMMAND_TTL_SECONDS,
+    )
+    cache_delete(pending_key)
+    log.info(
+        "bambu.ams.filament_ack dev_id=%s sequence_id=%s result=%s",
+        dev_id,
+        sequence_id,
+        result or "unknown",
+    )
+    return changed
+
+
+def _wait_for_filament_ack(dev_id: str, sequence_id: str) -> None:
+    from app.services.cache import cache_delete, cache_get
+
+    ack_key = _filament_ack_key(dev_id, sequence_id)
+    deadline = time.monotonic() + FILAMENT_ACK_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        ack = cache_get(ack_key)
+        if isinstance(ack, dict):
+            cache_delete(ack_key)
+            if ack.get("ok"):
+                return
+            detail = ack.get("reason") or ack.get("result") or "невідома помилка"
+            raise BambuError(f"принтер відхилив зміну AMS ({detail})")
+        time.sleep(FILAMENT_ACK_POLL_SECONDS)
+
+    cache_delete(_filament_pending_key(dev_id, sequence_id))
+    log.warning(
+        "bambu.ams.filament_ack_timeout dev_id=%s sequence_id=%s",
+        dev_id,
+        sequence_id,
+    )
+    raise BambuError("принтер не підтвердив зміну AMS протягом 8 секунд")
+
+
 def build_ams_filament_setting_payload(slot: dict[str, Any]) -> dict[str, Any]:
     """Build the MQTT command that makes Handy show a slot's material/color."""
     slot_index = int(slot.get("slot", 254))
     if slot_index == 254:
-        ams_id, tray_id = 255, 254
+        ams_id, slot_id, tray_id = 255, 0, 254
     else:
-        ams_id, tray_id = divmod(slot_index, 4)
+        ams_id, slot_id = divmod(slot_index, 4)
+        tray_id = slot_id
 
     raw_color = str(slot.get("hex_color") or slot.get("color") or "").strip().lstrip("#")
     color = raw_color[:8].upper() if len(raw_color) in (6, 8) else "FFFFFF00"
     if len(color) == 6:
         color += "FF"
     empty = bool(slot.get("empty"))
+    material = "" if empty else str(slot.get("type") or "PLA").strip().upper()
+    filament_id, nozzle_temp_min, nozzle_temp_max = _generic_filament_profile(material)
     return {
         "print": {
             "command": "ams_filament_setting",
             "sequence_id": _next_seq(),
             "ams_id": ams_id,
+            "slot_id": slot_id,
             "tray_id": tray_id,
-            "tray_info_idx": "",
+            "tray_info_idx": filament_id,
+            "setting_id": "",
             "tray_color": "FFFFFF00" if empty else color,
-            "nozzle_temp_min": 0,
-            "nozzle_temp_max": 0,
-            "tray_type": "" if empty else str(slot.get("type") or "PLA").upper(),
+            "nozzle_temp_min": nozzle_temp_min,
+            "nozzle_temp_max": nozzle_temp_max,
+            "tray_type": material,
         },
     }
 
@@ -1334,9 +1505,28 @@ def sync_filament_slot(dev_id: str, slot: dict[str, Any]) -> None:
 
 
 def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
-    """Publish slot edits, then request the authoritative Handy/printer state."""
+    """Publish slot edits, require printer ACKs, then refresh authoritative state."""
+    from app.services.cache import cache_delete, cache_set
+
+    sequences: list[str] = []
     for slot in slots:
-        _publish(dev_id, build_ams_filament_setting_payload(slot), qos=1)
+        payload = build_ams_filament_setting_payload(slot)
+        sequence_id = str(payload["print"]["sequence_id"])
+        cache_delete(_filament_ack_key(dev_id, sequence_id))
+        cache_set(
+            _filament_pending_key(dev_id, sequence_id),
+            _filament_cache_entry(slot),
+            FILAMENT_COMMAND_TTL_SECONDS,
+        )
+        try:
+            _publish(dev_id, payload, qos=1)
+        except Exception:
+            cache_delete(_filament_pending_key(dev_id, sequence_id))
+            raise
+        sequences.append(sequence_id)
+
+    for sequence_id in sequences:
+        _wait_for_filament_ack(dev_id, sequence_id)
     request_full_status(dev_id, qos=1)
 
 

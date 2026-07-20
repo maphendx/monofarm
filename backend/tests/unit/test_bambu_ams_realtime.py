@@ -88,10 +88,16 @@ def test_realtime_refresh_is_routed_through_redis(monkeypatch):
 
 def test_bulk_filament_sync_requests_fresh_printer_report(monkeypatch):
     published: list[tuple[dict, int]] = []
+    acknowledgements: list[tuple[str, str]] = []
     monkeypatch.setattr(
         bambu,
         "_publish",
         lambda _dev_id, payload, qos=0: published.append((payload, qos)),
+    )
+    monkeypatch.setattr(
+        bambu,
+        "_wait_for_filament_ack",
+        lambda dev_id, sequence_id: acknowledgements.append((dev_id, sequence_id)),
     )
 
     bambu.sync_filament_slots(
@@ -112,6 +118,68 @@ def test_bulk_filament_sync_requests_fresh_printer_report(monkeypatch):
     assert pushall["version"] == 1
     assert pushall["push_target"] == 1
     assert pushall["sequence_id"]
+    assert [sequence_id for _, sequence_id in acknowledgements] == [
+        item[0]["print"]["sequence_id"] for item in published[:-1]
+    ]
+
+
+def test_successful_filament_ack_updates_ams_cache_before_refresh(monkeypatch):
+    bambu._ams_cache.clear()
+    bambu._state_cache.clear()
+    bambu._last_ams_redis_write.clear()
+    bambu._last_state_redis_write.clear()
+    bambu._dev_to_org["AMS-ACK"] = 42
+    cache: dict[str, object] = {}
+    refreshes: list[tuple[str, str]] = []
+
+    monkeypatch.setattr("app.services.cache.cache_get", lambda key: cache.get(key))
+    monkeypatch.setattr(
+        "app.services.cache.cache_set",
+        lambda key, value, _ttl: cache.__setitem__(key, value),
+    )
+    monkeypatch.setattr("app.services.cache.cache_delete", lambda key: cache.pop(key, None))
+    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args: None)
+    monkeypatch.setattr(
+        bambu,
+        "_publish_printer_refresh",
+        lambda dev_id, reason: refreshes.append((dev_id, reason)),
+    )
+
+    def publish_with_immediate_ack(dev_id: str, payload: dict, qos: int = 0) -> None:
+        command = payload.get("print", {}).get("command")
+        if command != "ams_filament_setting":
+            return
+        bambu._handle_report_payload(
+            dev_id,
+            {
+                "print": {
+                    "command": command,
+                    "sequence_id": payload["print"]["sequence_id"],
+                    "result": "success",
+                }
+            },
+        )
+
+    monkeypatch.setattr(bambu, "_publish", publish_with_immediate_ack)
+
+    bambu.sync_filament_slot(
+        "AMS-ACK",
+        {"slot": 0, "type": "PLA", "color": "#123456", "empty": False},
+    )
+
+    assert bambu.get_ams_filaments("AMS-ACK") == [
+        {
+            "slot": 0,
+            "color": "#123456",
+            "type": "PLA",
+            "color_name": None,
+            "brand": None,
+            "filament_id": None,
+            "empty": False,
+            "unit_id": 0,
+        }
+    ]
+    assert refreshes == [("AMS-ACK", "ams")]
 
 
 def test_partial_external_report_preserves_last_full_ams(monkeypatch):

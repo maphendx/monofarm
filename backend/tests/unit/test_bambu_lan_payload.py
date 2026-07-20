@@ -152,8 +152,13 @@ def test_ams_filament_setting_uses_local_tray_index_and_rgba_color():
     p = cmd["print"]
     assert p["command"] == "ams_filament_setting"
     assert p["ams_id"] == 1
+    assert p["slot_id"] == 1
     assert p["tray_id"] == 1
+    assert p["tray_info_idx"] == "GFL99"
+    assert p["setting_id"] == ""
     assert p["tray_color"] == "FF0000FF"
+    assert p["nozzle_temp_min"] == 190
+    assert p["nozzle_temp_max"] == 240
     assert p["tray_type"] == "PLA"
 
 
@@ -163,12 +168,19 @@ def test_ams_filament_setting_uses_external_spool_ids():
     )
     p = cmd["print"]
     assert p["ams_id"] == 255
+    assert p["slot_id"] == 0
     assert p["tray_id"] == 254
+    assert p["tray_info_idx"] == "GFG99"
+    assert p["setting_id"] == ""
     assert p["tray_color"] == "00FF00FF"
+    assert p["nozzle_temp_min"] == 220
+    assert p["nozzle_temp_max"] == 270
 
 
 def test_ams_filament_setting_clears_empty_tray():
     p = build_ams_filament_setting_payload({"slot": 0, "empty": True})["print"]
+    assert p["slot_id"] == 0
     assert p["tray_info_idx"] == ""
+    assert p["setting_id"] == ""
     assert p["tray_type"] == ""
     assert p["tray_color"] == "FFFFFF00"
