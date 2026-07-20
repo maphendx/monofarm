@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from contextlib import nullcontext
 
 import pytest
 from fastapi.testclient import TestClient
@@ -32,6 +33,7 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
     auth_headers: dict[str, str],
     test_org,
     monkeypatch,
+    tmp_path,
 ):
     printer = Printer(
         organization_id=test_org.id,
@@ -72,7 +74,9 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
             "last_message_at": "2026-07-20T12:00:00+00:00",
         },
     )
-    monkeypatch.setattr(storage, "get_bytes", lambda *_args: _sliced_3mf())
+    source_path = tmp_path / "skip-test.gcode.3mf"
+    source_path.write_bytes(_sliced_3mf())
+    monkeypatch.setattr(storage, "local_path_for", lambda *_args: nullcontext(source_path))
     monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: False)
     sent: list[tuple[str, list[int]]] = []
     monkeypatch.setattr(bambu, "skip_objects", lambda dev_id, ids: sent.append((dev_id, ids)))
@@ -105,6 +109,7 @@ def test_bambu_skip_objects_keeps_large_monofarm_file_after_delayed_start(
     auth_headers: dict[str, str],
     test_org,
     monkeypatch,
+    tmp_path,
 ):
     printer = Printer(
         organization_id=test_org.id,
@@ -146,7 +151,9 @@ def test_bambu_skip_objects_keeps_large_monofarm_file_after_delayed_start(
             "last_message_at": "2026-07-20T13:00:00+00:00",
         },
     )
-    monkeypatch.setattr(storage, "get_bytes", lambda *_args: _sliced_3mf())
+    source_path = tmp_path / f"large-{terminal_status.value}.gcode.3mf"
+    source_path.write_bytes(_sliced_3mf())
+    monkeypatch.setattr(storage, "local_path_for", lambda *_args: nullcontext(source_path))
 
     response = client.get(
         f"/api/printers/{printer.id}/print/skip-objects",
