@@ -4,7 +4,13 @@ import { CheckCircle2, CircleAlert, LoaderCircle, X } from "lucide-react";
 import { useEffect } from "react";
 
 import { api } from "@/lib/api";
-import { dismissPrintTransfer, updatePrintTransfer, usePrintTransfers } from "@/lib/printTransferStore";
+import {
+  dismissPrintTransfer,
+  getPrintTransferDismissKey,
+  PRINT_TRANSFER_DISMISS_MS,
+  updatePrintTransfer,
+  usePrintTransfers,
+} from "@/lib/printTransferStore";
 import type { BambuCloudJob, BambuCloudJobStatus } from "@/lib/types";
 
 const TERMINAL_STATUSES: BambuCloudJobStatus[] = ["completed", "failed", "cancelled", "lost"];
@@ -31,6 +37,7 @@ export function PrintTransferStatus() {
     .filter((transfer) => transfer.isActive)
     .map((transfer) => transfer.jobId)
     .join(",");
+  const dismissJobIds = getPrintTransferDismissKey(transfers);
 
   useEffect(() => {
     const activeIds = activeJobIds ? activeJobIds.split(",").map(Number) : [];
@@ -58,11 +65,12 @@ export function PrintTransferStatus() {
   }, [activeJobIds]);
 
   useEffect(() => {
-    const timers = transfers
-      .filter((transfer) => !transfer.isActive)
-      .map((transfer) => setTimeout(() => dismissPrintTransfer(transfer.jobId), 8000));
+    const jobIds = dismissJobIds ? dismissJobIds.split(",").map(Number) : [];
+    const timers = jobIds.map((jobId) => (
+      setTimeout(() => dismissPrintTransfer(jobId), PRINT_TRANSFER_DISMISS_MS)
+    ));
     return () => timers.forEach(clearTimeout);
-  }, [transfers]);
+  }, [dismissJobIds]);
 
   if (transfers.length === 0) return null;
 

@@ -4,6 +4,18 @@ import type { BambuCloudJob, BambuCloudJobStatus } from "./types";
 
 const STORAGE_KEY = "monofarm_active_print_transfers";
 
+export const PRINT_TRANSFER_DISMISS_MS = 3500;
+
+const PRINT_TRANSFER_FINISHED_STATUSES = new Set<BambuCloudJobStatus>([
+  "acknowledged",
+  "printing",
+  "paused",
+  "completed",
+  "failed",
+  "cancelled",
+  "lost",
+]);
+
 export type PrintTransfer = {
   jobId: number;
   printerId: number | null;
@@ -57,6 +69,14 @@ export function subscribePrintTransfers(listener: () => void) {
 
 export function getPrintTransfers() {
   return snapshot;
+}
+
+export function getPrintTransferDismissKey(transfers: PrintTransfer[]) {
+  return transfers
+    .filter((transfer) => !transfer.isActive || PRINT_TRANSFER_FINISHED_STATUSES.has(transfer.status))
+    .map((transfer) => transfer.jobId)
+    .sort((a, b) => a - b)
+    .join(",");
 }
 
 export function usePrintTransfers() {
