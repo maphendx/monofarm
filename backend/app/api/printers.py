@@ -1329,6 +1329,7 @@ def set_loaded_filaments(
             )
         except bambu.BambuError as exc:
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
+        bambu.publish_printer_refresh(org.id, row.bambu_dev_id, "slot_assignment")
     return _to_dto(row, db)
 
 

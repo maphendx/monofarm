@@ -107,7 +107,45 @@ def test_bulk_filament_sync_requests_fresh_printer_report(monkeypatch):
         "ams_filament_setting",
     ]
     assert all(qos == 1 for _, qos in published)
-    assert published[-1][0] == {"pushing": {"command": "pushall"}}
+    pushall = published[-1][0]["pushing"]
+    assert pushall["command"] == "pushall"
+    assert pushall["version"] == 1
+    assert pushall["push_target"] == 1
+    assert pushall["sequence_id"]
+
+
+def test_partial_external_report_preserves_last_full_ams(monkeypatch):
+    bambu._ams_cache.clear()
+    bambu._last_ams_redis_write.clear()
+    monkeypatch.setattr("app.services.cache.cache_get", lambda _key: None)
+    monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
+
+    full = _ams_report()["print"]["ams"]
+    assert bambu._parse_ams("AMS-PARTIAL", full, None) is True
+
+    external = {
+        "tray_type": "PETG",
+        "tray_color": "00FF00FF",
+        "tray_sub_brands": "Generic",
+    }
+    assert bambu._parse_ams("AMS-PARTIAL", {}, external) is True
+    assert [slot["slot"] for slot in bambu._ams_cache["AMS-PARTIAL"]] == [0, 254]
+
+
+def test_authoritative_empty_ams_report_clears_stale_slots(monkeypatch):
+    bambu._ams_cache.clear()
+    bambu._last_ams_redis_write.clear()
+    monkeypatch.setattr("app.services.cache.cache_get", lambda _key: None)
+    monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
+
+    full = _ams_report()["print"]["ams"]
+    assert bambu._parse_ams("AMS-REMOVED", full, None) is True
+    assert bambu._parse_ams("AMS-REMOVED", {"ams": []}, None) is True
+    assert bambu._ams_cache["AMS-REMOVED"] == []
+
+
+def test_ams_cache_outlives_periodic_full_refresh():
+    assert bambu.AMS_CACHE_TTL_SECONDS > bambu.BAMBU_FULL_REFRESH_INTERVAL_SECONDS
 
 
 def test_live_handy_slot_keeps_inventory_link_only_while_material_matches():

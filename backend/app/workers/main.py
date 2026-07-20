@@ -86,7 +86,7 @@ def _redis_cmd_relay() -> None:
 
 
 async def _refresh_bambu_subscriptions() -> None:
-    """Re-subscribe MQTT for any Bambu printers added since startup."""
+    """Subscribe new Bambu devices and refresh full state for existing ones."""
     from app.core.db import SessionLocal
     from app.models.organization import Organization
     from app.services import bambu
@@ -102,6 +102,8 @@ async def _refresh_bambu_subscriptions() -> None:
                 if dev_id and dev_id not in _dev_to_org:
                     log.info("Worker: new Bambu device discovered, subscribing: %s", dev_id)
                     bambu.subscribe_device(dev_id, org.id)
+                elif dev_id:
+                    bambu.request_full_status(dev_id)
     except Exception:
         log.exception("Bambu subscription refresh failed")
 
@@ -152,13 +154,14 @@ async def main() -> None:
     except Exception:
         log.exception("Bambu MQTT failed to start")
 
-    # Periodic new-device subscription refresh (every 5 min)
+    # P1/A1 MQTT reports are deltas. Refresh full state every 5 minutes so AMS
+    # colors stay current without anyone opening the printer in Bambu Handy.
     from apscheduler.triggers.interval import IntervalTrigger
     from app.services.scheduler import _scheduler
     if _scheduler is not None:
         _scheduler.add_job(
             _refresh_bambu_subscriptions,
-            IntervalTrigger(minutes=5),
+            IntervalTrigger(seconds=bambu.BAMBU_FULL_REFRESH_INTERVAL_SECONDS),
             id="bambu_subscription_refresh",
             replace_existing=True,
         )

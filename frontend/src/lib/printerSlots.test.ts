@@ -90,7 +90,7 @@ describe("normalized printer slots", () => {
         filament_id: 42,
         material: "PLA",
         color: "Old red",
-        hex_color: "#aa0000",
+        hex_color: "#ff0000",
         brand: "Inventory brand",
         grams_at_load: 500,
         state: "loaded",
@@ -108,6 +108,52 @@ describe("normalized printer slots", () => {
       brand: "Handy brand",
       filamentId: 42,
     });
+  });
+
+  it("keeps a persistent assignment when a partial Bambu report omits that slot", () => {
+    const slots = normalizedPrinterSlots(basePrinter({
+      slots: [{
+        slot_index: 0,
+        filament_id: 42,
+        material: "PLA",
+        color: "Red",
+        hex_color: "#ff0000",
+        brand: "Inventory brand",
+        grams_at_load: 500,
+        state: "loaded",
+        unit_index: 0,
+        is_external: false,
+      }],
+      loaded_filaments: [
+        { slot: 254, color: "#00ff00", color_name: "Green", type: "PETG", brand: null, filament_id: null, empty: false, unit_id: null },
+      ],
+    }), { allSources: true });
+
+    expect(slots.map((slot) => slot.slot)).toEqual([0, 254]);
+    expect(slots[0]?.filamentId).toBe(42);
+  });
+
+  it("drops a persistent inventory assignment when Handy reports a different spool", () => {
+    const slots = normalizedPrinterSlots(basePrinter({
+      slots: [{
+        slot_index: 0,
+        filament_id: 42,
+        material: "PLA",
+        color: "Red",
+        hex_color: "#ff0000",
+        brand: "Inventory brand",
+        grams_at_load: 500,
+        state: "loaded",
+        unit_index: 0,
+        is_external: false,
+      }],
+      loaded_filaments: [
+        { slot: 0, color: "#0000ff", color_name: "Blue", type: "PETG", brand: "Handy brand", filament_id: null, empty: false, unit_id: 0, verified: true },
+      ],
+    }), { allSources: true });
+
+    expect(slots[0]?.filamentId).toBeNull();
+    expect(slots[0]?.color).toBe("#0000ff");
   });
 
   it("always exposes exactly four static U1 tool slots", () => {

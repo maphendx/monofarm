@@ -95,6 +95,9 @@ def assign_slot(
         raise HTTPException(400, detail="Невірний індекс Bambu слота")
 
     slot = _get_or_create_slot(db, printer_id, slot_index)
+    if printer.kind == PrinterKind.bambu:
+        slot.is_external = slot_index == 254
+        slot.unit_index = None if slot.is_external else slot_index // 4
     now = datetime.now(timezone.utc)
 
     if payload.filament_id is not None:
@@ -152,6 +155,7 @@ def assign_slot(
             )
         except bambu.BambuError as exc:
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc
+        bambu.publish_printer_refresh(org.id, printer.bambu_dev_id, "slot_assignment")
     return slot
 
 

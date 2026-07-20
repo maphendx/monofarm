@@ -52,7 +52,14 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     from app.services import bambu
 
     captured = []
+    refreshes = []
     monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(
+        bambu,
+        "publish_printer_refresh",
+        lambda org_id, dev_id, reason: refreshes.append((org_id, dev_id, reason)),
+        raising=False,
+    )
     # The test fixture's DB session is injected by the request; create the row through the API.
     created = client.post(
         "/api/printers",
@@ -86,7 +93,9 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     assert resp.status_code == 200, resp.text
     assert captured[0][0] == "BAMBU-SYNC"
     assert captured[0][1]["print"]["tray_color"] == "FF0000FF"
-    assert captured[-1][1] == {"pushing": {"command": "pushall"}}
+    assert captured[-1][1]["pushing"]["command"] == "pushall"
+    assert captured[-1][1]["pushing"]["push_target"] == 1
+    assert refreshes == [(test_org.id, "BAMBU-SYNC", "slot_assignment")]
 
 
 def test_bambu_slot_list_does_not_fabricate_u1_slots(client, auth_headers):
@@ -105,11 +114,18 @@ def test_bambu_slot_list_does_not_fabricate_u1_slots(client, auth_headers):
     assert resp.json() == []
 
 
-def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, monkeypatch):
+def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, test_org, monkeypatch):
     from app.services import bambu
 
     captured = []
+    refreshes = []
     monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(
+        bambu,
+        "publish_printer_refresh",
+        lambda org_id, dev_id, reason: refreshes.append((org_id, dev_id, reason)),
+        raising=False,
+    )
     created = client.post(
         "/api/printers",
         headers=auth_headers,
@@ -128,7 +144,10 @@ def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, m
     assert payload["ams_id"] == 255
     assert payload["tray_id"] == 254
     assert payload["tray_color"] == "FF0000FF"
-    assert captured[-1][1] == {"pushing": {"command": "pushall"}}
+    assert captured[-1][1]["pushing"]["command"] == "pushall"
+    assert resp.json()["unit_index"] is None
+    assert resp.json()["is_external"] is True
+    assert refreshes == [(test_org.id, "BAMBU-HANDY", "slot_assignment")]
 
 
 def test_assign_filament_to_slot(client: TestClient, auth_headers, u1_printer, test_filament):

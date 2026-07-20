@@ -1539,7 +1539,7 @@ function LoadedFilamentsCard({
   onUpdated,
 }: {
   printer: Printer;
-  onUpdated: () => void;
+  onUpdated: (updated: Printer) => void;
 }) {
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
@@ -1574,7 +1574,7 @@ function LoadedFilamentsCard({
     setQuickBusy(true);
     try {
       await api(`/api/printers/${printer.id}/loaded-filaments`, { method: "PUT", body: JSON.stringify(updated) });
-      onUpdated();
+      onUpdated({ ...printer, loaded_filaments: updated });
     } finally {
       setQuickBusy(false);
       setQuickPickSlot(null);
@@ -1586,7 +1586,7 @@ function LoadedFilamentsCard({
     setModeBusy(true);
     try {
       await api(`/api/printers/${printer.id}`, { method: "PATCH", body: JSON.stringify({ bambu_has_ams: mode }) });
-      onUpdated();
+      onUpdated({ ...printer, bambu_has_ams: mode });
     } finally {
       setModeBusy(false);
     }
@@ -1679,7 +1679,13 @@ function LoadedFilamentsCard({
           body: JSON.stringify({ nozzle_diameter: nz, bed_type: bt }),
         });
       }
-      onUpdated();
+      onUpdated({
+        ...printer,
+        loaded_filaments: slots,
+        bambu_has_ams: hasAms,
+        nozzle_diameter: nozzle.trim() ? Number(nozzle) : null,
+        bed_type: bedType.trim() || null,
+      });
       setSaved(true);
       setEditing(false);
       setTimeout(() => setSaved(false), 2000);
@@ -2700,7 +2706,7 @@ export default function PrinterPage() {
           {printer.kind === "snapmaker_u1" ? (
             <U1SlotsCard printer={printer} onUpdated={reload} />
           ) : (
-            <LoadedFilamentsCard printer={printer} onUpdated={reload} />
+            <LoadedFilamentsCard printer={printer} onUpdated={upsertPrinter} />
           )}
           <JogCard printer={printer} />
         </div>

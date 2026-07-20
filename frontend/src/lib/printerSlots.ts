@@ -19,13 +19,24 @@ export type NormalizedPrinterSlot = {
 function fromLive(slot: FilamentSlot, persistent?: PrinterSlotInfo): NormalizedPrinterSlot {
   const color = slot.color || persistent?.hex_color || persistent?.color || null;
   const material = slot.type || persistent?.material || null;
+  const persistentColor = (persistent?.hex_color || persistent?.color || "").toLowerCase().slice(0, 7);
+  const liveColor = (slot.color || "").toLowerCase().slice(0, 7);
+  const samePhysicalSpool = Boolean(
+    persistent &&
+    !slot.empty &&
+    persistent.material &&
+    persistent.material.toUpperCase() === (slot.type || "").toUpperCase() &&
+    persistentColor &&
+    persistentColor === liveColor,
+  );
+  const keepPersistent = slot.verified === false || samePhysicalSpool;
   return {
     slot: slot.slot,
     material,
     color,
-    colorName: slot.color_name || persistent?.color || null,
-    brand: slot.brand || persistent?.brand || null,
-    filamentId: slot.filament_id ?? persistent?.filament_id ?? null,
+    colorName: slot.color_name || (keepPersistent ? persistent?.color : null) || null,
+    brand: slot.brand || (keepPersistent ? persistent?.brand : null) || null,
+    filamentId: slot.filament_id ?? (keepPersistent ? persistent?.filament_id : null) ?? null,
     empty: slot.empty || (!material && !color && slot.filament_id == null),
     unitIndex: slot.unit_id ?? persistent?.unit_index ?? (slot.slot === EXTERNAL_SLOT ? null : 0),
     isExternal: slot.slot === EXTERNAL_SLOT,
@@ -91,10 +102,12 @@ export function normalizedPrinterSlots(
     });
   }
 
+  const liveSlotIndexes = new Set((printer.loaded_filaments ?? []).map((slot) => slot.slot));
   const liveSlots = (printer.loaded_filaments ?? []).map((slot) => fromLive(slot, persistent.get(slot.slot)));
-  const all = liveSlots.length > 0
-    ? liveSlots
-    : (printer.slots ?? []).map(fromPersistent);
+  const persistentOnly = (printer.slots ?? [])
+    .filter((slot) => !liveSlotIndexes.has(slot.slot_index))
+    .map(fromPersistent);
+  const all = [...liveSlots, ...persistentOnly];
   if (printer.kind !== "bambu") return all.sort((a, b) => a.slot - b.slot);
 
   if (opts?.allSources) return all.sort((a, b) => a.slot - b.slot);

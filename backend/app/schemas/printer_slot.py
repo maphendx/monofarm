@@ -15,6 +15,8 @@ class PrinterSlotOut(BaseModel):
     brand: str | None = None
     grams_at_load: int | None = None
     state: SlotState
+    unit_index: int | None = None
+    is_external: bool = False
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

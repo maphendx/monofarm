@@ -53,6 +53,10 @@ DEVICE_LIST_CACHE_TTL = 60
 # or at most this often, so Upstash isn't hammered with identical payloads.
 REDIS_STATE_WRITE_INTERVAL = 5.0
 REDIS_AMS_WRITE_INTERVAL = 60.0
+BAMBU_FULL_REFRESH_INTERVAL_SECONDS = 5 * 60
+# P1/A1 reports are delta-based, so AMS fields may be absent for minutes at a
+# time. Keep last-known trays beyond the periodic full refresh interval.
+AMS_CACHE_TTL_SECONDS = 15 * 60
 CLOUD_JOB_FILENAME_WINDOW = timedelta(hours=2)
 TRANSIENT_FAILURE_RECOVERY_WINDOW = timedelta(minutes=30)
 BED_CLEARED_TTL_SECONDS = 12 * 3600
@@ -133,6 +137,18 @@ def _next_seq() -> str:
     with _seq_lock:
         _seq_counter += 1
         return str(_seq_counter)
+
+
+def build_pushall_payload() -> dict[str, dict[str, str | int]]:
+    """Build the complete Bambu status request used by Handy/Studio clients."""
+    return {
+        "pushing": {
+            "command": "pushall",
+            "sequence_id": _next_seq(),
+            "version": 1,
+            "push_target": 1,
+        },
+    }
 
 
 def _is_configured(org: "Organization") -> bool:
@@ -406,7 +422,7 @@ def _make_on_connect(org_id: int):
         for dev_id, oid in list(_dev_to_org.items()):
             if oid == org_id:
                 client.subscribe(f"device/{dev_id}/report")
-                client.publish(f"device/{dev_id}/request", json.dumps({"pushing": {"command": "pushall"}}))
+                client.publish(f"device/{dev_id}/request", json.dumps(build_pushall_payload()))
     return _on_connect
 
 
@@ -977,33 +993,51 @@ def _sync_cloud_job_from_report(
 
 
 def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
-    trays: list[dict] = []
-    for unit in ams_data.get("ams") or []:
-        unit_id = int(unit.get("id", 0))
-        for tray in unit.get("tray") or []:
-            tray_id = int(tray.get("id", 0))
-            slot = unit_id * 4 + tray_id
-            tray_type = tray.get("tray_type") or ""
-            empty = not tray_type or tray_type.strip() == ""
-            color_hex = tray.get("tray_color", "")
-            css_color = f"#{color_hex[:6]}" if len(color_hex) >= 6 else "#888888"
-            trays.append({
-                "slot": slot,
-                "color": css_color if not empty else "#888888",
-                "type": tray_type if not empty else "",
-                "color_name": None,
-                "brand": tray.get("tray_sub_brands") or None,
-                "filament_id": None,
-                "empty": empty,
-                "unit_id": unit_id,
-            })
+    from app.services.cache import cache_get, cache_set
 
-    if vt_tray and isinstance(vt_tray, dict):
+    previous = _ams_cache.get(dev_id)
+    if previous is None:
+        cached = cache_get(f"bambu:ams:{dev_id}")
+        previous = cached if isinstance(cached, list) else []
+
+    trays_by_slot = {
+        int(tray["slot"]): tray
+        for tray in previous
+        if isinstance(tray, dict) and tray.get("slot") is not None
+    }
+    authoritative = False
+
+    units = ams_data.get("ams")
+    if isinstance(units, list):
+        authoritative = True
+        trays_by_slot = {slot: tray for slot, tray in trays_by_slot.items() if slot == 254}
+        for unit in units:
+            unit_id = int(unit.get("id", 0))
+            for tray in unit.get("tray") or []:
+                tray_id = int(tray.get("id", 0))
+                slot = unit_id * 4 + tray_id
+                tray_type = tray.get("tray_type") or ""
+                empty = not tray_type.strip()
+                color_hex = tray.get("tray_color", "")
+                css_color = f"#{color_hex[:6]}" if len(color_hex) >= 6 else "#888888"
+                trays_by_slot[slot] = {
+                    "slot": slot,
+                    "color": css_color if not empty else "#888888",
+                    "type": tray_type if not empty else "",
+                    "color_name": None,
+                    "brand": tray.get("tray_sub_brands") or None,
+                    "filament_id": None,
+                    "empty": empty,
+                    "unit_id": unit_id,
+                }
+
+    if isinstance(vt_tray, dict):
+        authoritative = True
         vt_type = vt_tray.get("tray_type") or ""
         vt_empty = not vt_type.strip()
         vt_color = vt_tray.get("tray_color", "")
         css = f"#{vt_color[:6]}" if len(vt_color) >= 6 else "#888888"
-        trays.append({
+        trays_by_slot[254] = {
             "slot": 254,
             "color": css if not vt_empty else "#888888",
             "type": vt_type,
@@ -1012,19 +1046,18 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
             "filament_id": None,
             "empty": vt_empty,
             "unit_id": None,
-        })
+        }
 
-    changed = False
-    if trays:
-        changed = _ams_cache.get(dev_id) != trays
-        _ams_cache[dev_id] = trays
-        now_mono = time.monotonic()
-        # Tray contents rarely change — refresh Redis on change or before the
-        # 300s TTL runs out, not on every report.
-        if changed or now_mono - _last_ams_redis_write.get(dev_id, 0.0) >= REDIS_AMS_WRITE_INTERVAL:
-            from app.services.cache import cache_set
-            cache_set(f"bambu:ams:{dev_id}", trays, 300)
-            _last_ams_redis_write[dev_id] = now_mono
+    if not authoritative:
+        return False
+
+    trays = [trays_by_slot[slot] for slot in sorted(trays_by_slot)]
+    changed = previous != trays
+    _ams_cache[dev_id] = trays
+    now_mono = time.monotonic()
+    if changed or now_mono - _last_ams_redis_write.get(dev_id, 0.0) >= REDIS_AMS_WRITE_INTERVAL:
+        cache_set(f"bambu:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
+        _last_ams_redis_write[dev_id] = now_mono
     return changed
 
 
@@ -1033,6 +1066,12 @@ def _publish_printer_refresh(dev_id: str, reason: str) -> None:
     org_id = _dev_to_org.get(dev_id)
     if org_id is None:
         return
+
+    publish_printer_refresh(org_id, dev_id, reason)
+
+
+def publish_printer_refresh(org_id: int, dev_id: str, reason: str) -> None:
+    """Publish a printer refresh from MQTT callbacks or API mutations."""
 
     event = {"org_id": org_id, "dev_id": dev_id, "reason": reason}
     from app.services.cache import _r
@@ -1177,7 +1216,7 @@ def subscribe_device(dev_id: str, org_id: int) -> None:
     client = _mqtt_clients.get(org_id)
     if client is not None:
         client.subscribe(f"device/{dev_id}/report")
-        _publish(dev_id, {"pushing": {"command": "pushall"}})
+        request_full_status(dev_id)
 
 
 def get_cached_state(dev_id: str) -> dict:
@@ -1298,7 +1337,12 @@ def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
     """Publish slot edits, then request the authoritative Handy/printer state."""
     for slot in slots:
         _publish(dev_id, build_ams_filament_setting_payload(slot), qos=1)
-    _publish(dev_id, {"pushing": {"command": "pushall"}}, qos=1)
+    request_full_status(dev_id, qos=1)
+
+
+def request_full_status(dev_id: str, *, qos: int = 0) -> None:
+    """Request a complete state snapshot; required for delta-only P1/A1 reports."""
+    _publish(dev_id, build_pushall_payload(), qos=qos)
 
 
 # Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.
@@ -1743,8 +1787,7 @@ def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str) -> None:
             # Request full state dump on connect
             client.publish(
                 f"device/{dev_id}/request",
-                json.dumps({"pushing": {"command": "pushall", "sequence_id": "0", "version": 1, "push_target": 1}},
-                           separators=(",", ":")),
+                json.dumps(build_pushall_payload(), separators=(",", ":")),
             )
 
         def _on_disconnect_lan(client: Any, userdata: Any, rc: int, properties: Any = None) -> None:
