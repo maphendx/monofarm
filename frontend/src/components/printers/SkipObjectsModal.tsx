@@ -89,16 +89,21 @@ export function SkipObjectsContent({
         </div>
       ) : objects.length > 0 ? (
         <>
-          <div
-            data-skip-bed="true"
-            className="relative mx-auto aspect-square w-full max-w-[520px] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-inner"
-            style={{
-              backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-              backgroundSize: "10% 10%",
-            }}
-          >
-            <div className="pointer-events-none absolute inset-3 rounded-lg border border-[var(--border-strong)]" />
-            {objects.map((object, index) => {
+          <div className="mx-auto w-full max-w-[520px] space-y-2">
+            <p data-bed-orientation="rear" className="flex items-center justify-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <span aria-hidden="true">↑</span>
+              {t("printers.skipObjects.plateRear")}
+            </p>
+            <div
+              data-skip-bed="true"
+              className="relative aspect-square w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-inner"
+              style={{
+                backgroundImage: "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+                backgroundSize: "10% 10%",
+              }}
+            >
+              <div className="pointer-events-none absolute inset-3 rounded-lg border border-[var(--border-strong)]" />
+              {objects.map((object, index) => {
               const [x1, y1, x2, y2] = object.bounds ?? fallbackBounds(index, objects.length);
               const selected = selectedIds.has(object.id);
               const selectionBlocked = !selected && maxSelectable > 0 && selectedIds.size >= maxSelectable;
@@ -129,10 +134,15 @@ export function SkipObjectsContent({
                   {selected && <Check size={15} strokeWidth={3} className="text-[var(--bg)]" aria-hidden="true" />}
                 </button>
               );
-            })}
-            <span className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2 py-1 text-[10px] text-[var(--text-muted)] backdrop-blur">
-              <MousePointer2 size={11} aria-hidden="true" /> {t("printers.skipObjects.selectOnBed")}
-            </span>
+              })}
+              <span className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-elevated)]/90 px-2 py-1 text-[10px] text-[var(--text-muted)] backdrop-blur">
+                <MousePointer2 size={11} aria-hidden="true" /> {t("printers.skipObjects.selectOnBed")}
+              </span>
+            </div>
+            <p data-bed-orientation="front" className="flex items-center justify-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <span aria-hidden="true">↓</span>
+              {t("printers.skipObjects.plateFront")}
+            </p>
           </div>
 
           <div className="max-h-56 divide-y divide-[var(--border)] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">

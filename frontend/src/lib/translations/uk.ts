@@ -251,6 +251,8 @@ const uk = {
     skipObjects: {
       title: "Пропустити об’єкти",
       description: "Виберіть деталі на столі або у списку. Стан синхронізується з принтером Bambu Lab автоматично.",
+      plateRear: "Зад пластини",
+      plateFront: "Перед пластини",
       selectOnBed: "Натисніть на деталь",
       printingNow: "Друкується зараз",
       skipped: "Пропущено",

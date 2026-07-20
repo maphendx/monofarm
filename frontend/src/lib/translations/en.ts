@@ -253,6 +253,8 @@ const en = {
     skipObjects: {
       title: "Skip objects",
       description: "Select parts on the plate or in the list. State stays synchronized with the Bambu Lab printer automatically.",
+      plateRear: "Rear of plate",
+      plateFront: "Front of plate",
       selectOnBed: "Select a part",
       printingNow: "Printing now",
       skipped: "Skipped",

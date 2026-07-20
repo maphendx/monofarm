@@ -98,6 +98,82 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
     assert sent == [("SKIP-DEV-1", [165])]
 
 
+def test_bambu_skip_objects_reconciles_lost_agent_ack(
+    db_session: Session,
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_org,
+    monkeypatch,
+    tmp_path,
+):
+    printer = Printer(
+        organization_id=test_org.id,
+        name="Bambu A9",
+        kind=PrinterKind.bambu,
+        bambu_dev_id="SKIP-A9",
+        bambu_dev_ip="192.168.1.9",
+        bambu_access_code="12345678",
+        is_active=True,
+    )
+    file = GcodeFile(
+        organization_id=test_org.id,
+        stored_name="skip-a9.gcode.3mf",
+        original_name="two-cubes.gcode.3mf",
+        size_bytes=123,
+    )
+    db_session.add_all([printer, file])
+    db_session.flush()
+    db_session.add(
+        BambuCloudJob(
+            organization_id=test_org.id,
+            printer_id=printer.id,
+            gcode_file_id=file.id,
+            printer_bambu_dev_id=printer.bambu_dev_id,
+            file_name=file.original_name,
+            status=BambuCloudJobStatus.printing,
+            correlation_id="skip-a9-correlation",
+            idempotency_key="skip-a9-idempotency",
+            dispatch_mode="lan",
+        )
+    )
+    db_session.commit()
+
+    states = iter([
+        {
+            "state": "printing",
+            "filename": file.original_name,
+            "skipped_object_ids": [],
+            "last_message_at": "2026-07-20T13:52:58+00:00",
+        },
+        {
+            "state": "printing",
+            "filename": file.original_name,
+            "skipped_object_ids": [165],
+            "last_message_at": "2026-07-20T13:53:19+00:00",
+        },
+    ])
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: next(states))
+    source_path = tmp_path / "skip-a9.gcode.3mf"
+    source_path.write_bytes(_sliced_3mf())
+    monkeypatch.setattr(storage, "local_path_for", lambda *_args: nullcontext(source_path))
+    monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: True)
+
+    async def lose_ack(*_args, **_kwargs):
+        raise RuntimeError("Agent BAMBU_MQTT timed out (20.0s)")
+
+    monkeypatch.setattr(tunnel, "send_bambu_mqtt", lose_ack)
+
+    response = client.post(
+        f"/api/printers/{printer.id}/print/skip-objects",
+        headers=auth_headers,
+        json={"object_ids": ["165"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["confirmed"] is True
+    assert response.json()["reconciled"] is True
+
+
 @pytest.mark.parametrize(
     "terminal_status",
     [BambuCloudJobStatus.failed, BambuCloudJobStatus.lost],

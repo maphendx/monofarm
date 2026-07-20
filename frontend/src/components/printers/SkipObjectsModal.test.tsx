@@ -22,6 +22,10 @@ describe("SkipObjectsModal", () => {
     })));
 
     expect(markup).toContain('data-skip-bed="true"');
+    expect(markup).toContain('data-bed-orientation="rear"');
+    expect(markup).toContain('data-bed-orientation="front"');
+    expect(markup).toContain("Зад пластини");
+    expect(markup).toContain("Перед пластини");
     expect(markup).toContain('data-object-id="cube-b"');
     expect(markup).toContain('data-selected="true"');
     expect(markup).toContain("Cube · 2");

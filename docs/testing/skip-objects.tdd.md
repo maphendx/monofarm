@@ -52,3 +52,32 @@
 - Production read-only verification: active Bambu A3 resolved its matching
   `failed` Monofarm job, parsed a `49,898,116` byte 3MF from disk, and returned
   `18` selectable objects with `available=true` and `source=bambu_mqtt`.
+
+## Plate orientation labels
+
+- RED: the modal render test could not find `rear` / `front` bed-orientation
+  markers or their Ukrainian captions.
+- GREEN: the bed map now has `Зад пластини` above it and `Перед пластини`
+  below it, with directional arrows outside the printable area so object
+  buttons remain unobstructed.
+- `bun test src/components/printers/SkipObjectsModal.test.tsx`: `3 passed`.
+- Targeted ESLint for the modal and both translation files: passed.
+
+## Lost agent ACK regression (A9)
+
+- Production evidence at `2026-07-20 13:53 UTC`: A9 (`printer_id=82`) returned
+  `502` exactly 20 seconds after the skip POST, while live MQTT subsequently
+  reported `skipped_object_ids=[411420]`. The printer applied the command; only
+  the relay acknowledgement was lost.
+- RED: the agent publish test failed because the persistent MQTT client blocked
+  in `wait_for_publish(timeout=10)` after already queueing the QoS 1 command.
+- GREEN: agent `0.8.12` returns after the connected MQTT client accepts the
+  command into its outgoing queue; one-shot connections retain their publish
+  wait before disconnecting.
+- GREEN: if the agent response is lost, the API reconciles for three seconds
+  against live `skipped_object_ids` and returns success when the printer state
+  confirms every requested object.
+- `pytest agent/test_bambu_mqtt_publish.py -q`: `1 passed`.
+- Targeted backend Ruff and unit tests: passed (`18 passed`).
+- The new PostgreSQL integration regression is committed for CI; local execution
+  was unavailable because the Docker/OrbStack daemon was not running.

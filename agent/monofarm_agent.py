@@ -38,7 +38,7 @@ import threading
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.11"
+AGENT_VERSION = "0.8.12"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
@@ -46,6 +46,7 @@ MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 # SD-card flushes block the data socket well beyond the handshake timeout.
 BAMBU_FTPS_CONNECT_TIMEOUT = 15
 BAMBU_FTPS_IO_TIMEOUT = 120
+MQTT_SUCCESS_RC = 0
 
 try:
     import httpx
@@ -816,7 +817,7 @@ def _mqtt_connect_hint(rc: int) -> str:
 
 
 def _bambu_publish_via_live_client(dev_id: str, payload: dict) -> bool:
-    """Publish through the persistent monitor connection if it is alive (QoS 1)."""
+    """Queue a command through the persistent monitor connection (QoS 1)."""
     client = _bambu_lan_live_clients.get(dev_id)
     if client is None or not getattr(client, "is_connected", lambda: False)():
         return False
@@ -825,9 +826,8 @@ def _bambu_publish_via_live_client(dev_id: str, payload: dict) -> bool:
         json.dumps(payload, separators=(",", ":")),
         qos=1,
     )
-    info.wait_for_publish(timeout=10)
-    if not info.is_published():
-        raise RuntimeError("publish timeout (live client)")
+    if info.rc != MQTT_SUCCESS_RC:
+        raise RuntimeError(f"publish queue failed (rc={info.rc})")
     return True
 
 

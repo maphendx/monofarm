@@ -1,0 +1,23 @@
+from unittest.mock import patch
+
+import monofarm_agent
+
+
+class _PublishInfo:
+    rc = 0
+
+    def wait_for_publish(self, timeout=None):
+        raise AssertionError("persistent MQTT publish must not block for QoS ACK")
+
+
+class _LiveClient:
+    def is_connected(self):
+        return True
+
+    def publish(self, *_args, **_kwargs):
+        return _PublishInfo()
+
+
+def test_live_bambu_publish_acknowledges_after_command_is_queued():
+    with patch.dict(monofarm_agent._bambu_lan_live_clients, {"A9": _LiveClient()}):
+        assert monofarm_agent._bambu_publish_via_live_client("A9", {"print": {"command": "skip_objects"}}) is True

@@ -50,6 +50,9 @@ from app.services.skip_objects import (
 
 log = logging.getLogger(__name__)
 
+BAMBU_SKIP_RECONCILE_TIMEOUT_SECONDS = 3.0
+BAMBU_SKIP_RECONCILE_POLL_SECONDS = 0.25
+
 
 class ClearBedPayload(BaseModel):
     success: bool = True
@@ -2027,12 +2030,13 @@ async def print_skip_objects(
         object_ids,
         sequence_id=str(int(datetime.now(timezone.utc).timestamp() * 1000)),
     )
-    try:
-        if (
-            row.bambu_dev_ip
-            and row.bambu_access_code
-            and _tunnel.has_tunnel(org.id)
-        ):
+    use_agent = bool(
+        row.bambu_dev_ip
+        and row.bambu_access_code
+        and _tunnel.has_tunnel(org.id)
+    )
+    if use_agent:
+        try:
             await _tunnel.send_bambu_mqtt(
                 org.id,
                 row.bambu_dev_id,
@@ -2040,12 +2044,38 @@ async def print_skip_objects(
                 row.bambu_access_code.strip(),
                 command,
             )
-        else:
+        except RuntimeError as exc:
+            deadline = asyncio.get_running_loop().time() + BAMBU_SKIP_RECONCILE_TIMEOUT_SECONDS
+            while True:
+                live_skipped = {
+                    int(value)
+                    for value in bambu.get_cached_state(row.bambu_dev_id).get("skipped_object_ids", [])
+                    if str(value).lstrip("-").isdigit()
+                }
+                if set(object_ids).issubset(live_skipped):
+                    return {
+                        "ok": True,
+                        "action": "skip_objects",
+                        "object_ids": selected,
+                        "confirmed": True,
+                        "reconciled": True,
+                    }
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise HTTPException(status_code=502, detail=str(exc)) from exc
+                await asyncio.sleep(BAMBU_SKIP_RECONCILE_POLL_SECONDS)
+    else:
+        try:
             await asyncio.to_thread(bambu.skip_objects, row.bambu_dev_id, object_ids)
-    except (bambu.BambuError, RuntimeError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except (bambu.BambuError, RuntimeError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return {"ok": True, "action": "skip_objects", "object_ids": selected}
+    return {
+        "ok": True,
+        "action": "skip_objects",
+        "object_ids": selected,
+        "confirmed": False,
+        "reconciled": False,
+    }
 
 
 class GcodePayload(BaseModel):
