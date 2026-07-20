@@ -5,6 +5,7 @@ import { ArrowLeft, Maximize, MoreHorizontal, Pause, Play, Settings, Square, Vid
 import { toast } from "sonner";
 
 import { PrinterQuickMenu, type QuickMenuPos } from "@/components/printers/PrinterQuickMenu";
+import { SkipObjectsModal } from "@/components/printers/SkipObjectsModal";
 import { SlotStrip } from "@/components/printers/SlotStrip";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -64,6 +65,7 @@ export function PrinterCard({
   const [confirmClearBed, setConfirmClearBed] = useState(false);
   const [menuPos, setMenuPos] = useState<QuickMenuPos | null>(null);
   const [camOpen, setCamOpen] = useState(false);
+  const [skipObjectsOpen, setSkipObjectsOpen] = useState(false);
   const [streamLoaded, setStreamLoaded] = useState(false);
   const [streamError, setStreamError] = useState(false);
   const inFlight = useRef(false);
@@ -360,8 +362,8 @@ export function PrinterCard({
               )
             )}
             {canSkip && (
-              <button type="button" className="pc-action skip" disabled={busy !== null} title={t("printers.skipObjectFull")} onClick={(e) => act(e, "skip-object")}>
-                {busy === "skip-object" ? "…" : t("printers.skip")}
+              <button type="button" className="pc-action skip" disabled={busy !== null} title={t("printers.skipObjects.title")} onClick={(e) => { e.stopPropagation(); setSkipObjectsOpen(true); }}>
+                {t("printers.skip")}
               </button>
             )}
           </div>}
@@ -408,6 +410,11 @@ export function PrinterCard({
           onOpenSettings={onSettings}
           onOpenInfo={onClick}
         />
+      )}
+      {skipObjectsOpen && (
+        <div onClick={(event) => event.stopPropagation()}>
+          <SkipObjectsModal open printer={printer} onClose={() => setSkipObjectsOpen(false)} />
+        </div>
       )}
     </div>
   );

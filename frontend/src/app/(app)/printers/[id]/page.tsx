@@ -7,6 +7,7 @@ import { usePrinterStream } from "@/hooks/usePrinterStream";
 
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
+import { useT } from "@/lib/i18n";
 import {
   flagLabel,
   kindLabel,
@@ -17,6 +18,7 @@ import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
 import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { PrinterAmsOverview } from "@/components/printers/PrinterAmsOverview";
+import { SkipObjectsModal } from "@/components/printers/SkipObjectsModal";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
@@ -554,12 +556,14 @@ function JobHeroCard({
   onUpdated: (printer?: Printer) => void;
   onPrint?: () => void;
 }) {
+  const t = useT();
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmClearBed, setConfirmClearBed] = useState(false);
+  const [skipObjectsOpen, setSkipObjectsOpen] = useState(false);
   const [streamLoaded, setStreamLoaded] = useState(false);
   const [streamError, setStreamError] = useState(false);
   const [cameraRetry, setCameraRetry] = useState(0);
@@ -787,17 +791,17 @@ function JobHeroCard({
               {busy === "clear-error" ? "…" : "Скинути помилку"}
             </button>
           )}
-          {isPrinting && hasMoonraker && printer.kind !== "snapmaker_u1" && (
-            <button onClick={() => act("skip-object")} disabled={busy !== null}
-              title="Потребує [exclude_object] в printer.cfg"
+          {isPrinting && printer.kind === "bambu" && (
+            <button onClick={() => setSkipObjectsOpen(true)} disabled={busy !== null}
               className="rounded-md border border-[var(--border)] bg-[var(--bg)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[var(--surface-hi)] disabled:opacity-40   ">
-              {busy === "skip-object" ? "…" : "Пропустити об'єкт"}
+              {t("printers.skipObjects.title")}
             </button>
           )}
         </div>
       )}
 
       {err && <p className="px-5 pb-3.5 text-xs text-[var(--state-error)]">{err}</p>}
+      <SkipObjectsModal open={skipObjectsOpen} printer={printer} onClose={() => setSkipObjectsOpen(false)} />
     </div>
   );
 }

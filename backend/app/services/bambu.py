@@ -593,6 +593,12 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         ),
         # Carry forward — reports without AMS data must not drop the active tray
         "active_tray": prev.get("active_tray"),
+        # Bambu reports the cumulative native skip-object set as `s_obj`.
+        "skipped_object_ids": (
+            [int(value) for value in print_data.get("s_obj", []) if str(value).lstrip("-").isdigit()]
+            if isinstance(print_data.get("s_obj"), list)
+            else prev.get("skipped_object_ids", [])
+        ),
     }
     if state in ("paused", "printing", "error") and error_msg and error_msg != prev.get("error_msg"):
         from app.core.db import SessionLocal as _SessionLocal
@@ -662,10 +668,12 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     # reports stream ~1/s per printing device and the payload rarely differs.
     now_mono = time.monotonic()
     active_tray_changed = updated.get("active_tray") != prev.get("active_tray")
+    skipped_objects_changed = updated.get("skipped_object_ids") != prev.get("skipped_object_ids")
     if (
         state_changed
         or updated.get("error_msg") != prev.get("error_msg")
         or active_tray_changed
+        or skipped_objects_changed
         or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
     ):
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
@@ -673,6 +681,8 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         _last_state_redis_write[dev_id] = now_mono
     if ams_changed or active_tray_changed:
         _publish_printer_refresh(dev_id, "ams" if ams_changed else "active_tray")
+    elif skipped_objects_changed:
+        _publish_printer_refresh(dev_id, "skip_objects")
     if cleared_terminal:
         return None
     return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
@@ -1548,6 +1558,17 @@ def resume_print(dev_id: str) -> None:
 
 def stop_print(dev_id: str) -> None:
     _publish(dev_id, {"print": {"command": "stop", "param": "", "sequence_id": _next_seq()}}, qos=1)
+
+
+def skip_objects(dev_id: str, object_ids: list[int]) -> None:
+    """Skip specific native Bambu object IDs from slice_info.config."""
+    from app.services.skip_objects import build_bambu_skip_payload
+
+    _publish(
+        dev_id,
+        build_bambu_skip_payload(object_ids, sequence_id=_next_seq()),
+        qos=1,
+    )
 
 
 def clear_print_error(dev_id: str) -> None:

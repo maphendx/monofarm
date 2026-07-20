@@ -109,10 +109,10 @@ describe("printer card model", () => {
     expect(printerCardUsesPersistentSlots(printer({ kind: "other", slots: persistentSlots }))).toBe(true);
   });
 
-  it("only enables Skip for an active Moonraker print", () => {
-    expect(canSkipObject(printer({ state: "printing", moonraker_url: "http://m.local" }))).toBe(true);
-    expect(canSkipObject(printer({ state: "paused", moonraker_url: "http://m.local" }))).toBe(false);
-    expect(canSkipObject(printer({ state: "printing", moonraker_url: null }))).toBe(false);
+  it("only enables native Skip Objects for an active Bambu print", () => {
+    expect(canSkipObject(printer({ kind: "bambu", state: "printing", moonraker_url: null }))).toBe(true);
+    expect(canSkipObject(printer({ kind: "bambu", state: "paused", moonraker_url: null }))).toBe(false);
+    expect(canSkipObject(printer({ kind: "snapmaker_u1", state: "printing" }))).toBe(false);
   });
 
   it("resolves known printer assets and leaves unknown models for a placeholder", () => {

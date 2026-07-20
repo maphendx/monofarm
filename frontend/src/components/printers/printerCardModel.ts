@@ -117,6 +117,6 @@ export function printerCardUsesPersistentSlots(
   return printer.kind === "other" && Boolean(printer.slots?.length);
 }
 
-export function canSkipObject(printer: Pick<Printer, "state" | "moonraker_url" | "kind">): boolean {
-  return printer.state === "printing" && !!printer.moonraker_url && printer.kind !== "snapmaker_u1";
+export function canSkipObject(printer: Pick<Printer, "state" | "kind">): boolean {
+  return printer.state === "printing" && printer.kind === "bambu";
 }

@@ -20,6 +20,7 @@ from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.bambu_cloud_job import BambuCloudJob
+from app.models.gcode_file import GcodeFile
 from app.models.plan import PlanEntry
 from app.models.printer import Printer, PrinterKind
 from app.models.printer_group import PrinterGroup
@@ -38,6 +39,12 @@ from app.schemas.printer import (
 )
 from app.services import bambu, moonraker, tunnel as _tunnel
 from app.services.bambu_job_state import ACTIVE_STATUSES
+from app.services.skip_objects import (
+    InvalidSkipRequest,
+    build_bambu_skip_payload,
+    parse_bambu_plate_objects,
+    validate_skip_request,
+)
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +63,10 @@ class AutoPrintSettings(BaseModel):
 
 class SendGcodePayload(BaseModel):
     gcode: list[str]
+
+
+class SkipObjectsPayload(BaseModel):
+    object_ids: list[str]
 
 
 import re
@@ -1893,6 +1904,158 @@ async def print_skip_object(
         moonraker.invalidate_status(row.moonraker_url)
         return {"ok": True, "action": "skip_object"}
     raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
+
+
+def _bambu_job_name(value: str | None) -> str:
+    name = (value or "").strip().lower()
+    for suffix in (".gcode.3mf", ".3mf", ".gcode"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return re.sub(r"[^a-z0-9а-яіїєґ]+", "", name)
+
+
+async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> dict:
+    if row.kind != PrinterKind.bambu or not row.bambu_dev_id:
+        raise HTTPException(status_code=400, detail="Skip Objects доступний лише для Bambu Lab")
+
+    live = bambu.get_cached_state(row.bambu_dev_id)
+    if live.get("state") not in {"printing", "paused"}:
+        return {
+            "available": False,
+            "reason": "not_printing",
+            "objects": [],
+            "updated_at": live.get("last_message_at"),
+        }
+
+    job = (
+        db.query(BambuCloudJob)
+        .filter(
+            BambuCloudJob.organization_id == org_id,
+            BambuCloudJob.printer_id == row.id,
+            BambuCloudJob.status.in_(ACTIVE_STATUSES),
+        )
+        .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
+        .first()
+    )
+    if job is None or job.gcode_file_id is None:
+        return {
+            "available": False,
+            "reason": "not_started_from_monofarm",
+            "objects": [],
+            "updated_at": live.get("last_message_at"),
+        }
+
+    gcode_file = db.get(GcodeFile, job.gcode_file_id)
+    if gcode_file is None:
+        return {
+            "available": False,
+            "reason": "file_unavailable",
+            "objects": [],
+            "updated_at": live.get("last_message_at"),
+        }
+
+    live_name = _bambu_job_name(live.get("filename"))
+    file_name = _bambu_job_name(job.file_name or gcode_file.original_name)
+    if live_name and file_name and live_name != file_name:
+        return {
+            "available": False,
+            "reason": "not_started_from_monofarm",
+            "objects": [],
+            "updated_at": live.get("last_message_at"),
+        }
+
+    from app.services import storage
+
+    try:
+        file_bytes = await asyncio.to_thread(storage.get_bytes, gcode_file.stored_name, org_id)
+    except (FileNotFoundError, OSError):
+        return {
+            "available": False,
+            "reason": "file_unavailable",
+            "objects": [],
+            "updated_at": live.get("last_message_at"),
+        }
+
+    excluded_ids = {
+        int(value)
+        for value in live.get("skipped_object_ids", [])
+        if str(value).lstrip("-").isdigit()
+    }
+    objects = await asyncio.to_thread(
+        parse_bambu_plate_objects,
+        file_bytes,
+        excluded_ids=excluded_ids,
+    )
+    remaining = sum(not obj["excluded"] for obj in objects)
+    reason = None
+    if not objects:
+        reason = "missing_object_labels"
+    elif remaining <= 1:
+        reason = "single_object"
+
+    return {
+        "available": reason is None,
+        "reason": reason,
+        "objects": objects,
+        "remaining_count": remaining,
+        "updated_at": live.get("last_message_at"),
+        "source": "bambu_mqtt",
+    }
+
+
+@router.get("/{printer_id}/print/skip-objects")
+async def get_print_skip_objects(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    """Return the live Bambu object list and cumulative skipped state."""
+    row = _require_printer(printer_id, db, org.id)
+    return await _bambu_skip_objects_state(row, db, org.id)
+
+
+@router.post("/{printer_id}/print/skip-objects")
+async def print_skip_objects(
+    printer_id: int,
+    payload: SkipObjectsPayload,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> dict:
+    """Skip selected Bambu objects using their native 3MF identify IDs."""
+    row = _require_printer(printer_id, db, org.id)
+    state = await _bambu_skip_objects_state(row, db, org.id)
+    try:
+        selected = validate_skip_request(state.get("objects", []), payload.object_ids)
+    except InvalidSkipRequest as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    object_ids = [int(object_id) for object_id in selected]
+    command = build_bambu_skip_payload(
+        object_ids,
+        sequence_id=str(int(datetime.now(timezone.utc).timestamp() * 1000)),
+    )
+    try:
+        if (
+            row.bambu_dev_ip
+            and row.bambu_access_code
+            and _tunnel.has_tunnel(org.id)
+        ):
+            await _tunnel.send_bambu_mqtt(
+                org.id,
+                row.bambu_dev_id,
+                row.bambu_dev_ip,
+                row.bambu_access_code.strip(),
+                command,
+            )
+        else:
+            await asyncio.to_thread(bambu.skip_objects, row.bambu_dev_id, object_ids)
+    except (bambu.BambuError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"ok": True, "action": "skip_objects", "object_ids": selected}
 
 
 class GcodePayload(BaseModel):
