@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Check, MousePointer2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -255,7 +256,9 @@ export function SkipObjectsModal({
     }
   }
 
-  return (
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
     <Modal
       open={open}
       onClose={onClose}
@@ -287,6 +290,7 @@ export function SkipObjectsModal({
         loading={loading}
         unavailableReason={state?.reason ?? null}
       />
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }

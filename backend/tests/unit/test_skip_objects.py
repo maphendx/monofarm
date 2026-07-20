@@ -9,6 +9,7 @@ from app.services import bambu
 from app.services.skip_objects import (
     InvalidSkipRequest,
     build_bambu_skip_payload,
+    merge_bambu_excluded_state,
     parse_bambu_plate_objects,
     validate_skip_request,
 )
@@ -87,3 +88,16 @@ def test_bambu_report_tracks_skipped_objects_in_realtime(monkeypatch):
 
     assert bambu._state_cache["SKIP-REPORT"]["skipped_object_ids"] == [155, 165]
     assert refreshes == [("SKIP-REPORT", "skip_objects")]
+
+
+def test_merges_live_skipped_ids_without_reparsing_the_3mf():
+    objects = [
+        {"id": "155", "name": "A", "excluded": False, "current": False, "bounds": None},
+        {"id": "165", "name": "B", "excluded": False, "current": False, "bounds": None},
+    ]
+
+    merged = merge_bambu_excluded_state(objects, {165})
+
+    assert merged[0]["excluded"] is False
+    assert merged[1]["excluded"] is True
+    assert objects[1]["excluded"] is False

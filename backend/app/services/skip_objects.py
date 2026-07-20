@@ -100,6 +100,20 @@ def parse_bambu_plate_objects(
     ]
 
 
+def merge_bambu_excluded_state(
+    objects: list[dict[str, Any]],
+    excluded_ids: set[int],
+) -> list[dict[str, Any]]:
+    """Overlay fast-changing MQTT `s_obj` state on immutable 3MF metadata."""
+    return [
+        {
+            **obj,
+            "excluded": int(obj["id"]) in excluded_ids,
+        }
+        for obj in objects
+    ]
+
+
 def validate_skip_request(objects: list[dict[str, Any]], requested_ids: list[str]) -> list[str]:
     requested = list(dict.fromkeys(str(object_id) for object_id in requested_ids))
     if not requested:

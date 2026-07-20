@@ -18,6 +18,8 @@
 - Unit contract: Bambu 3MF parsing, last-object guard, MQTT payload, and live
   `s_obj` cache update.
 - Frontend contract: bed selection, current/skipped state, empty-state guidance.
+- Parsed 3MF geometry is cached for seven days; 1.5-second modal refreshes only
+  overlay the lightweight MQTT `s_obj` set.
 - `backend/.venv/bin/pytest tests/unit -q`: `168 passed`.
 - `backend/.venv/bin/ruff check .`: passed.
 - `frontend/bun run build`: production build passed (53 routes).

@@ -42,6 +42,7 @@ from app.services.bambu_job_state import ACTIVE_STATUSES
 from app.services.skip_objects import (
     InvalidSkipRequest,
     build_bambu_skip_payload,
+    merge_bambu_excluded_state,
     parse_bambu_plate_objects,
     validate_skip_request,
 )
@@ -1965,28 +1966,30 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
             "updated_at": live.get("last_message_at"),
         }
 
-    from app.services import storage
-
-    try:
-        file_bytes = await asyncio.to_thread(storage.get_bytes, gcode_file.stored_name, org_id)
-    except (FileNotFoundError, OSError):
-        return {
-            "available": False,
-            "reason": "file_unavailable",
-            "objects": [],
-            "updated_at": live.get("last_message_at"),
-        }
-
     excluded_ids = {
         int(value)
         for value in live.get("skipped_object_ids", [])
         if str(value).lstrip("-").isdigit()
     }
-    objects = await asyncio.to_thread(
-        parse_bambu_plate_objects,
-        file_bytes,
-        excluded_ids=excluded_ids,
-    )
+    from app.services import storage
+    from app.services.cache import cache_get, cache_set
+
+    object_cache_key = f"bambu:skip_objects:file:v1:{gcode_file.id}"
+    object_template = cache_get(object_cache_key)
+    if not isinstance(object_template, list):
+        try:
+            file_bytes = await asyncio.to_thread(storage.get_bytes, gcode_file.stored_name, org_id)
+        except (FileNotFoundError, OSError):
+            return {
+                "available": False,
+                "reason": "file_unavailable",
+                "objects": [],
+                "updated_at": live.get("last_message_at"),
+            }
+        object_template = await asyncio.to_thread(parse_bambu_plate_objects, file_bytes)
+        cache_set(object_cache_key, object_template, 7 * 24 * 60 * 60)
+
+    objects = merge_bambu_excluded_state(object_template, excluded_ids)
     remaining = sum(not obj["excluded"] for obj in objects)
     reason = None
     if not objects:
