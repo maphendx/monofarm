@@ -20,6 +20,7 @@ def test_decodes_loaded_slots_with_colors_and_material():
     assert slots[0] == {
         "slot": 0, "color": "#FF0000", "color_name": None, "type": "PLA",
         "brand": "Snapmaker", "filament_id": None, "empty": False, "unit_id": None,
+        "verified": True,
     }
     assert slots[1]["color"] == "#00FF00"
     assert slots[1]["brand"] is None

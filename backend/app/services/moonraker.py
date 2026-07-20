@@ -393,6 +393,7 @@ def u1_slots_from_task_config(ptc: dict) -> list[dict] | None:
             "filament_id": None,
             "empty": not loaded,
             "unit_id": None,
+            "verified": True,
         })
     return slots
 

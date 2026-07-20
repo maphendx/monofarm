@@ -37,6 +37,17 @@ def test_cached_status_matches_agent_url_without_trailing_slash(monkeypatch):
     assert requested[0] == f"mr:status:{U1_URL}"
 
 
+def test_u1_task_config_slots_are_verified_by_the_printer():
+    slots = moonraker.u1_slots_from_task_config({
+        "filament_exist": [True, False, False, False],
+        "filament_color_rgba": ["#8BD5EEFF"],
+        "filament_type": ["PLA"],
+    })
+
+    assert slots is not None
+    assert slots[0]["verified"] is True
+
+
 def test_status_push_keeps_last_u1_colors_when_packet_is_incomplete(monkeypatch):
     stored: dict[str, dict] = {
         f"mr:stale:{U1_URL}": {"state": "idle", "u1_filaments": U1_SLOTS},
