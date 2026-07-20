@@ -14,6 +14,8 @@ from fastapi import WebSocket
 
 log = logging.getLogger(__name__)
 
+PRINTER_EVENTS_CHANNEL = "printer:events"
+
 
 class WsManager:
     def __init__(self) -> None:

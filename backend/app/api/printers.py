@@ -237,6 +237,28 @@ def _apply_error_cleared_flag(printer: Printer, live: dict, db: Session | None) 
     return {**live, "state": "paused", "error_msg": None}
 
 
+def _merge_bambu_filament(persisted: dict, live: dict) -> dict:
+    """Merge Handy/printer truth without attaching inventory to a changed spool."""
+    persisted_type = str(persisted.get("type") or "").strip().upper()
+    live_type = str(live.get("type") or "").strip().upper()
+    persisted_color = str(persisted.get("color") or "").strip().lower()[:7]
+    live_color = str(live.get("color") or "").strip().lower()[:7]
+    same_material = bool(
+        not live.get("empty")
+        and persisted_type
+        and persisted_type == live_type
+        and persisted_color
+        and persisted_color == live_color
+    )
+    merged = {**persisted, **live, "verified": True}
+    if same_material:
+        merged["filament_id"] = persisted.get("filament_id")
+        merged["color_name"] = live.get("color_name") or persisted.get("color_name")
+    else:
+        merged["filament_id"] = live.get("filament_id")
+    return merged
+
+
 def _to_dto(
     printer: Printer,
     db: Session | None = None,
@@ -321,7 +343,7 @@ def _to_dto(
         # print-dispatch path must never send ams_mapping for an unverified slot,
         # or firmware rejects it with "Failed to get AMS mapping table".
         filaments = [
-            {**live_by_slot[s["slot"]], "verified": True} if s["slot"] in live_by_slot
+            _merge_bambu_filament(s, live_by_slot[s["slot"]]) if s["slot"] in live_by_slot
             else {**s, "verified": False}
             for s in persisted
         ] + [
@@ -1301,8 +1323,10 @@ def set_loaded_filaments(
     db.refresh(row)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         try:
-            for slot in slots:
-                bambu.sync_filament_slot(row.bambu_dev_id, slot.model_dump())
+            bambu.sync_filament_slots(
+                row.bambu_dev_id,
+                [slot.model_dump() for slot in slots],
+            )
         except bambu.BambuError as exc:
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
     return _to_dto(row, db)

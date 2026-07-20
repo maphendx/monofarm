@@ -28,7 +28,7 @@ from app.models.printer import Printer
 from app.models.printer_group import PrinterGroup
 from app.models.user import is_platform_admin
 from app.services import moonraker
-from app.services.ws_manager import manager
+from app.services.ws_manager import PRINTER_EVENTS_CHANNEL, manager
 
 log = logging.getLogger(__name__)
 
@@ -111,12 +111,63 @@ async def _get_snapshot(org_id: int) -> tuple[list[dict], str]:
         cached = _snapshot_cache.get(org_id)
         if cached and now - cached[0] < _SNAPSHOT_TTL:
             return cached[2], cached[1]
+        return await _build_and_cache_snapshot(org_id)
 
-        data = await asyncio.to_thread(_build_snapshot, org_id)
-        raw = json.dumps(data, default=str)
-        digest = hashlib.md5(raw.encode()).hexdigest()
-        _snapshot_cache[org_id] = (time.monotonic(), digest, data)
-        return data, digest
+
+async def _build_and_cache_snapshot(org_id: int) -> tuple[list[dict], str]:
+    data = await asyncio.to_thread(_build_snapshot, org_id)
+    raw = json.dumps(data, default=str)
+    digest = hashlib.md5(raw.encode()).hexdigest()
+    _snapshot_cache[org_id] = (time.monotonic(), digest, data)
+    return data, digest
+
+
+async def broadcast_printer_snapshot(org_id: int) -> None:
+    """Push a fresh printer snapshot after an out-of-process device event."""
+    _snapshot_cache.pop(org_id, None)
+    lock = _snapshot_locks.setdefault(org_id, asyncio.Lock())
+    async with lock:
+        data, _digest = await _build_and_cache_snapshot(org_id)
+    await manager.broadcast(org_id, {"type": "printers", "data": data})
+
+
+async def run_printer_event_listener() -> None:
+    """Bridge worker-side MQTT changes into web-process WebSocket sessions."""
+    from app.core.config import settings
+
+    if not settings.REDIS_URL:
+        return
+
+    import redis.asyncio as aioredis
+
+    while True:
+        client = None
+        pubsub = None
+        try:
+            client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            pubsub = client.pubsub()
+            await pubsub.subscribe(PRINTER_EVENTS_CHANNEL)
+            log.info("printer event listener: subscribed")
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                try:
+                    event = json.loads(message["data"])
+                    await broadcast_printer_snapshot(int(event["org_id"]))
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception("printer event failed: %s", message.get("data"))
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            log.exception("printer event listener lost connection — retrying in 5s")
+            await asyncio.sleep(5)
+        finally:
+            if pubsub is not None:
+                await pubsub.aclose()
+            if client is not None:
+                await client.aclose()
 
 
 @router.websocket("/ws/printers")

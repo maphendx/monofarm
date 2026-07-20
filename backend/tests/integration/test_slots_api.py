@@ -86,6 +86,7 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
     assert resp.status_code == 200, resp.text
     assert captured[0][0] == "BAMBU-SYNC"
     assert captured[0][1]["print"]["tray_color"] == "FF0000FF"
+    assert captured[-1][1] == {"pushing": {"command": "pushall"}}
 
 
 def test_bambu_slot_list_does_not_fabricate_u1_slots(client, auth_headers):
@@ -122,11 +123,12 @@ def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, m
         json={"filament_id": test_filament.id},
     )
     assert resp.status_code == 200, resp.text
-    assert captured[-1][0] == "BAMBU-HANDY"
-    payload = captured[-1][1]["print"]
+    assert captured[0][0] == "BAMBU-HANDY"
+    payload = captured[0][1]["print"]
     assert payload["ams_id"] == 255
     assert payload["tray_id"] == 254
     assert payload["tray_color"] == "FF0000FF"
+    assert captured[-1][1] == {"pushing": {"command": "pushall"}}
 
 
 def test_assign_filament_to_slot(client: TestClient, auth_headers, u1_printer, test_filament):

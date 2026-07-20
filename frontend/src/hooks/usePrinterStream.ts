@@ -26,7 +26,6 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryDelayRef = useRef(1000);
-  const mountedRef = useRef(true);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => {
@@ -38,13 +37,11 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
   }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+    let cancelled = false;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
 
-  useEffect(() => {
     function connect() {
-      if (!mountedRef.current) return;
+      if (cancelled) return;
       const token = getToken();
       if (!token) return;
 
@@ -56,13 +53,16 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (!mountedRef.current) { ws.close(); return; }
+        if (cancelled) { ws.close(); return; }
         retryDelayRef.current = 1000;
         setConnected(true);
+        heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("ping");
+        }, 25_000);
       };
 
       ws.onmessage = (e) => {
-        if (!mountedRef.current) return;
+        if (cancelled) return;
         try {
           const msg = JSON.parse(e.data as string);
           if (msg.type === "printers") {
@@ -75,7 +75,9 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
       };
 
       ws.onclose = () => {
-        if (!mountedRef.current) return;
+        if (heartbeat) clearInterval(heartbeat);
+        heartbeat = null;
+        if (cancelled) return;
         setConnected(false);
         // Exponential backoff, cap at 30 s
         const delay = retryDelayRef.current;
@@ -89,13 +91,13 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
     connect();
 
     return () => {
-      mountedRef.current = false;
+      cancelled = true;
       wsRef.current?.close();
       wsRef.current = null;
       if (retryRef.current) clearTimeout(retryRef.current);
+      if (heartbeat) clearInterval(heartbeat);
     };
   // reloadKey triggers a reconnect (e.g. after Bambu discover adds new printers)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
   return { printers, connected, loading, reload, upsertPrinter };

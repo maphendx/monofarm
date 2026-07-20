@@ -92,11 +92,14 @@ async def lifespan(_: FastAPI):
     # dispatch needs the agent tunnel, which lives in this (web) process.
     from app.services.autoprint import run_kick_listener
     autoprint_kick_task = asyncio.create_task(run_kick_listener())
+    from app.api.ws import run_printer_event_listener
+    printer_event_task = asyncio.create_task(run_printer_event_listener())
 
     log.info("monofarm api started")
     yield
 
     autoprint_kick_task.cancel()
+    printer_event_task.cancel()
     if settings.INLINE_WORKERS:
         try:
             await bambu.shutdown()

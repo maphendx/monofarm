@@ -603,8 +603,13 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     vt_tray = print_data.get("vt_tray")
     # P1-series printers without a physical AMS unit still report the external
     # spool via vt_tray but may omit the "ams" key entirely — parse it either way.
+    ams_changed = False
     if isinstance(ams_data, dict) or isinstance(vt_tray, dict):
-        _parse_ams(dev_id, ams_data if isinstance(ams_data, dict) else {}, vt_tray)
+        ams_changed = _parse_ams(
+            dev_id,
+            ams_data if isinstance(ams_data, dict) else {},
+            vt_tray,
+        )
     if isinstance(ams_data, dict):
         # Active tray: "255" = external spool (slot 254 in our convention)
         tray_now = ams_data.get("tray_now")
@@ -621,15 +626,18 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     # Persist to Redis on meaningful change, else at most every few seconds —
     # reports stream ~1/s per printing device and the payload rarely differs.
     now_mono = time.monotonic()
+    active_tray_changed = updated.get("active_tray") != prev.get("active_tray")
     if (
         state_changed
         or updated.get("error_msg") != prev.get("error_msg")
-        or updated.get("active_tray") != prev.get("active_tray")
+        or active_tray_changed
         or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
     ):
         cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
         cache_set(f"bambu:state:stale:{dev_id}", updated, STATUS_STALE_TTL)
         _last_state_redis_write[dev_id] = now_mono
+    if ams_changed or active_tray_changed:
+        _publish_printer_refresh(dev_id, "ams" if ams_changed else "active_tray")
     if cleared_terminal:
         return None
     return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
@@ -968,7 +976,7 @@ def _sync_cloud_job_from_report(
         return job
 
 
-def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
+def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
     trays: list[dict] = []
     for unit in ams_data.get("ams") or []:
         unit_id = int(unit.get("id", 0))
@@ -1006,6 +1014,7 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
             "unit_id": None,
         })
 
+    changed = False
     if trays:
         changed = _ams_cache.get(dev_id) != trays
         _ams_cache[dev_id] = trays
@@ -1016,6 +1025,32 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> None:
             from app.services.cache import cache_set
             cache_set(f"bambu:ams:{dev_id}", trays, 300)
             _last_ams_redis_write[dev_id] = now_mono
+    return changed
+
+
+def _publish_printer_refresh(dev_id: str, reason: str) -> None:
+    """Notify the web process that a Bambu AMS snapshot changed."""
+    org_id = _dev_to_org.get(dev_id)
+    if org_id is None:
+        return
+
+    event = {"org_id": org_id, "dev_id": dev_id, "reason": reason}
+    from app.services.cache import _r
+    from app.services.ws_manager import PRINTER_EVENTS_CHANNEL
+
+    redis_client = _r()
+    if redis_client is not None:
+        try:
+            if redis_client.publish(PRINTER_EVENTS_CHANNEL, json.dumps(event)):
+                return
+        except Exception:
+            log.warning("printer realtime publish failed (dev_id=%s)", dev_id, exc_info=True)
+
+    if _main_loop is None or not _main_loop.is_running():
+        return
+    from app.api.ws import broadcast_printer_snapshot
+
+    asyncio.run_coroutine_threadsafe(broadcast_printer_snapshot(org_id), _main_loop)
 
 
 # ── HMS error lookup ──────────────────────────────────────────────────────────
@@ -1256,7 +1291,14 @@ def build_ams_filament_setting_payload(slot: dict[str, Any]) -> dict[str, Any]:
 
 def sync_filament_slot(dev_id: str, slot: dict[str, Any]) -> None:
     """Publish one operator-edited AMS/external-spool setting."""
-    _publish(dev_id, build_ams_filament_setting_payload(slot), qos=1)
+    sync_filament_slots(dev_id, [slot])
+
+
+def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
+    """Publish slot edits, then request the authoritative Handy/printer state."""
+    for slot in slots:
+        _publish(dev_id, build_ams_filament_setting_payload(slot), qos=1)
+    _publish(dev_id, {"pushing": {"command": "pushall"}}, qos=1)
 
 
 # Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.
