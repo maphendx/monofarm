@@ -1,3 +1,5 @@
+import asyncio
+
 from app.services import anycubic, anycubic_protocol, tunnel
 
 
@@ -103,3 +105,15 @@ def test_tunnel_passes_organization_to_anycubic_cache(monkeypatch):
     )
 
     assert seen == [(23, "DEV-4", {"state": "free"})]
+
+
+def test_bad_anycubic_telemetry_does_not_drop_agent_tunnel(monkeypatch):
+    def reject_payload(_org_id, _dev_id, _payload):
+        raise ValueError("partial ACE payload")
+
+    monkeypatch.setattr(anycubic, "handle_agent_ace_report", reject_payload)
+
+    asyncio.run(tunnel.handle_agent_message(
+        {"type": "ANYCUBIC_ACE_PUSH", "dev_id": "DEV-5", "payload": {"multi_color_box": [{}]}},
+        org_id=23,
+    ))
