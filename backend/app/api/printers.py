@@ -364,6 +364,8 @@ def _to_dto(
         bambu_model=printer.bambu_model,
         bambu_lan_mode=printer.bambu_lan_mode,
         bambu_has_ams=printer.bambu_has_ams,
+        anycubic_dev_ip=printer.anycubic_dev_ip,
+        anycubic_model_name=printer.anycubic_model_name,
         is_active=printer.is_active,
         is_out_of_order=printer.is_out_of_order,
         sort_order=printer.sort_order,
@@ -427,6 +429,29 @@ def _to_dto(
             bed_target=live.get("bed_target"),
             error_msg=live.get("error_msg"),
             active_tray=live.get("active_tray"),
+        )
+
+    # Anycubic Kobra — live state from the agent's LAN MQTT cache
+    if printer.kind == PrinterKind.anycubic and printer.anycubic_dev_id:
+        from app.services import anycubic
+
+        live = anycubic.get_cached_state(printer.anycubic_dev_id)
+        live = _apply_bed_cleared_flag(printer, live, db)
+        live = _apply_error_cleared_flag(printer, live, db)
+        return PrinterOut(
+            **base,
+            state=live.get("state") or "unknown",
+            state_stale=bool(live.get("state_stale")),
+            flags=[],
+            job=live.get("filename"),
+            eta_minutes=live.get("eta_minutes"),
+            source="anycubic",
+            progress_pct=live.get("progress_pct"),
+            extruder_temp=live.get("nozzle_temp"),
+            extruder_target=live.get("nozzle_target"),
+            bed_temp=live.get("bed_temp"),
+            bed_target=live.get("bed_target"),
+            error_msg=live.get("error_msg"),
         )
 
     # Manual (U1, other) — if Moonraker URL is set, prefer live data
@@ -1273,6 +1298,7 @@ def create_printer(
         bambu_model=payload.bambu_model,
         bambu_lan_mode=payload.bambu_lan_mode,
         bambu_has_ams=payload.bambu_has_ams,
+        anycubic_dev_ip=payload.anycubic_dev_ip,
         build_x=payload.build_x if payload.build_x is not None else (bvol[0] if bvol else None),
         build_y=payload.build_y if payload.build_y is not None else (bvol[1] if bvol else None),
         build_z=payload.build_z if payload.build_z is not None else (bvol[2] if bvol else None),
@@ -1316,6 +1342,8 @@ def update_printer(
         row.bambu_dev_ip = payload.bambu_dev_ip.strip() or None
     if payload.bambu_model is not None:
         row.bambu_model = payload.bambu_model.strip() or None
+    if payload.anycubic_dev_ip is not None:
+        row.anycubic_dev_ip = payload.anycubic_dev_ip.strip() or None
         # Auto-fill build volume when model name is set and no explicit override given
         if row.kind == PrinterKind.bambu and payload.build_x is None:
             bvol = _bambu_build_volume(row.bambu_model)
@@ -1711,6 +1739,15 @@ async def _dispatch(
             # doing" — force idle regardless of what live telemetry reports.
             # A print that failed outright (e.g. FAILED at layer 0) can stay
             # reported that way indefinitely; nothing else can get it unstuck.
+            row.bed_cleared_at = datetime.now(timezone.utc)
+            db.commit()
+    elif row.kind == PrinterKind.anycubic and row.anycubic_dev_id:
+        command = {"pause": "pause", "resume": "resume", "cancel": "stop"}[action]
+        try:
+            await _tunnel.send_anycubic_mqtt(org.id, row.anycubic_dev_id, row.anycubic_model_id or "", command)
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        if action == "cancel":
             row.bed_cleared_at = datetime.now(timezone.utc)
             db.commit()
     elif row.moonraker_url:

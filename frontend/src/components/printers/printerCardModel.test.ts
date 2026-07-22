@@ -118,5 +118,13 @@ describe("printer card model", () => {
   it("resolves known printer assets and leaves unknown models for a placeholder", () => {
     expect(printerCover(printer({ kind: "bambu", bambu_model: "A1 mini" }))).toBe("/printers/a1_mini.png");
     expect(printerCover(printer({ kind: "other", bambu_model: null }))).toBeNull();
+    expect(printerCover(printer({ kind: "other", name: "Neptune 4 Max" }))).toBe("/printers/neptune4_max.png");
+    expect(printerCover(printer({ kind: "other", name: "Neptune4Max (farm)" }))).toBe("/printers/neptune4_max.png");
+    expect(printerCover(printer({ kind: "anycubic", anycubic_model_name: "Anycubic Kobra 3 Max" })))
+      .toBe("/printers/kobra3_max.png");
+    expect(printerCover(printer({ kind: "anycubic", anycubic_model_name: "Anycubic Kobra S1 Max" })))
+      .toBe("/printers/kobra_s1_max.png");
+    expect(printerCover(printer({ kind: "anycubic", anycubic_model_name: null })))
+      .toBe("/printers/kobra3_max.png");
   });
 });

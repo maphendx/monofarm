@@ -306,6 +306,30 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     log.debug("BAMBU_STATUS_PUSH: cached %s", dev_id)
 
 
+def _handle_anycubic_status_push(data: dict) -> None:
+    """Cache an Anycubic LAN MQTT `info` report pushed by the agent."""
+    dev_id = (data.get("dev_id") or "").strip()
+    payload = data.get("payload") or {}
+    if not dev_id or not isinstance(payload, dict):
+        return
+    from app.services import anycubic
+
+    anycubic.handle_agent_report(dev_id, payload)
+    log.debug("ANYCUBIC_STATUS_PUSH: cached %s", dev_id)
+
+
+def _handle_anycubic_ace_push(data: dict) -> None:
+    """Cache an Anycubic `multiColorBox` (ACE) report pushed by the agent."""
+    dev_id = (data.get("dev_id") or "").strip()
+    payload = data.get("payload") or {}
+    if not dev_id or not isinstance(payload, dict):
+        return
+    from app.services import anycubic
+
+    anycubic.handle_agent_ace_report(dev_id, payload)
+    log.debug("ANYCUBIC_ACE_PUSH: cached %s", dev_id)
+
+
 async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     """Dispatch an incoming agent message to the waiting caller."""
     msg_type = data.get("type")
@@ -328,6 +352,14 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
 
     if msg_type == "BAMBU_STATUS_PUSH":
         _handle_bambu_status_push(data, org_id)
+        return
+
+    if msg_type == "ANYCUBIC_STATUS_PUSH":
+        _handle_anycubic_status_push(data)
+        return
+
+    if msg_type == "ANYCUBIC_ACE_PUSH":
+        _handle_anycubic_ace_push(data)
         return
 
     if msg_type == "TG_BOT_USERNAME":
@@ -626,6 +658,46 @@ async def send_bambu_mqtt(
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_MQTT failed: {resp.get('error')}")
+    return resp.get("body") or {"ok": True}
+
+
+async def send_anycubic_mqtt(
+    org_id: int,
+    dev_id: str,
+    model_id: str,
+    command: str,
+    timeout: float = 20.0,
+    **kwargs,
+) -> dict:
+    """Publish one Anycubic LAN MQTT control command through the local agent."""
+    ws = _tunnels.get(org_id)
+    if not ws:
+        raise RuntimeError(f"No agent connected for org {org_id}")
+
+    req_id = str(uuid.uuid4())
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future = loop.create_future()
+    _pending[req_id] = future
+    _pending_org[req_id] = org_id
+
+    try:
+        await ws.send_text(json.dumps({
+            "id": req_id,
+            "method": "ANYCUBIC_MQTT",
+            "dev_id": dev_id,
+            "model_id": model_id,
+            "command": command,
+            **kwargs,
+        }))
+        resp = await asyncio.wait_for(future, timeout=timeout)
+    except asyncio.TimeoutError:
+        raise RuntimeError(f"Agent ANYCUBIC_MQTT timed out ({timeout}s) for {dev_id}")
+    finally:
+        _pending.pop(req_id, None)
+        _pending_org.pop(req_id, None)
+
+    if resp.get("status", 0) >= 400 or resp.get("error"):
+        raise RuntimeError(f"ANYCUBIC_MQTT failed: {resp.get('error')}")
     return resp.get("body") or {"ok": True}
 
 

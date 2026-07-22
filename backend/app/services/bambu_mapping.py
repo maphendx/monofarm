@@ -131,10 +131,15 @@ def build_ams_mapping(
         if picked is None:
             picked = candidates[0] if candidates else None
 
-        target = picked.slot if picked else idx
+        # No real printer tray to map onto (no AMS reported, or its trays are
+        # already spoken for) — fall back to the external spool (254), never
+        # the file's own slot index: that number is unrelated to any actual
+        # printer tray and would otherwise land in the AMS range (0-253) and
+        # falsely mark use_ams=True for a printer with no AMS at all.
+        target = picked.slot if picked else 254
         mapping.append(target)
         used_targets.add(target)
-        source[idx] = "auto" if picked else "identity"
+        source[idx] = "auto" if picked else "external_fallback"
 
     use_ams = any(0 <= v < 254 for v in mapping)
     return mapping, use_ams, {

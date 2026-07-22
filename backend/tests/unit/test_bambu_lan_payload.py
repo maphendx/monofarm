@@ -74,6 +74,21 @@ def test_external_spool_mapping_disables_ams():
     assert use_ams is False
 
 
+def test_no_loaded_filaments_falls_back_to_external_spool_not_ams():
+    """A printer reporting zero loaded filaments (stale MQTT report, or an
+    AMS-less printer with only an external spool) must never get an in-range
+    AMS tray guessed from the file's own slot index — that number is
+    unrelated to any real printer tray and would send use_ams=true to
+    hardware that has no AMS at all."""
+    printer = _Printer([])
+    mapping, use_ams, _details = build_ams_mapping(
+        {"types": ["PETG"], "colors": ["#ffffff"], "used_g": [8.45]},
+        printer,
+    )
+    assert mapping == [254]
+    assert use_ams is False
+
+
 def test_http_url_takes_priority():
     cmd = build_start_print_payload(
         "DEV1", "model.3mf", http_url="https://r2.example/m.3mf", ftp_filename="cache/m.3mf"

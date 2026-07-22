@@ -2,7 +2,7 @@ export type UserRole = "admin" | "operator" | "manager";
 
 export type OrgPlan = "free" | "starter" | "pro" | "farm";
 
-export type PrinterKind = "snapmaker_u1" | "bambu" | "other";
+export type PrinterKind = "snapmaker_u1" | "bambu" | "anycubic" | "other";
 
 export type PrintTaskStatus = "queued" | "in_progress" | "done" | "cancelled";
 export type FarmTaskStatus = "todo" | "in_progress" | "done";
@@ -103,6 +103,8 @@ export interface Printer {
   bambu_model: string | null;
   bambu_lan_mode: boolean;
   bambu_has_ams: boolean | null;
+  anycubic_dev_ip: string | null;
+  anycubic_model_name: string | null;
   is_active: boolean;
   is_out_of_order: boolean;
   sort_order: number;
@@ -115,7 +117,7 @@ export interface Printer {
   job: string | null;
   eta_minutes: number | null;
   updated_at: string | null;
-  source: "moonraker" | "bambu" | "manual" | "unknown";
+  source: "moonraker" | "bambu" | "anycubic" | "manual" | "unknown";
   progress_pct: number | null;
   extruder_temp: number | null;
   extruder_target: number | null;

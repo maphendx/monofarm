@@ -225,6 +225,10 @@ Class-based `.dark` on `<html>`. Applied before hydration via inline script in `
 
 Tailwind v4 uses `@custom-variant dark` in `globals.css`. **The dev server must be restarted after any change to `globals.css`** — hot reload does not pick up `@custom-variant` changes.
 
+### Motion & interaction design
+
+Before writing or reviewing spring animations, drag/swipe/sheet gestures, translucent/glass surfaces, or typography sizing (tracking/leading), read `.claude/skills/apple-design/SKILL.md` (project root) — Apple HIG-style interaction design guidance covering the `--dur-*`/`--ease-spring` tokens above, interruptible motion, momentum, and reduced-motion behavior.
+
 ## Component CSS classes
 
 `globals.css` defines reusable CSS classes. **Check these before creating new components:**

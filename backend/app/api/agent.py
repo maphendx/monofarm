@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.8.12"
+AGENT_VERSION = "0.8.13"
 
 
 @router.get("/api/agent/version")
@@ -92,6 +92,78 @@ def bambu_lan_config(org: Organization = Depends(get_current_org)) -> dict:
             if row.bambu_dev_id and row.bambu_dev_ip and row.bambu_access_code
         ]
     return {"printers": printers}
+
+
+@router.get("/api/agent/anycubic-lan-config")
+def anycubic_lan_config(org: Organization = Depends(get_current_org)) -> dict:
+    """Anycubic Kobra printers the local agent should monitor over local LAN MQTT.
+
+    Consumed by monofarm-agent (see anycubic-lan-config poll in monofarm_agent.py),
+    not browser UI. `dev_id`/`model_id` may be null on first run — the agent runs
+    the handshake, discovers them, and reports them back via POST anycubic-discovered.
+    """
+    from app.core.db import SessionLocal
+    from app.models.printer import Printer, PrinterKind
+
+    with SessionLocal() as db:
+        rows = (
+            db.query(Printer)
+            .filter(
+                Printer.organization_id == org.id,
+                Printer.kind == PrinterKind.anycubic,
+                Printer.is_active.is_(True),
+                Printer.anycubic_dev_ip.isnot(None),
+            )
+            .all()
+        )
+        printers = [
+            {
+                "id": row.id,
+                "name": row.name,
+                "ip": row.anycubic_dev_ip,
+                "dev_id": row.anycubic_dev_id,
+                "model_id": row.anycubic_model_id,
+            }
+            for row in rows
+            if row.anycubic_dev_ip
+        ]
+    return {"printers": printers}
+
+
+class AnycubicDiscoveredRequest(BaseModel):
+    printer_id: int
+    dev_id: str
+    model_id: str
+    model_name: str | None = None
+
+
+@router.post("/api/agent/anycubic-discovered")
+def anycubic_discovered(
+    body: AnycubicDiscoveredRequest,
+    org: Organization = Depends(get_current_org),
+) -> dict:
+    """Persist the device_id/model_id/model_name the agent learned from the LAN handshake."""
+    from app.core.db import SessionLocal
+    from app.models.printer import Printer, PrinterKind
+
+    with SessionLocal() as db:
+        printer = (
+            db.query(Printer)
+            .filter(
+                Printer.id == body.printer_id,
+                Printer.organization_id == org.id,
+                Printer.kind == PrinterKind.anycubic,
+            )
+            .first()
+        )
+        if printer is None:
+            raise HTTPException(status_code=404, detail="Printer not found")
+        printer.anycubic_dev_id = body.dev_id
+        printer.anycubic_model_id = body.model_id
+        if body.model_name:
+            printer.anycubic_model_name = body.model_name
+        db.commit()
+    return {"ok": True}
 
 
 class PrintZplRequest(BaseModel):

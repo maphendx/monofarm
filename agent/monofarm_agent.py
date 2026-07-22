@@ -35,10 +35,11 @@ import logging
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse as _urlparse_mod
 from pathlib import Path
 
-AGENT_VERSION = "0.8.12"
+AGENT_VERSION = "0.8.13"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
@@ -1075,6 +1076,189 @@ async def _bambu_lan_config_loop(cloud_ws, server: str, token: str) -> None:
         except Exception as exc:
             log.debug("Bambu LAN config refresh failed: %s", exc)
         await asyncio.sleep(_BAMBU_LAN_CONFIG_INTERVAL)
+
+
+# ── Anycubic Kobra 3/S1 local LAN monitor ─────────────────────────────────────
+# dev_ip → asyncio task/config for Anycubic LAN MQTT subscriptions.
+_anycubic_sub_tasks: dict[str, "asyncio.Task[None]"] = {}
+_anycubic_sub_configs: dict[str, str] = {}
+_ANYCUBIC_CONFIG_INTERVAL = 15
+# dev_id → connected paho client from the monitor loop, reused for commands.
+_anycubic_live_clients: dict[str, object] = {}
+
+
+async def handle_anycubic_command(ws, req: dict) -> None:
+    """Publish an Anycubic LAN MQTT command on behalf of the cloud backend."""
+    from anycubic_local import commands as anycubic_commands
+
+    req_id = req.get("id")
+    dev_id = (req.get("dev_id") or "").strip()
+    model_id = (req.get("model_id") or "").strip()
+    command = req.get("command") or ""
+    try:
+        client = _anycubic_live_clients.get(dev_id)
+        if client is None or not client.is_connected():
+            raise RuntimeError("printer not connected to LAN monitor")
+        topic, payload = anycubic_commands.build(
+            model_id, dev_id, command,
+            value=req.get("value"), on=req.get("on"), brightness=req.get("brightness"),
+        )
+        client.publish(topic, json.dumps(payload))
+        result = {"id": req_id, "status": 200, "body": {"ok": True}, "error": None}
+    except Exception as exc:
+        log.warning("ANYCUBIC_MQTT error %s: %s", dev_id, exc)
+        result = {"id": req_id, "status": 502, "body": None, "error": str(exc)}
+    try:
+        await ws.send(json.dumps(result))
+    except websockets.exceptions.ConnectionClosed as exc:
+        log.warning("ANYCUBIC_MQTT response dropped after cloud disconnect: %s", exc)
+
+
+async def _anycubic_lan_loop(cloud_ws, printer: dict, server: str, token: str) -> None:
+    """Handshake + maintain a LAN MQTT subscription for one Anycubic printer; push reports to SaaS."""
+    from anycubic_local import const as ac_const
+    from anycubic_local import handshake as ac_handshake
+
+    try:
+        import paho.mqtt.client as mqtt
+    except ImportError:
+        log.warning("Anycubic LAN monitor disabled: install paho-mqtt")
+        return
+
+    printer_id = printer.get("id")
+    ip = (printer.get("ip") or "").strip()
+    name = printer.get("name") or ip
+    if not ip:
+        return
+
+    while True:
+        try:
+            hs = await asyncio.to_thread(ac_handshake.do_handshake, ip)
+        except Exception as exc:
+            log.warning("ANYCUBIC_SUB handshake failed %s (%s): %s", name, ip, exc)
+            await asyncio.sleep(15)
+            continue
+
+        if hs.device_id != printer.get("dev_id") or hs.model_id != printer.get("model_id"):
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"{server}/api/agent/anycubic-discovered",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"printer_id": printer_id, "dev_id": hs.device_id,
+                              "model_id": hs.model_id, "model_name": hs.model_name},
+                    )
+                printer = {**printer, "dev_id": hs.device_id, "model_id": hs.model_id}
+            except Exception as exc:
+                log.debug("anycubic-discovered report failed: %s", exc)
+
+        dev_id = hs.device_id
+        connected = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        client = mqtt.Client(client_id=f"monofarm-agent-{dev_id}",
+                              callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+        client.username_pw_set(hs.username, hs.password)
+        client.tls_set(cert_reqs=ssl.CERT_NONE)
+        client.tls_insecure_set(True)
+
+        def _on_connect(client, userdata, flags, rc, properties=None):
+            if rc != 0:
+                log.warning("ANYCUBIC_SUB connect failed %s (%s): rc=%s", name, ip, rc)
+                loop.call_soon_threadsafe(connected.set)
+                return
+            log.info("ANYCUBIC_SUB connected %s (%s)", name, ip)
+            client.subscribe(f"{ac_const.report_prefix(hs.model_id, dev_id)}/#")
+            loop.call_soon_threadsafe(connected.set)
+
+        def _on_message(client, userdata, message):
+            try:
+                obj = json.loads(message.payload)
+            except Exception:
+                return
+            if obj.get("action") == "query" and obj.get("data") is None and "state" not in obj:
+                return  # our own echoed query
+            msg_type = obj.get("type")
+            data = obj.get("data")
+            if data is None:
+                return
+            push_type = {"info": "ANYCUBIC_STATUS_PUSH", "multiColorBox": "ANYCUBIC_ACE_PUSH"}.get(msg_type)
+            if push_type is None:
+                return
+            asyncio.run_coroutine_threadsafe(
+                cloud_ws.send(json.dumps({"type": push_type, "dev_id": dev_id, "payload": data})),
+                loop,
+            )
+
+        client.on_connect = _on_connect
+        client.on_message = _on_message
+
+        try:
+            client.connect_async(hs.broker_host, hs.broker_port, keepalive=60)
+            client.loop_start()
+            await asyncio.wait_for(connected.wait(), timeout=12)
+            _anycubic_live_clients[dev_id] = client
+            while True:
+                # ACE state is not pushed autonomously — poll it (see PROTOCOL-VALIDATED.md).
+                await asyncio.sleep(30)
+                if client.is_connected():
+                    body = json.dumps({"type": "multiColorBox", "action": "getInfo",
+                                        "timestamp": int(time.time() * 1000), "msgid": "poll", "data": None})
+                    client.publish(ac_const.query_topic(hs.model_id, dev_id, "multiColorBox"), body)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("ANYCUBIC_SUB error %s (%s): %s — retrying", name, ip, exc)
+        finally:
+            if _anycubic_live_clients.get(dev_id) is client:
+                _anycubic_live_clients.pop(dev_id, None)
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except Exception:
+                pass
+        await asyncio.sleep(5)
+
+
+async def _sync_anycubic_subscriptions(cloud_ws, printers: list[dict], server: str, token: str) -> None:
+    wanted: dict[str, dict] = {p["ip"]: p for p in printers if p.get("ip")}
+
+    for ip in list(_anycubic_sub_tasks):
+        if ip not in wanted:
+            _anycubic_sub_tasks.pop(ip).cancel()
+            _anycubic_sub_configs.pop(ip, None)
+
+    for ip, printer in wanted.items():
+        cfg = f"{printer.get('dev_id')}:{printer.get('model_id')}"
+        task = _anycubic_sub_tasks.get(ip)
+        if task is not None and not task.done() and _anycubic_sub_configs.get(ip) == cfg:
+            continue
+        if task is not None:
+            task.cancel()
+        _anycubic_sub_configs[ip] = cfg
+        _anycubic_sub_tasks[ip] = asyncio.create_task(_anycubic_lan_loop(cloud_ws, printer, server, token))
+
+
+def _cancel_all_anycubic_subscriptions() -> None:
+    for task in list(_anycubic_sub_tasks.values()):
+        task.cancel()
+    _anycubic_sub_tasks.clear()
+    _anycubic_sub_configs.clear()
+
+
+async def _anycubic_config_loop(cloud_ws, server: str, token: str) -> None:
+    headers = {"Authorization": f"Bearer {token}"}
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{server}/api/agent/anycubic-lan-config", headers=headers)
+            if resp.status_code == 200:
+                printers = (resp.json() or {}).get("printers") or []
+                await _sync_anycubic_subscriptions(cloud_ws, printers, server, token)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.debug("Anycubic LAN config refresh failed: %s", exc)
+        await asyncio.sleep(_ANYCUBIC_CONFIG_INTERVAL)
 
 
 def _load_config() -> dict[str, str]:
@@ -2473,6 +2657,7 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                     ],
                 }))
                 bambu_lan_task = asyncio.create_task(_bambu_lan_config_loop(ws, server, token))
+                anycubic_task = asyncio.create_task(_anycubic_config_loop(ws, server, token))
 
                 # Fetch TG config on every connect (token may have changed while disconnected)
                 try:
@@ -2530,6 +2715,8 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                             asyncio.create_task(handle_bambu_upload(ws, req))
                         elif method == "BAMBU_MQTT":
                             asyncio.create_task(handle_bambu_mqtt(ws, req))
+                        elif method == "ANYCUBIC_MQTT":
+                            asyncio.create_task(handle_anycubic_command(ws, req))
                         elif method == "MOONRAKER_UPLOAD":
                             if req.get("chunked"):
                                 _moonraker_upload_buffers[req["id"]] = {
@@ -2555,8 +2742,10 @@ async def run(server: str, token: str, *, on_state=None, run_updates: bool = Tru
                     _cloud_connected = False
                     _cancel_all_subscriptions()
                     _cancel_all_bambu_lan_subscriptions()
+                    _cancel_all_anycubic_subscriptions()
                     _moonraker_upload_buffers.clear()
                     bambu_lan_task.cancel()
+                    anycubic_task.cancel()
 
         except asyncio.CancelledError:
             _emit("disconnected")

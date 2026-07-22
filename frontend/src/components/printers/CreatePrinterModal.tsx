@@ -9,6 +9,7 @@ import type { Printer, PrinterKind } from "@/lib/types";
 const KINDS: { value: PrinterKind; label: string }[] = [
   { value: "snapmaker_u1", label: "Snapmaker U1" },
   { value: "bambu", label: "Bambu Lab" },
+  { value: "anycubic", label: "Anycubic Kobra" },
   { value: "other", label: "Інший (Klipper / ручний)" },
 ];
 
@@ -47,6 +48,7 @@ export function CreatePrinterModal({
   const [moonrakerUrl, setMoonrakerUrl] = useState("");
   const [bambuDevId, setBambuDevId] = useState("");
   const [bambuAccessCode, setBambuAccessCode] = useState("");
+  const [anycubicDevIp, setAnycubicDevIp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +64,7 @@ export function CreatePrinterModal({
     setMoonrakerUrl("");
     setBambuDevId("");
     setBambuAccessCode("");
+    setAnycubicDevIp("");
     setError(null);
     setDiscovered([]);
     setCheckResult(null);
@@ -111,7 +114,7 @@ export function CreatePrinterModal({
     setError(null);
     try {
       let p: Printer;
-      if (kind !== "bambu" && moonrakerUrl.trim()) {
+      if (isMoonraker && moonrakerUrl.trim()) {
         // Use claim endpoint for Moonraker — handles plan limits, accepts firmware_version
         p = await api<Printer>("/api/printers/moonraker/claim", {
           method: "POST",
@@ -131,6 +134,7 @@ export function CreatePrinterModal({
             moonraker_url: moonrakerUrl.trim() || null,
             bambu_dev_id: bambuDevId.trim() || null,
             bambu_access_code: bambuAccessCode.trim() || null,
+            anycubic_dev_ip: anycubicDevIp.trim() || null,
           }),
         });
       }
@@ -144,7 +148,7 @@ export function CreatePrinterModal({
     }
   }
 
-  const isMoonraker = kind !== "bambu";
+  const isMoonraker = kind !== "bambu" && kind !== "anycubic";
 
   return (
     <Modal
@@ -328,6 +332,26 @@ export function CreatePrinterModal({
                 value={bambuAccessCode}
                 onChange={(e) => setBambuAccessCode(e.target.value)}
                 placeholder="12345678"
+                className="input"
+              />
+            </label>
+          </>
+        )}
+
+        {/* ── Anycubic Kobra (local LAN) ────────────────────────────────── */}
+        {kind === "anycubic" && (
+          <>
+            <p className="text-xs text-[var(--text-muted)]">
+              Увімкніть LAN Mode на принтері (Налаштування → Мережа → LAN Mode),
+              потім вкажіть його IP-адресу в локальній мережі.
+            </p>
+            <label className="block">
+              <span className="mb-1 block text-sm">IP-адреса</span>
+              <input
+                type="text"
+                value={anycubicDevIp}
+                onChange={(e) => setAnycubicDevIp(e.target.value)}
+                placeholder="192.168.31.67"
                 className="input"
               />
             </label>

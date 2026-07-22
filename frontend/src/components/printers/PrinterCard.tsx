@@ -215,7 +215,7 @@ export function PrinterCard({
             )}
           </div>
           <div className="pc-overview-main">
-            <div className="pc-model">{printer.bambu_model ?? kindLabel(printer.kind)}</div>
+            <div className="pc-model">{printer.bambu_model ?? printer.anycubic_model_name ?? kindLabel(printer.kind)}</div>
             <div className="pc-temps">
               {printer.extruder_temp != null && (
                 <span title={t("printers.nozzle")}>

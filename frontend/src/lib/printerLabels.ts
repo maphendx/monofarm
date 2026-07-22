@@ -28,6 +28,7 @@ const FLAG_LABEL: Record<string, string> = {
 const KIND_LABEL: Record<string, string> = {
   snapmaker_u1: "Snapmaker U1",
   bambu: "Bambu Lab",
+  anycubic: "Anycubic Kobra",
   other: "Інший",
 };
 

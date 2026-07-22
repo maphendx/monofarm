@@ -29,6 +29,7 @@ class PrinterCreate(BaseModel):
     bambu_model: str | None = None
     bambu_lan_mode: bool = False
     bambu_has_ams: bool | None = None
+    anycubic_dev_ip: str | None = None
     build_x: int | None = None
     build_y: int | None = None
     build_z: int | None = None
@@ -47,6 +48,7 @@ class PrinterUpdate(BaseModel):
     bambu_model: str | None = None
     bambu_lan_mode: bool | None = None
     bambu_has_ams: bool | None = None
+    anycubic_dev_ip: str | None = None
     build_x: int | None = None
     build_y: int | None = None
     build_z: int | None = None
@@ -100,6 +102,8 @@ class PrinterOut(BaseModel):
     bambu_model: str | None = None
     bambu_lan_mode: bool = False
     bambu_has_ams: bool | None = None
+    anycubic_dev_ip: str | None = None
+    anycubic_model_name: str | None = None
     is_active: bool
     is_out_of_order: bool = False
     sort_order: int = 0

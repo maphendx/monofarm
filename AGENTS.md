@@ -195,6 +195,8 @@ Before working in an area, read the matching file in `.claude/rules/`:
 - `agent.md` — local farm agent: version bumps, wire protocol, auth
 - `migrations.md` — Alembic: sequential naming, never edit applied migrations
 
+For gesture-driven UI, spring animation, drag/swipe/sheet interactions, translucent materials, or typography work, also read `.claude/skills/apple-design/SKILL.md` — Apple HIG-style interaction design guidance (adopted from [emilkowalski/skills](https://github.com/emilkowalski/skills)). Claude Code auto-loads this as a project skill; read it directly before touching animation, gesture, or visual-design code.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

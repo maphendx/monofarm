@@ -40,6 +40,7 @@ const PAGES: PageItem[] = [
 const PRINTER_KIND_LABEL: Record<string, string> = {
   snapmaker_u1: "Snapmaker U1",
   bambu:        "Bambu Lab",
+  anycubic:     "Anycubic Kobra",
   other:        "Принтер",
 };
 

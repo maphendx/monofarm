@@ -32,10 +32,37 @@ function bambuCover(model: string | null | undefined): string | null {
   return null;
 }
 
+const OTHER_COVER: [RegExp, string][] = [
+  [/neptune[\s_-]*4[\s_-]*max/i, "/printers/neptune4_max.png"],
+];
+
+function otherCover(name: string | null | undefined): string | null {
+  if (!name) return null;
+  for (const [re, path] of OTHER_COVER) {
+    if (re.test(name)) return path;
+  }
+  return null;
+}
+
+const ANYCUBIC_COVER: [RegExp, string][] = [
+  [/kobra[\s_-]*3[\s_-]*max/i, "/printers/kobra3_max.png"],
+  [/kobra[\s_-]*s1/i, "/printers/kobra_s1_max.png"],
+  [/kobra[\s_-]*3/i, "/printers/kobra3.png"],
+];
+
+function anycubicCover(modelName: string | null | undefined): string | null {
+  if (!modelName) return null;
+  for (const [re, path] of ANYCUBIC_COVER) {
+    if (re.test(modelName)) return path;
+  }
+  return null;
+}
+
 export function printerCover(printer: Printer): string | null {
   if (printer.kind === "bambu") return bambuCover(printer.bambu_model);
   if (printer.kind === "snapmaker_u1") return "/printers/snapmaker_u1.png";
-  return null;
+  if (printer.kind === "anycubic") return anycubicCover(printer.anycubic_model_name) ?? "/printers/kobra3_max.png";
+  return otherCover(printer.name);
 }
 
 export function printerNeedsClearBed(

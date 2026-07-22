@@ -15,5 +15,6 @@ This folder is the project **control center** for Claude Code: settings, hooks, 
 | `rules/migrations.md` | Alembic: sequential naming, never edit applied migrations. |
 | `commands/` | Slash workflows you trigger (`/backend-test`, etc.). |
 | `agents/` | Custom subagents for delegated tasks. |
+| `skills/apple-design/SKILL.md` | Apple HIG-style motion/interaction design guidance (springs, gestures, materials, typography), from [emilkowalski/skills](https://github.com/emilkowalski/skills). Auto-loaded by Claude Code for gesture/animation/motion frontend work; Codex reads it via the `AGENTS.md` pointer. |
 
 For private preferences without polluting team context, use root **`CLAUDE.local.md`** (gitignored).
