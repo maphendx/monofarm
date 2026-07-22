@@ -52,6 +52,10 @@ function fmtMinutes(m: number): string {
   const h = Math.floor(m / 60), min = m % 60;
   return m < 60 ? `${m} хв` : min > 0 ? `${h} г ${min} хв` : `${h} г`;
 }
+function fileNameStem(name: string): string {
+  const idx = name.indexOf(".");
+  return idx > 0 ? name.slice(0, idx) : name;
+}
 function usedSlotIndices(meta: GcodeFileMeta | null): number[] {
   if (!meta) return [];
   const total = Math.max(meta.colors?.length ?? 0, meta.types?.length ?? 0);
@@ -339,9 +343,10 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
-function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onDragStart, onDragEnd }: {
+function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onRename, onAssignGroup, onDragStart, onDragEnd }: {
   file: GcodeFile; printers: Printer[]; groups: PrinterGroup[]; canEdit: boolean; highlighted: boolean; isDragging: boolean;
   onSend: () => void; onSendTo: (p: Printer | null, groupId?: number) => void; onDelete: () => void;
+  onRename: () => void; onAssignGroup: (groupId: number | null) => void;
   onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
   const [confirmDel, setConfirmDel] = useState(false);
@@ -413,9 +418,34 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
       </div>
 
       {/* name */}
-      <p className="truncate text-xs font-medium text-[var(--text)] leading-tight" title={file.original_name}>
-        {file.original_name}
-      </p>
+      <div className="flex items-center gap-1">
+        <p className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text)] leading-tight" title={file.original_name}>
+          {file.original_name}
+        </p>
+        {canEdit && (
+          <button type="button" onClick={onRename} title="Перейменувати"
+            className="shrink-0 rounded p-0.5 text-[10px] text-[var(--text-faint)] opacity-0 transition hover:bg-[var(--surface-hi)] hover:text-[var(--text)] group-hover:opacity-100">
+            ✎
+          </button>
+        )}
+      </div>
+
+      {/* assigned printer group */}
+      {(canEdit || file.assigned_group_id) && (
+        canEdit ? (
+          <select
+            value={file.assigned_group_id ?? ""}
+            onClick={e => e.stopPropagation()}
+            onChange={e => onAssignGroup(e.target.value ? Number(e.target.value) : null)}
+            title="Група принтерів, для якої нарізано цей файл"
+            className="w-full truncate rounded-md border border-[var(--border-strong)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] outline-none focus:border-accent">
+            <option value="">— група не призначена —</option>
+            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        ) : (
+          <p className="truncate text-[10px] text-[var(--text-muted)]">🖨 {file.assigned_group_name}</p>
+        )
+      )}
 
       {/* tags */}
       {file.tags?.length > 0 && (
@@ -532,6 +562,7 @@ export default function FilesPage() {
   // Modals
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<GcodeFolder | null>(null);
+  const [renamingFile, setRenamingFile] = useState<GcodeFile | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const autoOpenAttemptsRef = useRef(0);
@@ -601,9 +632,48 @@ export default function FilesPage() {
       setFolders(updatedFolders);
       setSendAskMode(false);
       setSendFile(saved);
+      void autoAssignGroup(saved);
     } catch (err) {
       setUploadError(err instanceof ApiError ? err.message : "Помилка завантаження");
     } finally { setUploading(false); setUploadProgress(0); }
+  }
+
+  // ── Auto-assign printer group ──
+  // Best-effort: if exactly one printer group is a clean ("ok") compat match
+  // for the parsed slicer metadata, pin the file to it. Never blocks upload;
+  // the operator can always change/clear the assignment afterwards.
+  async function autoAssignGroup(file: GcodeFile) {
+    const groupsWithSpecs = printerGroups.filter(g => g.nozzle_diameter || g.build_x || g.supported_materials?.length);
+    const matches = groupsWithSpecs.filter(g => {
+      const gPrinters = printers.filter(p => p.group_id === g.id);
+      return groupCompat(file.filament_meta, g, gPrinters, file.original_name) === "ok";
+    });
+    if (matches.length !== 1) return;
+    try {
+      const updated = await api<GcodeFile>(`/api/files/${file.id}/assign-group`, {
+        method: "PATCH", body: JSON.stringify({ group_id: matches[0].id }),
+      });
+      setFiles(prev => prev.map(f => f.id === updated.id ? updated : f));
+      setSendFile(prev => prev && prev.id === updated.id ? updated : prev);
+    } catch { /* non-critical — leave unassigned */ }
+  }
+
+  // ── Assign / rename ──
+  async function handleAssignGroup(file: GcodeFile, groupId: number | null) {
+    try {
+      const updated = await api<GcodeFile>(`/api/files/${file.id}/assign-group`, {
+        method: "PATCH", body: JSON.stringify({ group_id: groupId }),
+      });
+      setFiles(prev => prev.map(f => f.id === updated.id ? updated : f));
+    } catch (e) { setUploadError(e instanceof ApiError ? e.message : "Помилка призначення групи"); }
+  }
+
+  async function handleRenameFile(file: GcodeFile, name: string) {
+    const updated = await api<GcodeFile>(`/api/files/${file.id}/rename`, {
+      method: "PATCH", body: JSON.stringify({ name }),
+    });
+    setFiles(prev => prev.map(f => f.id === updated.id ? updated : f));
+    setRenamingFile(null);
   }
 
   // ── Delete ──
@@ -902,6 +972,8 @@ export default function FilesPage() {
                 }
               }}
               onDelete={() => handleDelete(f)}
+              onRename={() => setRenamingFile(f)}
+              onAssignGroup={groupId => handleAssignGroup(f, groupId)}
               onDragStart={e => onFileDragStart(e, f)}
               onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}
             />
@@ -955,6 +1027,16 @@ export default function FilesPage() {
           initialValue={renamingFolder.name}
           onConfirm={name => handleRenameFolder(renamingFolder, name)}
           onClose={() => setRenamingFolder(null)}
+        />
+      )}
+
+      {/* rename file modal */}
+      {renamingFile && (
+        <FolderNameModal
+          title="Перейменувати файл"
+          initialValue={fileNameStem(renamingFile.original_name)}
+          onConfirm={name => handleRenameFile(renamingFile, name)}
+          onClose={() => setRenamingFile(null)}
         />
       )}
     </div>

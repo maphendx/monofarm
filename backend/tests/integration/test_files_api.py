@@ -533,3 +533,112 @@ def test_bambu_job_endpoints_list_active_cancel_and_retry(client, auth_headers, 
     assert retried.json()["ok"] is True
     assert retried.json()["job"]["status"] == "queued"
     assert retried.json()["job"]["retry_count"] == 1
+
+
+# ── Rename ────────────────────────────────────────────────────────────────────
+
+def test_rename_file_preserves_extension(client, auth_headers, cleanup_uploads):
+    up = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("original.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+
+    resp = client.patch(
+        f"/api/files/{up['id']}/rename", headers=auth_headers, json={"name": "Lid v2"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["original_name"] == "Lid v2.gcode"
+
+
+def test_rename_file_strips_extension_if_user_typed_it(client, auth_headers, cleanup_uploads):
+    up = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("original.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+
+    resp = client.patch(
+        f"/api/files/{up['id']}/rename", headers=auth_headers, json={"name": "Lid v2.gcode"}
+    )
+    assert resp.status_code == 200, resp.text
+    # No doubled extension
+    assert resp.json()["original_name"] == "Lid v2.gcode"
+
+
+def test_rename_file_rejects_empty_name(client, auth_headers, cleanup_uploads):
+    up = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("original.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+
+    resp = client.patch(f"/api/files/{up['id']}/rename", headers=auth_headers, json={"name": "   "})
+    assert resp.status_code == 400
+
+
+def test_rename_file_404_for_missing_file(client, auth_headers):
+    resp = client.patch("/api/files/999999/rename", headers=auth_headers, json={"name": "x"})
+    assert resp.status_code == 404
+
+
+# ── Assign printer group ───────────────────────────────────────────────────────
+
+def test_assign_group_sets_and_clears(client, auth_headers, cleanup_uploads, db_session, test_org):
+    from app.models.printer_group import PrinterGroup
+
+    group = PrinterGroup(organization_id=test_org.id, name="U1 farm", nozzle_diameter=0.4)
+    db_session.add(group)
+    db_session.commit()
+    db_session.refresh(group)
+
+    up = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("part.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+    assert up["assigned_group_id"] is None
+
+    resp = client.patch(
+        f"/api/files/{up['id']}/assign-group", headers=auth_headers, json={"group_id": group.id}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["assigned_group_id"] == group.id
+    assert resp.json()["assigned_group_name"] == "U1 farm"
+
+    listed = client.get("/api/files", headers=auth_headers).json()
+    assert next(f for f in listed if f["id"] == up["id"])["assigned_group_name"] == "U1 farm"
+
+    cleared = client.patch(
+        f"/api/files/{up['id']}/assign-group", headers=auth_headers, json={"group_id": None}
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["assigned_group_id"] is None
+    assert cleared.json()["assigned_group_name"] is None
+
+
+def test_assign_group_rejects_group_from_other_org(client, auth_headers, cleanup_uploads, db_session):
+    from app.models.organization import Organization
+    from app.models.printer_group import PrinterGroup
+
+    other_org = Organization(name="Other Farm", slug="other-farm")
+    db_session.add(other_org)
+    db_session.commit()
+    db_session.refresh(other_org)
+    foreign_group = PrinterGroup(organization_id=other_org.id, name="Not mine")
+    db_session.add(foreign_group)
+    db_session.commit()
+    db_session.refresh(foreign_group)
+
+    up = client.post(
+        "/api/files/upload",
+        headers=auth_headers,
+        files={"file": ("part.gcode", GCODE_SAMPLE, "application/octet-stream")},
+    ).json()
+
+    resp = client.patch(
+        f"/api/files/{up['id']}/assign-group",
+        headers=auth_headers,
+        json={"group_id": foreign_group.id},
+    )
+    assert resp.status_code == 404

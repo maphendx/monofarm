@@ -30,6 +30,10 @@ class GcodeFile(Base):
     folder_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("gcode_folders.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Printer group this file was sliced for (manual or auto-detected from filament_meta)
+    assigned_group_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("printer_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     uploaded_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

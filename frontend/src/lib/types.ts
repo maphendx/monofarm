@@ -259,6 +259,8 @@ export interface GcodeFile {
   uploaded_at: string;
   uploaded_by_name: string | null;
   folder_id: number | null;
+  assigned_group_id: number | null;
+  assigned_group_name: string | null;
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 

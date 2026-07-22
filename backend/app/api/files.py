@@ -27,6 +27,7 @@ from app.services.auto_tag import auto_tag_file
 from app.models.gcode_folder import GcodeFolder
 from app.models.organization import Organization
 from app.models.printer import Printer, PrinterKind
+from app.models.printer_group import PrinterGroup
 from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
 from app.schemas.tag import TagOut
@@ -77,6 +78,8 @@ class GcodeFileOut(BaseModel):
     uploaded_at: str
     uploaded_by_name: str | None
     folder_id: int | None
+    assigned_group_id: int | None
+    assigned_group_name: str | None
     tags: list[TagOut] = []
 
     model_config = {"from_attributes": True}
@@ -101,6 +104,14 @@ class FolderRename(BaseModel):
 
 class MoveFilePayload(BaseModel):
     folder_id: Optional[int] = None
+
+
+class FileRename(BaseModel):
+    name: str
+
+
+class AssignGroupPayload(BaseModel):
+    group_id: Optional[int] = None
 
 
 class SendPayload(BaseModel):
@@ -131,7 +142,7 @@ class SendResult(BaseModel):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
+def _to_out(f: GcodeFile, db: Session, group_names: dict[int, str] | None = None) -> GcodeFileOut:
     name: str | None = None
     if f.uploaded_by_id:
         u = db.get(User, f.uploaded_by_id)
@@ -140,6 +151,13 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
     has_thumbnail = bool(raw_meta.get("has_thumbnail"))
     meta_fields = {k: v for k, v in raw_meta.items() if k != "has_thumbnail"}
     meta = FilamentMeta(**meta_fields) if meta_fields else None
+    group_name: str | None = None
+    if f.assigned_group_id:
+        if group_names is not None:
+            group_name = group_names.get(f.assigned_group_id)
+        else:
+            g = db.get(PrinterGroup, f.assigned_group_id)
+            group_name = g.name if g else None
     return GcodeFileOut(
         id=f.id,
         original_name=f.original_name,
@@ -151,6 +169,8 @@ def _to_out(f: GcodeFile, db: Session) -> GcodeFileOut:
         uploaded_at=f.uploaded_at.isoformat(),
         uploaded_by_name=name,
         folder_id=f.folder_id,
+        assigned_group_id=f.assigned_group_id,
+        assigned_group_name=group_name,
         tags=[TagOut(id=t.id, kind=t.kind, label=t.label, color=t.color, meta=t.meta, display=t.display) for t in (f.tags or [])],
     )
 
@@ -290,7 +310,11 @@ def list_files(
     if healed:
         db.commit()
 
-    return [_to_out(f, db) for f in files]
+    group_names = {
+        g.id: g.name
+        for g in db.query(PrinterGroup).filter(PrinterGroup.organization_id == org.id).all()
+    }
+    return [_to_out(f, db, group_names) for f in files]
 
 
 @router.post("/upload", response_model=GcodeFileOut, status_code=status.HTTP_201_CREATED)
@@ -415,6 +439,69 @@ def move_file(
             raise HTTPException(status_code=404, detail="Папку не знайдено")
 
     row.folder_id = payload.folder_id
+    db.commit()
+    db.refresh(row)
+    return _to_out(row, db)
+
+
+@router.patch("/{file_id}/rename", response_model=GcodeFileOut)
+def rename_file(
+    file_id: int,
+    payload: FileRename,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> GcodeFileOut:
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не знайдено")
+
+    new_stem = payload.name.strip()
+    if not new_stem:
+        raise HTTPException(status_code=400, detail="Назва файлу не може бути порожньою")
+
+    # Preserve the original extension (including double-extension .gcode.3mf) —
+    # renaming must never change the file type, since it drives Bambu 3mf vs
+    # Moonraker gcode dispatch logic downstream.
+    _p = Path(row.original_name)
+    ext = ("".join(_p.suffixes)) if len(_p.suffixes) > 1 else _p.suffix
+    if ext and new_stem.lower().endswith(ext.lower()):
+        new_stem = new_stem[: -len(ext)].strip()
+    if not new_stem:
+        raise HTTPException(status_code=400, detail="Назва файлу не може бути порожньою")
+
+    new_name = f"{new_stem}{ext}"
+    if len(new_name) > 255:
+        raise HTTPException(status_code=400, detail="Назва файлу занадто довга (макс 255 символів)")
+
+    row.original_name = new_name
+    db.commit()
+    db.refresh(row)
+    return _to_out(row, db)
+
+
+@router.patch("/{file_id}/assign-group", response_model=GcodeFileOut)
+def assign_file_group(
+    file_id: int,
+    payload: AssignGroupPayload,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
+) -> GcodeFileOut:
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не знайдено")
+
+    if payload.group_id is not None:
+        group = (
+            db.query(PrinterGroup)
+            .filter(PrinterGroup.id == payload.group_id, PrinterGroup.organization_id == org.id)
+            .first()
+        )
+        if not group:
+            raise HTTPException(status_code=404, detail="Групу принтерів не знайдено")
+
+    row.assigned_group_id = payload.group_id
     db.commit()
     db.refresh(row)
     return _to_out(row, db)
