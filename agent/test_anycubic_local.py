@@ -6,6 +6,7 @@ Crypto/handshake test vectors mirror chrisfore/anycubic_ha_local's test suite
 import base64
 import hashlib
 import json
+import time
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.padding import PKCS7
@@ -136,6 +137,14 @@ def test_commands_pause_resume_stop_topic_and_payload():
     assert topic == "anycubic/anycubicCloud/v1/web/printer/20026/DEV-1/print"
     assert payload["type"] == "print" and payload["action"] == "pause"
     assert payload["data"] == {"taskid": "-1"}
+
+
+def test_commands_default_to_a_current_timestamp():
+    before = int(time.time() * 1000)
+    _topic, payload = commands.build("20026", "DEV-1", "pause")
+    after = int(time.time() * 1000)
+
+    assert before <= payload["timestamp"] <= after
 
 
 def test_commands_light_on_defaults_to_full_brightness():
