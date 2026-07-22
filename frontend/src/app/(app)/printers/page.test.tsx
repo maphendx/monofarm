@@ -46,5 +46,6 @@ describe("printers page add flow", () => {
     ));
 
     expect(markup).toContain('value="192.168.31.67"');
+    expect(markup).toContain('type="button" disabled=""');
   });
 });

@@ -69,8 +69,10 @@ describe("Anycubic add-printer flow", () => {
     ));
 
     expect(markup).toContain('value="192.168.31.67"');
+    expect(markup).toContain('type="button" disabled=""');
     expect(buildAnycubicUpdateFields("anycubic", " 192.168.31.68 ")).toEqual({
       anycubic_dev_ip: "192.168.31.68",
     });
+    expect(buildAnycubicUpdateFields("bambu", "192.168.31.68")).toEqual({});
   });
 });
