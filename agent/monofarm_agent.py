@@ -40,7 +40,7 @@ import urllib.parse as _urlparse_mod
 import uuid
 from pathlib import Path
 
-AGENT_VERSION = "0.8.14"
+AGENT_VERSION = "0.8.15"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
@@ -48,6 +48,8 @@ MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 # SD-card flushes block the data socket well beyond the handshake timeout.
 BAMBU_FTPS_CONNECT_TIMEOUT = 15
 BAMBU_FTPS_IO_TIMEOUT = 120
+BAMBU_FTPS_CONNECT_ATTEMPTS = 3
+BAMBU_FTPS_RETRY_DELAY = 1.0
 MQTT_SUCCESS_RC = 0
 
 try:
@@ -631,6 +633,26 @@ def _bambu_mark_tls_failure(ip: str, exc: Exception) -> None:
         if _bambu_tls_timeouts[ip] >= 2:
             log.info("Bambu connect kept timing out for %s — retrying with unverified TLS", ip)
             _bambu_tls_insecure.add(ip)
+
+
+def _connect_bambu_ftps_with_retry(ip: str, connect):
+    """Retry only the FTPS control connection; never replay a partial upload."""
+    for attempt in range(1, BAMBU_FTPS_CONNECT_ATTEMPTS + 1):
+        try:
+            return connect()
+        except TimeoutError as exc:
+            if attempt >= BAMBU_FTPS_CONNECT_ATTEMPTS:
+                raise
+            log.warning(
+                "Bambu FTPS connect failed for %s (attempt %s/%s): %s; retrying",
+                ip,
+                attempt,
+                BAMBU_FTPS_CONNECT_ATTEMPTS,
+                exc,
+            )
+            time.sleep(BAMBU_FTPS_RETRY_DELAY)
+
+    raise RuntimeError("Bambu FTPS retry loop exhausted")
 
 
 async def _u1_camera_keepalive(mr_ws, moonraker_url: str) -> None:
@@ -2211,8 +2233,15 @@ async def handle_bambu_upload(ws, req: dict) -> None:
 
         def _ftp_connect() -> "ftplib.FTP_TLS":
             ftp = _ImplicitFTP_TLS(context=_bambu_ssl_context(ip))
-            ftp.connect(ip, 990, timeout=BAMBU_FTPS_CONNECT_TIMEOUT)
-            ftp.login(user="bblp", passwd=access_code)
+            try:
+                ftp.connect(ip, 990, timeout=BAMBU_FTPS_CONNECT_TIMEOUT)
+                ftp.login(user="bblp", passwd=access_code)
+            except Exception:
+                try:
+                    ftp.close()
+                except Exception:
+                    pass
+                raise
             # ftplib reuses self.timeout for every data connection: keep the
             # short timeout for the TCP+TLS handshake, then relax it so an SD
             # write stall mid-transfer doesn't kill the upload
@@ -2222,11 +2251,7 @@ async def handle_bambu_upload(ws, req: dict) -> None:
             return ftp
 
         def _ftp_upload() -> str:
-            try:
-                ftp = _ftp_connect()
-            except _ssl.SSLError as exc:
-                _bambu_mark_tls_failure(ip, exc)
-                ftp = _ftp_connect()
+            ftp = _connect_bambu_ftps_with_retry(ip, _ftp_connect)
             ftp.prot_p()
             remote_path = filename
             if target_dir != "sdcard":

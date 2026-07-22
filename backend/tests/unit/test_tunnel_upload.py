@@ -8,6 +8,7 @@ an upload that has actually stalled (no progress messages), not a slow-but-alive
 
 import asyncio
 import json
+import logging
 
 import pytest
 
@@ -27,12 +28,16 @@ def clean_tunnel_state():
     tunnel._tunnels.clear()
     tunnel._agent_capabilities.clear()
     tunnel._pending.clear()
+    tunnel._pending_org.clear()
     tunnel._pending_upload_progress.clear()
+    tunnel._upload_progress_error_logged.clear()
     yield
     tunnel._tunnels.clear()
     tunnel._agent_capabilities.clear()
     tunnel._pending.clear()
+    tunnel._pending_org.clear()
     tunnel._pending_upload_progress.clear()
+    tunnel._upload_progress_error_logged.clear()
 
 
 def _register(org_id: int = 1) -> FakeWS:
@@ -67,10 +72,14 @@ def test_slow_upload_survives_past_sized_timeout_while_progress_flows(monkeypatc
         # Progress every 0.1s for 0.5s total — five times the old 0.1s budget.
         for i in range(5):
             await tunnel.handle_agent_message(
-                {"id": req_id, "type": "upload_progress", "sent": i + 1, "total": 5})
+                {"id": req_id, "type": "upload_progress", "sent": i + 1, "total": 5},
+                org_id=1,
+            )
             await asyncio.sleep(0.1)
         await tunnel.handle_agent_message(
-            {"id": req_id, "status": 201, "body": {"result": {"print_started": False}}, "error": None})
+            {"id": req_id, "status": 201, "body": {"result": {"print_started": False}}, "error": None},
+            org_id=1,
+        )
         return await upload
 
     result = asyncio.run(scenario())
@@ -103,7 +112,9 @@ def test_explicit_timeout_is_a_hard_cap_even_with_progress(monkeypatch):
         async def feeder():
             while True:
                 await tunnel.handle_agent_message(
-                    {"id": req_id, "type": "upload_progress", "sent": 1, "total": 5})
+                    {"id": req_id, "type": "upload_progress", "sent": 1, "total": 5},
+                    org_id=1,
+                )
                 await asyncio.sleep(0.05)
 
         feed = asyncio.create_task(feeder())
@@ -130,7 +141,9 @@ def test_unregister_only_fails_requests_of_its_own_org(monkeypatch):
         await asyncio.sleep(0.05)
         assert not upload.done()
         await tunnel.handle_agent_message(
-            {"id": _req_id(ws1), "status": 201, "body": {"ok": True}, "error": None})
+            {"id": _req_id(ws1), "status": 201, "body": {"ok": True}, "error": None},
+            org_id=1,
+        )
         return await upload
 
     assert asyncio.run(scenario()) == {"ok": True}
@@ -149,7 +162,9 @@ def test_presigned_url_skips_chunk_transfer_when_agent_supports_it(monkeypatch):
         ))
         await asyncio.sleep(0.05)
         await tunnel.handle_agent_message(
-            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None})
+            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None},
+            org_id=1,
+        )
         return await upload
 
     assert asyncio.run(scenario()) == {"ok": True}
@@ -171,7 +186,9 @@ def test_presigned_url_falls_back_to_chunks_for_old_agents(monkeypatch):
         ))
         await asyncio.sleep(0.05)
         await tunnel.handle_agent_message(
-            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None})
+            {"id": _req_id(ws), "status": 201, "body": {"ok": True}, "error": None},
+            org_id=1,
+        )
         return await upload
 
     assert asyncio.run(scenario()) == {"ok": True}
@@ -201,8 +218,11 @@ def test_bambu_upload_forwards_agent_progress(monkeypatch):
             "phase": "uploading",
             "sent": 50,
             "total": 100,
-        })
-        await tunnel.handle_agent_message({"id": req_id, "status": 200, "body": {"path": "model.3mf"}})
+        }, org_id=1)
+        await tunnel.handle_agent_message(
+            {"id": req_id, "status": 200, "body": {"path": "model.3mf"}},
+            org_id=1,
+        )
         return await upload
 
     assert asyncio.run(scenario()) == "model.3mf"
@@ -226,6 +246,114 @@ def test_bambu_upload_fails_when_agent_stalls(monkeypatch):
     with pytest.raises(RuntimeError, match="без прогресу"):
         asyncio.run(scenario())
     assert ws.sent
+
+
+def test_upload_progress_callback_error_does_not_escape_agent_message_loop():
+    async def broken_callback(_data):
+        raise RuntimeError("job was cancelled while upload was still running")
+
+    tunnel._pending_upload_progress["upload-1"] = broken_callback
+
+    asyncio.run(tunnel.handle_agent_message({
+        "id": "upload-1",
+        "type": "upload_progress",
+        "phase": "uploading",
+        "sent": 1,
+        "total": 100,
+    }))
+
+
+def test_upload_progress_callback_error_is_logged_once(caplog):
+    async def broken_callback(_data):
+        raise RuntimeError("job was cancelled while upload was still running")
+
+    tunnel._pending_org["upload-1"] = 1
+    tunnel._pending_upload_progress["upload-1"] = broken_callback
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(2):
+            asyncio.run(tunnel.handle_agent_message({
+                "id": "upload-1",
+                "type": "upload_progress",
+                "phase": "uploading",
+                "sent": 1,
+                "total": 100,
+            }, org_id=1))
+
+    messages = [record.message for record in caplog.records if "upload_progress callback failed" in record.message]
+    assert len(messages) == 1
+
+
+def test_upload_progress_from_another_org_is_ignored():
+    seen: list[dict] = []
+    tunnel._pending_org["upload-1"] = 1
+    tunnel._pending_upload_progress["upload-1"] = seen.append
+
+    asyncio.run(tunnel.handle_agent_message({
+        "id": "upload-1",
+        "type": "upload_progress",
+        "phase": "uploading",
+        "sent": 1,
+        "total": 100,
+    }, org_id=2))
+
+    assert seen == []
+
+
+@pytest.mark.parametrize(
+    ("sent", "total"),
+    [
+        (-1, 100),
+        (1, -1),
+        (True, 100),
+        (1, "100"),
+        (101, 100),
+    ],
+)
+def test_invalid_upload_progress_envelope_is_ignored(sent, total):
+    seen: list[dict] = []
+    tunnel._pending_org["upload-1"] = 1
+    tunnel._pending_upload_progress["upload-1"] = seen.append
+
+    asyncio.run(tunnel.handle_agent_message({
+        "id": "upload-1",
+        "type": "upload_progress",
+        "phase": "uploading",
+        "sent": sent,
+        "total": total,
+    }, org_id=1))
+
+    assert seen == []
+
+
+def test_proxy_stream_binds_chunks_to_the_requesting_org():
+    ws = _register(1)
+
+    async def scenario():
+        stream = tunnel.proxy_stream(1, "http://camera/stream", chunk_timeout=1)
+        next_chunk = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0.01)
+        req_id = _req_id(ws)
+        assert tunnel._pending_org.get(req_id) == 1
+
+        await tunnel.handle_agent_message({
+            "id": req_id,
+            "type": "chunk",
+            "data": "aW50cnVkZXI=",
+        }, org_id=2)
+        await asyncio.sleep(0)
+        assert not next_chunk.done()
+
+        await tunnel.handle_agent_message({
+            "id": req_id,
+            "type": "stream_end",
+        }, org_id=1)
+        with pytest.raises(StopAsyncIteration):
+            await next_chunk
+        await stream.aclose()
+        assert req_id not in tunnel._pending_org
+
+    asyncio.run(scenario())
 
 
 def test_unregister_of_stale_socket_keeps_replacement_tunnel():

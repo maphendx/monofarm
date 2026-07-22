@@ -41,6 +41,7 @@ _pending: dict[str, asyncio.Future] = {}
 # request_id → org_id — lets unregister() fail only its own org's requests
 _pending_org: dict[str, int] = {}
 _pending_upload_progress: dict[str, Callable[[dict[str, Any]], Awaitable[None] | None]] = {}
+_upload_progress_error_logged: set[tuple[int, str]] = set()
 # request_id → Queue  (streaming)
 _pending_streams: dict[str, asyncio.Queue] = {}
 
@@ -179,6 +180,7 @@ async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
         if not fut.done():
             fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
         _pending_upload_progress.pop(req_id, None)
+        _upload_progress_error_logged.discard((org_id, req_id))
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
@@ -380,6 +382,10 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
     if not req_id:
         return
 
+    pending_org = _pending_org.get(req_id)
+    if pending_org is not None and pending_org != org_id:
+        return
+
     msg_type = data.get("type")
 
     if msg_type == "chunk":
@@ -400,11 +406,33 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "upload_progress":
+        sent = data.get("sent")
+        total = data.get("total")
+        if (
+            not isinstance(sent, int)
+            or isinstance(sent, bool)
+            or sent < 0
+            or not isinstance(total, int)
+            or isinstance(total, bool)
+            or total < 0
+            or (total > 0 and sent > total)
+        ):
+            return
         callback = _pending_upload_progress.get(req_id)
         if callback:
-            result = callback(data)
-            if inspect.isawaitable(result):
-                await result
+            try:
+                result = callback(data)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception as exc:
+                error_key = (org_id, req_id)
+                if error_key not in _upload_progress_error_logged:
+                    _upload_progress_error_logged.add(error_key)
+                    log.warning(
+                        "upload_progress callback failed for request %s (%s); keeping agent tunnel alive",
+                        req_id,
+                        type(exc).__name__,
+                    )
         return
 
     # Regular (non-streaming) response
@@ -455,6 +483,7 @@ async def bambu_camera_stream(
     req_id = str(uuid.uuid4())
     q: asyncio.Queue[bytes | None] = asyncio.Queue()
     _pending_streams[req_id] = q
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({
@@ -470,6 +499,7 @@ async def bambu_camera_stream(
         log.warning("Bambu camera stream timed out for org %s ip %s", org_id, ip)
     finally:
         _pending_streams.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
 
 async def ffmpeg_stream(
@@ -489,6 +519,7 @@ async def ffmpeg_stream(
     req_id = str(uuid.uuid4())
     q: asyncio.Queue[bytes | None] = asyncio.Queue()
     _pending_streams[req_id] = q
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({
@@ -503,6 +534,7 @@ async def ffmpeg_stream(
         log.warning("FFmpeg stream timed out for org %s", org_id)
     finally:
         _pending_streams.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
 
 async def proxy_stream(
@@ -521,6 +553,7 @@ async def proxy_stream(
     req_id = str(uuid.uuid4())
     q: asyncio.Queue[bytes | None] = asyncio.Queue()
     _pending_streams[req_id] = q
+    _pending_org[req_id] = org_id
 
     try:
         await ws.send_text(json.dumps({"id": req_id, "method": "STREAM", "url": url}))
@@ -533,6 +566,7 @@ async def proxy_stream(
         log.warning("Stream timed out for org %s url %s", org_id, url)
     finally:
         _pending_streams.pop(req_id, None)
+        _pending_org.pop(req_id, None)
 
 
 # ── File upload helpers ───────────────────────────────────────────────────────
@@ -620,6 +654,7 @@ async def send_bambu_upload(
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
         _pending_upload_progress.pop(req_id, None)
+        _upload_progress_error_logged.discard((org_id, req_id))
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_UPLOAD failed: {resp.get('error')}")
@@ -816,6 +851,7 @@ async def send_moonraker_upload(
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
         _pending_upload_progress.pop(req_id, None)
+        _upload_progress_error_logged.discard((org_id, req_id))
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise MoonrakerError(f"Agent upload failed ({resp.get('status')}): {resp.get('error')}")

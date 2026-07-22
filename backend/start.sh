@@ -21,5 +21,6 @@ else
     echo "=== running migrations ==="
     alembic upgrade head
     echo "=== migrations done, starting uvicorn on ${PORT:-8000} ==="
-    exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+    exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" \
+        --ws-ping-timeout "${WS_PING_TIMEOUT:-120}"
 fi
