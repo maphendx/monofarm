@@ -2,6 +2,7 @@
 
 Ported from chrisfore/anycubic_ha_local (MIT License).
 """
+import time
 import uuid
 
 from .const import query_topic
@@ -44,6 +45,7 @@ def build(model_id: str, device_id: str, command: str, *, value=None, on=None,
     else:
         raise ValueError(f"unknown command: {command}")
 
-    payload = {"type": mtype, "action": action, "timestamp": ts or 0,
+    timestamp = int(time.time() * 1000) if ts is None else ts
+    payload = {"type": mtype, "action": action, "timestamp": timestamp,
                "msgid": msgid or str(uuid.uuid4()), "data": data}
     return query_topic(model_id, device_id, mtype), payload

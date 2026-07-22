@@ -37,9 +37,10 @@ import tempfile
 import threading
 import time
 import urllib.parse as _urlparse_mod
+import uuid
 from pathlib import Path
 
-AGENT_VERSION = "0.8.13"
+AGENT_VERSION = "0.8.14"
 UPDATE_INTERVAL = 6 * 3600  # check every 6 hours
 MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL = 5.0
 
@@ -1083,8 +1084,33 @@ async def _bambu_lan_config_loop(cloud_ws, server: str, token: str) -> None:
 _anycubic_sub_tasks: dict[str, "asyncio.Task[None]"] = {}
 _anycubic_sub_configs: dict[str, str] = {}
 _ANYCUBIC_CONFIG_INTERVAL = 15
+_ANYCUBIC_STATUS_POLL_INTERVAL = 15
 # dev_id → connected paho client from the monitor loop, reused for commands.
 _anycubic_live_clients: dict[str, object] = {}
+
+
+def _anycubic_poll_requests(
+    model_id: str,
+    dev_id: str,
+    *,
+    timestamp_ms: int | None = None,
+) -> list[tuple[str, str]]:
+    from anycubic_local import const as ac_const
+
+    timestamp = int(time.time() * 1000) if timestamp_ms is None else timestamp_ms
+    return [
+        (
+            ac_const.query_topic(model_id, dev_id, msg_type),
+            json.dumps({
+                "type": msg_type,
+                "action": action,
+                "timestamp": timestamp,
+                "msgid": str(uuid.uuid4()),
+                "data": None,
+            }),
+        )
+        for msg_type, action in (("info", "query"), ("multiColorBox", "getInfo"))
+    ]
 
 
 async def handle_anycubic_command(ws, req: dict) -> None:
@@ -1102,6 +1128,7 @@ async def handle_anycubic_command(ws, req: dict) -> None:
         topic, payload = anycubic_commands.build(
             model_id, dev_id, command,
             value=req.get("value"), on=req.get("on"), brightness=req.get("brightness"),
+            ts=int(time.time() * 1000),
         )
         client.publish(topic, json.dumps(payload))
         result = {"id": req_id, "status": 200, "body": {"ok": True}, "error": None}
@@ -1196,14 +1223,15 @@ async def _anycubic_lan_loop(cloud_ws, printer: dict, server: str, token: str) -
             client.connect_async(hs.broker_host, hs.broker_port, keepalive=60)
             client.loop_start()
             await asyncio.wait_for(connected.wait(), timeout=12)
+            if not client.is_connected():
+                raise RuntimeError("MQTT connection rejected")
             _anycubic_live_clients[dev_id] = client
             while True:
-                # ACE state is not pushed autonomously — poll it (see PROTOCOL-VALIDATED.md).
-                await asyncio.sleep(30)
-                if client.is_connected():
-                    body = json.dumps({"type": "multiColorBox", "action": "getInfo",
-                                        "timestamp": int(time.time() * 1000), "msgid": "poll", "data": None})
-                    client.publish(ac_const.query_topic(hs.model_id, dev_id, "multiColorBox"), body)
+                if not client.is_connected():
+                    raise RuntimeError("MQTT connection lost")
+                for topic, body in _anycubic_poll_requests(hs.model_id, dev_id):
+                    client.publish(topic, body)
+                await asyncio.sleep(_ANYCUBIC_STATUS_POLL_INTERVAL)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

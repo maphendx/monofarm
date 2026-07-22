@@ -108,7 +108,11 @@ def test_tunnel_passes_organization_to_anycubic_cache(monkeypatch):
 
 
 def test_bad_anycubic_telemetry_does_not_drop_agent_tunnel(monkeypatch):
+    called = False
+
     def reject_payload(_org_id, _dev_id, _payload):
+        nonlocal called
+        called = True
         raise ValueError("partial ACE payload")
 
     monkeypatch.setattr(anycubic, "handle_agent_ace_report", reject_payload)
@@ -117,3 +121,5 @@ def test_bad_anycubic_telemetry_does_not_drop_agent_tunnel(monkeypatch):
         {"type": "ANYCUBIC_ACE_PUSH", "dev_id": "DEV-5", "payload": {"multi_color_box": [{}]}},
         org_id=23,
     ))
+
+    assert called

@@ -40,7 +40,11 @@ def _unified_state(payload: dict) -> str:
     return _STATE_MAP.get(raw or "", "unknown")
 
 
-def handle_agent_report(dev_id: str, raw_data: dict) -> dict:
+def _cache_key(org_id: int, section: str, dev_id: str) -> str:
+    return f"anycubic:{org_id}:{section}:{dev_id}"
+
+
+def handle_agent_report(org_id: int, dev_id: str, raw_data: dict) -> dict:
     """Parse a raw `info` report `.data` payload (as relayed by the agent) and cache it."""
     parsed = anycubic_protocol.parse_info(raw_data)
     state = {
@@ -56,31 +60,32 @@ def handle_agent_report(dev_id: str, raw_data: dict) -> dict:
         "total_layers": parsed.get("total_layers"),
         "camera_url": parsed.get("camera_url"),
     }
-    cache_set(f"anycubic:state:{dev_id}", state, STATUS_CACHE_TTL)
-    cache_set(f"anycubic:state:stale:{dev_id}", state, STATUS_STALE_TTL)
+    cache_set(_cache_key(org_id, "state", dev_id), state, STATUS_CACHE_TTL)
+    cache_set(_cache_key(org_id, "state:stale", dev_id), state, STATUS_STALE_TTL)
     return state
 
 
-def handle_agent_ace_report(dev_id: str, raw_data: dict) -> list[dict]:
+def handle_agent_ace_report(org_id: int, dev_id: str, raw_data: dict) -> list[dict]:
     """Parse a raw `multiColorBox` report `.data` payload, merge with cached boxes, and cache."""
     new_boxes = anycubic_protocol.parse_multicolorbox(raw_data)
-    prev_boxes = cache_get(f"anycubic:ace:{dev_id}") or []
+    key = _cache_key(org_id, "ace", dev_id)
+    prev_boxes = cache_get(key) or []
     merged = anycubic_protocol.merge_boxes(prev_boxes, new_boxes)
-    cache_set(f"anycubic:ace:{dev_id}", merged, ACE_CACHE_TTL)
+    cache_set(key, merged, ACE_CACHE_TTL)
     return merged
 
 
-def get_cached_state(dev_id: str) -> dict:
+def get_cached_state(org_id: int, dev_id: str) -> dict:
     """Return cached LAN state for a device, or an offline placeholder."""
-    fresh = cache_get(f"anycubic:state:{dev_id}")
+    fresh = cache_get(_cache_key(org_id, "state", dev_id))
     if fresh is not None:
         return {**fresh, "state_stale": False}
-    stale = cache_get(f"anycubic:state:stale:{dev_id}")
+    stale = cache_get(_cache_key(org_id, "state:stale", dev_id))
     if stale is not None:
         return {**stale, "state_stale": True}
     return {"state": "offline"}
 
 
-def get_ace_filaments(dev_id: str) -> list[dict]:
+def get_ace_filaments(org_id: int, dev_id: str) -> list[dict]:
     """Return cached ACE multi-material slot data for a device."""
-    return cache_get(f"anycubic:ace:{dev_id}") or []
+    return cache_get(_cache_key(org_id, "ace", dev_id)) or []

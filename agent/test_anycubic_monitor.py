@@ -48,7 +48,7 @@ def test_anycubic_command_supplies_live_timestamp_for_source_updates(monkeypatch
 
     monkeypatch.setattr(commands, "build", fake_build)
     monkeypatch.setattr(monofarm_agent.time, "time", lambda: 1.234)
-    monofarm_agent._anycubic_live_clients["DEV-1"] = Client()
+    monkeypatch.setitem(monofarm_agent._anycubic_live_clients, "DEV-1", Client())
 
     asyncio.run(handle_anycubic_command(WebSocket(), {
         "id": "request-1",

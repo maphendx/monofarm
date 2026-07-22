@@ -6,22 +6,30 @@ import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
+import { useT } from "@/lib/i18n";
 import { kindLabel, stateLabel } from "@/lib/printerLabels";
 import type { Printer, PrinterKind } from "@/lib/types";
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
+import {
+  buildAnycubicCreateBody,
+  buildAnycubicUpdateFields,
+  runSingleSubmission,
+} from "@/components/printers/printerWizardModel";
 
 // ── types & constants ─────────────────────────────────────────────────────────
 
-type WizardStep = "choose" | "bambu" | "moonraker" | "manual" | "done";
+type WizardStep = "choose" | "bambu" | "anycubic" | "moonraker" | "manual" | "done";
 
 const KIND_OPTIONS: { value: PrinterKind; label: string; desc: string }[] = [
   { value: "bambu",        label: "Bambu Lab",           desc: "P1S, A1, A1 Mini, X1 — підключення через Bambu Cloud або вручну" },
+  { value: "anycubic",     label: "Anycubic",            desc: "Kobra 3 / S1 — локальне підключення через IP-адресу" },
   { value: "snapmaker_u1", label: "Moonraker / Klipper", desc: "Snapmaker U1, Voron, Ender з Klipper — через Moonraker API" },
   { value: "other",        label: "Вручну",              desc: "Будь-який принтер без API — стан оновлюється вручну" },
 ];
 
 const KIND_BADGE: Record<string, string> = {
   bambu:        "badge badge-ok",
+  anycubic:     "badge badge-accent",
   snapmaker_u1: "badge badge-accent",
   other:        "badge badge-neutral",
 };
@@ -40,17 +48,18 @@ interface PrinterForm {
   name: string; kind: PrinterKind;
   moonraker_url: string; bambu_dev_id: string;
   bambu_access_code: string; bambu_dev_ip: string;
+  anycubic_dev_ip: string;
   bambu_model: string; is_active: boolean;
   build_x: string; build_y: string; build_z: string;
   nozzle_diameter: string;
 }
 
 function emptyForm(): PrinterForm {
-  return { name: "", kind: "snapmaker_u1", moonraker_url: "", bambu_dev_id: "", bambu_access_code: "", bambu_dev_ip: "", bambu_model: "", is_active: true, build_x: "", build_y: "", build_z: "", nozzle_diameter: "" };
+  return { name: "", kind: "snapmaker_u1", moonraker_url: "", bambu_dev_id: "", bambu_access_code: "", bambu_dev_ip: "", anycubic_dev_ip: "", bambu_model: "", is_active: true, build_x: "", build_y: "", build_z: "", nozzle_diameter: "" };
 }
 
 function printerToForm(p: Printer): PrinterForm {
-  return { name: p.name, kind: p.kind, moonraker_url: p.moonraker_url ?? "", bambu_dev_id: p.bambu_dev_id ?? "", bambu_access_code: "", bambu_dev_ip: p.bambu_dev_ip ?? "", bambu_model: p.bambu_model ?? "", is_active: p.is_active, build_x: p.build_x?.toString() ?? "", build_y: p.build_y?.toString() ?? "", build_z: p.build_z?.toString() ?? "", nozzle_diameter: p.nozzle_diameter?.toString() ?? "" };
+  return { name: p.name, kind: p.kind, moonraker_url: p.moonraker_url ?? "", bambu_dev_id: p.bambu_dev_id ?? "", bambu_access_code: "", bambu_dev_ip: p.bambu_dev_ip ?? "", anycubic_dev_ip: p.anycubic_dev_ip ?? "", bambu_model: p.bambu_model ?? "", is_active: p.is_active, build_x: p.build_x?.toString() ?? "", build_y: p.build_y?.toString() ?? "", build_z: p.build_z?.toString() ?? "", nozzle_diameter: p.nozzle_diameter?.toString() ?? "" };
 }
 
 const inp = "input";
@@ -84,28 +93,33 @@ function WizardTypeCard({ icon, title, desc, badge, onClick }: { icon: React.Rea
 
 // ── add wizard ────────────────────────────────────────────────────────────────
 
-function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+export function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const t = useT();
   const [step, setStep] = useState<WizardStep>("choose");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [anycubicIp, setAnycubicIp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const createInFlight = useRef(false);
 
   useEffect(() => {
-    if (open) { setStep("choose"); setName(""); setUrl(""); setError(null); }
+    if (open) { setStep("choose"); setName(""); setUrl(""); setAnycubicIp(""); setError(null); }
   }, [open]);
 
   function back() { setStep("choose"); setError(null); }
 
   async function createPrinter(body: object) {
-    setBusy(true); setError(null);
-    try {
-      await api("/api/printers", { method: "POST", body: JSON.stringify(body) });
-      setStep("done");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка створення");
-    } finally { setBusy(false); }
+    await runSingleSubmission(createInFlight, async () => {
+      setBusy(true); setError(null);
+      try {
+        await api("/api/printers", { method: "POST", body: JSON.stringify(body) });
+        setStep("done");
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Помилка створення");
+      } finally { setBusy(false); }
+    });
   }
 
   async function syncBambu() {
@@ -125,6 +139,7 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
           <div className="space-y-2">
             <p className="mb-3 text-xs text-[var(--text-muted)]">Оберіть тип підключення</p>
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><path d="M18 2v4h4"/></svg>} title="Bambu Lab" desc="P1S, A1, X1C — синхронізація через Bambu Cloud акаунт" badge="Авто-імпорт" onClick={() => setStep("bambu")} />
+            <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16v10H4z"/><path d="M8 3v4m8-4v4M8 17v4m8-4v4"/><circle cx="12" cy="12" r="2"/></svg>} title={t("printers.anycubicTitle")} desc={t("printers.anycubicDesc")} onClick={() => setStep("anycubic")} />
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 8h10M7 11h6"/></svg>} title="Klipper / Moonraker" desc="Snapmaker, Voron, Rat Rig та будь-який Klipper принтер" onClick={() => setStep("moonraker")} />
             <WizardTypeCard icon={<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>} title="Ручне відстеження" desc="Будь-який принтер — оператор оновлює стан вручну" onClick={() => setStep("manual")} />
           </div>
@@ -140,6 +155,14 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
               <button onClick={back} className={ghostBtn}>Назад</button>
             </div>
           </div>
+        )}
+        {step === "anycubic" && (
+          <form onSubmit={(e) => { e.preventDefault(); createPrinter(buildAnycubicCreateBody(name, anycubicIp)); }} className="space-y-3">
+            <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">{t("printers.nameLabel")}</span><input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Kobra 3 Max" className={inp} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-[var(--text-muted)]">{t("printers.anycubicIpLabel")}</span><input type="text" inputMode="decimal" required value={anycubicIp} onChange={(e) => setAnycubicIp(e.target.value)} placeholder="192.168.31.67" className={inp} /><span className="mt-1 block text-[11px] text-[var(--text-faint)]">{t("printers.anycubicIpHint")}</span></label>
+            {error && <p role="alert" className="text-xs text-[var(--state-error)]">{error}</p>}
+            <div className="flex gap-2"><button type="submit" disabled={busy || !name.trim() || !anycubicIp.trim()} className={primaryBtn}>{busy ? "Додавання…" : "Додати принтер"}</button><button type="button" onClick={back} disabled={busy} className={ghostBtn}>Назад</button></div>
+          </form>
         )}
         {step === "moonraker" && (
           <form onSubmit={(e) => { e.preventDefault(); createPrinter({ name: name.trim(), kind: "snapmaker_u1", moonraker_url: url.trim() }); }} className="space-y-3">
@@ -158,10 +181,10 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
           </form>
         )}
         {step === "done" && (
-          <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <div role="status" aria-live="polite" className="flex flex-col items-center gap-3 py-4 text-center">
             <div className="flex size-12 items-center justify-center rounded-full bg-[rgba(34,197,94,.12)] text-[var(--state-ok)]"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
             <p className="font-medium">Принтер додано!</p>
-            <div className="flex gap-2"><button onClick={() => { onDone(); onClose(); }} className={primaryBtn}>Готово</button><button onClick={() => { onDone(); setStep("choose"); setName(""); setUrl(""); setError(null); }} className={ghostBtn}>Ще один</button></div>
+            <div className="flex gap-2"><button onClick={() => { onDone(); onClose(); }} className={primaryBtn}>Готово</button><button onClick={() => { onDone(); setStep("choose"); setName(""); setUrl(""); setAnycubicIp(""); setError(null); }} className={ghostBtn}>Ще один</button></div>
           </div>
         )}
       </div>
@@ -171,9 +194,10 @@ function AddPrinterWizard({ open, onClose, onDone }: { open: boolean; onClose: (
 
 // ── edit modal ────────────────────────────────────────────────────────────────
 
-function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; onClose: () => void; printer: Printer | null; onDone: () => void }) {
+export function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; onClose: () => void; printer: Printer | null; onDone: () => void }) {
   const isEdit = printer !== null;
-  const [form, setForm] = useState<PrinterForm>(emptyForm);
+  const t = useT();
+  const [form, setForm] = useState<PrinterForm>(() => printer ? printerToForm(printer) : emptyForm());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -185,7 +209,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
 
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(null);
-    const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, moonraker_url: form.moonraker_url.trim() || null, bambu_dev_id: form.bambu_dev_id.trim() || null, bambu_dev_ip: form.bambu_dev_ip.trim() || null, bambu_model: form.bambu_model.trim() || null, is_active: form.is_active };
+    const body: Record<string, unknown> = { name: form.name.trim(), kind: form.kind, moonraker_url: form.moonraker_url.trim() || null, bambu_dev_id: form.bambu_dev_id.trim() || null, bambu_dev_ip: form.bambu_dev_ip.trim() || null, bambu_model: form.bambu_model.trim() || null, is_active: form.is_active, ...buildAnycubicUpdateFields(form.kind, form.anycubic_dev_ip) };
     if (form.bambu_access_code.trim()) body.bambu_access_code = form.bambu_access_code.trim();
     if (form.build_x.trim()) body.build_x = parseInt(form.build_x);
     if (form.build_y.trim()) body.build_y = parseInt(form.build_y);
@@ -201,11 +225,12 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
   }
 
   const isBambu = form.kind === "bambu";
+  const isAnycubic = form.kind === "anycubic";
   const hasUrl = form.kind === "snapmaker_u1" || form.kind === "other";
 
   return (
     <Modal open={open} onClose={() => { if (!busy) onClose(); }} title={isEdit ? "Редагувати принтер" : "Додати принтер"}
-      footer={<><button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button><button type="submit" form="printer-form" disabled={busy || !form.name.trim()} className="btn btn-primary disabled:opacity-50">{busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}</button></>}
+      footer={<><button type="button" onClick={onClose} disabled={busy} className="btn btn-ghost">Скасувати</button><button type="submit" form="printer-form" disabled={busy || !form.name.trim() || (isAnycubic && !form.anycubic_dev_ip.trim())} className="btn btn-primary disabled:opacity-50">{busy ? "Збереження…" : isEdit ? "Зберегти" : "Додати"}</button></>}
     >
       <form id="printer-form" onSubmit={submit} className="space-y-4">
         <Field label="Назва"><input type="text" required autoFocus value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="U1-01" className={inp} /></Field>
@@ -213,7 +238,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           <span className="mb-2 block text-sm">Тип</span>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {KIND_OPTIONS.map((opt) => (
-              <button key={opt.value} type="button" onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition " + (form.kind === opt.value ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   " : "border-[var(--border)] hover:border-[var(--border-strong)] ")}>
+              <button key={opt.value} type="button" disabled={isEdit} onClick={() => set("kind", opt.value)} className={"rounded-lg border p-3 text-left transition disabled:cursor-default " + (form.kind === opt.value ? "border-[var(--border-strong)] bg-[var(--accent)] text-white   " : "border-[var(--border)] hover:border-[var(--border-strong)] ")}>
                 <p className="text-sm font-medium">{opt.label}</p>
                 <p className={`mt-0.5 text-xs leading-tight ${form.kind === opt.value ? "opacity-70" : "text-[var(--text-muted)]"}`}>{opt.desc}</p>
               </button>
@@ -227,6 +252,7 @@ function PrinterEditModal({ open, onClose, printer, onDone }: { open: boolean; o
           <Field label="IP адреса (LAN)" hint="(опційно)"><input type="text" value={form.bambu_dev_ip} onChange={(e) => set("bambu_dev_ip", e.target.value)} placeholder="192.168.1.50" className={inp} /></Field>
           <Field label="Модель" hint="(опційно)"><input type="text" value={form.bambu_model} onChange={(e) => set("bambu_model", e.target.value)} placeholder="P1S" className={inp} /></Field>
         </>)}
+        {isAnycubic && <Field label={t("printers.anycubicIpLabel")} hint={`(${t("printers.anycubicIpHint")})`}><input type="text" inputMode="decimal" required value={form.anycubic_dev_ip} onChange={(e) => set("anycubic_dev_ip", e.target.value)} placeholder="192.168.31.67" className={inp} /></Field>}
         {hasUrl && (<Field label="Moonraker URL" hint="(опційно для ручного)"><input type="url" value={form.moonraker_url} onChange={(e) => set("moonraker_url", e.target.value)} placeholder="http://192.168.31.210" className={inp} /></Field>)}
         <div>
           <span className="mb-1 block text-sm">Робочий об&apos;єм (мм) <span className="text-[var(--text-faint)] text-xs">(опційно)</span></span>
@@ -317,6 +343,7 @@ export function PrintersManager() {
 
   function connectionInfo(p: Printer): string {
     if (p.kind === "bambu") return [p.bambu_dev_id, p.bambu_dev_ip].filter(Boolean).join(" · ") || "—";
+    if (p.kind === "anycubic") return p.anycubic_dev_ip ?? "—";
     return p.moonraker_url ?? "—";
   }
 

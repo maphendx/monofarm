@@ -52,6 +52,10 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
         run: pytest -ra
 
+      - name: Run agent unit tests
+        working-directory: agent
+        run: pytest -q test_*.py
+
       - name: Verify Alembic migrations apply cleanly
         env:
           DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
@@ -72,7 +76,7 @@ jobs:
           alembic upgrade head
 
   frontend:
-    name: Frontend (lint + build)
+    name: Frontend (lint + test + build)
     runs-on: ubuntu-latest
 
     defaults:
@@ -97,6 +101,9 @@ jobs:
         # is fixed; the build step below is the hard gate.
         continue-on-error: true
         run: bun run lint
+
+      - name: Test
+        run: bun test
 
       - name: Build
         env:

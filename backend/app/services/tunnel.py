@@ -306,7 +306,7 @@ def _handle_bambu_status_push(data: dict, org_id: int) -> None:
     log.debug("BAMBU_STATUS_PUSH: cached %s", dev_id)
 
 
-def _handle_anycubic_status_push(data: dict) -> None:
+def _handle_anycubic_status_push(data: dict, org_id: int) -> None:
     """Cache an Anycubic LAN MQTT `info` report pushed by the agent."""
     dev_id = (data.get("dev_id") or "").strip()
     payload = data.get("payload") or {}
@@ -314,11 +314,11 @@ def _handle_anycubic_status_push(data: dict) -> None:
         return
     from app.services import anycubic
 
-    anycubic.handle_agent_report(dev_id, payload)
+    anycubic.handle_agent_report(org_id, dev_id, payload)
     log.debug("ANYCUBIC_STATUS_PUSH: cached %s", dev_id)
 
 
-def _handle_anycubic_ace_push(data: dict) -> None:
+def _handle_anycubic_ace_push(data: dict, org_id: int) -> None:
     """Cache an Anycubic `multiColorBox` (ACE) report pushed by the agent."""
     dev_id = (data.get("dev_id") or "").strip()
     payload = data.get("payload") or {}
@@ -326,7 +326,7 @@ def _handle_anycubic_ace_push(data: dict) -> None:
         return
     from app.services import anycubic
 
-    anycubic.handle_agent_ace_report(dev_id, payload)
+    anycubic.handle_agent_ace_report(org_id, dev_id, payload)
     log.debug("ANYCUBIC_ACE_PUSH: cached %s", dev_id)
 
 
@@ -355,11 +355,17 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "ANYCUBIC_STATUS_PUSH":
-        _handle_anycubic_status_push(data)
+        try:
+            _handle_anycubic_status_push(data, org_id)
+        except Exception:
+            log.exception("ANYCUBIC_STATUS_PUSH: dropped invalid telemetry for org %s", org_id)
         return
 
     if msg_type == "ANYCUBIC_ACE_PUSH":
-        _handle_anycubic_ace_push(data)
+        try:
+            _handle_anycubic_ace_push(data, org_id)
+        except Exception:
+            log.exception("ANYCUBIC_ACE_PUSH: dropped invalid telemetry for org %s", org_id)
         return
 
     if msg_type == "TG_BOT_USERNAME":

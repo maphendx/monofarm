@@ -435,7 +435,7 @@ def _to_dto(
     if printer.kind == PrinterKind.anycubic and printer.anycubic_dev_id:
         from app.services import anycubic
 
-        live = anycubic.get_cached_state(printer.anycubic_dev_id)
+        live = anycubic.get_cached_state(printer.organization_id, printer.anycubic_dev_id)
         live = _apply_bed_cleared_flag(printer, live, db)
         live = _apply_error_cleared_flag(printer, live, db)
         return PrinterOut(
