@@ -441,8 +441,34 @@ def _make_on_connect(org_id: int):
         for dev_id, oid in list(_dev_to_org.items()):
             if oid == org_id:
                 client.subscribe(f"device/{dev_id}/report")
-                client.publish(f"device/{dev_id}/request", json.dumps(build_pushall_payload()))
+                _maybe_pushall(dev_id, client=client)
     return _on_connect
+
+
+_last_pushall: dict[str, float] = {}
+
+
+def _maybe_pushall(dev_id: str, *, force: bool = False, qos: int = 0, client: Any = None) -> None:
+    """Publish a pushall (full-state dump) unless one was sent recently for this device.
+
+    Repeated pushall requests make P1/A1 printers drop their Bambu Cloud
+    connection, which knocks them out of the Handy app. `_make_on_connect`
+    fires this for every device on every MQTT reconnect, so it must be
+    throttled — a flapping connection would otherwise storm every printer.
+    The periodic worker refresh (`request_full_status`, every
+    `BAMBU_FULL_REFRESH_INTERVAL_SECONDS`) and explicit post-command reads
+    pass `force=True` to bypass the throttle deliberately.
+    """
+    now = time.monotonic()
+    if not force and now - _last_pushall.get(dev_id, 0.0) < BAMBU_FULL_REFRESH_INTERVAL_SECONDS:
+        return
+    _last_pushall[dev_id] = now
+    if client is not None:
+        # on_connect callback — _mqtt_clients[org_id] isn't assigned yet, so
+        # publish directly on the client paho just handed us.
+        client.publish(f"device/{dev_id}/request", json.dumps(build_pushall_payload()), qos=qos)
+    else:
+        _publish(dev_id, build_pushall_payload(), qos=qos)
 
 
 def _on_message(client: Any, userdata: Any, msg: Any) -> None:
@@ -1258,7 +1284,7 @@ def subscribe_device(dev_id: str, org_id: int) -> None:
     client = _mqtt_clients.get(org_id)
     if client is not None:
         client.subscribe(f"device/{dev_id}/report")
-        request_full_status(dev_id)
+        _maybe_pushall(dev_id)
 
 
 def get_cached_state(dev_id: str) -> dict:
@@ -1541,8 +1567,13 @@ def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
 
 
 def request_full_status(dev_id: str, *, qos: int = 0) -> None:
-    """Request a complete state snapshot; required for delta-only P1/A1 reports."""
-    _publish(dev_id, build_pushall_payload(), qos=qos)
+    """Request a complete state snapshot; required for delta-only P1/A1 reports.
+
+    Bypasses the pushall throttle (force=True) — callers use this for the
+    periodic worker refresh and explicit post-command reads, both already
+    paced deliberately by their own caller.
+    """
+    _maybe_pushall(dev_id, force=True, qos=qos)
 
 
 # Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.
@@ -1936,6 +1967,7 @@ def _init_cloud_sync(org: "Organization") -> None:
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             protocol=mqtt.MQTTv311,
+            client_id=f"monofarm-cloud-{org.id}",
         )
         client.username_pw_set(f"u_{user_id}", _access_tokens[org.id])
         client.tls_set()

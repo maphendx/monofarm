@@ -70,11 +70,52 @@ def test_u1_upload_maps_then_explicitly_starts_without_rewriting_logical_tools(t
         printer_kind=PrinterKind.snapmaker_u1,
     ))
 
-    assert calls[0] == ("upload", False)
-    assert calls[1] == ("gcode", build_u1_mapping_script({0: 2, 1: 0}))
-    assert calls[2] == ("gcode", 'SDCARD_PRINT_FILE FILENAME="part.gcode"')
+    # U1 unloads any stale "loaded" file before uploading, then maps + starts.
+    assert calls[0] == ("gcode", "SDCARD_RESET_FILE")
+    assert calls[1] == ("upload", False)
+    assert calls[2] == ("gcode", build_u1_mapping_script({0: 2, 1: 0}))
+    assert calls[3] == ("gcode", 'SDCARD_PRINT_FILE FILENAME="part.gcode"')
     assert result["start_requested"] is True
     assert source.read_bytes() == b"T0\nT1\n"
+
+
+def test_u1_unloads_loaded_file_before_upload_then_other_kind_does_not(tmp_path, monkeypatch):
+    """U1 must reset the loaded file first (avoids Moonraker 403 on re-dispatch);
+    non-U1 Moonraker printers must not, since the upload itself starts them."""
+    from app.services import moonraker, tunnel
+
+    def run(kind: PrinterKind) -> list[tuple[str, object]]:
+        source = tmp_path / "part.gcode"
+        source.write_bytes(b"G1 X1\n")
+        calls: list[tuple[str, object]] = []
+
+        async def fake_upload(url, path, filename, start_print=False, timeout=None):
+            calls.append(("upload", start_print))
+            return {"result": {"print_started": True}}
+
+        monkeypatch.setattr(tunnel, "has_tunnel", lambda _org_id: False)
+        monkeypatch.setattr(moonraker, "async_upload_gcode", fake_upload)
+        monkeypatch.setattr(
+            moonraker, "send_gcode",
+            lambda _url, script: calls.append(("gcode", script)) or {},
+        )
+        asyncio.run(send_file_to_moonraker(
+            org_id=1,
+            moonraker_url="http://mr.local",
+            src=source,
+            file_name="part.gcode",
+            filament_meta={},
+            slot_map={0: 0},
+            printer_kind=kind,
+        ))
+        return calls
+
+    u1_calls = run(PrinterKind.snapmaker_u1)
+    assert ("gcode", "SDCARD_RESET_FILE") in u1_calls
+    assert u1_calls.index(("gcode", "SDCARD_RESET_FILE")) < u1_calls.index(("upload", False))
+
+    other_calls = run(PrinterKind.other)
+    assert ("gcode", "SDCARD_RESET_FILE") not in other_calls
 
 
 def test_u1_options_use_agent_local_transform_with_direct_url(tmp_path, monkeypatch):

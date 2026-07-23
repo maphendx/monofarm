@@ -116,7 +116,11 @@ _STATUS_TIMESTAMP_FIELD: dict[BambuCloudJobStatus, str] = {
 
 TASK_CREATED_ACK_TIMEOUT = timedelta(minutes=10)
 ACTIVE_MQTT_TIMEOUT = timedelta(minutes=30)
-MOONRAKER_START_TIMEOUT = timedelta(minutes=2)
+# U1/Moonraker prints go through slow LAN uploads and the agent-relayed state
+# cache only refreshes every ~30s, so a freshly-acknowledged start can take a
+# few minutes to surface as `printing`. Two minutes wrongly marked slow-but-OK
+# starts as `lost`; five gives the tracker room without stranding real failures.
+MOONRAKER_START_TIMEOUT = timedelta(minutes=5)
 
 
 class BambuJobTransitionError(ValueError):

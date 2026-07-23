@@ -273,3 +273,49 @@ def test_lost_detection_marks_unacknowledged_task_created_job(db_session, test_o
     assert marked == 1
     assert job.status == BambuCloudJobStatus.lost
     assert "acknowledge" in (job.status_reason or "")
+
+
+def test_moonraker_start_timeout_only_loses_jobs_past_the_grace_window(db_session, test_org):
+    """A U1 that hasn't reported `printing` yet must keep its grace window: only
+    an acknowledged Moonraker job older than MOONRAKER_START_TIMEOUT is lost."""
+    from app.services.bambu_job_state import MOONRAKER_START_TIMEOUT
+
+    printer = Printer(
+        organization_id=test_org.id,
+        name="U1",
+        kind=PrinterKind.snapmaker_u1,
+        moonraker_url="http://u1.local",
+        is_active=True,
+    )
+    db_session.add(printer)
+    db_session.commit()
+    db_session.refresh(printer)
+
+    now = datetime.now(timezone.utc)
+
+    def _ack_job(ack_age: timedelta, tag: str) -> BambuCloudJob:
+        job = BambuCloudJob(
+            organization_id=test_org.id,
+            printer_id=printer.id,
+            file_name="part.gcode",
+            status=BambuCloudJobStatus.acknowledged,
+            dispatch_mode="moonraker",
+            printer_ack_at=now - ack_age,
+            correlation_id=f"corr-mr-{tag}",
+            idempotency_key=f"idem-mr-{tag}",
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+        return job
+
+    fresh = _ack_job(MOONRAKER_START_TIMEOUT - timedelta(minutes=1), "fresh")
+    stale = _ack_job(MOONRAKER_START_TIMEOUT + timedelta(minutes=1), "stale")
+
+    mark_lost_jobs(db_session, now=now)
+
+    db_session.refresh(fresh)
+    db_session.refresh(stale)
+    assert fresh.status == BambuCloudJobStatus.acknowledged
+    assert stale.status == BambuCloudJobStatus.lost
+    assert stale.error_code == "MOONRAKER_START_TIMEOUT"

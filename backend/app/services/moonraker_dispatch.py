@@ -273,6 +273,17 @@ async def send_file_to_moonraker(
     if upload_bytes is None and _tunnel.has_tunnel(org_id):
         upload_bytes = src.read_bytes()
 
+    # Snapmaker U1: Moonraker refuses to overwrite a gcode that is still the
+    # "loaded" file (403 "File is loaded, upload not permitted"), which blocks
+    # re-dispatch of the same filename after a cancelled or failed start. Unload
+    # it first — best-effort, since SDCARD_RESET_FILE is refused mid-print, so
+    # this can never disrupt a job that is genuinely running.
+    if is_u1:
+        try:
+            await _send_moonraker_gcode(org_id, moonraker_url, "SDCARD_RESET_FILE")
+        except Exception as exc:  # noqa: BLE001 — advisory unload, never fatal
+            log.debug("U1 SDCARD_RESET_FILE before upload failed (%s): %s", moonraker_url, exc)
+
     upload_result: dict
     if _tunnel.has_tunnel(org_id):
         async def tunnel_progress(data: dict) -> None:
