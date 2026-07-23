@@ -19,6 +19,7 @@ from app.models.task import PrintTask, PrintTaskStatus
 from app.models.user import User, UserRole
 from app.schemas.task import PrintTaskCreate, PrintTaskOut, PrintTaskUpdate
 from app.services.gcode_meta import parse_gcode
+from app.services.queue_targeting import target_reasons
 
 
 # Files live under data/uploads/<task_id>/<original_filename>
@@ -100,6 +101,12 @@ def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:
         prod = db.get(Product, task.product_id)
         product_name = f"{prod.sku} · {prod.name}" if prod else None
 
+    assigned_group_name: str | None = None
+    if task.assigned_group_id:
+        from app.models.printer_group import PrinterGroup
+        group = db.get(PrinterGroup, task.assigned_group_id)
+        assigned_group_name = group.name if group else None
+
     return {
         "gcode_file_id": gcode_file_id,
         "has_thumbnail": has_thumbnail,
@@ -108,6 +115,7 @@ def _enrich(task: PrintTask, db: Session, org_id: int) -> dict[str, Any]:
         "assigned_printer_id": assigned_printer_id,
         "assigned_printer_name": assigned_printer_name,
         "product_name": product_name,
+        "assigned_group_name": assigned_group_name,
     }
 
 
@@ -152,6 +160,7 @@ class _FromLibraryPayload(BaseModel):
     gcode_file_id: int
     quantity: int = 1
     title: str | None = None
+    assigned_group_id: int | None = None
 
 
 @router.post("/from-library", response_model=PrintTaskOut, status_code=status.HTTP_201_CREATED)
@@ -172,6 +181,7 @@ def create_task_from_library(
         filament_meta=gfile.filament_meta,
         estimated_minutes=meta.get("estimated_minutes"),
         gcode_file_id=gfile.id,
+        assigned_group_id=payload.assigned_group_id or gfile.assigned_group_id,
         created_by_id=user.id,
         organization_id=org.id,
     )
@@ -253,6 +263,8 @@ def bulk_distribute(
                 continue
             if not is_3mf and p.kind.value == "bambu":
                 continue
+            if target_reasons(task, p):
+                continue
             chosen = p
             break
 
@@ -308,10 +320,15 @@ def update_task(
     pieces_ok = payload.pieces_ok
     pieces_defective = payload.pieces_defective or 0
     old_status = task.status  # capture before setattr overwrites it
-    exclude_fields = {"filament_consumptions", "pieces_ok", "pieces_defective", "defect_reason"}
+    exclude_fields = {"filament_consumptions", "pieces_ok", "pieces_defective", "defect_reason", "assigned_group_id"}
     update_data = payload.model_dump(exclude_none=True, exclude=exclude_fields)
     for field, val in update_data.items():
         setattr(task, field, val)
+
+    # assigned_group_id is exempt from exclude_none above so the queue "Ціль"
+    # picker can explicitly clear it back to null ("будь-який принтер").
+    if "assigned_group_id" in payload.model_fields_set:
+        task.assigned_group_id = payload.assigned_group_id
 
     if payload.pieces_ok is not None:
         task.pieces_ok = payload.pieces_ok
@@ -509,7 +526,7 @@ def check_compatibility(
 
         entries: list[PrinterCompat] = []
         for p in printers:
-            reasons: list[str] = []
+            reasons: list[str] = [*target_reasons(task, p)]
             if is_3mf and p.kind.value != "bambu":
                 reasons.append("3mf → тільки Bambu")
             elif not is_3mf and fname and p.kind.value == "bambu":

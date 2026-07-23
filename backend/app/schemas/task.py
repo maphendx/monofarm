@@ -15,6 +15,8 @@ class PrintTaskCreate(BaseModel):
     deadline: date | None = None
     notes: str | None = None
     product_id: int | None = None
+    assigned_group_id: int | None = None
+    target_printer_ids: list[int] | None = None
 
 
 class FilamentConsumption(BaseModel):
@@ -32,6 +34,8 @@ class PrintTaskUpdate(BaseModel):
     notes: str | None = None
     status: PrintTaskStatus | None = None
     product_id: int | None = None
+    assigned_group_id: int | None = None
+    target_printer_ids: list[int] | None = None
     filament_consumptions: list[FilamentConsumption] | None = None
     # production outcome (supplied together with status=done)
     pieces_ok: int | None = None
@@ -56,6 +60,9 @@ class PrintTaskOut(BaseModel):
     filament_consumptions: list | None = None
     product_id: int | None = None
     product_name: str | None = None
+    assigned_group_id: int | None = None
+    assigned_group_name: str | None = None
+    target_printer_ids: list[int] | None = None
     pieces_ok: int | None = None
     pieces_defective: int | None = None
     defect_reason: str | None = None

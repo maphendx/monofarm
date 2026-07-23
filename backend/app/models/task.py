@@ -47,6 +47,13 @@ class PrintTask(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[PrintTaskStatus] = mapped_column(Enum(PrintTaskStatus), default=PrintTaskStatus.queued)
 
+    # Printer/group targeting — restricts which printers may run this task.
+    # Null/empty = any compatible printer (unchanged default behaviour).
+    assigned_group_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("printer_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    target_printer_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     # production outcome
     pieces_ok: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pieces_defective: Mapped[int | None] = mapped_column(Integer, nullable=True)

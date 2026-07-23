@@ -23,6 +23,7 @@ from app.models.tag import Tag, TagKind
 from app.models.task import PrintTask
 from app.models.user import User, UserRole
 from app.schemas.tag import TagAssign, TagCreate, TagOut, TagSettingsOut, TagSettingsUpdate, TagUpdate, TagsMatchResult
+from app.services.queue_targeting import target_reasons
 
 router = APIRouter(tags=["tags"])
 
@@ -250,6 +251,10 @@ def get_matching_printers(
     results = []
     for p in printers:
         matches, reasons = _task_matches_printer(task, p)
+        t_reasons = target_reasons(task, p)
+        if t_reasons:
+            matches = False
+            reasons = [*reasons, *t_reasons]
         if p.is_out_of_order:
             matches = False
             reasons = [*reasons, "Printer is marked out of order"]

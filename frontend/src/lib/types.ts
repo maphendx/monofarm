@@ -204,6 +204,9 @@ export interface PrintTask {
   printed_count: number;
   assigned_printer_id: number | null;
   assigned_printer_name: string | null;
+  assigned_group_id: number | null;
+  assigned_group_name: string | null;
+  target_printer_ids: number[] | null;
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
 }
 

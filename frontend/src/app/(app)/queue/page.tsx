@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import type { ChangeEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
 import { AmountStepper } from "@/components/queue/AmountStepper";
@@ -10,7 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { ApiError, api, getPlanCalendar } from "@/lib/api";
 import { formatDuration, formatRelativeDate, sumArray } from "@/lib/format";
 import { useUser } from "@/lib/auth-context";
-import type { CalendarLane, Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer } from "@/lib/types";
+import type { CalendarLane, Filament, GcodeFile, PrintTask, PrintTaskStatus, Printer, PrinterGroup } from "@/lib/types";
 import { useQueueStream } from "@/hooks/useQueueStream";
 import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { usePageTitle } from "@/lib/usePageTitle";
@@ -378,18 +379,33 @@ function CompleteModal({ task, onClose, onDone }: {
 // ── queue row (table view) ────────────────────────────────────────────────────
 
 function QueueRow({
-  index, task, status, selected, onToggle, onUpdated, onDelete, onSend, onComplete, onRestore, canEdit,
+  index, task, status, selected, onToggle, onUpdated, onDelete, onSend, onComplete, onRestore, canEdit, printerGroups,
 }: {
   index: number; task: PrintTask; status: StatusTab;
   selected: boolean; onToggle: () => void;
   onUpdated: (t: PrintTask) => void; onDelete: () => void;
   onSend: () => void; onComplete: () => void; onRestore: () => void;
-  canEdit: boolean;
+  canEdit: boolean; printerGroups: PrinterGroup[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [targetBusy, setTargetBusy] = useState(false);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const thumbSrc = task.has_thumbnail && task.gcode_file_id
     ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
+
+  async function handleTargetGroupChange(e: ChangeEvent<HTMLSelectElement>) {
+    const value = e.target.value;
+    const assignedGroupId = value ? Number(value) : null;
+    setTargetBusy(true);
+    try {
+      const updated = await api<PrintTask>(`/api/queue/${task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ assigned_group_id: assignedGroupId }),
+      });
+      onUpdated(updated);
+    } catch { /* toast handled globally via ApiError in api() */ }
+    finally { setTargetBusy(false); }
+  }
 
   return (
     <tr className={["border-b border-[var(--border)]/60 transition-colors",
@@ -459,6 +475,20 @@ function QueueRow({
         </td>
       )}
 
+      <td className="px-3 py-2">
+        {canEdit ? (
+          <select value={task.assigned_group_id ?? ""} onChange={handleTargetGroupChange} disabled={targetBusy}
+            className="w-36 rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-xs outline-none disabled:opacity-50">
+            <option value="">— будь-який —</option>
+            {printerGroups.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-xs text-[var(--text-muted)]">{task.assigned_group_name ?? "— будь-який —"}</span>
+        )}
+      </td>
+
       <td className="relative px-2 py-2">
         <button onClick={() => setMenuOpen(v => !v)}
           className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]">
@@ -521,6 +551,7 @@ function QueuePageInner() {
   // ── List-view state ──
   const [tasks, setTasks] = useState<PrintTask[]>([]);
   const [printers, setPrinters] = useState<Printer[]>([]);
+  const [printerGroups, setPrinterGroups] = useState<PrinterGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -608,10 +639,12 @@ function QueuePageInner() {
     Promise.all([
       api<PrintTask[]>("/api/queue"),
       api<Printer[]>("/api/printers"),
+      api<PrinterGroup[]>("/api/printer-groups"),
       view === "calendar" ? getPlanCalendar(startStr, endStr) : Promise.resolve(null),
-    ]).then(([t, p, lanes]) => {
+    ]).then(([t, p, groups, lanes]) => {
       setTasks(t);
       setPrinters(p);
+      setPrinterGroups(groups);
       if (lanes) setCalendarLanes(lanes);
     }).catch(err => {
       if (err instanceof ApiError) setError(err.message);
@@ -976,6 +1009,7 @@ function QueuePageInner() {
                         <th className="px-3 py-2.5 text-left">Користувач</th>
                         <th className="px-3 py-2.5 text-left">Додано</th>
                         <th className="px-3 py-2.5 text-left">Принтер</th>
+                        <th className="px-3 py-2.5 text-left">Ціль</th>
                         <th className="w-8 px-2 py-2.5" />
                       </tr>
                     </thead>
@@ -987,6 +1021,7 @@ function QueuePageInner() {
                           onUpdated={handleTaskUpdated} onDelete={() => handleDelete(task.id)}
                           onSend={() => setSendRequest({ task })} onComplete={() => setCompleteTask(task)}
                           onRestore={() => handleRestore(task.id)} canEdit={canEdit}
+                          printerGroups={printerGroups}
                         />
                       ))}
                     </tbody>
