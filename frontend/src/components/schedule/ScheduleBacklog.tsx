@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { PrintTask } from "@/lib/types";
-import { fmtDuration } from "./utils";
+import { fmtDuration, setDraggedTaskForCompat } from "./utils";
 import { API_URL } from "@/lib/api";
 
 function BacklogItem({
@@ -30,11 +30,17 @@ function BacklogItem({
       fileName: fname,
       quantity: Math.max(1, task.quantity),
       durationMins: duration > 0 ? duration : 60,
+      tags: task.tags,
     }));
     const is3mf = fname.toLowerCase().endsWith(".3mf");
     e.dataTransfer.setData(is3mf ? "application/x-3mf" : "application/x-gcode", "1");
     e.dataTransfer.setData(`application/x-duration-${duration > 0 ? duration : 60}`, "1");
     e.dataTransfer.effectAllowed = "move";
+    setDraggedTaskForCompat(task);
+  }
+
+  function handleDragEnd() {
+    setDraggedTaskForCompat(null);
   }
 
   return (
@@ -53,6 +59,7 @@ function BacklogItem({
       type="button"
       draggable
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={() => onSchedule(task)}
       className="group/btn w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-left transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] cursor-grab active:cursor-grabbing"
     >

@@ -1,6 +1,12 @@
 /** Shared utilities for schedule/calendar components. */
 
-import type { CalendarEntry, CalendarLane } from "@/lib/types";
+import type { CalendarEntry, CalendarLane, PrintTask } from "@/lib/types";
+
+// Global drag state to bypass dataTransfer restrictions in onDragOver
+export let __draggedTaskForCompat: PrintTask | null = null;
+export function setDraggedTaskForCompat(task: PrintTask | null) {
+  __draggedTaskForCompat = task;
+}
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 

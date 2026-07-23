@@ -27,6 +27,7 @@ class TagKind(str, enum.Enum):
     nozzle = "nozzle"
     material = "material"
     bed_type = "bed_type"
+    printer_type = "printer_type"
     custom = "custom"
 
 
@@ -96,6 +97,8 @@ class Tag(Base):
             return f"{m.get('type', '?')} · {m.get('color_name', '')}".strip(" ·")
         if self.kind == TagKind.bed_type:
             return (self.meta or {}).get("bed_type", "") or self.label or ""
+        if self.kind == TagKind.printer_type:
+            return (self.meta or {}).get("printer_type", "") or self.label or ""
         return self.label or ""
 
     @property
@@ -120,4 +123,10 @@ class Tag(Base):
     def bed_type_name(self) -> str | None:
         if self.kind == TagKind.bed_type:
             return (self.meta or {}).get("bed_type")
+        return None
+
+    @property
+    def printer_type_name(self) -> str | None:
+        if self.kind == TagKind.printer_type:
+            return (self.meta or {}).get("printer_type")
         return None

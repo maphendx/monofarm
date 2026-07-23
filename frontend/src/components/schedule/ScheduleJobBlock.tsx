@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { CalendarBlock } from "./utils";
-import { fmtTimeMins, fmtDuration } from "./utils";
+import { fmtTimeMins, fmtDuration, setDraggedTaskForCompat } from "./utils";
 import { API_URL } from "@/lib/api";
 
 function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
@@ -160,13 +160,18 @@ export function ScheduleJobBlock({
     : "";
 
   function onDragStart(e: React.DragEvent<HTMLDivElement>) {
-    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id }));
+    e.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: entry.id, tags: entry.task.tags }));
     const fname = entry.task.file_name ?? "";
     const is3mf = fname.toLowerCase().endsWith(".3mf");
     e.dataTransfer.setData(is3mf ? "application/x-3mf" : "application/x-gcode", "1");
     e.dataTransfer.setData(`application/x-duration-${Math.max(1, totalDurationMins)}`, "1");
     e.dataTransfer.setData(`application/x-entry-${entry.id}`, "1");
     e.dataTransfer.effectAllowed = "move";
+    setDraggedTaskForCompat(entry.task);
+  }
+
+  function onDragEnd() {
+    setDraggedTaskForCompat(null);
   }
 
   return (
@@ -175,6 +180,7 @@ export function ScheduleJobBlock({
       tabIndex={0}
       draggable
       onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       onClick={onClick}
       onKeyDown={e => {
         if (e.key === "Enter" || e.key === " ") {

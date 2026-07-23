@@ -133,8 +133,8 @@ const NAV_GROUPS: { label: string | null; items: { href: string; Ic: NavIcon; tK
   },
 ];
 
-// ── component ─────────────────────────────────────────────────────────────────
-
+// ── component ────────────────────────────────────────────────────────────────
+//
 export function Sidebar({
   user,
   pinned,

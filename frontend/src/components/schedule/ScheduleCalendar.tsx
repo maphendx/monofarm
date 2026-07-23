@@ -19,7 +19,11 @@ import {
   getEntryDurationMins,
   getWeekDates,
   isoDateStr,
+  __draggedTaskForCompat,
+  setDraggedTaskForCompat,
 } from "./utils";
+
+import { printerTypeMismatch } from "../files/SendModal";
 
 // ── Zoom config ───────────────────────────────────────────────────────────────
 
@@ -140,9 +144,11 @@ function UntimedChips({
           draggable
           onDragStart={ev => {
             ev.stopPropagation();
-            ev.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: e.id }));
+            ev.dataTransfer.setData("text/plain", JSON.stringify({ type: "block", entryId: e.id, tags: e.task.tags }));
             ev.dataTransfer.effectAllowed = "move";
+            setDraggedTaskForCompat(e.task);
           }}
+          onDragEnd={() => setDraggedTaskForCompat(null)}
           title={e.task.title}
           className="max-w-[100px] truncate rounded border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-1 py-px text-[9px] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--text)]"
         >
@@ -1309,7 +1315,24 @@ export function ScheduleCalendar({
                           const types = e.dataTransfer.types;
                           const is3mf = types.includes("application/x-3mf");
                           const isGcode = types.includes("application/x-gcode");
-                          const fileIncompat = (is3mf && lane.printer_kind !== "bambu") || (isGcode && lane.printer_kind === "bambu");
+                          
+                          let fileIncompat = false;
+                          if (is3mf && lane.printer_kind !== "bambu") fileIncompat = true;
+                          if (isGcode && lane.printer_kind === "bambu") fileIncompat = true;
+                          
+                          if (!fileIncompat && __draggedTaskForCompat) {
+                            // We mock a GcodeFile out of the PrintTask for printerTypeMismatch
+                            const mockFile = {
+                              filament_meta: __draggedTaskForCompat.filament_meta,
+                              original_name: __draggedTaskForCompat.file_name ?? __draggedTaskForCompat.title,
+                              tags: __draggedTaskForCompat.tags ?? [],
+                            } as any;
+                            const printer = printerById.get(lane.printer_id);
+                            if (printer && printerTypeMismatch(mockFile, printer)) {
+                              fileIncompat = true;
+                            }
+                          }
+
                           const incompat = isPast || fileIncompat;
                           const durationType = types.find(type => type.startsWith("application/x-duration-"));
                           const duration = durationType

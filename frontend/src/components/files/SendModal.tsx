@@ -355,6 +355,20 @@ function tagCompatCheck(file: GcodeFile | null, printer: PrinterType): TagIssue[
     if (fb && pb && fb !== pb) issues.push({ kind: "bed_type", msg: `стіл:${fb}≠${pb}` });
   }
 
+  const filePrinterTypes = ft.filter((t) => t.kind === "printer_type");
+  const printerPrinterTypes = pt.filter((t) => t.kind === "printer_type");
+  if (filePrinterTypes.length > 0) {
+    const fTypes = filePrinterTypes
+      .map((t) => ((t.meta as Record<string, unknown>)?.printer_type as string | undefined)?.toLowerCase() ?? "")
+      .filter(Boolean);
+    const pTypes = printerPrinterTypes
+      .map((t) => ((t.meta as Record<string, unknown>)?.printer_type as string | undefined)?.toLowerCase() ?? "")
+      .filter(Boolean);
+    if (fTypes.length > 0 && !fTypes.some((t) => pTypes.includes(t))) {
+      issues.push({ kind: "printer_type", msg: fTypes.join(", ") });
+    }
+  }
+
   const pCustom = new Set(pt.filter((t) => t.kind === "custom" && t.label).map((t) => t.label!));
   for (const t of ft.filter((t2) => t2.kind === "custom" && t2.label)) {
     if (!pCustom.has(t.label!)) issues.push({ kind: "custom", msg: t.label! });
@@ -627,10 +641,12 @@ export function SendModal({
     const base = fileHasDimensions
       ? sendablePrinters.filter((p) => fitCheck(file?.filament_meta ?? null, p) !== "oversize")
       : sendablePrinters;
-    // hide printer models this gcode was never sliced for (e.g. Bambu 3mf on a U1)
-    const modelMatched = base.filter((p) => modelCheck(file?.filament_meta ?? null, p, file?.original_name) !== "mismatch");
-    // free + type-compatible first, then busy-but-compatible, then wrong type
-    return [...modelMatched].sort((a, b) => printerSendRank(file, a) - printerSendRank(file, b));
+    
+    // Hide printers that fail tag compatibility or basic model checks
+    const strictlyMatched = base.filter((p) => !printerTypeMismatch(file, p));
+    
+    // free printers first, then busy
+    return [...strictlyMatched].sort((a, b) => printerSendRank(file, a) - printerSendRank(file, b));
   }, [sendablePrinters, fileHasDimensions, file]);
   const selectedPrinters = useMemo(
     // only free + type-compatible printers can actually be sent to

@@ -11,7 +11,7 @@ const BADGE_COLORS = [
   "#3498db", "#9b59b6", "#6b7280", "#111827",
 ];
 
-type Kind = "nozzle" | "material" | "bed_type" | "custom";
+type Kind = "nozzle" | "material" | "bed_type" | "printer_type" | "custom";
 
 interface Props {
   open: boolean;
@@ -28,6 +28,7 @@ export function CreateTagModal({ open, onClose, onCreated }: Props) {
   const [matColor, setMatColor] = useState("#ffffff");
   const [matColorName, setMatColorName] = useState("");
   const [bedType, setBedType] = useState("PEI");
+  const [printerType, setPrinterType] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,6 +49,8 @@ export function CreateTagModal({ open, onClose, onCreated }: Props) {
         };
       } else if (kind === "bed_type") {
         body = { kind: "bed_type", meta: { bed_type: bedType } };
+      } else if (kind === "printer_type") {
+        body = { kind: "printer_type", meta: { printer_type: printerType.trim() } };
       } else {
         body = { kind: "custom", label: label.trim(), color };
       }
@@ -69,18 +72,18 @@ export function CreateTagModal({ open, onClose, onCreated }: Props) {
 
         {/* Kind selector */}
         <div className="flex gap-2 mb-5">
-          {(["nozzle", "material", "bed_type", "custom"] as Kind[]).map((k) => (
+          {(["nozzle", "material", "bed_type", "printer_type", "custom"] as Kind[]).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setKind(k)}
-              className={`flex-1 rounded-lg border py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${
                 kind === k
                   ? "border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                   : "border-gray-200 text-gray-500 hover:border-gray-300"
               }`}
             >
-              {k === "bed_type" ? "Bed" : k}
+              {k === "bed_type" ? "Bed" : k === "printer_type" ? "Type" : k}
             </button>
           ))}
         </div>
@@ -172,6 +175,20 @@ export function CreateTagModal({ open, onClose, onCreated }: Props) {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {kind === "printer_type" && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Printer type</label>
+              <input
+                type="text"
+                placeholder="e.g. Bambu Lab P1S, Snapmaker U1, Resin"
+                value={printerType}
+                onChange={(e) => setPrinterType(e.target.value)}
+                required
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              />
             </div>
           )}
 

@@ -34,6 +34,9 @@ class TagCreate(BaseModel):
         elif self.kind == TagKind.bed_type:
             if not self.meta or "bed_type" not in self.meta:
                 raise ValueError("bed_type tag requires meta.bed_type")
+        elif self.kind == TagKind.printer_type:
+            if not self.meta or "printer_type" not in self.meta:
+                raise ValueError("printer_type tag requires meta.printer_type")
         elif self.kind == TagKind.custom:
             if not self.label:
                 raise ValueError("custom tag requires label")
