@@ -1,12 +1,15 @@
 import asyncio
+import io
+import json
 import logging
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -20,7 +23,7 @@ from app.api.history import router as history_router
 from app.api.horoshop import router as horoshop_router
 from app.api.auth import router as auth_router
 from app.api.bambu_jobs import router as bambu_jobs_router
-from app.api.deps import require_roles
+from app.api.deps import get_current_admin
 from app.api.farm_tasks import router as farm_tasks_router
 from app.api.filament_colors import router as filament_colors_router
 from app.api.filament_labels import router as filament_labels_router
@@ -44,7 +47,6 @@ from app.core.config import settings
 from app.core.ratelimit import limiter
 from app.core.db import SessionLocal
 from app.models.organization import Organization
-from app.models.user import UserRole
 from app.services import bambu, scheduler
 from app.services.bootstrap import seed_admin
 
@@ -60,6 +62,8 @@ log = logging.getLogger("monofarm")
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from app.services import tunnel
+    await tunnel.start_router()
     try:
         with SessionLocal() as db:
             seed_admin(db)
@@ -88,24 +92,26 @@ async def lifespan(_: FastAPI):
     else:
         log.info("INLINE_WORKERS=false — Telegram/Scheduler/Bambu run in separate worker process")
 
-    # AutoPrint kicks from the worker's cloud MQTT arrive over Redis pub/sub;
-    # dispatch needs the agent tunnel, which lives in this (web) process.
+    # AutoPrint kicks from cloud MQTT arrive over Redis pub/sub. Dispatch can
+    # now reach an agent owned by any web process through the tunnel router.
     from app.services.autoprint import run_kick_listener
     autoprint_kick_task = asyncio.create_task(run_kick_listener())
     from app.api.ws import run_printer_event_listener
     printer_event_task = asyncio.create_task(run_printer_event_listener())
 
     log.info("monofarm api started")
-    yield
-
-    autoprint_kick_task.cancel()
-    printer_event_task.cancel()
-    if settings.INLINE_WORKERS:
-        try:
-            await bambu.shutdown()
-        except Exception:
-            log.exception("Bambu MQTT shutdown failed (all orgs)")
-        scheduler.shutdown()
+    try:
+        yield
+    finally:
+        await tunnel.stop_router()
+        autoprint_kick_task.cancel()
+        printer_event_task.cancel()
+        if settings.INLINE_WORKERS:
+            try:
+                await bambu.shutdown()
+            except Exception:
+                log.exception("Bambu MQTT shutdown failed (all orgs)")
+            scheduler.shutdown()
 
 
 app = FastAPI(title="Printfarm API", version="0.1.0", lifespan=lifespan)
@@ -120,6 +126,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def private_response_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if request.url.path.startswith("/api/") or request.headers.get("authorization") or request.headers.get("x-api-key"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _frontend_url(path: str = "") -> str:
@@ -152,7 +168,7 @@ async def health() -> dict:
 
 @app.post("/api/internal/send-plan-now")
 async def send_plan_now(
-    _admin=Depends(require_roles(UserRole.admin)),
+    _admin=Depends(get_current_admin),
 ) -> dict:
     """Force-send today's plan to all linked Telegram users (test-only)."""
     from app.services.daily_report import send_daily_plan_to_all
@@ -161,6 +177,8 @@ async def send_plan_now(
 
 
 _AGENT_DIR = Path(__file__).parent.parent / "agent"
+if not _AGENT_DIR.exists():
+    _AGENT_DIR = Path(__file__).parent.parent.parent / "agent"
 _AGENT_FILES = {"monofarm_agent.py", "monofarm_tray.py", "install.sh", "install.ps1", "Dockerfile", "requirements.txt", "bambu_camera_test.py"}
 
 
@@ -178,6 +196,41 @@ async def serve_agent_exe() -> RedirectResponse:
     if not url:
         raise HTTPException(status_code=404)
     return RedirectResponse(url, status_code=302)
+
+
+@app.get("/agent/source.zip")
+async def serve_agent_source() -> Response:
+    """Return one complete, version-consistent source-agent bundle."""
+    manifest_path = _AGENT_DIR / "source_manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404)
+    source_files = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(source_files, list) or not source_files:
+        raise HTTPException(status_code=500, detail="Invalid agent source manifest")
+
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(
+        archive_buffer,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=9,
+    ) as archive:
+        for relative_name in source_files:
+            if not isinstance(relative_name, str):
+                raise HTTPException(status_code=500, detail="Invalid agent source manifest")
+            relative_path = Path(relative_name)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                raise HTTPException(status_code=500, detail="Invalid agent source manifest")
+            source_path = _AGENT_DIR / relative_path
+            if not source_path.is_file():
+                raise HTTPException(status_code=500, detail=f"Missing agent source: {relative_name}")
+            archive.writestr(relative_name, source_path.read_bytes())
+
+    return Response(
+        content=archive_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="monofarm-agent-source.zip"'},
+    )
 
 
 @app.get("/agent/{filename}")

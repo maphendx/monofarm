@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-import monofarm_agent
+from printers import bambu
 
 
 class _PublishInfo:
@@ -19,5 +19,5 @@ class _LiveClient:
 
 
 def test_live_bambu_publish_acknowledges_after_command_is_queued():
-    with patch.dict(monofarm_agent._bambu_lan_live_clients, {"A9": _LiveClient()}):
-        assert monofarm_agent._bambu_publish_via_live_client("A9", {"print": {"command": "skip_objects"}}) is True
+    with patch.dict(bambu._bambu_lan_live_clients, {"A9": _LiveClient()}):
+        assert bambu._bambu_publish_via_live_client("A9", {"print": {"command": "skip_objects"}}) is True

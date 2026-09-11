@@ -150,6 +150,7 @@ def assign_slot(
                         "hex_color": slot.hex_color,
                         "empty": slot.state == SlotState.empty,
                     },
+                    org_id=printer.organization_id,
                 )
     except bambu.BambuError as exc:
         raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати Bambu слот: {exc}") from exc

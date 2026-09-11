@@ -1,5 +1,7 @@
 "use client";
 
+import { AuthImage } from "@/components/ui/AuthImage";
+
 import { Check, ChevronRight, Folder, FolderDown, ListPlus, Printer as PrinterIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1001,7 +1003,7 @@ export function SendModal({
                         >
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg)] text-[10px] font-mono text-[var(--text-muted)]">
                             {f.has_thumbnail
-                              ? <img src={`${API_URL}/api/files/${f.id}/thumbnail`} alt="" className="h-full w-full object-cover" />
+                              ? <AuthImage src={`/api/files/${f.id}/thumbnail`} alt="" className="h-full w-full object-cover" />
                               : (f.original_name.includes(".") ? f.original_name.split(".").pop()!.toUpperCase() : "?")}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -1082,7 +1084,7 @@ export function SendModal({
                       <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] text-[9px] font-mono text-[var(--text-muted)]">
                           {file.has_thumbnail
-                            ? <img src={`${API_URL}/api/files/${file.id}/thumbnail`} alt="" className="h-full w-full object-cover" />
+                            ? <AuthImage src={`/api/files/${file.id}/thumbnail`} alt="" className="h-full w-full object-cover" />
                             : file.original_name.split(".").pop()!.toUpperCase()}
                         </span>
                         <div className="min-w-0">

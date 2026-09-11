@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 
 /**
  * Friendly empty-state: dashed card, icon, title, optional description + CTA.
@@ -14,7 +15,7 @@ export function EmptyState({
   icon?: React.ReactNode;
   title: string;
   description?: string;
-  action?: { label: string; href?: string; onClick?: () => void };
+  action?: { label: string; href?: Route; onClick?: () => void };
   className?: string;
 }) {
   return (

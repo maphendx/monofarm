@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 
 import { ScannerModal } from "@/components/warehouse/ScannerModal";
@@ -9,8 +10,8 @@ import { WarehouseNoticeOverlay } from "@/components/warehouse/WarehouseNoticeOv
 import { usePageTitle } from "@/lib/usePageTitle";
 import { useUser } from "@/lib/auth-context";
 
-type NavItem  = { href: string; label: string; fullOnly?: boolean };
-type NavGroup = { label: string; href: string; exact?: boolean; fullOnly?: boolean; items: NavItem[] };
+type NavItem  = { href: Route; label: string; fullOnly?: boolean };
+type NavGroup = { label: string; href: Route; exact?: boolean; fullOnly?: boolean; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
   {

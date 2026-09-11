@@ -12,6 +12,17 @@ services:
     volumes:
       - printfarm-pgdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+    # Internal-only: tenant commands and temporary tunnel data must not be public.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   web:
     build: ./backend
     container_name: monofarm-web
@@ -21,11 +32,15 @@ services:
     env_file: ./backend/.env
     environment:
       INLINE_WORKERS: "false"
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://printfarm:printfarm@db:5432/printfarm
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend/data:/app/data
 
@@ -37,9 +52,13 @@ services:
     env_file: ./backend/.env
     environment:
       INLINE_WORKERS: "false"
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+psycopg://printfarm:printfarm@db:5432/printfarm
     depends_on:
-      - db
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
     # No published ports — worker talks outbound only (MQTT, Telegram, APScheduler)
 
   frontend:

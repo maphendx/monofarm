@@ -3,14 +3,16 @@
 Agents connect from the client's local network, authenticate with a JWT,
 and then serve as HTTP proxies for Moonraker (and other local services).
 """
+import asyncio
 import json
+import time
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.api.deps import get_current_org, require_roles
-from app.core.security import decode_token
+from app.api.deps import authenticate_user, get_current_org, require_roles
+from app.core.db import SessionLocal
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.services import tunnel
@@ -19,7 +21,8 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agent"])
 
-AGENT_VERSION = "0.8.15"
+AGENT_VERSION = "0.8.16"
+SESSION_RECHECK_SECONDS = 30.0
 
 
 @router.get("/api/agent/version")
@@ -55,7 +58,7 @@ async def agent_logs(
     return {"version": body.get("version"), "lines": body.get("lines") or []}
 
 
-@router.get("/api/agent/bambu-lan-config")
+@router.get("/api/agent/bambu-lan-config", dependencies=[Depends(require_roles(UserRole.admin))])
 def bambu_lan_config(org: Organization = Depends(get_current_org)) -> dict:
     """LAN-only Bambu printers the local agent should monitor.
 
@@ -94,7 +97,7 @@ def bambu_lan_config(org: Organization = Depends(get_current_org)) -> dict:
     return {"printers": printers}
 
 
-@router.get("/api/agent/anycubic-lan-config")
+@router.get("/api/agent/anycubic-lan-config", dependencies=[Depends(require_roles(UserRole.admin))])
 def anycubic_lan_config(org: Organization = Depends(get_current_org)) -> dict:
     """Anycubic Kobra printers the local agent should monitor over local LAN MQTT.
 
@@ -137,7 +140,7 @@ class AnycubicDiscoveredRequest(BaseModel):
     model_name: str | None = None
 
 
-@router.post("/api/agent/anycubic-discovered")
+@router.post("/api/agent/anycubic-discovered", dependencies=[Depends(require_roles(UserRole.admin))])
 def anycubic_discovered(
     body: AnycubicDiscoveredRequest,
     org: Organization = Depends(get_current_org),
@@ -172,7 +175,7 @@ class PrintZplRequest(BaseModel):
     zpl:  str
 
 
-@router.post("/api/agent/print-zpl")
+@router.post("/api/agent/print-zpl", dependencies=[Depends(require_roles(UserRole.admin))])
 async def agent_print_zpl(
     payload: PrintZplRequest,
     org: Organization = Depends(get_current_org),
@@ -198,32 +201,49 @@ async def agent_connect(
     token: str = Query(..., description="User JWT token for authentication"),
 ) -> None:
     """monofarm-agent connects here and serves as a local HTTP proxy tunnel."""
-    payload = decode_token(token)
-    if not payload:
-        await ws.close(code=4001, reason="Invalid token")
+    org_id = _agent_org(token)
+    if org_id is None:
+        await ws.close(code=4001, reason="Invalid agent session")
         return
 
-    org_id = payload.get("org_id")
-    if not org_id:
-        await ws.close(code=4002, reason="Token missing org_id")
-        return
-
-    org_id = int(org_id)
     await ws.accept()
-    await tunnel.register(org_id, ws)
-
+    checked_at = time.monotonic()
     try:
+        await tunnel.register(org_id, ws)
         while True:
-            raw = await ws.receive_text()
+            remaining = SESSION_RECHECK_SECONDS - (time.monotonic() - checked_at)
+            if remaining <= 0:
+                if _agent_org(token) != org_id:
+                    await ws.close(code=4001, reason="Agent session expired")
+                    return
+                checked_at = time.monotonic()
+                remaining = SESSION_RECHECK_SECONDS
+            try:
+                raw = await asyncio.wait_for(ws.receive_text(), timeout=remaining)
+            except asyncio.TimeoutError:
+                continue
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 log.warning("Agent org %s sent invalid JSON", org_id)
                 continue
-            await tunnel.handle_agent_message(data, org_id=org_id)
+            if not isinstance(data, dict):
+                continue
+            await tunnel.handle_agent_message(data, org_id=org_id, socket=ws)
     except WebSocketDisconnect:
         pass
     except Exception as e:
         log.warning("Agent org %s connection error: %s", org_id, e)
     finally:
         await tunnel.unregister(org_id, ws)
+
+
+def _agent_org(token: str) -> int | None:
+    with SessionLocal() as db:
+        try:
+            user = authenticate_user(token, db)
+        except HTTPException:
+            return None
+        if user.role != UserRole.admin:
+            return None
+        return user.organization_id

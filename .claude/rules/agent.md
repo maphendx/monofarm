@@ -38,7 +38,7 @@ agent→server: {"id": "…", "type": "stream_end"}
 method: "BAMBU_CAMERA", body: {"dev_ip": "…", "access_code": "…"}
 ```
 
-Adding new methods: implement in `tunnel.py` dispatch and the corresponding agent handler in `monofarm_agent.py`.
+Adding new methods: implement backend dispatch in `tunnel.py`, agent dispatch in `agent/transports/websocket.py`, and the handler in the owning transport or printer module.
 
 ## Agent auth
 
@@ -60,7 +60,7 @@ Agent stores config in `~/.monofarm-agent/.env`. Never hardcode paths — always
 
 ## One canonical loop — tray is a thin host
 
-`monofarm_agent.run(server, token, *, on_state=None, run_updates=True)` is the **single** WebSocket relay + dispatch loop (TG bot, `MOONRAKER_SUBSCRIBE`, Bambu LAN, alerts, updates). The tray (`monofarm_tray.py`) must **host** `run()` and only add GUI (tray icon, local browser UI, autostart, printer discovery). Do **not** re-add a parallel dispatch loop to the tray — the old duplicate silently dropped the Telegram bot and Moonraker live state on Windows. New server→agent methods go in `run()`'s dispatch only.
+`monofarm_agent.run(server, token, *, on_state=None, run_updates=True)` is the single public loop hosted by the tray. `core/runtime.py` owns connection and reconnect lifecycle; `transports/websocket.py` owns server-message dispatch. The tray only adds GUI, local browser UI, autostart and discovery. Do not add a parallel dispatch loop to the facade or tray.
 
 ## Relay purity — nothing processed on our server
 
@@ -69,5 +69,5 @@ The agent is the smart edge: it receives commands and relays them to local print
 ## Distribution — exe-first on Windows
 
 - Windows: a frozen PyInstaller **.exe** (`monofarm-agent.spec`, entry `monofarm_tray.py`). Built on a Windows CI runner (`.github/workflows/agent-build.yml`) — **cannot build on Linux/macOS** — and uploaded to R2 at `agent/monofarm-agent.exe`. Served by `GET /agent/monofarm-agent.exe` (302 → presigned). `install.ps1` is exe-first (no Python).
-- Linux/Pi/dev: Python source via `install.sh` / `requirements.txt`.
-- Auto-update (`check_for_update`) is **frozen-aware**: `.exe` self-swaps (`*.old.exe` cleaned next launch); source path rewrites `.py` + re-execs. Still bump `AGENT_VERSION` in all three files together; tag `agent-v*` to publish a new exe.
+- Linux/Pi/dev: `install.sh` downloads `/agent/source.zip`. Keep every runtime source file in `agent/source_manifest.json`.
+- Auto-update (`core/updates.py`) is frozen-aware: `.exe` self-swaps; source installs validate and replace the complete manifest tree, with `monofarm_agent.py` last. The facade bootstrap upgrades pre-0.8.16 flat installs. Still bump `AGENT_VERSION` in all three files together; tag `agent-v*` to publish a new exe.

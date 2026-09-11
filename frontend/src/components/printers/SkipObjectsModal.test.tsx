@@ -40,7 +40,7 @@ describe("SkipObjectsModal", () => {
     const markup = renderToStaticMarkup(createElement(LocaleProvider, null, createElement(SkipObjectsContent, {
       printerName: "U1",
       objects: [],
-      selectedIds: new Set(),
+      selectedIds: new Set<string>(),
       onToggle: () => {},
       loading: false,
       unavailableReason: "missing_object_labels",

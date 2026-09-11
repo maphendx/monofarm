@@ -45,19 +45,37 @@ echo "Python: $PYTHON ($($PYTHON --version 2>&1))"
 
 mkdir -p "$INSTALL_DIR"
 
-# ── create venv + install deps ────────────────────────────────────────────────
+# ── create venv ───────────────────────────────────────────────────────────────
 
 echo "Creating virtual environment…"
 "$PYTHON" -m venv "$INSTALL_DIR/venv"
 VENV_PYTHON="$INSTALL_DIR/venv/bin/python"
 
-echo "Installing dependencies (websockets, httpx, paho-mqtt)…"
-"$INSTALL_DIR/venv/bin/pip" install --quiet websockets httpx paho-mqtt
-
 # ── download agent ────────────────────────────────────────────────────────────
 
-echo "Downloading agent from $SERVER/agent/monofarm_agent.py …"
-curl -sSL "$SERVER/agent/monofarm_agent.py" -o "$INSTALL_DIR/monofarm_agent.py"
+echo "Downloading agent source bundle…"
+SOURCE_ARCHIVE=$(mktemp)
+trap 'rm -f "$SOURCE_ARCHIVE"' EXIT
+curl -fsSL "$SERVER/agent/source.zip" -o "$SOURCE_ARCHIVE"
+"$PYTHON" - "$SOURCE_ARCHIVE" "$INSTALL_DIR" <<'PY'
+import sys
+import zipfile
+from pathlib import Path, PurePosixPath
+
+archive_path = Path(sys.argv[1])
+install_dir = Path(sys.argv[2]).resolve()
+with zipfile.ZipFile(archive_path) as archive:
+    for name in archive.namelist():
+        path = PurePosixPath(name)
+        if path.is_absolute() or ".." in path.parts:
+            raise SystemExit(f"Unsafe source archive path: {name}")
+    archive.extractall(install_dir)
+PY
+rm -f "$SOURCE_ARCHIVE"
+trap - EXIT
+
+echo "Installing agent dependencies…"
+"$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements-core.txt"
 
 # ── write config ──────────────────────────────────────────────────────────────
 

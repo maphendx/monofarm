@@ -1,10 +1,11 @@
 "use client";
 
+import { AuthImage } from "@/components/ui/AuthImage";
+
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { CalendarBlock } from "./utils";
 import { fmtTimeMins, fmtDuration, setDraggedTaskForCompat } from "./utils";
-import { API_URL } from "@/lib/api";
 
 function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
   const { entry, startMins, endMins, totalDurationMins } = block;
@@ -12,7 +13,7 @@ function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
   const startLabel = fmtTimeMins(startMins);
   const endLabel = fmtTimeMins(endMins % 1440);
   const thumbSrc = task.has_thumbnail && task.gcode_file_id
-    ? `${API_URL}/api/files/${task.gcode_file_id}/thumbnail` : null;
+    ? `/api/files/${task.gcode_file_id}/thumbnail` : null;
   const meta = task.filament_meta;
   const statusLabel = task.status === "done" ? "✓ Завершено"
     : task.status === "cancelled" ? "⊘ Скасовано"
@@ -34,7 +35,7 @@ function JobPopover({ block, rect }: { block: CalendarBlock; rect: DOMRect }) {
     >
       <div className="flex gap-3 border-b border-[var(--border)] px-4 py-3">
         {thumbSrc ? (
-          <img src={thumbSrc} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+          <AuthImage src={thumbSrc} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
         ) : (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-hi)] text-xs font-bold text-[var(--text-faint)]">
             {(task.file_name ?? "").endsWith(".3mf") ? "3MF" : "GC"}
@@ -125,7 +126,7 @@ export function ScheduleJobBlock({
   const durationLabel = fmtDuration(totalDurationMins);
   const fileLabel  = entry.task.file_name ?? entry.task.title;
   const thumbSrc   = entry.task.has_thumbnail && entry.task.gcode_file_id
-    ? `${API_URL}/api/files/${entry.task.gcode_file_id}/thumbnail`
+    ? `/api/files/${entry.task.gcode_file_id}/thumbnail`
     : null;
 
   const base =
@@ -195,7 +196,7 @@ export function ScheduleJobBlock({
     >
       <div className="flex h-full items-center gap-1 px-1">
         {thumbSrc ? (
-          <img src={thumbSrc} alt="" draggable={false} className="h-full max-h-6 w-auto shrink-0 rounded object-cover" />
+          <AuthImage src={thumbSrc} alt="" draggable={false} className="h-full max-h-6 w-auto shrink-0 rounded object-cover" />
         ) : (
           <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[7px] font-semibold uppercase text-[var(--text-faint)]">
             {fileLabel.endsWith(".3mf") ? "3mf" : "gc"}

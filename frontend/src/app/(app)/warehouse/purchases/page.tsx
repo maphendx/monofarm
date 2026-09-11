@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -199,10 +199,10 @@ export default function PurchasesPage() {
   const load = useCallback(async () => {
     try {
       const [pos, cps, whs, prods] = await Promise.all([
-        api<PurchaseOrder[]>("/api/warehouse/purchases"),
-        api<Counterparty[]>("/api/warehouse/counterparties"),
+        apiAll<PurchaseOrder>("/api/warehouse/purchases"),
+        apiAll<Counterparty>("/api/warehouse/counterparties"),
         api<Warehouse[]>("/api/warehouse/warehouses"),
-        api<Product[]>("/api/warehouse/products"),
+        apiAll<Product>("/api/warehouse/products"),
       ]);
       setOrders(pos);
       setCounterparties(cps);

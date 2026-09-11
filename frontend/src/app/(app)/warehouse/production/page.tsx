@@ -15,7 +15,7 @@ import { Archive, GripVertical, MessageSquare, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { CreateBatchModal, Batch, BatchComponent, BatchPriority } from "@/components/warehouse/CreateBatchModal";
@@ -583,7 +583,7 @@ export default function ProductionPage() {
   const { version } = useWarehouseStream();
 
   const load = useCallback(async () => {
-    try { setBatches(await api<Batch[]>("/api/warehouse/batches")); }
+    try { setBatches(await apiAll<Batch>("/api/warehouse/batches")); }
     finally { setLoading(false); }
   }, []);
 

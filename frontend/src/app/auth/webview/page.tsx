@@ -3,21 +3,14 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { setToken } from "@/lib/api";
+import { safeInternalRedirect } from "@/lib/safeInternalRedirect";
 
 function WebviewAuthInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
-    const token = searchParams.get("token");
-    const next = searchParams.get("next") ?? "/files";
-
-    if (token) {
-      setToken(token);
-    }
-
-    router.replace(next);
+    router.replace(safeInternalRedirect(searchParams.get("next")));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;

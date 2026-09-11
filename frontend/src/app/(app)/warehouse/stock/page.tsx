@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { matchTokens } from "@/lib/search";
 import { toast } from "sonner";
-import { API_URL, api, getToken } from "@/lib/api";
+import { API_URL, api, apiAll, getToken } from "@/lib/api";
 import Link from "next/link";
 import { CreateMovementModal, MovementType } from "@/components/warehouse/MovementModal";
 import { CreateBatchModal } from "@/components/warehouse/CreateBatchModal";
@@ -113,6 +113,7 @@ function ThresholdCell({
   field:     "min_stock" | "desired_stock" | "cell_limit";
   onSaved:   (pid: number, field: string, val: number | null) => void;
 }) {
+  "use memo";
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(value != null ? String(value) : "");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +164,7 @@ function ThresholdCell({
 // ── StockBar ──────────────────────────────────────────────────────────────────
 
 function StockBar({ avail, min, desired, inProduction = false }: { avail: number; min: number | null; desired: number | null; inProduction?: boolean }) {
+  "use memo";
   if (!desired) return null;
   const pct   = Math.min(100, (avail / desired) * 100);
   const lowOrOut = avail <= 0 || (min != null && avail < min);
@@ -637,7 +639,7 @@ export default function StockPage() {
   const { version } = useWarehouseStream();
 
   const load = useCallback(async () => {
-    try { setStock(await api<StockEntry[]>("/api/warehouse/stock")); }
+    try { setStock(await apiAll<StockEntry>("/api/warehouse/stock")); }
     finally { setLoading(false); }
   }, []);
 

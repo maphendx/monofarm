@@ -64,7 +64,7 @@ def test_bambu_bed_cleared_flag_forces_idle_despite_stale_finish_telemetry(
 
     monkeypatch.setattr(
         bambu, "get_cached_state",
-        lambda _dev_id: {"state": "operational", "filename": "done.gcode", "progress_pct": 100},
+        lambda _dev_id, *, org_id: {"state": "operational", "filename": "done.gcode", "progress_pct": 100},
     )
 
     clear_response = client.post(f"/api/printers/{printer.id}/print/clear-bed", headers=auth_headers)
@@ -100,7 +100,7 @@ def test_bambu_bed_cleared_flag_resets_once_a_new_print_is_running(
 
     monkeypatch.setattr(
         bambu, "get_cached_state",
-        lambda _dev_id: {"state": "printing", "filename": "new-job.gcode", "progress_pct": 5},
+        lambda _dev_id, *, org_id: {"state": "printing", "filename": "new-job.gcode", "progress_pct": 5},
     )
 
     get_response = client.get(f"/api/printers/{printer.id}", headers=auth_headers)

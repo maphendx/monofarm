@@ -70,7 +70,7 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
     monkeypatch.setattr(
         bambu,
         "get_cached_state",
-        lambda _dev_id: {
+        lambda _dev_id, *, org_id: {
             "state": "printing",
             "filename": "two-cubes.gcode.3mf",
             "skipped_object_ids": [],
@@ -87,7 +87,7 @@ def test_bambu_skip_objects_reads_current_job_and_sends_native_ids(
 
     monkeypatch.setattr(tunnel, "send_bambu_mqtt", unexpected_agent_command)
     sent: list[tuple[str, list[int]]] = []
-    monkeypatch.setattr(bambu, "skip_objects", lambda dev_id, ids: sent.append((dev_id, ids)))
+    monkeypatch.setattr(bambu, "skip_objects", lambda dev_id, ids, *, org_id: sent.append((dev_id, ids)))
 
     state_response = client.get(
         f"/api/printers/{printer.id}/print/skip-objects",
@@ -161,7 +161,7 @@ def test_bambu_skip_objects_reconciles_lost_agent_ack(
             "last_message_at": "2026-07-20T13:53:19+00:00",
         },
     ])
-    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: next(states))
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id, *, org_id: next(states))
     source_path = tmp_path / "skip-a9.gcode.3mf"
     source_path.write_bytes(_sliced_3mf())
     monkeypatch.setattr(storage, "local_path_for", lambda *_args: nullcontext(source_path))
@@ -229,7 +229,7 @@ def test_bambu_skip_objects_keeps_large_monofarm_file_after_delayed_start(
     monkeypatch.setattr(
         bambu,
         "get_cached_state",
-        lambda _dev_id: {
+        lambda _dev_id, *, org_id: {
             "state": "printing",
             "filename": "Large+Model_PLA_2d4h.gcode.3mf",
             "skipped_object_ids": [],

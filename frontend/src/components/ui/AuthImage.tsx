@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { API_URL, getToken } from "@/lib/api";
+import { getActiveImpersonationOrgId } from "@/lib/impersonation-store";
 
 type Props = {
   src: string;           // presigned URL (https://) or API path (/api/...)
   alt?: string;
   className?: string;
   fallback?: React.ReactNode;
+  draggable?: boolean;
 };
 
 /**
@@ -16,7 +18,7 @@ type Props = {
  * - API path (local storage): IntersectionObserver defers the Bearer-auth fetch
  *   until the element is ~200px from the viewport, then converts to a blob URL.
  */
-export function AuthImage({ src, alt = "", className, fallback }: Props) {
+export function AuthImage({ src, alt = "", className, fallback, draggable }: Props) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [error,   setError]   = useState(false);
   const [visible, setVisible] = useState(false);
@@ -50,8 +52,13 @@ export function AuthImage({ src, alt = "", className, fallback }: Props) {
     setError(false);
     setBlobUrl(null);
 
+    const headers = new Headers({ Authorization: `Bearer ${getToken() ?? ""}` });
+    const orgId = getActiveImpersonationOrgId();
+    if (orgId) headers.set("X-Impersonated-Org-Id", String(orgId));
     fetch(API_URL + src, {
-      headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+      headers,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
     })
       .then((r) => {
         if (!r.ok) throw new Error("not ok");
@@ -76,7 +83,7 @@ export function AuthImage({ src, alt = "", className, fallback }: Props) {
 
   // S3 presigned URL — let the browser handle lazy loading natively.
   if (isAbsolute) {
-    return <img src={src} alt={alt} className={className} loading="lazy" decoding="async" />;
+    return <img src={src} alt={alt} className={className} draggable={draggable} loading="lazy" decoding="async" referrerPolicy="no-referrer" />;
   }
 
   // API path — show animated placeholder until blob is ready.
@@ -89,5 +96,5 @@ export function AuthImage({ src, alt = "", className, fallback }: Props) {
     );
   }
 
-  return <img src={blobUrl} alt={alt} className={className} decoding="async" />;
+  return <img src={blobUrl} alt={alt} className={className} draggable={draggable} decoding="async" />;
 }

@@ -56,6 +56,8 @@ const printer = (overrides: Partial<Printer> = {}): Printer => ({
   autoprint_delay_seconds: 0,
   autoprint_eject_last_plate: true,
   autoprint_error: null,
+  anycubic_dev_ip: null,
+  anycubic_model_name: null,
   tags: [],
   ...overrides,
 });

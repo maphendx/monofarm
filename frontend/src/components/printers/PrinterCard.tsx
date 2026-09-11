@@ -1,5 +1,7 @@
 "use client";
 
+import { AuthImage } from "@/components/ui/AuthImage";
+
 import { useRef, useState } from "react";
 import { ArrowLeft, Maximize, MoreHorizontal, Pause, Play, Settings, Square, Video } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +42,7 @@ export function PrinterCard({
   onPrint?: (p: Printer) => void;
   onDeleted?: (id: number) => void;
 }) {
+  "use memo";
   const t = useT();
   const user = useUser();
   const tone = getPrinterCardTone(printer);
@@ -57,7 +60,7 @@ export function PrinterCard({
   const isHeating = isPrinting && (printer.progress_pct ?? 0) <= 1 && printer.bed_target != null && printer.bed_temp != null && printer.bed_temp < printer.bed_target;
   const canSkip = canSkipObject(printer);
   const thumbnailSrc = printer.job && printer.last_gcode_file_id
-    ? `${API_URL}/api/files/${printer.last_gcode_file_id}/thumbnail`
+    ? `/api/files/${printer.last_gcode_file_id}/thumbnail`
     : null;
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -272,7 +275,7 @@ export function PrinterCard({
           <div className="pc-file-row">
             {thumbnailSrc && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img className="pc-thumb" src={thumbnailSrc} alt="" />
+              <AuthImage className="pc-thumb" src={thumbnailSrc} alt="" />
             )}
             <span className="pc-file" title={printer.job}>{printer.job}</span>
             {(eta || finish) && (

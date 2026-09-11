@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApiError, api } from "@/lib/api";
 
@@ -154,7 +154,7 @@ function makeBarcodeSeed(value: string) {
   });
 }
 
-export default function OrderPrintPage() {
+function OrderPrintContent() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
@@ -461,5 +461,13 @@ export default function OrderPrintPage() {
         }
       `}</style>
     </main>
+  );
+}
+
+export default function OrderPrintPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-[var(--text-faint)]">Завантаження...</div>}>
+      <OrderPrintContent />
+    </Suspense>
   );
 }

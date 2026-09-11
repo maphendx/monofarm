@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { matchTokens } from "@/lib/search";
 import { Modal } from "@/components/ui/Modal";
@@ -432,7 +432,7 @@ export default function CounterpartiesPage() {
   const [colSettingsOpen, setColSettingsOpen] = useState(false);
 
   const load = useCallback(async () => {
-    try { setCounterparties(await api<Counterparty[]>("/api/warehouse/counterparties")); }
+    try { setCounterparties(await apiAll<Counterparty>("/api/warehouse/counterparties")); }
     finally { setLoading(false); }
   }, []);
 

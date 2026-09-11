@@ -33,7 +33,7 @@ function cardCenter(id: number): { x: number; y: number } | null {
 /*
   10×13 pixel grid rendered at 30×39px (3× scale).
   Two leg frames for walking animation.
-  Colors follow the project's cyan design system.
+  Colors follow the project's sky design system (accent #0ea5e9).
 */
 export function PixelSprite({
   hasAlert,
@@ -50,11 +50,11 @@ export function PixelSprite({
   waveFrame: boolean;
   isWaving: boolean;
 }) {
-  const B = "#0891b2"; // body — cyan-600
-  const S = "#0e7490"; // shadow — cyan-700
-  const F = "#cffafe"; // face — cyan-50
-  const E = "#083344"; // eye dark
-  const A = hasAlert ? (antOn ? "#ef4444" : "#fbbf24") : "#22d3ee"; // red↔amber blink when alert, cyan when idle
+  const B = "#0ea5e9"; // body — sky-500
+  const S = "#0369a1"; // shadow — sky-700
+  const F = "#f0f9ff"; // face — sky-50
+  const E = "#082f49"; // eye dark — sky-950
+  const A = hasAlert ? (antOn ? "#ef4444" : "#fbbf24") : "#38bdf8"; // red↔amber blink when alert, sky-400 when idle
 
   return (
     <svg

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 let lockCount = 0;
 let savedScrollY = 0;
@@ -71,6 +71,16 @@ export function Modal({
 }) {
   useBodyScrollLock(open);
 
+  // Keep the panel mounted through the exit animation before unmounting.
+  const [render, setRender] = useState(open);
+  useEffect(() => {
+    if (open) { setRender(true); return; }
+    if (!render) return;
+    const t = setTimeout(() => setRender(false), 140);
+    return () => clearTimeout(t);
+  }, [open, render]);
+  const closing = !open && render;
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -80,16 +90,16 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!render) return null;
 
   return (
     <div
-      className="overlay-in fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 ${closing ? "overlay-out" : "overlay-in"}`}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`modal-panel p-0 w-full flex flex-col max-h-[90vh] ${SIZE_CLS[size] ?? "max-w-md"}`}
+        className={`modal-panel p-0 w-full flex flex-col max-h-[90vh] ${SIZE_CLS[size] ?? "max-w-md"} ${closing ? "modal-out" : ""}`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-3">
           <h2 className="text-base font-semibold">{title}</h2>

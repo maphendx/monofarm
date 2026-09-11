@@ -42,8 +42,8 @@ def upload_timeout_for_size(size_bytes: int) -> float:
 
 # Local cache kept as stale-data fallback when Redis is unavailable or a fetch fails.
 # Some tunnel paths store `(monotonic_timestamp, status)` so readers must unwrap it.
-_status_cache: dict[str, object] = {}
-_meta_cache: dict[tuple[str, str], dict] = {}
+_status_cache: dict[tuple[int, str], object] = {}
+_meta_cache: dict[tuple[int, str, str], dict] = {}
 
 
 def _api_base(url: str) -> str:
@@ -62,8 +62,10 @@ def _status_cache_url(url: str) -> str:
         return url.strip().rstrip("/")
 
 
-def _status_cache_key(kind: str, url: str) -> str:
-    return f"mr:{kind}:{_status_cache_url(url)}"
+def _status_cache_key(kind: str, url: str, org_id: int) -> str:
+    if type(org_id) is not int or org_id <= 0:
+        raise ValueError("Moonraker cache requires an organization")
+    return f"mr:org:{org_id}:{kind}:{_status_cache_url(url)}"
 
 
 def _request(method: str, base: str, path: str, **kw) -> dict:
@@ -279,7 +281,7 @@ def apply_bed_cleared_override(status: dict, marker: dict | None) -> dict:
     }
 
 
-def mark_bed_cleared(moonraker_url: str, filename: str | None = None) -> dict:
+def mark_bed_cleared(moonraker_url: str, filename: str | None = None, *, org_id: int) -> dict:
     """Persist operator confirmation until the next print starts."""
     from app.services.cache import cache_set
 
@@ -287,14 +289,14 @@ def mark_bed_cleared(moonraker_url: str, filename: str | None = None) -> dict:
         "cleared_at": datetime.now(timezone.utc).isoformat(),
         "filename": filename,
     }
-    cache_set(f"mr:bed_cleared:{moonraker_url}", marker, BED_CLEARED_TTL_SECONDS)
+    cache_set(_status_cache_key("bed_cleared", moonraker_url, org_id), marker, BED_CLEARED_TTL_SECONDS)
     return marker
 
 
-def _apply_cached_bed_cleared(moonraker_url: str, status: dict) -> dict:
+def _apply_cached_bed_cleared(moonraker_url: str, status: dict, org_id: int) -> dict:
     from app.services.cache import cache_delete, cache_get
 
-    key = f"mr:bed_cleared:{moonraker_url}"
+    key = _status_cache_key("bed_cleared", moonraker_url, org_id)
     marker = cache_get(key)
     if not isinstance(marker, dict):
         return status
@@ -514,7 +516,7 @@ def _fetch_file_tail_and_parse(moonraker_url: str, filename: str) -> dict:
         return {}
 
 
-def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
+def get_remote_file_meta(moonraker_url: str, filename: str | None, *, org_id: int) -> dict:
     """Get filament metadata for a file stored on the printer.
 
     Tries Moonraker's own metadata first; falls back to downloading the file
@@ -525,7 +527,7 @@ def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
         return {}
 
     from app.services.cache import cache_get, cache_set
-    redis_key = f"mr:meta:{moonraker_url}:{filename}"
+    redis_key = f"{_status_cache_key('meta', moonraker_url, org_id)}:{filename}"
     fresh = cache_get(redis_key)
     if fresh is not None:
         return fresh
@@ -538,7 +540,7 @@ def get_remote_file_meta(moonraker_url: str, filename: str | None) -> dict:
             meta = {**meta, **parsed}
 
     cache_set(redis_key, meta, int(META_CACHE_TTL))
-    _meta_cache[(moonraker_url, filename)] = meta
+    _meta_cache[(org_id, _status_cache_url(moonraker_url), filename)] = meta
     return meta
 
 
@@ -699,12 +701,12 @@ def apply_print_options(
     return out.encode("utf-8")
 
 
-def get_live_status(moonraker_url: str) -> dict:
+def get_live_status(moonraker_url: str, *, org_id: int) -> dict:
     """Get cached live status. On error, returns stale data or {state:'offline'}."""
     if not moonraker_url:
         return {"state": "unknown"}
 
-    cached = get_cached_live_status(moonraker_url)
+    cached = get_cached_live_status(moonraker_url, org_id=org_id)
     if cached is not None:
         return cached
 
@@ -717,12 +719,12 @@ def get_live_status(moonraker_url: str) -> dict:
 
     from app.services.cache import cache_set
     cache_url = _status_cache_url(moonraker_url)
-    fresh_key = _status_cache_key("status", cache_url)
-    stale_key = _status_cache_key("stale", cache_url)
+    fresh_key = _status_cache_key("status", cache_url, org_id)
+    stale_key = _status_cache_key("stale", cache_url, org_id)
     cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
     cache_set(stale_key, status, STALE_CACHE_TTL)
-    _status_cache[cache_url] = status
-    return _apply_cached_bed_cleared(moonraker_url, status)
+    _status_cache[(org_id, cache_url)] = status
+    return _apply_cached_bed_cleared(moonraker_url, status, org_id)
 
 
 def _unwrap_cached_status(value: object) -> dict | None:
@@ -737,31 +739,31 @@ def _unwrap_cached_status(value: object) -> dict | None:
     return None
 
 
-def get_cached_live_status(moonraker_url: str) -> dict | None:
+def get_cached_live_status(moonraker_url: str, *, org_id: int) -> dict | None:
     """Return fresh/stale cached status without network I/O."""
     if not moonraker_url:
         return None
 
     from app.services.cache import cache_get
     cache_url = _status_cache_url(moonraker_url)
-    fresh_key = _status_cache_key("status", cache_url)
-    stale_key = _status_cache_key("stale", cache_url)
+    fresh_key = _status_cache_key("status", cache_url, org_id)
+    stale_key = _status_cache_key("stale", cache_url, org_id)
 
     fresh = cache_get(fresh_key)
     if isinstance(fresh, dict):
-        return _apply_cached_bed_cleared(moonraker_url, fresh)
+        return _apply_cached_bed_cleared(moonraker_url, fresh, org_id)
 
     stale = cache_get(stale_key)
     if isinstance(stale, dict):
-        return _apply_cached_bed_cleared(moonraker_url, stale)
+        return _apply_cached_bed_cleared(moonraker_url, stale, org_id)
 
-    cached = _unwrap_cached_status(_status_cache.get(cache_url))
-    return _apply_cached_bed_cleared(moonraker_url, cached) if cached is not None else None
+    cached = _unwrap_cached_status(_status_cache.get((org_id, cache_url)))
+    return _apply_cached_bed_cleared(moonraker_url, cached, org_id) if cached is not None else None
 
 
-def invalidate_status(moonraker_url: str) -> None:
+def invalidate_status(moonraker_url: str, *, org_id: int) -> None:
     """Force the next poll to fetch fresh state (call after pause/resume/cancel)."""
     from app.services.cache import cache_delete
     cache_url = _status_cache_url(moonraker_url)
-    cache_delete(_status_cache_key("status", cache_url))
-    _status_cache.pop(cache_url, None)
+    cache_delete(_status_cache_key("status", cache_url, org_id))
+    _status_cache.pop((org_id, cache_url), None)

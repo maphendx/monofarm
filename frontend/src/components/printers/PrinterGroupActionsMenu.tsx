@@ -273,7 +273,7 @@ export function PrinterGroupActionsMenu({
             role="menu"
             data-testid="printer-group-actions"
             className={[
-              "fixed z-50 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-2 shadow-lg",
+              "anim-menu fixed z-50 overflow-y-auto rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-2 shadow-lg",
               position.compact ? "bottom-3 max-h-[calc(100vh-24px)]" : "max-h-[calc(100vh-24px)]",
             ].join(" ")}
             style={position.compact

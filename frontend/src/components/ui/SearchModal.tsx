@@ -3,13 +3,19 @@
 import { Loader2, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { api } from "@/lib/api";
 
-type PageItem     = { kind: "page";     href: string; label: string; section: string };
-type ProductItem  = { kind: "product";  id: number; name: string; sku: string; barcode: string | null; href: string };
-type FilamentItem = { kind: "filament"; id: number; label: string; brand: string | null; sku: string | null; label_id: string | null; href: string };
-type FileItem     = { kind: "file";     id: number; name: string; href: string };
-type PrinterItem  = { kind: "printer";  id: number; name: string; kind_label: string; href: string };
+type SearchHref =
+  | Route
+  | Route<`/warehouse/products/${number}`>
+  | Route<`/printers/${number}`>;
+
+type PageItem     = { kind: "page";     href: Route; label: string; section: string };
+type ProductItem  = { kind: "product";  id: number; name: string; sku: string; barcode: string | null; href: Route<`/warehouse/products/${number}`> };
+type FilamentItem = { kind: "filament"; id: number; label: string; brand: string | null; sku: string | null; label_id: string | null; href: Route };
+type FileItem     = { kind: "file";     id: number; name: string; href: Route };
+type PrinterItem  = { kind: "printer";  id: number; name: string; kind_label: string; href: Route<`/printers/${number}`> };
 type AnyItem      = PageItem | ProductItem | FilamentItem | FileItem | PrinterItem;
 
 const PAGES: PageItem[] = [
@@ -19,7 +25,7 @@ const PAGES: PageItem[] = [
   { href: "/files",                     label: "Файли",            section: "Головне",      kind: "page" },
   { href: "/analytics",                 label: "Аналітика",        section: "Аналіз",       kind: "page" },
   { href: "/history",                   label: "Історія",          section: "Аналіз",       kind: "page" },
-  { href: "/filament",                  label: "Матеріали",        section: "Управління",   kind: "page" },
+  { href: "/materials",                 label: "Матеріали",        section: "Управління",   kind: "page" },
   { href: "/warehouse",                 label: "Склад",            section: "Управління",   kind: "page" },
   { href: "/warehouse/products",        label: "Товари",           section: "Склад",        kind: "page" },
   { href: "/warehouse/products",        label: "Номенклатура",     section: "Склад",        kind: "page" },
@@ -87,10 +93,10 @@ function itemMeta(item: AnyItem): string {
 }
 
 type ApiResult = {
-  products:  Omit<ProductItem,  "kind">[];
-  filaments: Omit<FilamentItem, "kind">[];
-  files:     Omit<FileItem,     "kind">[];
-  printers:  Array<{ id: number; name: string; kind: string; href: string }>;
+  products:  Array<{ id: number; name: string; sku: string; barcode: string | null }>;
+  filaments: Array<{ id: number; label: string; brand: string | null; sku: string | null; label_id: string | null }>;
+  files:     Array<{ id: number; name: string }>;
+  printers:  Array<{ id: number; name: string; kind: string }>;
 };
 
 export function SearchModal({ onClose }: { onClose: () => void }) {
@@ -114,11 +120,27 @@ export function SearchModal({ onClose }: { onClose: () => void }) {
     debounceRef.current = setTimeout(async () => {
       try {
         const data = await api<ApiResult>(`/api/search?q=${encodeURIComponent(q)}`);
-        const products:  ProductItem[]  = data.products.map((p) => ({ ...p, kind: "product" }));
-        const filaments: FilamentItem[] = data.filaments.map((f) => ({ ...f, kind: "filament" }));
-        const files:     FileItem[]     = data.files.map((f) => ({ ...f, kind: "file" }));
+        const products:  ProductItem[]  = data.products.map((p) => ({
+          ...p,
+          href: `/warehouse/products/${p.id}`,
+          kind: "product",
+        }));
+        const filaments: FilamentItem[] = data.filaments.map((f) => ({
+          ...f,
+          href: "/materials",
+          kind: "filament",
+        }));
+        const files:     FileItem[]     = data.files.map((f) => ({
+          ...f,
+          href: "/files",
+          kind: "file",
+        }));
         const printers:  PrinterItem[]  = data.printers.map((p) => ({
-          id: p.id, name: p.name, kind_label: PRINTER_KIND_LABEL[p.kind] ?? "Принтер", href: p.href, kind: "printer",
+          id: p.id,
+          name: p.name,
+          kind_label: PRINTER_KIND_LABEL[p.kind] ?? "Принтер",
+          href: `/printers/${p.id}`,
+          kind: "printer",
         }));
         setLive([...printers, ...products, ...files, ...filaments]);
       } catch {
@@ -135,7 +157,7 @@ export function SearchModal({ onClose }: { onClose: () => void }) {
   const pageResults: AnyItem[] = q.length >= 1 ? matchPages(q) : PAGES;
   const results: AnyItem[]     = q.length >= 2 ? [...liveItems, ...pageResults] : pageResults;
 
-  function go(href: string) { router.push(href); onClose(); }
+  function go(href: SearchHref) { router.push(href); onClose(); }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "ArrowDown")  { e.preventDefault(); setIdx((v) => Math.min(v + 1, results.length - 1)); }
@@ -145,10 +167,11 @@ export function SearchModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]" onClick={onClose}>
+    <div className="overlay-in fixed inset-0 z-50 flex items-start justify-center pt-[15vh]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative w-full max-w-[560px] mx-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl overflow-hidden"
+        className="anim-menu relative w-full max-w-[560px] mx-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl overflow-hidden"
+        style={{ transformOrigin: "top center" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border)]">

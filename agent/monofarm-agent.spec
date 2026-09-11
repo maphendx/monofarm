@@ -10,6 +10,18 @@ a = Analysis(
     datas=[],
     hiddenimports=[
         'monofarm_agent',          # imported dynamically by the tray
+        'core.runtime',
+        'core.updates',
+        'transports.http',
+        'transports.telegram',
+        'transports.web_ui',
+        'transports.websocket',
+        'printers.anycubic',
+        'printers.bambu',
+        'printers.moonraker',
+        'printers.zpl',
+        'anycubic_local.commands',
+        'anycubic_local.handshake',
         'telegram',
         'telegram.ext',
         'paho.mqtt.client',

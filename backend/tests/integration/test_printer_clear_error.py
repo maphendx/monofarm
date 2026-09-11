@@ -31,9 +31,9 @@ def test_bambu_error_cleared_flag_forces_paused_despite_stale_error_telemetry(
 
     monkeypatch.setattr(
         bambu, "get_cached_state",
-        lambda _dev_id: {"state": "error", "filename": "broken.gcode", "error_msg": "MicroSD error"},
+        lambda _dev_id, *, org_id: {"state": "error", "filename": "broken.gcode", "error_msg": "MicroSD error"},
     )
-    monkeypatch.setattr(bambu, "clear_print_error", lambda _dev_id: None)
+    monkeypatch.setattr(bambu, "clear_print_error", lambda _dev_id, *, org_id: None)
 
     clear_response = client.post(f"/api/printers/{printer.id}/print/clear-error", headers=auth_headers)
     assert clear_response.status_code == 200
@@ -67,7 +67,7 @@ def test_bambu_error_cleared_flag_resets_once_a_new_print_is_running(
 
     monkeypatch.setattr(
         bambu, "get_cached_state",
-        lambda _dev_id: {"state": "printing", "filename": "new-job.gcode", "progress_pct": 5},
+        lambda _dev_id, *, org_id: {"state": "printing", "filename": "new-job.gcode", "progress_pct": 5},
     )
 
     get_response = client.get(f"/api/printers/{printer.id}", headers=auth_headers)
@@ -102,7 +102,7 @@ def test_bambu_error_cleared_flag_does_not_force_paused_on_an_idle_printer(
     db_session.commit()
     db_session.refresh(printer)
 
-    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: {"state": "idle", "filename": None})
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id, *, org_id: {"state": "idle", "filename": None})
 
     get_response = client.get(f"/api/printers/{printer.id}", headers=auth_headers)
     assert get_response.status_code == 200
@@ -141,9 +141,9 @@ def test_cancel_unsticks_a_bambu_printer_permanently_stuck_reporting_failed(
 
     monkeypatch.setattr(
         bambu, "get_cached_state",
-        lambda _dev_id: {"state": "error", "raw_state": "FAILED", "filename": "broken.gcode", "progress_pct": 0},
+        lambda _dev_id, *, org_id: {"state": "error", "raw_state": "FAILED", "filename": "broken.gcode", "progress_pct": 0},
     )
-    monkeypatch.setattr(bambu, "stop_print", lambda _dev_id: None)
+    monkeypatch.setattr(bambu, "stop_print", lambda _dev_id, *, org_id: None)
 
     cancel_response = client.post(f"/api/printers/{printer.id}/print/cancel", headers=auth_headers)
     assert cancel_response.status_code == 200
@@ -177,7 +177,7 @@ def test_clear_error_succeeds_even_if_bambu_command_fails(
     db_session.commit()
     db_session.refresh(printer)
 
-    def _boom(_dev_id):
+    def _boom(_dev_id, *, org_id):
         raise bambu.BambuError("MQTT publish failed")
 
     monkeypatch.setattr(bambu, "clear_print_error", _boom)

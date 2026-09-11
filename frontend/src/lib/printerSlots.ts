@@ -80,9 +80,9 @@ function fromPersistent(slot: PrinterSlotInfo): NormalizedPrinterSlot {
 }
 
 function bambuSource(printer: Printer, slots: NormalizedPrinterSlot[]): "ams" | "external" {
+  if (printer.bambu_has_ams === false) return "external";
   if (printer.active_tray === EXTERNAL_SLOT) return "external";
   if (printer.active_tray != null && printer.active_tray !== EXTERNAL_SLOT) return "ams";
-  if (printer.bambu_has_ams === false) return "external";
   if (printer.bambu_has_ams === true) return "ams";
   return slots.some((slot) => !slot.isExternal) ? "ams" : "external";
 }
@@ -129,6 +129,25 @@ export function normalizedPrinterSlots(
     .map(fromPersistent);
   const all = [...liveSlots, ...persistentOnly];
   if (printer.kind !== "bambu") return all.sort((a, b) => a.slot - b.slot);
+
+  if (printer.bambu_has_ams === false) {
+    const external = all.filter((slot) => slot.isExternal);
+    if (external.length === 0) {
+      return [{
+        slot: EXTERNAL_SLOT,
+        material: null,
+        color: null,
+        colorName: null,
+        brand: null,
+        filamentId: null,
+        empty: true,
+        unitIndex: null,
+        isExternal: true,
+        verified: false,
+      }];
+    }
+    return external.sort((a, b) => a.slot - b.slot);
+  }
 
   if (opts?.allSources) return all.sort((a, b) => a.slot - b.slot);
 

@@ -96,11 +96,11 @@ def build_status_text(db: Session, org: Organization) -> str:
     for row in rows:
         from app.models.printer import PrinterKind
         if row.kind == PrinterKind.bambu and row.bambu_dev_id:
-            live = bambu.get_cached_state(row.bambu_dev_id)
+            live = bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id)
             state = live.get("state") or "unknown"
         elif row.moonraker_url:
             from app.services import moonraker
-            live = moonraker.get_live_status(row.moonraker_url)
+            live = moonraker.get_live_status(row.moonraker_url, org_id=row.organization_id)
             state = live.get("state") or "unknown"
         else:
             state = row.manual_status or "idle"

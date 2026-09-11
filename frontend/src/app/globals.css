@@ -92,7 +92,7 @@
 
   --border:        rgba(255,255,255,.08);
   --border-strong: rgba(255,255,255,.14);
-  --border-focus:  rgba(34,211,238,.45);
+  --border-focus:  rgba(56,189,248,.45);
 
   --text:       #e7e9ec;
   --text-hi:    #ffffff;
@@ -100,11 +100,11 @@
   --text-faint: #767c87;
   --text-dim:   #54585f;
 
-  --accent:        #22d3ee;
-  --accent-hi:     #67e8f9;
-  --accent-soft:   rgba(34,211,238,.12);
-  --accent-ring:   rgba(34,211,238,.22);
-  --accent-strong: #06b6d4;
+  --accent:        #0ea5e9;
+  --accent-hi:     #38bdf8;
+  --accent-soft:   rgba(14,165,233,.14);
+  --accent-ring:   rgba(14,165,233,.28);
+  --accent-strong: #0284c7;
 
   --state-print:   #38bdf8;
   --state-ok:      #4ade80;
@@ -178,6 +178,13 @@ body {
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 
+/* Dropdown / popover entrance */
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.98); }
+  to   { opacity: 1; transform: none; }
+}
+.anim-menu { animation: menu-in 140ms var(--ease-out); transform-origin: top left; }
+
 /* ───── Component base classes ───── */
 
 /* Buttons */
@@ -194,9 +201,7 @@ body {
 .btn:active:not(:disabled) { transform: scale(.97); }
 .btn-sm { height: 26px; padding: 0 10px; font-size: 12px; }
 .btn-lg { height: 38px; padding: 0 16px; font-size: 14px; }
-.btn-primary { background: var(--accent); color: #052e2b; font-weight: 600; }
-.dark .btn-primary { color: #052e2b; }
-:root:not(.dark) .btn-primary { color: #ffffff; }
+.btn-primary { background: var(--accent); color: #ffffff; font-weight: 600; }
 .btn-primary:hover { background: var(--accent-hi); }
 .btn-secondary {
   background: var(--surface); color: var(--text);
@@ -445,6 +450,7 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
   transition: border-color var(--dur-quick), transform var(--dur-quick) var(--ease-out);
 }
 .printer-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.printer-card:active { transform: scale(.985); }
 .printer-card.printing { --rail: var(--state-print); --band: color-mix(in srgb, var(--state-print) 8%, var(--surface)); --fill: var(--state-print); --pill-bg: color-mix(in srgb, var(--state-print) 14%, transparent); --pill-fg: var(--state-print); --pill-bd: color-mix(in srgb, var(--state-print) 30%, transparent); }
 .printer-card.paused { --rail: var(--state-warn); --band: color-mix(in srgb, var(--state-warn) 9%, var(--surface)); --fill: var(--state-warn); --pill-bg: color-mix(in srgb, var(--state-warn) 14%, transparent); --pill-fg: var(--state-warn); --pill-bd: color-mix(in srgb, var(--state-warn) 30%, transparent); }
 .printer-card.collect, .printer-card.ok { --rail: var(--state-ok); --band: color-mix(in srgb, var(--state-ok) 9%, var(--surface)); --fill: var(--state-ok); --pill-bg: color-mix(in srgb, var(--state-ok) 14%, transparent); --pill-fg: var(--state-ok); --pill-bd: color-mix(in srgb, var(--state-ok) 30%, transparent); }
@@ -452,7 +458,7 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 .printer-card.error { --rail: var(--state-error); --band: color-mix(in srgb, var(--state-error) 9%, var(--surface)); --fill: var(--state-error); --pill-bg: color-mix(in srgb, var(--state-error) 14%, transparent); --pill-fg: var(--state-error); --pill-bd: color-mix(in srgb, var(--state-error) 30%, transparent); }
 .printer-card.offline { --rail: transparent; opacity: .68; }
 
-.pc-band { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 7px 10px 7px 13px; background: var(--band); border-bottom: 1px solid var(--border); border-radius: var(--r-lg) var(--r-lg) 0 0; overflow: hidden; }
+.pc-band { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 7px 10px 7px 13px; background: var(--band); border-bottom: 1px solid var(--border); /* inner radius = outer radius − card border width, else corner gaps show */ border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0; overflow: hidden; }
 .pc-band-id { min-width: 0; display: flex; align-items: center; gap: 9px; }
 .pc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; letter-spacing: -.015em; color: var(--text-hi); }
 .pc-pill { align-self: center; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--pill-bd); border-radius: var(--r-full); background: var(--pill-bg); color: var(--pill-fg); font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
@@ -653,14 +659,21 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Sidebar nav link */
 .nav-link {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 8px; border-radius: var(--r-sm);
+  padding: 6px 8px 6px 10px; border-radius: var(--r-sm);
   color: var(--text-muted); font-size: 13px;
-  transition: background var(--dur-quick), color var(--dur-quick);
+  transition: background var(--dur-quick), color var(--dur-quick), transform var(--dur-instant) var(--ease-out);
   cursor: pointer;
 }
-.nav-link:hover { background: var(--surface); color: var(--text); }
-.nav-link.active { background: var(--accent-soft); color: var(--accent); }
+.nav-link:hover { background: var(--surface-hi); color: var(--text); }
+.nav-link:active { background: var(--surface-2); transform: scale(.98); }
+.nav-link.active { background: var(--surface-hi); color: var(--text-hi); }
+.nav-link.active::before {
+  content: ""; position: absolute; left: 0; top: 50%; translate: 0 -50%;
+  width: 3px; height: 16px; border-radius: var(--r-full);
+  background: var(--accent);
+}
 
 /* Table (warehouse-density) — separate from .ds-table legacy */
 .table-wrap {
@@ -695,6 +708,26 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 .overlay-in { animation: overlay-in var(--dur-quick) var(--ease-out) both; }
+/* Exit mirrors the entrance along the same path, but shorter (dismiss feels faster than appear) */
+@keyframes modal-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(6px) scale(.98); } }
+.modal-out { animation: modal-out 140ms var(--ease-out) both; pointer-events: none; }
+@keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
+.overlay-out { animation: overlay-out 140ms var(--ease-out) both; pointer-events: none; }
+
+/* Global enter for every full-screen overlay and hosted panel — covers custom
+   modals that render their own `fixed inset-0` markup (warehouse, files, …).
+   Overlay mounts only when opened, so the animation plays once per open. */
+.fixed.inset-0.z-40, .fixed.inset-0.z-50 { animation: overlay-in var(--dur-quick) var(--ease-out) both; }
+.fixed.inset-0.z-40 > .rounded-2xl, .fixed.inset-0.z-50 > .rounded-2xl,
+.fixed.inset-0.z-40 > .rounded-xl, .fixed.inset-0.z-50 > .rounded-xl { animation: modal-in var(--dur-base) var(--ease-out) both; }
+
+/* Route change: template remounts on navigation, giving every page a soft fade-in.
+   Opacity only — transform here would make `fixed` children page-relative while running. */
+@keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+.page-in { animation: page-in var(--dur-base) var(--ease-out) both; }
+
+/* View Transitions — dashboard view cross-fade */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 200ms; animation-timing-function: var(--ease-out); }
 .modal-head   { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
 .modal-title  { font-size: 16px; font-weight: 600; color: var(--text-hi); letter-spacing: -0.01em; }
 .modal-sub    { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 20px; }

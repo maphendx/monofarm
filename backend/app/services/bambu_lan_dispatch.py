@@ -225,6 +225,8 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
                 presigned = None
                 if not isinstance(platecycler, dict):
                     presigned = storage_svc.presigned_url(stored_name, org_id, expires=900)
+                if not presigned and file_bytes is None:
+                    file_bytes = await asyncio.to_thread(storage_svc.get_bytes, stored_name, org_id)
                 remote_path = await _tunnel.send_bambu_upload(
                     org_id,
                     dev_ip,
@@ -282,7 +284,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
             if start_via == "lan" and has_tunnel:
                 await _tunnel.send_bambu_mqtt(org_id, dev_id, dev_ip, access_code, start_payload)
             else:
-                await asyncio.to_thread(bambu._publish, dev_id, start_payload, 1)
+                await asyncio.to_thread(bambu._publish, dev_id, start_payload, 1, org_id=org_id)
         except (RuntimeError, bambu.BambuError) as e:
             return fail_job(
                 job_id, BambuErrorCode.LAN_MQTT_FAILED,

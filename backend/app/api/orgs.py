@@ -196,11 +196,11 @@ def bambu_status(
     _admin: User = Depends(require_roles(UserRole.admin)),
 ) -> dict:
     """Debug: show current in-memory Bambu state for this org."""
-    from app.services.bambu import _access_tokens, _user_ids, _mqtt_clients, _dev_to_org
+    from app.services.bambu import _access_tokens, _user_ids, _mqtt_clients, _subscriptions
     has_token = bool(_access_tokens.get(org.id))
     user_id = _user_ids.get(org.id, "NOT SET")
     has_mqtt = org.id in _mqtt_clients
-    devices = [dev for dev, oid in _dev_to_org.items() if oid == org.id]
+    devices = [dev for oid, dev in _subscriptions if oid == org.id]
     return {
         "bambu_configured": bool((org.bambu_email and org.bambu_password) or org.bambu_refresh_token),
         "has_access_token": has_token,

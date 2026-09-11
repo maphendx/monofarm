@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.security import create_access_token, decode_token
+from app.api.deps import authenticate_user
 from app.models.gcode_file import GcodeFile
 from app.models.printer import Printer, PrinterKind
 from app.models.printer_slot import PrinterSlot, SlotState
@@ -73,17 +73,8 @@ def _resolve_user(
             return user
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or expired API key")
 
-    # Legacy path: raw JWT token
-    payload = decode_token(x_api_key)
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API key")
-    user = db.get(User, int(user_id))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User inactive")
-    return user
+    # Legacy path: raw access JWT, with the same revocation and tenant checks as HTTP.
+    return authenticate_user(x_api_key, db)
 
 
 def _resolve_slicer_user(
@@ -265,21 +256,19 @@ async def _autoprint_moonraker(
 
 
 def _build_response(row: GcodeFile, user: User, next_path: str | None = None) -> dict:
-    """Build the OctoPrint upload response with an authenticated webview URL.
+    """Build the OctoPrint upload response without granting a browser session.
 
     OrcaSlicer opens `url` in the Device tab webview after upload.
-    We route through /auth/webview so the JWT is stored before the auth guard
-    on the target app route runs.
+    Slicer API keys must never be exchanged for unrestricted user JWTs.
+    The webview uses its existing login or the normal login screen.
     """
     from urllib.parse import quote
 
     frontend = settings.FARM_PUBLIC_URL.rstrip("/")
     backend = settings.FARM_PUBLIC_URL.rstrip("/")
 
-    # Short-lived token (15 min) for the webview session
-    wv_token = create_access_token(str(user.id), user.role.value, user.organization_id)
     next_url = quote(next_path or f"/files?highlight={row.id}", safe="")
-    webview_url = f"{frontend}/auth/webview?token={wv_token}&next={next_url}"
+    webview_url = f"{frontend}/auth/webview?next={next_url}"
 
     return {
         "done": True,

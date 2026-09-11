@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
@@ -95,7 +95,7 @@ function AddComponentForm({
 
   function handleOpen() {
     setOpen(true);
-    api<WProduct[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
+    apiAll<WProduct>("/api/warehouse/products/options").then(setProducts).catch(() => {});
   }
 
   function handleProductChange(id: string) {

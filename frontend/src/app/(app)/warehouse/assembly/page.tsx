@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
@@ -336,14 +336,14 @@ export default function AssemblyPage() {
   const load = useCallback(async () => {
     if (isManager) {
       const [b, u] = await Promise.all([
-        api<Batch[]>("/api/warehouse/batches"),
+        apiAll<Batch>("/api/warehouse/batches"),
         api<OrgUser[]>("/api/users"),
       ]);
       setMgrBatches(b.filter((x) => WORK_BATCH_STATUSES.has(x.status))); setAllUsers(u);
     } else {
       const [b, s] = await Promise.all([
-        api<Batch[]>("/api/warehouse/batches"),
-        api<Session[]>("/api/warehouse/assembly/sessions?open_only=true"),
+        apiAll<Batch>("/api/warehouse/batches"),
+        apiAll<Session>("/api/warehouse/assembly/sessions?open_only=true"),
       ]);
       setBatches(b.filter(x => x.assigned_to_id === me.id && WORK_BATCH_STATUSES.has(x.status)));
       setActiveSession(s.find(x => x.worker_id === me.id) ?? null);
@@ -354,7 +354,7 @@ export default function AssemblyPage() {
   const loadStats = useCallback(async () => {
     const [st, se] = await Promise.all([
       api<WorkerStats[]>(`/api/warehouse/assembly/stats?date_from=${dateFrom}&date_to=${dateTo}`),
-      api<Session[]>(`/api/warehouse/assembly/sessions?date_from=${dateFrom}&date_to=${dateTo}`),
+      apiAll<Session>(`/api/warehouse/assembly/sessions?date_from=${dateFrom}&date_to=${dateTo}`),
     ]);
     setStats(st); setSessions(se);
   }, [dateFrom, dateTo]);

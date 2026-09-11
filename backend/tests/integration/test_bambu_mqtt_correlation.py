@@ -37,6 +37,7 @@ def _make_printer(db_session, org_id: int, *, dev_id: str = "DEV-1") -> Printer:
     db_session.add(printer)
     db_session.commit()
     db_session.refresh(printer)
+    bambu._subscriptions.add((org_id, dev_id))
     return printer
 
 
@@ -81,7 +82,7 @@ def test_mqtt_report_transitions_matched_job_to_printing(db_session, test_org, m
 
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg(
             "DEV-MATCH",
             {
@@ -119,7 +120,7 @@ def test_transient_failed_report_before_start_waits_for_running(db_session, test
 
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg(
             "DEV-TRANSIENT",
             {"print": {"gcode_state": "FAILED", "task_id": "task-transient", "mc_percent": 0}},
@@ -132,7 +133,7 @@ def test_transient_failed_report_before_start_waits_for_running(db_session, test
 
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg(
             "DEV-TRANSIENT",
             {"print": {"gcode_state": "RUNNING", "task_id": "task-transient", "mc_percent": 1}},
@@ -162,7 +163,7 @@ def test_running_report_recovers_job_marked_failed_before_start(db_session, test
 
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg(
             "DEV-RECOVER",
             {"print": {"gcode_state": "RUNNING", "task_id": "task-recover", "mc_percent": 4}},
@@ -197,7 +198,7 @@ def test_mqtt_ambiguous_report_does_not_update_jobs(db_session, test_org, monkey
 
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg("DEV-AMBIG", {"print": {"gcode_state": "RUNNING", "subtask_name": "unknown.3mf", "mc_percent": 50}}),
     )
 
@@ -222,10 +223,10 @@ def test_bed_cleared_failed_report_stays_idle_and_does_not_fail_job(db_session, 
         status=BambuCloudJobStatus.printing,
     )
 
-    bambu.mark_bed_cleared("DEV-CLEARED", "bad-sd.3mf")
+    bambu.mark_bed_cleared("DEV-CLEARED", "bad-sd.3mf", org_id=test_org.id)
     bambu._on_message(
         None,
-        None,
+        test_org.id,
         _Msg(
             "DEV-CLEARED",
             {
@@ -241,7 +242,7 @@ def test_bed_cleared_failed_report_stays_idle_and_does_not_fail_job(db_session, 
         ),
     )
 
-    live = bambu.get_cached_state("DEV-CLEARED")
+    live = bambu.get_cached_state("DEV-CLEARED", org_id=test_org.id)
     db_session.refresh(job)
     assert live["state"] == "idle"
     assert live["raw_state"] == "IDLE"

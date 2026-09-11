@@ -1,9 +1,10 @@
 "use client";
 
+import { AuthImage } from "@/components/ui/AuthImage";
+
 import { useState } from "react";
 import type { PrintTask } from "@/lib/types";
 import { fmtDuration, setDraggedTaskForCompat } from "./utils";
-import { API_URL } from "@/lib/api";
 
 function BacklogItem({
   task,
@@ -18,7 +19,7 @@ function BacklogItem({
   const material = [task.filament_type, task.filament_color].filter(Boolean).join(" · ");
   const fileLabel = task.file_name ?? task.title;
   const thumbSrc = task.has_thumbnail && task.gcode_file_id
-    ? `${API_URL}/api/files/${task.gcode_file_id}/thumbnail`
+    ? `/api/files/${task.gcode_file_id}/thumbnail`
     : null;
 
   function handleDragStart(e: React.DragEvent<HTMLButtonElement>) {
@@ -65,7 +66,7 @@ function BacklogItem({
     >
       <div className="flex items-start gap-2">
         {thumbSrc ? (
-          <img
+          <AuthImage
             src={thumbSrc}
             alt=""
             draggable={false}

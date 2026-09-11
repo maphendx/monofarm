@@ -63,3 +63,25 @@ def test_decode_token_rejects_expired_token():
         algorithm=ALGORITHM,
     )
     assert decode_token(expired) is None
+
+
+def test_legacy_untyped_access_token_is_rejected():
+    token = jwt.encode({"sub": "1", "role": "admin", "org_id": 1,
+                        "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
+                       security.settings.SECRET_KEY, algorithm=ALGORITHM)
+    assert decode_token(token) is None
+
+
+def test_signed_access_token_without_expiration_is_rejected():
+    token = jwt.encode({"sub": "1", "role": "admin", "org_id": 1, "typ": "access", "ver": 0},
+                       security.settings.SECRET_KEY, algorithm=ALGORITHM)
+    assert decode_token(token) is None
+
+
+def test_production_email_fallback_does_not_log_reset_tokens(monkeypatch, caplog):
+    from app.services import email
+    monkeypatch.setattr(email.settings, "ENV", "production")
+    monkeypatch.setattr(email.settings, "RESEND_API_KEY", "")
+    assert not email.send_password_reset("private@example.com", "Private", "https://example.com/reset?token=PRIVATE-TOKEN")
+    assert "PRIVATE-TOKEN" not in caplog.text
+    assert "private@example.com" not in caplog.text

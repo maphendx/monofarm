@@ -14,27 +14,36 @@ bearer_scheme = HTTPBearer(auto_error=False)
 SAFE_IMPERSONATION_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
+def authenticate_user(token: str, db: Session) -> User:
+    """Use current account state for HTTP, slicer, camera and WebSocket auth."""
+    payload = decode_token(token)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user = db.get(User, int(payload["sub"]))
+    if (
+        user is None or not user.is_active
+        or user.organization_id != payload["org_id"]
+        or user.session_version != payload["ver"]
+        or user.role.value != payload["role"]
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    return user
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user = db.get(User, int(user_id))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
+    user = authenticate_user(credentials.credentials, db)
     # If a custom role is set, override allowed_modules from the role (in-memory only)
     if user.custom_role_id and not (is_platform_admin(user) or is_tenant_admin(user)):
         from app.models.user import CustomRole
         cr = db.get(CustomRole, user.custom_role_id)
-        if cr:
-            user.allowed_modules = cr.allowed_modules
+        if not cr or cr.organization_id != user.organization_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid role assignment")
+        user.allowed_modules = cr.allowed_modules
     return user
 
 

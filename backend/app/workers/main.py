@@ -40,7 +40,7 @@ def _redis_cmd_relay() -> None:
     import time as _time
     import redis as _lib
     from app.core.config import settings
-    from app.services.bambu import _mqtt_clients, _dev_to_org
+    from app.services.bambu import _mqtt_clients, _subscriptions
 
     if not settings.REDIS_URL:
         log.warning("Redis not configured — Bambu command relay disabled")
@@ -70,8 +70,12 @@ def _redis_cmd_relay() -> None:
                     payload: str = cmd["payload"]
                     qos: int = int(cmd.get("qos", 0))
                     dev_id = topic.split("/")[1] if "/" in topic else ""
-                    org_id = _dev_to_org.get(dev_id)
-                    client = _mqtt_clients.get(org_id) if org_id is not None else None
+                    org_id = cmd.get("org_id")
+                    if type(org_id) is not int or (org_id, dev_id) not in _subscriptions:
+                        continue
+                    if topic != f"device/{dev_id}/request":
+                        continue
+                    client = _mqtt_clients.get(org_id)
                     if client is not None:
                         client.publish(topic, payload, qos=qos)
                         log.debug("Redis cmd relay: forwarded cmd to %s", topic)
@@ -90,7 +94,7 @@ async def _refresh_bambu_subscriptions() -> None:
     from app.core.db import SessionLocal
     from app.models.organization import Organization
     from app.services import bambu
-    from app.services.bambu import _dev_to_org
+    from app.services.bambu import _subscriptions
 
     try:
         with SessionLocal() as db:
@@ -99,11 +103,11 @@ async def _refresh_bambu_subscriptions() -> None:
             devices = await asyncio.to_thread(bambu.list_devices, org.id)
             for d in devices:
                 dev_id = d.get("dev_id", "")
-                if dev_id and dev_id not in _dev_to_org:
+                if dev_id and (org.id, dev_id) not in _subscriptions:
                     log.info("Worker: new Bambu device discovered, subscribing: %s", dev_id)
                     bambu.subscribe_device(dev_id, org.id)
                 elif dev_id:
-                    bambu.request_full_status(dev_id)
+                    bambu.request_full_status(dev_id, org_id=org.id)
     except Exception:
         log.exception("Bambu subscription refresh failed")
 
@@ -126,6 +130,9 @@ async def main() -> None:
     from app.core.db import SessionLocal
     from app.models.organization import Organization
     import app.models.tag  # noqa: F401 — register Tag mapper before Printer is used
+
+    from app.services import tunnel
+    await tunnel.start_router()
 
     # Redis command relay (runs in daemon thread — dies with the process)
     threading.Thread(target=_redis_cmd_relay, daemon=True, name="redis-cmd-relay").start()
@@ -181,6 +188,7 @@ async def main() -> None:
         renew_task.cancel()
 
     log.info("Worker shutting down…")
+    await tunnel.stop_router()
     if is_leader:
         scheduler.shutdown()
         leader.release()

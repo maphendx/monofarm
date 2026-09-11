@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -468,7 +468,7 @@ export default function StocktakePage() {
 
   const load = useCallback(async () => {
     const [sts, whs, cats] = await Promise.all([
-      api<Stocktake[]>("/api/warehouse/stocktakes"),
+      apiAll<Stocktake>("/api/warehouse/stocktakes"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
       api<Category[]>("/api/warehouse/categories"),
     ]);

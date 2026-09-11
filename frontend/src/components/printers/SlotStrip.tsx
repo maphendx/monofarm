@@ -103,7 +103,7 @@ export function SlotPicker({
 
       {/* Picker panel */}
       <div
-        className="fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl"
+        className="anim-menu fixed z-50 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl"
         style={{ top, left, width: PICKER_W }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useBodyScrollLock } from "@/components/ui/Modal";
 
 // Mascot with variant expression
 function ConfirmMascot({ variant }: { variant: "danger" | "warn" | "default" }) {
-  const eyeColor = variant === "danger" ? "#ef4444" : variant === "warn" ? "#f59e0b" : "#083344";
-  const B = "#0891b2";
-  const S = "#0e7490";
-  const F = "#cffafe";
-  const A = "#22d3ee";
+  const eyeColor = variant === "danger" ? "#ef4444" : variant === "warn" ? "#f59e0b" : "#082f49";
+  const B = "#0ea5e9";
+  const S = "#0369a1";
+  const F = "#f0f9ff";
+  const A = "#38bdf8";
   return (
     <svg width={56} height={73} viewBox="0 0 10 13" shapeRendering="crispEdges"
       style={{ imageRendering: "pixelated" }} aria-hidden>
@@ -65,6 +65,16 @@ export function ConfirmDialog({
   const showMascot = variant !== "default";
   useBodyScrollLock(open);
 
+  // Keep mounted through the exit animation.
+  const [render, setRender] = useState(open);
+  useEffect(() => {
+    if (open) { setRender(true); return; }
+    if (!render) return;
+    const t = setTimeout(() => setRender(false), 140);
+    return () => clearTimeout(t);
+  }, [open, render]);
+  const closing = !open && render;
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -75,16 +85,16 @@ export function ConfirmDialog({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onCancel, onConfirm]);
 
-  if (!open) return null;
+  if (!render) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 ${closing ? "overlay-out" : "overlay-in"}`}
       onClick={onCancel}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="modal-panel w-full max-w-sm p-0"
+        className={`modal-panel w-full max-w-sm p-0 ${closing ? "modal-out" : ""}`}
       >
         <div className="px-5 py-5">
           {showMascot && (

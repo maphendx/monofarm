@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { matchTokens } from "@/lib/search";
 
 // ── local types ───────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ export function SpecModal({
 
   useEffect(() => {
     if (addComp && catalog.length === 0) {
-      api<CatalogItem[]>("/api/warehouse/products/options").then(setCatalog).catch(() => {});
+      apiAll<CatalogItem>("/api/warehouse/products/options").then(setCatalog).catch(() => {});
     }
     if (!addComp) { setCSearch(""); setCDropOpen(false); }
   }, [addComp]); // eslint-disable-line react-hooks/exhaustive-deps

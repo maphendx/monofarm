@@ -13,6 +13,7 @@ from app.core.security import (
     decode_invite_token,
     decode_verify_token,
     hash_password,
+    revoke_user_credentials,
     verify_password,
 )
 from app.models.organization import Organization
@@ -42,7 +43,8 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     from datetime import datetime, timezone
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    token = create_access_token(subject=str(user.id), role=user.role.value, org_id=user.organization_id)
+    token = create_access_token(subject=str(user.id), role=user.role.value, org_id=user.organization_id,
+                                session_version=user.session_version)
     return TokenResponse(access_token=token)
 
 
@@ -76,6 +78,7 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
     if not user or data.get("pwh") != (user.password_hash or "")[:16]:
         raise _bad
     user.password_hash = hash_password(payload.new_password)
+    revoke_user_credentials(user, db)
     db.commit()
     return {"ok": True}
 
@@ -173,7 +176,7 @@ def get_invite(token: str, db: Session = Depends(get_db)) -> InviteInfo:
     if not data:
         return InviteInfo(email="", org_name="", valid=False)
     user = db.get(User, data["user_id"])
-    if not user or user.email_verified_at is not None:
+    if not user or not user.is_active or user.organization_id != data["org_id"] or user.email_verified_at is not None:
         return InviteInfo(email="", org_name="", valid=False)
     org = db.get(Organization, data["org_id"])
     return InviteInfo(email=user.email, org_name=org.name if org else "", valid=True)
@@ -190,10 +193,11 @@ def accept_invite(
     if not data:
         raise HTTPException(status_code=400, detail="Посилання недійсне або застаріло")
     user = db.get(User, data["user_id"])
-    if not user or user.email_verified_at is not None:
+    if not user or not user.is_active or user.organization_id != data["org_id"] or user.email_verified_at is not None:
         raise HTTPException(status_code=400, detail="Посилання вже використано")
     from datetime import datetime, timezone
     user.password_hash = hash_password(payload.password)
+    revoke_user_credentials(user, db)
     user.email_verified_at = datetime.now(timezone.utc)
     db.commit()
     return {"ok": True}

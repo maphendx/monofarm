@@ -79,8 +79,14 @@ export function getPrintTransferDismissKey(transfers: PrintTransfer[]) {
     .join(",");
 }
 
+const EMPTY_TRANSFERS: PrintTransfer[] = [];
+
+function getServerSnapshot(): PrintTransfer[] {
+  return EMPTY_TRANSFERS;
+}
+
 export function usePrintTransfers() {
-  return useSyncExternalStore(subscribePrintTransfers, getPrintTransfers, () => []);
+  return useSyncExternalStore(subscribePrintTransfers, getPrintTransfers, getServerSnapshot);
 }
 
 export function trackPrintTransfer(seed: TransferSeed) {
@@ -124,4 +130,12 @@ export function updatePrintTransfer(job: BambuCloudJob) {
 export function dismissPrintTransfer(jobId: number) {
   snapshot = snapshot.filter((transfer) => transfer.jobId !== jobId);
   notify();
+}
+
+export function clearPrintTransfers() {
+  snapshot = [];
+  notify();
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(STORAGE_KEY);
+  } catch { /* private browsing may disable storage */ }
 }

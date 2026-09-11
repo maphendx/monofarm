@@ -19,10 +19,10 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from app.core.db import SessionLocal
-from app.core.security import decode_token
+from app.api.deps import authenticate_user
 from app.models.organization import Organization
 from app.models.printer import Printer
 from app.models.printer_group import PrinterGroup
@@ -36,6 +36,7 @@ router = APIRouter(tags=["ws"])
 
 _TICK = 5  # seconds between state snapshots
 _SNAPSHOT_TTL = 4.0
+SESSION_RECHECK_SECONDS = 30.0
 _snapshot_cache: dict[int, tuple[float, str, list[dict]]] = {}
 _snapshot_locks: dict[int, asyncio.Lock] = {}
 
@@ -88,7 +89,7 @@ def _build_snapshot(org_id: int) -> list[dict]:
         out = []
         for row in rows:
             cached = (
-                moonraker.get_cached_live_status(row.moonraker_url)
+                moonraker.get_cached_live_status(row.moonraker_url, org_id=row.organization_id)
                 if row.moonraker_url else None
             )
             pslots = slots_by_printer.get(row.id) or None
@@ -203,8 +204,7 @@ async def printer_stream(
 
         push_task = asyncio.create_task(_push_loop())
         try:
-            while True:
-                await websocket.receive_text()  # keeps connection alive, accepts pings
+            await _receive_authenticated(websocket, token, org_id, impersonated_org_id)
         except WebSocketDisconnect:
             pass
         finally:
@@ -215,16 +215,10 @@ async def printer_stream(
 
 def _auth_org(token: str | None, impersonated_org_id: int | None = None) -> int | None:
     """Decode token → org_id, or None if invalid."""
-    payload = decode_token(token or "")
-    if not payload:
-        return None
-    user_id_raw = payload.get("sub")
-    if not user_id_raw:
-        return None
     with SessionLocal() as db:
-        from app.models.user import User
-        user = db.get(User, int(user_id_raw))
-        if not user or not user.is_active:
+        try:
+            user = authenticate_user(token or "", db)
+        except HTTPException:
             return None
         if impersonated_org_id is not None:
             if not is_platform_admin(user):
@@ -234,6 +228,28 @@ def _auth_org(token: str | None, impersonated_org_id: int | None = None) -> int 
         if user.organization_id is None:
             return None
         return user.organization_id
+
+
+async def _receive_authenticated(
+    websocket: WebSocket,
+    token: str | None,
+    org_id: int,
+    impersonated_org_id: int | None = None,
+) -> None:
+    """Recheck idle and busy connections so revoked sessions stop receiving data."""
+    checked_at = time.monotonic()
+    while True:
+        remaining = SESSION_RECHECK_SECONDS - (time.monotonic() - checked_at)
+        if remaining <= 0:
+            if _auth_org(token, impersonated_org_id) != org_id:
+                await websocket.close(code=1008)
+                return
+            checked_at = time.monotonic()
+            remaining = SESSION_RECHECK_SECONDS
+        try:
+            await asyncio.wait_for(websocket.receive_text(), timeout=remaining)
+        except asyncio.TimeoutError:
+            continue
 
 
 @router.websocket("/ws/org")
@@ -251,8 +267,7 @@ async def org_event_stream(
     await manager.connect(websocket, org_id)
     try:
         await websocket.send_json({"type": "connected", "org_id": org_id})
-        while True:
-            await websocket.receive_text()
+        await _receive_authenticated(websocket, token, org_id, impersonated_org_id)
     except WebSocketDisconnect:
         pass
     finally:

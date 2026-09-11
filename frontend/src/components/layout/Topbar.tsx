@@ -65,7 +65,7 @@ function ProfileMenu({ user }: { user: User }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 z-50 min-w-[180px] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-lg  ">
+        <div className="anim-menu absolute right-0 top-10 z-50 min-w-[180px] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-lg  ">
           <div className="border-b border-[var(--border)] px-4 py-2 ">
             <p className="truncate text-sm font-medium">{user.name || user.email}</p>
             <p className="truncate text-xs text-[var(--text-muted)]">{user.email}</p>
@@ -108,7 +108,7 @@ export function Topbar({ user }: { user: User | null }) {
   ] as const;
 
   return (
-    <header className="border-b border-[var(--border)] bg-[var(--bg-elevated)]  ">
+    <header className="border-b border-[var(--border)] bg-[var(--bg)]">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link href="/dashboard" className="font-semibold tracking-tight">
@@ -124,7 +124,7 @@ export function Topbar({ user }: { user: User | null }) {
                   className={
                     "rounded-md px-3 py-1.5 transition " +
                     (active
-                      ? "bg-[var(--accent-soft)] text-[var(--accent)]"
+                      ? "bg-[var(--surface-hi)] font-medium text-[var(--text-hi)]"
                       : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)] hover:text-[var(--text)]")
                   }
                 >

@@ -11,6 +11,15 @@ jobs:
     name: Backend (lint + tests)
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       postgres:
         image: postgres:16-alpine
         env:
@@ -49,6 +58,7 @@ jobs:
 
       - name: Run tests
         env:
+          TEST_REDIS_URL: redis://localhost:6379/0
           TEST_DATABASE_URL: postgresql+psycopg://printfarm:printfarm@localhost:5432/printfarm_test
         run: pytest -ra
 
@@ -89,18 +99,16 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Lint (advisory)
-        # Next.js 16 / React 19 introduced new strict rules (react-hooks/
-        # set-state-in-effect) that flag legacy patterns in the codebase.
-        # See TECH_DEBT.md for the cleanup list. Lint is advisory until that
-        # is fixed; the build step below is the hard gate.
-        continue-on-error: true
+      - name: Lint
         run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
 
       - name: Test
         run: bun test

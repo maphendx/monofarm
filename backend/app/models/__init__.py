@@ -19,6 +19,8 @@ from app.models.warehouse import (
     OrderPayment, HoroshopSyncEvent, WarehouseZone, WarehouseCell,
     CellStock, CellMovement, CashTransaction, LabelTemplate,
 )
+from app.models.tag import Tag, TagKind, printer_tags_table, gcode_file_tags_table, print_task_tags_table
+
 
 __all__ = [
     "Organization",

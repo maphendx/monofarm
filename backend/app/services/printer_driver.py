@@ -59,7 +59,7 @@ class MoonrakerDriver:
         from app.services import moonraker
         if not printer.moonraker_url:
             return {"state": "unknown"}
-        return moonraker.get_live_status(printer.moonraker_url)
+        return moonraker.get_live_status(printer.moonraker_url, org_id=printer.organization_id)
 
     def sync_slots(self, db: "Session", printer: "Printer") -> list["PrinterSlot"]:
         """Read printer.loaded_filaments JSONB → upsert printer_slots.
@@ -109,7 +109,7 @@ class MoonrakerDriver:
 
         if printer.moonraker_url and filename:
             try:
-                meta = moonraker.get_remote_file_meta(printer.moonraker_url, filename)
+                meta = moonraker.get_remote_file_meta(printer.moonraker_url, filename, org_id=printer.organization_id)
                 used_g: list[float] = meta.get("used_g") or []
                 if used_g:
                     return {i: g for i, g in enumerate(used_g) if g and g > 0}
@@ -128,7 +128,7 @@ class BambuDriver:
         from app.services import bambu
         if not printer.bambu_dev_id:
             return {"state": "unknown"}
-        return bambu.get_cached_state(printer.bambu_dev_id)
+        return bambu.get_cached_state(printer.bambu_dev_id, org_id=printer.organization_id)
 
     def sync_slots(self, db: "Session", printer: "Printer") -> list["PrinterSlot"]:
         """Pull AMS trays from Bambu cache → upsert printer_slots.
@@ -143,7 +143,7 @@ class BambuDriver:
         if not printer.bambu_dev_id:
             return []
 
-        trays = bambu.get_ams_filaments(printer.bambu_dev_id) or []
+        trays = bambu.get_ams_filaments(printer.bambu_dev_id, org_id=printer.organization_id) or []
         slots: list[PrinterSlot] = []
         for tray in trays:
             idx = int(tray.get("slot", 0))
@@ -186,7 +186,7 @@ class BambuDriver:
         """
         if printer.bambu_dev_id and filament_g_total and filament_g_total > 0:
             from app.services import bambu
-            state = bambu.get_cached_state(printer.bambu_dev_id)
+            state = bambu.get_cached_state(printer.bambu_dev_id, org_id=printer.organization_id)
             active = state.get("active_tray")
             if active is not None and active != 254:
                 return {int(active): filament_g_total}

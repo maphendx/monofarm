@@ -10,7 +10,7 @@ import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, FilamentColor } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
-import { PageSkeleton } from "@/components/ui/ContentSkeleton";
+import { CardsSkeleton, PageSkeleton, StatsSkeleton } from "@/components/ui/ContentSkeleton";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -749,7 +749,19 @@ export default function FilamentPage() {
     [filaments, selected],
   );
 
-  if (loading) return <div className="text-sm text-[var(--text-muted)]">{t("common.loading")}</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="skeleton h-7 w-40 rounded-lg" />
+          <div className="skeleton h-9 w-28 rounded-lg" />
+        </div>
+        <StatsSkeleton count={3} />
+        <div className="skeleton h-10 w-full rounded-lg" />
+        <CardsSkeleton count={8} cols={4} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

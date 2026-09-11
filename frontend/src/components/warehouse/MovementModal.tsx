@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
 import { matchTokens } from "@/lib/search";
@@ -155,9 +155,9 @@ export function CreateMovementModal({
 
   useEffect(() => {
     Promise.all([
-      api<Product[]>("/api/warehouse/products/options"),
+      apiAll<Product>("/api/warehouse/products/options"),
       api<Warehouse[]>("/api/warehouse/warehouses"),
-      api<Counterparty[]>("/api/warehouse/counterparties"),
+      apiAll<Counterparty>("/api/warehouse/counterparties"),
     ]).then(([p, w, c]) => {
       setProducts(p);
       setWarehouses(w);

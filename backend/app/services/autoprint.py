@@ -34,8 +34,16 @@ def record_completed_run(db: Session, job: BambuCloudJob) -> bool:
     ):
         return False
 
-    entry = db.get(PlanEntry, job.plan_entry_id)
-    printer = db.get(Printer, job.printer_id)
+    # Pub/Sub delivers the same terminal event to multiple web workers. Lock and
+    # refresh persisted counters so only one consumer accounts for this run.
+    printer = (
+        db.query(Printer).filter(Printer.id == job.printer_id, Printer.organization_id == job.organization_id)
+        .populate_existing().with_for_update().first()
+    )
+    entry = (
+        db.query(PlanEntry).filter(PlanEntry.id == job.plan_entry_id, PlanEntry.organization_id == job.organization_id)
+        .populate_existing().with_for_update().first()
+    )
     if entry is None or printer is None:
         return False
     if entry.organization_id != job.organization_id or entry.printer_id != printer.id:
@@ -116,7 +124,9 @@ async def start_next_for_printer(
         from app.services.schedule_conflict import check_eligibility
 
         with SessionLocal() as db:
-            printer = db.get(Printer, printer_id)
+            # The asyncio lock is process-local. Skip a printer another worker is
+            # already planning; its queued job becomes visible before this lock is released.
+            printer = db.query(Printer).filter(Printer.id == printer_id).with_for_update(skip_locked=True).first()
             if (
                 printer is None
                 or printer.autoprint_mode != "platecycler"
@@ -139,7 +149,7 @@ async def start_next_for_printer(
             if active_job is not None:
                 return None
 
-            state = bambu.get_cached_state(printer.bambu_dev_id).get("state")
+            state = bambu.get_cached_state(printer.bambu_dev_id, org_id=printer.organization_id).get("state")
             allowed_states = {"idle", "operational"} if allow_finished_state else {"idle"}
             if state not in allowed_states:
                 return None

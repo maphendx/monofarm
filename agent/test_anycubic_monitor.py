@@ -1,9 +1,9 @@
 import asyncio
 import json
 
-import monofarm_agent
 from anycubic_local import commands
-from monofarm_agent import (
+from printers import anycubic
+from printers.anycubic import (
     _ANYCUBIC_STATUS_POLL_INTERVAL,
     _anycubic_poll_requests,
     handle_anycubic_command,
@@ -47,8 +47,8 @@ def test_anycubic_command_supplies_live_timestamp_for_source_updates(monkeypatch
         return "topic", {"ok": True}
 
     monkeypatch.setattr(commands, "build", fake_build)
-    monkeypatch.setattr(monofarm_agent.time, "time", lambda: 1.234)
-    monkeypatch.setitem(monofarm_agent._anycubic_live_clients, "DEV-1", Client())
+    monkeypatch.setattr(anycubic.time, "time", lambda: 1.234)
+    monkeypatch.setitem(anycubic._anycubic_live_clients, "DEV-1", Client())
 
     asyncio.run(handle_anycubic_command(WebSocket(), {
         "id": "request-1",

@@ -1068,3 +1068,113 @@ class PickListOut(BaseModel):
     order_id:     int
     order_number: str
     items:        list[PickItem] = []
+
+
+# ── Router support schemas ───────────────────────────────────────────────────
+
+class StockThresholdsUpdate(BaseModel):
+    min_stock: int | None = None
+    desired_stock: int | None = None
+    cell_limit: int | None = None
+
+
+class OrdageSpecImportResult(BaseModel):
+    updated: int
+    skipped: int
+    errors: list[dict]
+
+
+class ReplenishPreviewItem(BaseModel):
+    product_id: int
+    product_name: str
+    product_sku: str
+    unit: str
+    available: float
+    min_stock: int | None
+    desired_stock: int | None
+    qty_needed: int
+    kind: str
+    specification_id: int | None
+    warehouse_id: int | None
+    warehouse_name: str | None
+
+
+class ReplenishItem(BaseModel):
+    product_id: int
+    qty: int
+    kind: str
+    warehouse_id: int | None = None
+    specification_id: int | None = None
+    unit_cost: Decimal | None = None
+
+
+class ReplenishRequest(BaseModel):
+    items: list[ReplenishItem]
+
+
+class StockImportResult(BaseModel):
+    updated: int
+    skipped: int
+    errors: list[str]
+
+
+class TopProduct(BaseModel):
+    product_id: int
+    product_name: str
+    revenue: Decimal
+    units: int
+
+
+class MaterialCost(BaseModel):
+    name: str
+    cost: Decimal
+
+
+class CashFlowBucket(BaseModel):
+    label: str
+    inflow: Decimal
+    outflow: Decimal
+
+
+class WarehouseAnalytics(BaseModel):
+    revenue: Decimal
+    cogs: Decimal
+    gross_profit: Decimal
+    margin_pct: Decimal
+    units_produced: int
+    units_sold: int
+    defect_rate: Decimal
+    top_products: list[TopProduct]
+    material_costs: list[MaterialCost]
+    cash_flow: list[CashFlowBucket]
+
+
+class LabelTemplateCreate(BaseModel):
+    name: str
+    item_type: str = "universal"
+    width_mm: float = 57.0
+    height_mm: float = 32.0
+    elements: list = []
+    is_default: bool = False
+
+
+class LabelTemplateUpdate(BaseModel):
+    name: str | None = None
+    item_type: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    elements: list | None = None
+    is_default: bool | None = None
+
+
+class LabelTemplateOut(BaseModel):
+    id: int
+    name: str
+    item_type: str
+    width_mm: float
+    height_mm: float
+    elements: list
+    is_default: bool
+    is_builtin: bool = False
+
+    model_config = ConfigDict(from_attributes=True)

@@ -1,12 +1,26 @@
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import bcrypt
 import jwt
 
 from app.core.config import settings
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from app.models.user import User
+
 
 ALGORITHM = "HS256"
+ACCESS_TOKEN_TYPE = "access"
+
+
+def revoke_user_credentials(user: "User", db: "Session") -> None:
+    """Invalidate existing login tokens and API keys after account security changes."""
+    from app.models.api_key import ApiKey
+
+    user.session_version += 1
+    db.query(ApiKey).filter(ApiKey.user_id == user.id).update({ApiKey.is_active: False})
 
 
 def hash_password(password: str) -> str:
@@ -20,17 +34,37 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, role: str, org_id: int | None) -> str:
+def create_access_token(subject: str, role: str, org_id: int | None, session_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": subject, "role": role, "org_id": org_id, "exp": expire}
+    payload = {
+        "sub": subject, "role": role, "org_id": org_id, "exp": expire,
+        "typ": ACCESS_TOKEN_TYPE, "ver": session_version,
+    }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict | None:
+    """Decode access tokens only; email/reset/invitation tokens cannot authenticate."""
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[ALGORITHM],
+            options={"require": ["sub", "exp", "typ", "role", "ver"]},
+        )
     except jwt.PyJWTError:
         return None
+    if payload.get("typ") != ACCESS_TOKEN_TYPE or "org_id" not in payload:
+        return None
+    subject = payload.get("sub")
+    if not isinstance(subject, str) or not subject.isascii() or not subject.isdigit() or int(subject) <= 0:
+        return None
+    org_id = payload["org_id"]
+    if org_id is not None and (type(org_id) is not int or org_id <= 0):
+        return None
+    if type(payload["ver"]) is not int or payload["ver"] < 0:
+        return None
+    if not isinstance(payload["role"], str):
+        return None
+    return payload
 
 
 def create_verify_token(user_id: int) -> str:
@@ -82,4 +116,3 @@ def create_reset_token(user: object) -> str:
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
-

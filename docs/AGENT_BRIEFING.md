@@ -21,10 +21,10 @@ Agent methods: GET/POST (HTTP proxy), STREAM (httpx), BAMBU_CAMERA, FFMPEG_STREA
 
 ## Credentials
 
-- oytoy@gmail.com / monofarm2026 (org 2, admin)
-- vladakinpro@gmail.com / 123456Qwerty (org 2, admin)
-- Tailscale Mac: 100.83.31.41
-- A1: 192.168.31.39, code: 41434469
+Credentials and printer access codes must not be stored in this repository.
+Previously documented credentials require rotation if they were ever active;
+removing this section does not remove them from Git history or existing copies.
+Use a secret manager and per-environment configuration.
 
 ## Pending
 

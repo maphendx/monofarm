@@ -49,7 +49,11 @@ Use the existing `_get_product()` / `_get_warehouse()` / `_get_spec()` helpers i
 
 ## Pagination
 
-No framework-level pagination yet — large lists are returned in full. For new endpoints on potentially large tables (movements, history, orders) add `skip: int = 0, limit: int = 100` query params and apply `.offset(skip).limit(limit)` on the query.
+For new endpoints on potentially large tables (movements, history, orders), add
+bounded pagination and deterministic ordering. Warehouse collections use
+`PageOffset` / `PageLimit` from `api/warehouse_modules/pagination.py` (default
+100, maximum 500). Apply `.offset(skip).limit(limit)` after all filters and a
+stable order that includes a unique tie-breaker such as `id`.
 
 ## Response patterns
 

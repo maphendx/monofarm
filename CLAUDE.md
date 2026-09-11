@@ -77,7 +77,7 @@ Tests use a separate `printfarm_test` Postgres database. Override with `TEST_DAT
 | `folders_router` | `/folders` | gcode folder CRUD |
 | `history.py` | `/history` | print history log |
 | `analytics.py` | `/analytics` | summary, daily, printer stats, filament usage |
-| `warehouse.py` | `/warehouse` | full ERP — see Warehouse module section |
+| `warehouse.py` + `warehouse_modules/` | `/warehouse` | full ERP — see Warehouse module section |
 | `keycrm.py` | `/keycrm` | KeyCRM webhook receiver (orders → warehouse orders) |
 | `billing.py` | `/api/billing` | Lemon Squeezy checkout, webhook, cancel |
 | `agent.py` | `/api/agent` | WebSocket tunnel for local farm agent; version check |
@@ -106,9 +106,15 @@ Tests use a separate `printfarm_test` Postgres database. Override with `TEST_DAT
 - `go2rtc.py` — camera stream proxy via go2rtc sidecar (`GO2RTC_URL`). Used for Bambu camera streams.
 - `bootstrap.py` — seeds admin user and default org on first start.
 
-### Warehouse module (`api/warehouse.py`, `models/warehouse.py`)
+### Warehouse module (`api/warehouse.py`, `api/warehouse_modules/`, `models/warehouse.py`)
 
 Full ERP layer. All under `/api/warehouse`:
+
+`api/warehouse.py` is the compatibility facade and composes domain routers from
+`api/warehouse_modules/`. Shared stock, AVCO, bin and serialization invariants
+live in `common.py`. Large collections use bounded `skip`/`limit` pagination
+(100 by default, 500 maximum); frontend views that require the full collection
+walk those pages through `apiAll()`.
 
 | Group | Endpoints |
 | --- | --- |
@@ -305,3 +311,27 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Tenant security invariants
+
+- Access JWTs require `typ=access` and `ver`; authenticate against the current user organization, role, active flag and `session_version` through `authenticate_user`. Password/account security changes revoke credentials. Migration `0086` adds the version.
+- Moonraker and Bambu caches, Bambu MQTT routing/acknowledgments, and go2rtc stream names must include organization identity. Pass the required `org_id`; never fall back to URL-only or serial-only keys.
+- File thumbnails require organization authentication. Use `AuthImage` for API thumbnail URLs; do not restore public ID-only thumbnail access.
+- Agent connections/configuration require a tenant-admin session. Use the authenticated tunnel organization, never an organization supplied in an agent payload.
+- See `docs/SECURITY_REVIEW_2026-09-10.md` for verification, deployment requirements and remaining confidentiality boundaries.
+
+## Agent tunnel routing
+
+- `services/tunnel_router.py` routes agent commands/responses over Redis Pub/Sub between web and background-worker processes. The socket owner has a 15-second Redis lease and a unique connection ID; requests remain pinned to that connection.
+- All web and worker instances must share a private `REDIS_URL`. Without Redis, tunnels support only one web process. Redis routing failures fail closed; do not silently use process-local presence when Redis is configured.
+- Keep the agent wire protocol unchanged when changing internal routing. Route all request senders through `tunnel.py`; propagate the authenticated organization and preserve upload progress, camera cleanup and connection fencing.
+- Never automatically retry an ambiguously delivered printer command. Redis delivery permits and acknowledgments are transport guards, not proof of physical execution.
+- See `docs/AGENT_TUNNEL_ROUTING.md` for lifecycle, tests, limits and deployment requirements.
+
+## Edge agent module boundaries
+
+- `agent/monofarm_agent.py` is a compatibility facade and CLI. Keep implementation in `agent/core/`, `agent/transports/`, or `agent/printers/`.
+- `core/runtime.py` owns the canonical connection/reconnect lifecycle. `transports/websocket.py` owns wire parsing and dispatch. Printer-specific protocols stay in their corresponding module.
+- Linux/source distribution is a complete archive defined by `agent/source_manifest.json`; keep it current whenever a runtime file is added or removed. Pre-0.8.16 flat installs rely on the facade bootstrap.
+- Windows continues to enter through `monofarm_tray.py`; keep the PyInstaller hidden imports synchronized with package changes.
+- See `docs/EDGE_AGENT_ARCHITECTURE.md` for the module map and compatibility contract.

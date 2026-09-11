@@ -22,8 +22,8 @@ def is_available() -> bool:
     return bool(settings.GO2RTC_URL)
 
 
-def stream_name(dev_id: str) -> str:
-    return f"bambu_{dev_id}"
+def stream_name(dev_id: str, *, org_id: int) -> str:
+    return f"bambu_org_{org_id}_{dev_id}"
 
 
 def _stream_url(access_code: str, ip: str, model: str = "") -> str:
@@ -39,12 +39,12 @@ def _stream_url(access_code: str, ip: str, model: str = "") -> str:
     return f"bambu://{access_code}@{ip}?channel=1"
 
 
-async def register_stream(dev_id: str, access_code: str, ip: str, model: str = "") -> bool:
+async def register_stream(dev_id: str, access_code: str, ip: str, model: str = "", *, org_id: int) -> bool:
     """Register (or update) a Bambu stream in go2rtc. Returns True on success."""
     if not is_available():
         return False
     url = _stream_url(access_code, ip, model)
-    name = stream_name(dev_id)
+    name = stream_name(dev_id, org_id=org_id)
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.put(
@@ -57,11 +57,11 @@ async def register_stream(dev_id: str, access_code: str, ip: str, model: str = "
         return False
 
 
-def mjpeg_url(dev_id: str) -> str:
-    return f"{settings.GO2RTC_URL}/api/stream.mjpeg?src={stream_name(dev_id)}"
+def mjpeg_url(dev_id: str, *, org_id: int) -> str:
+    return f"{settings.GO2RTC_URL}/api/stream.mjpeg?src={stream_name(dev_id, org_id=org_id)}"
 
 
-async def stream_exists(dev_id: str) -> bool:
+async def stream_exists(dev_id: str, *, org_id: int) -> bool:
     """Check if go2rtc already has this stream registered."""
     if not is_available():
         return False
@@ -69,7 +69,7 @@ async def stream_exists(dev_id: str) -> bool:
         async with httpx.AsyncClient(timeout=3) as client:
             r = await client.get(f"{settings.GO2RTC_URL}/api/streams")
             if r.status_code == 200:
-                return stream_name(dev_id) in r.json()
+                return stream_name(dev_id, org_id=org_id) in r.json()
     except Exception:
         pass
     return False

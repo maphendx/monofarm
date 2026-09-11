@@ -55,6 +55,8 @@ const basePrinter = (overrides: Partial<Printer>): Printer => ({
   autoprint_delay_seconds: 0,
   autoprint_eject_last_plate: true,
   autoprint_error: null,
+  anycubic_dev_ip: null,
+  anycubic_model_name: null,
   tags: [],
   ...overrides,
 });
@@ -85,6 +87,33 @@ describe("normalized printer slots", () => {
 
     expect(slots.map((slot) => slot.slot)).toEqual([0, 1]);
     expect(slots.every((slot) => !slot.isExternal)).toBe(true);
+  });
+
+  it("shows only the external slot when bambu_has_ams is false", () => {
+    const slots = normalizedPrinterSlots(basePrinter({
+      bambu_has_ams: false,
+      loaded_filaments: [
+        { slot: 0, color: "#ff0000", color_name: "Red", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: 0 },
+        { slot: 1, color: "#0000ff", color_name: "Blue", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: 0 },
+        { slot: 254, color: "#00ff00", color_name: "Green", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: null },
+      ],
+    }));
+
+    expect(slots.map((slot) => slot.slot)).toEqual([254]);
+    expect(slots[0]?.isExternal).toBe(true);
+  });
+
+  it("falls back to an empty external slot placeholder when bambu_has_ams is false and no external is loaded", () => {
+    const slots = normalizedPrinterSlots(basePrinter({
+      bambu_has_ams: false,
+      loaded_filaments: [
+        { slot: 0, color: "#ff0000", color_name: "Red", type: "PLA", brand: null, filament_id: null, empty: false, unit_id: 0 },
+      ],
+    }));
+
+    expect(slots.map((slot) => slot.slot)).toEqual([254]);
+    expect(slots[0]?.isExternal).toBe(true);
+    expect(slots[0]?.empty).toBe(true);
   });
 
   it("keeps Handy live color while preserving the inventory link", () => {

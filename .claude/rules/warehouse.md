@@ -1,6 +1,7 @@
 ---
 paths:
   - "backend/app/api/warehouse.py"
+  - "backend/app/api/warehouse_modules/**/*.py"
   - "backend/app/models/warehouse.py"
   - "backend/app/schemas/warehouse.py"
   - "frontend/src/app/**/warehouse/**"
@@ -10,6 +11,15 @@ paths:
 # Warehouse / ERP module
 
 Long-form context in root `CLAUDE.md`. Rules specific to warehouse code:
+
+## Router structure and pagination
+
+`api/warehouse.py` is only the public compatibility facade and router aggregator.
+Put endpoints in the matching domain module under `api/warehouse_modules/`; shared
+stock/cost invariants stay in `common.py`. Large list routes use the shared
+`PageOffset` / `PageLimit` bounds from `pagination.py`, with stable tie-breaker
+ordering. Frontend views that need the complete collection use `apiAll()` so they
+walk bounded pages instead of relying on an unbounded response.
 
 ## Stock ledger — never mutate directly
 

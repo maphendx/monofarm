@@ -118,6 +118,12 @@ class _ImplicitFTP_TLS(ftplib.FTP_TLS):
                 conn.sendall(buf)
                 if callback:
                     callback(buf)
+            if isinstance(conn, ssl.SSLSocket):
+                try:
+                    conn.settimeout(0.5)
+                    conn.unwrap()
+                except Exception:
+                    pass
         finally:
             conn.close()
         return self.voidresp()
@@ -134,21 +140,21 @@ _mqtt_lock = threading.Lock()
 _seq_counter = 0
 _seq_lock = threading.Lock()
 
-# dev_id → {ts: float, state: str, ...}  — latest MQTT report per printer
-_state_cache: dict[str, dict[str, Any]] = {}
-# dev_id → list[dict]  — AMS tray data
-_ams_cache: dict[str, list[dict]] = {}
+# (org_id, dev_id) → latest MQTT report; serial numbers are not tenant boundaries.
+_state_cache: dict[tuple[int, str], dict[str, Any]] = {}
+# (org_id, dev_id) → AMS tray data
+_ams_cache: dict[tuple[int, str], list[dict]] = {}
 # A successful setting ACK can arrive just before an older full AMS snapshot.
 # Hold the confirmed value briefly so that stale in-flight telemetry cannot
 # make the spool flash back to its previous colour in the UI.
-_confirmed_filament_slots: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
-# dev_id → monotonic ts of last Redis write (throttling, see REDIS_*_WRITE_INTERVAL)
-_last_state_redis_write: dict[str, float] = {}
-_last_ams_redis_write: dict[str, float] = {}
-# dev_id → org_id  — routes publish to the right MQTT client
-_dev_to_org: dict[str, int] = {}
-# dev_id → paho Client  — per-device LAN MQTT clients (older firmware, no cloud)
-_lan_mqtt_clients: dict[str, Any] = {}
+_confirmed_filament_slots: dict[tuple[int, str, int], tuple[float, dict[str, Any]]] = {}
+# (org_id, dev_id) → last Redis write (throttling)
+_last_state_redis_write: dict[tuple[int, str], float] = {}
+_last_ams_redis_write: dict[tuple[int, str], float] = {}
+# Subscriptions are owned by the authenticated cloud/LAN connection.
+_subscriptions: set[tuple[int, str]] = set()
+# (org_id, dev_id) → LAN MQTT client
+_lan_mqtt_clients: dict[tuple[int, str], Any] = {}
 
 
 def _next_seq() -> str:
@@ -438,17 +444,17 @@ def _make_on_connect(org_id: int):
             log.warning("Bambu MQTT connect failed (org_id=%s): rc=%s", org_id, rc)
             return
         log.info("Bambu MQTT connected (org_id=%s)", org_id)
-        for dev_id, oid in list(_dev_to_org.items()):
+        for oid, dev_id in list(_subscriptions):
             if oid == org_id:
                 client.subscribe(f"device/{dev_id}/report")
-                _maybe_pushall(dev_id, client=client)
+                _maybe_pushall(dev_id, client=client, org_id=org_id)
     return _on_connect
 
 
-_last_pushall: dict[str, float] = {}
+_last_pushall: dict[tuple[int, str], float] = {}
 
 
-def _maybe_pushall(dev_id: str, *, force: bool = False, qos: int = 0, client: Any = None) -> None:
+def _maybe_pushall(dev_id: str, *, org_id: int, force: bool = False, qos: int = 0, client: Any = None) -> None:
     """Publish a pushall (full-state dump) unless one was sent recently for this device.
 
     Repeated pushall requests make P1/A1 printers drop their Bambu Cloud
@@ -460,15 +466,15 @@ def _maybe_pushall(dev_id: str, *, force: bool = False, qos: int = 0, client: An
     pass `force=True` to bypass the throttle deliberately.
     """
     now = time.monotonic()
-    if not force and now - _last_pushall.get(dev_id, 0.0) < BAMBU_FULL_REFRESH_INTERVAL_SECONDS:
+    if not force and now - _last_pushall.get((org_id, dev_id), 0.0) < BAMBU_FULL_REFRESH_INTERVAL_SECONDS:
         return
-    _last_pushall[dev_id] = now
+    _last_pushall[(org_id, dev_id)] = now
     if client is not None:
         # on_connect callback — _mqtt_clients[org_id] isn't assigned yet, so
         # publish directly on the client paho just handed us.
         client.publish(f"device/{dev_id}/request", json.dumps(build_pushall_payload()), qos=qos)
     else:
-        _publish(dev_id, build_pushall_payload(), qos=qos)
+        _publish(dev_id, build_pushall_payload(), qos=qos, org_id=org_id)
 
 
 def _on_message(client: Any, userdata: Any, msg: Any) -> None:
@@ -481,18 +487,23 @@ def _on_message(client: Any, userdata: Any, msg: Any) -> None:
     if len(parts) < 2:
         return
     dev_id = parts[1]
+    org_id = userdata
+    if type(org_id) is not int or (org_id, dev_id) not in _subscriptions:
+        return
+    if len(parts) != 3 or parts[0] != "device" or parts[2] != "report" or not isinstance(payload, dict):
+        return
 
-    job = _handle_report_payload(dev_id, payload)
-    _kick_autoprint_from_report(dev_id, payload, job)
+    job = _handle_report_payload(dev_id, payload, org_id=org_id)
+    _kick_autoprint_from_report(dev_id, payload, job, org_id=org_id)
 
 
-_autoprint_idle_kicks: dict[str, float] = {}
+_autoprint_idle_kicks: dict[tuple[int, str], float] = {}
 # Event loop of the process that called init() — lets paho callback threads
 # schedule coroutines when there is no Redis to relay through.
 _main_loop: asyncio.AbstractEventLoop | None = None
 
 
-def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: BambuCloudJob | None) -> None:
+def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: BambuCloudJob | None, *, org_id: int) -> None:
     """Forward PlateCycler AutoPrint triggers from cloud MQTT reports.
 
     Runs in the paho callback thread of the worker process. Publish a kick event
@@ -500,9 +511,6 @@ def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: Bambu
     web process advances the queue. When Redis is absent (single-process dev),
     schedule the coroutine locally.
     """
-    org_id = _dev_to_org.get(dev_id)
-    if org_id is None:
-        return
 
     from app.services.bambu_job_state import TERMINAL_STATUSES
 
@@ -512,8 +520,8 @@ def _kick_autoprint_from_report(dev_id: str, payload: dict[str, Any], job: Bambu
     else:
         raw_state = str((payload.get("print") or {}).get("gcode_state") or "")
         now = time.monotonic()
-        if raw_state in {"IDLE", "FINISH"} and now - _autoprint_idle_kicks.get(dev_id, 0.0) >= 30:
-            _autoprint_idle_kicks[dev_id] = now
+        if raw_state in {"IDLE", "FINISH"} and now - _autoprint_idle_kicks.get((org_id, dev_id), 0.0) >= 30:
+            _autoprint_idle_kicks[(org_id, dev_id)] = now
             event = {"org_id": org_id, "dev_id": dev_id, "finished": raw_state == "FINISH"}
     if event is None:
         return
@@ -547,18 +555,18 @@ def handle_agent_report(org_id: int, dev_id: str, payload: dict[str, Any]) -> Ba
     """
     if not dev_id:
         return None
-    _dev_to_org[dev_id] = org_id
-    return _handle_report_payload(dev_id, payload)
+    _subscriptions.add((org_id, dev_id))
+    return _handle_report_payload(dev_id, payload, org_id=org_id)
 
 
-def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJob | None:
+def _handle_report_payload(dev_id: str, payload: dict[str, Any], *, org_id: int) -> BambuCloudJob | None:
     print_data = payload.get("print", {})
     if not print_data:
         return None
 
     raw_state = print_data.get("gcode_state", "")
 
-    prev = _state_cache.get(dev_id, {})
+    prev = _state_cache.get((org_id, dev_id), {})
     received_at = datetime.now(timezone.utc)
     progress_pct = print_data.get("mc_percent")
     remaining_min = print_data.get("mc_remaining_time")
@@ -566,7 +574,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
     filename = print_data.get("subtask_name") or print_data.get("gcode_file") or prev.get("filename")
 
     from app.services.cache import cache_delete, cache_get, cache_set
-    bed_cleared_key = f"bambu:bed_cleared:{dev_id}"
+    bed_cleared_key = f"bambu:org:{org_id}:bed_cleared:{dev_id}"
     if raw_state in ("RUNNING", "PREPARE", "SLICING"):
         cache_delete(bed_cleared_key)
         bed_cleared = None
@@ -630,7 +638,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         from app.core.db import SessionLocal as _SessionLocal
         from app.models.printer import Printer
 
-        org_id_local = _dev_to_org.get(dev_id)
+        org_id_local = org_id
         with _SessionLocal() as db:
             printer = (
                 db.query(Printer)
@@ -654,19 +662,19 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
                     dedupe_key=f"{printer.id}:failed:{error_msg}",
                 )
     state_changed = updated.get("state") != prev.get("state")
-    _state_cache[dev_id] = updated
+    _state_cache[(org_id, dev_id)] = updated
     if state_changed:
         log_event(
             log,
             logging.INFO,
             "bambu.mqtt.state.changed",
-            org_id=_dev_to_org.get(dev_id),
+            org_id=org_id,
             dev_id=dev_id,
             old_status=prev.get("state", "unknown"),
             new_status=updated.get("state"),
         )
 
-    ams_changed = _handle_filament_setting_ack(dev_id, print_data)
+    ams_changed = _handle_filament_setting_ack(dev_id, print_data, org_id=org_id)
     ams_data = print_data.get("ams")
     vt_tray = print_data.get("vt_tray")
     # P1-series printers without a physical AMS unit still report the external
@@ -676,6 +684,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
             dev_id,
             ams_data if isinstance(ams_data, dict) else {},
             vt_tray,
+            org_id=org_id,
         ) or ams_changed
     if isinstance(ams_data, dict):
         # Active tray: "255" = external spool (slot 254 in our convention)
@@ -700,18 +709,18 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any]) -> BambuCloudJo
         or updated.get("error_msg") != prev.get("error_msg")
         or active_tray_changed
         or skipped_objects_changed
-        or now_mono - _last_state_redis_write.get(dev_id, 0.0) >= REDIS_STATE_WRITE_INTERVAL
+        or now_mono - _last_state_redis_write.get((org_id, dev_id), 0.0) >= REDIS_STATE_WRITE_INTERVAL
     ):
-        cache_set(f"bambu:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
-        cache_set(f"bambu:state:stale:{dev_id}", updated, STATUS_STALE_TTL)
-        _last_state_redis_write[dev_id] = now_mono
+        cache_set(f"bambu:org:{org_id}:state:{dev_id}", updated, int(STATUS_CACHE_TTL))
+        cache_set(f"bambu:org:{org_id}:state:stale:{dev_id}", updated, STATUS_STALE_TTL)
+        _last_state_redis_write[(org_id, dev_id)] = now_mono
     if ams_changed or active_tray_changed:
-        _publish_printer_refresh(dev_id, "ams" if ams_changed else "active_tray")
+        _publish_printer_refresh(dev_id, "ams" if ams_changed else "active_tray", org_id=org_id)
     elif skipped_objects_changed:
-        _publish_printer_refresh(dev_id, "skip_objects")
+        _publish_printer_refresh(dev_id, "skip_objects", org_id=org_id)
     if cleared_terminal:
         return None
-    return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg)
+    return _sync_cloud_job_from_report(dev_id, print_data, updated, error_msg, org_id=org_id)
 
 
 def _describe_print_error(err_code: int) -> str:
@@ -721,11 +730,11 @@ def _describe_print_error(err_code: int) -> str:
     return f"Помилка друку: {err_code:#010x}"
 
 
-def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]:
+def mark_bed_cleared(dev_id: str, filename: str | None = None, *, org_id: int) -> dict[str, Any]:
     """Persist operator confirmation so FINISH reports do not re-open the bed prompt."""
     from app.services.cache import cache_set
     marker = {"cleared_at": datetime.now(timezone.utc).isoformat(), "filename": filename}
-    cache_set(f"bambu:bed_cleared:{dev_id}", marker, BED_CLEARED_TTL_SECONDS)
+    cache_set(f"bambu:org:{org_id}:bed_cleared:{dev_id}", marker, BED_CLEARED_TTL_SECONDS)
     idle = {
         "ts": time.monotonic(),
         "last_message_at": marker["cleared_at"],
@@ -738,9 +747,9 @@ def mark_bed_cleared(dev_id: str, filename: str | None = None) -> dict[str, Any]
         "layer_num": None,
         "total_layers": None,
     }
-    _state_cache[dev_id] = idle
-    cache_set(f"bambu:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
-    cache_set(f"bambu:state:stale:{dev_id}", idle, STATUS_STALE_TTL)
+    _state_cache[(org_id, dev_id)] = idle
+    cache_set(f"bambu:org:{org_id}:state:{dev_id}", idle, int(STATUS_CACHE_TTL))
+    cache_set(f"bambu:org:{org_id}:state:stale:{dev_id}", idle, STATUS_STALE_TTL)
     return idle
 
 
@@ -771,11 +780,12 @@ def _normalize_cloud_job_name(value: str | None) -> str:
     return Path(value or "").name.strip().lower()
 
 
-def _query_active_jobs_for_device(db: Session, dev_id: str) -> list[BambuCloudJob]:
+def _query_active_jobs_for_device(db: Session, dev_id: str, *, org_id: int) -> list[BambuCloudJob]:
     return (
         db.query(BambuCloudJob)
         .filter(
             BambuCloudJob.printer_bambu_dev_id == dev_id,
+            BambuCloudJob.organization_id == org_id,
             BambuCloudJob.status.in_(CLOUD_JOB_ACTIVE_STATUSES),
         )
         .order_by(BambuCloudJob.created_at.desc(), BambuCloudJob.id.desc())
@@ -786,6 +796,7 @@ def _query_active_jobs_for_device(db: Session, dev_id: str) -> list[BambuCloudJo
 def _find_matching_cloud_job(
     db: Session,
     *,
+    org_id: int,
     dev_id: str,
     print_data: dict[str, Any],
     filename: str | None,
@@ -797,6 +808,7 @@ def _find_matching_cloud_job(
             db.query(BambuCloudJob)
             .filter(
                 BambuCloudJob.printer_bambu_dev_id == dev_id,
+                BambuCloudJob.organization_id == org_id,
                 BambuCloudJob.bambu_task_id == task_id,
                 BambuCloudJob.status.in_((*CLOUD_JOB_ACTIVE_STATUSES, BambuCloudJobStatus.failed)),
             )
@@ -817,7 +829,7 @@ def _find_matching_cloud_job(
             return None
 
     active_jobs = [
-        job for job in _query_active_jobs_for_device(db, dev_id)
+        job for job in _query_active_jobs_for_device(db, dev_id, org_id=org_id)
         if job.status in (
             BambuCloudJobStatus.task_created,
             BambuCloudJobStatus.acknowledged,
@@ -902,6 +914,7 @@ def _sync_cloud_job_from_report(
     cached_state: dict[str, Any],
     error_msg: str | None,
     *,
+    org_id: int,
     session_factory=None,
 ) -> BambuCloudJob | None:
     session_factory = session_factory or SessionLocal
@@ -914,7 +927,7 @@ def _sync_cloud_job_from_report(
         eta_minutes = _safe_int(eta_minutes)
 
     with session_factory() as db:
-        job = _find_matching_cloud_job(db, dev_id=dev_id, print_data=print_data, filename=filename, now=now)
+        job = _find_matching_cloud_job(db, dev_id=dev_id, print_data=print_data, filename=filename, now=now, org_id=org_id)
         if job is None:
             return None
 
@@ -1047,12 +1060,12 @@ def _sync_cloud_job_from_report(
         return job
 
 
-def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
+def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None, *, org_id: int) -> bool:
     from app.services.cache import cache_get, cache_set
 
-    previous = _ams_cache.get(dev_id)
+    previous = _ams_cache.get((org_id, dev_id))
     if previous is None:
-        cached = cache_get(f"bambu:ams:{dev_id}")
+        cached = cache_get(f"bambu:org:{org_id}:ams:{dev_id}")
         previous = cached if isinstance(cached, list) else []
 
     trays_by_slot = {
@@ -1108,8 +1121,8 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
 
     now_mono = time.monotonic()
     for key, (expires_at, confirmed) in list(_confirmed_filament_slots.items()):
-        confirmed_dev_id, slot = key
-        if confirmed_dev_id != dev_id:
+        confirmed_org_id, confirmed_dev_id, slot = key
+        if confirmed_org_id != org_id or confirmed_dev_id != dev_id:
             continue
         if expires_at <= now_mono:
             _confirmed_filament_slots.pop(key, None)
@@ -1122,18 +1135,15 @@ def _parse_ams(dev_id: str, ams_data: dict, vt_tray: dict | None) -> bool:
 
     trays = [trays_by_slot[slot] for slot in sorted(trays_by_slot)]
     changed = previous != trays
-    _ams_cache[dev_id] = trays
-    if changed or now_mono - _last_ams_redis_write.get(dev_id, 0.0) >= REDIS_AMS_WRITE_INTERVAL:
-        cache_set(f"bambu:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
-        _last_ams_redis_write[dev_id] = now_mono
+    _ams_cache[(org_id, dev_id)] = trays
+    if changed or now_mono - _last_ams_redis_write.get((org_id, dev_id), 0.0) >= REDIS_AMS_WRITE_INTERVAL:
+        cache_set(f"bambu:org:{org_id}:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
+        _last_ams_redis_write[(org_id, dev_id)] = now_mono
     return changed
 
 
-def _publish_printer_refresh(dev_id: str, reason: str) -> None:
+def _publish_printer_refresh(dev_id: str, reason: str, *, org_id: int) -> None:
     """Notify the web process that a Bambu AMS snapshot changed."""
-    org_id = _dev_to_org.get(dev_id)
-    if org_id is None:
-        return
 
     publish_printer_refresh(org_id, dev_id, reason)
 
@@ -1279,25 +1289,25 @@ def _hms_describe(h: dict) -> str:
 
 def subscribe_device(dev_id: str, org_id: int) -> None:
     """Subscribe to MQTT reports for a device (idempotent)."""
-    _dev_to_org[dev_id] = org_id
-    _state_cache.setdefault(dev_id, {"ts": 0, "state": "unknown"})
+    _subscriptions.add((org_id, dev_id))
+    _state_cache.setdefault((org_id, dev_id), {"ts": 0, "state": "unknown"})
     client = _mqtt_clients.get(org_id)
     if client is not None:
         client.subscribe(f"device/{dev_id}/report")
-        _maybe_pushall(dev_id)
+        _maybe_pushall(dev_id, org_id=org_id)
 
 
-def get_cached_state(dev_id: str) -> dict:
+def get_cached_state(dev_id: str, *, org_id: int) -> dict:
     """Return cached MQTT state for a device, or offline placeholder."""
     from app.services.cache import cache_get
-    fresh = cache_get(f"bambu:state:{dev_id}")
+    fresh = cache_get(f"bambu:org:{org_id}:state:{dev_id}")
     if fresh is not None:
         return {**fresh, "state_stale": False}
-    stale = cache_get(f"bambu:state:stale:{dev_id}")
+    stale = cache_get(f"bambu:org:{org_id}:state:stale:{dev_id}")
     if stale is not None:
         return {**stale, "state_stale": True}
     # Local dict fallback (same-worker stale data)
-    entry = _state_cache.get(dev_id)
+    entry = _state_cache.get((org_id, dev_id))
     if entry and time.monotonic() - entry.get("ts", 0) <= STATUS_CACHE_TTL:
         return {**entry, "state_stale": False}
     if entry:
@@ -1305,21 +1315,21 @@ def get_cached_state(dev_id: str) -> dict:
     return {"state": "offline"}
 
 
-def get_ams_filaments(dev_id: str) -> list[dict]:
+def get_ams_filaments(dev_id: str, *, org_id: int) -> list[dict]:
     """Return cached AMS tray data for a device."""
     from app.services.cache import cache_get
-    fresh = cache_get(f"bambu:ams:{dev_id}")
+    fresh = cache_get(f"bambu:org:{org_id}:ams:{dev_id}")
     if fresh is not None:
         return fresh
-    return _ams_cache.get(dev_id, [])
+    return _ams_cache.get((org_id, dev_id), [])
 
 
 # ── MQTT commands ─────────────────────────────────────────────────────────────
 
 
-def _publish(dev_id: str, payload: dict, qos: int = 0) -> None:
+def _publish(dev_id: str, payload: dict, qos: int = 0, *, org_id: int) -> None:
     # LAN client takes priority (per-device, older firmware)
-    lan_client = _lan_mqtt_clients.get(dev_id)
+    lan_client = _lan_mqtt_clients.get((org_id, dev_id))
     if lan_client is not None:
         lan_client.publish(
             f"device/{dev_id}/request",
@@ -1328,7 +1338,6 @@ def _publish(dev_id: str, payload: dict, qos: int = 0) -> None:
         )
         return
     # Cloud MQTT client (per-org)
-    org_id = _dev_to_org.get(dev_id)
     client = _mqtt_clients.get(org_id) if org_id is not None else None
     if client is not None:
         client.publish(f"device/{dev_id}/request", json.dumps(payload), qos=qos)
@@ -1338,6 +1347,7 @@ def _publish(dev_id: str, payload: dict, qos: int = 0) -> None:
     r = _r()
     if r is not None:
         r.publish("bambu:cmd", json.dumps({
+            "org_id": org_id,
             "topic": f"device/{dev_id}/request",
             "payload": json.dumps(payload),
             "qos": qos,
@@ -1346,7 +1356,7 @@ def _publish(dev_id: str, payload: dict, qos: int = 0) -> None:
     raise BambuError("Bambu MQTT не підключений (no local client, no Redis)")
 
 
-def send_gcode(dev_id: str, script: str) -> None:
+def send_gcode(dev_id: str, script: str, *, org_id: int) -> None:
     """Send raw G-code to a Bambu printer via MQTT gcode_line command."""
     _publish(dev_id, {
         "print": {
@@ -1354,10 +1364,10 @@ def send_gcode(dev_id: str, script: str) -> None:
             "param": script if script.endswith("\n") else script + "\n",
             "sequence_id": _next_seq(),
         }
-    })
+    }, org_id=org_id)
 
 
-def set_speed_profile(dev_id: str, profile: int) -> None:
+def set_speed_profile(dev_id: str, profile: int, *, org_id: int) -> None:
     """Set Bambu speed profile: 1=Silent, 2=Standard, 3=Sport, 4=Ludicrous."""
     _publish(dev_id, {
         "print": {
@@ -1365,7 +1375,7 @@ def set_speed_profile(dev_id: str, profile: int) -> None:
             "param": str(profile),
             "sequence_id": _next_seq(),
         }
-    })
+    }, org_id=org_id)
 
 
 def _generic_filament_profile(material: str) -> tuple[str, int, int]:
@@ -1378,12 +1388,12 @@ def _generic_filament_profile(material: str) -> tuple[str, int, int]:
     return "", 190, 300
 
 
-def _filament_pending_key(dev_id: str, sequence_id: str) -> str:
-    return f"bambu:ams:pending:{dev_id}:{sequence_id}"
+def _filament_pending_key(dev_id: str, sequence_id: str, *, org_id: int) -> str:
+    return f"bambu:org:{org_id}:ams:pending:{dev_id}:{sequence_id}"
 
 
-def _filament_ack_key(dev_id: str, sequence_id: str) -> str:
-    return f"bambu:ams:ack:{dev_id}:{sequence_id}"
+def _filament_ack_key(dev_id: str, sequence_id: str, *, org_id: int) -> str:
+    return f"bambu:org:{org_id}:ams:ack:{dev_id}:{sequence_id}"
 
 
 def _filament_cache_entry(slot: dict[str, Any]) -> dict[str, Any]:
@@ -1420,10 +1430,10 @@ def _same_filament_state(left: dict[str, Any], right: dict[str, Any]) -> bool:
     )
 
 
-def _store_confirmed_filament_slot(dev_id: str, slot: dict[str, Any]) -> bool:
+def _store_confirmed_filament_slot(dev_id: str, slot: dict[str, Any], *, org_id: int) -> bool:
     from app.services.cache import cache_set
 
-    previous = get_ams_filaments(dev_id)
+    previous = get_ams_filaments(dev_id, org_id=org_id)
     by_slot = {
         int(item["slot"]): item
         for item in previous
@@ -1433,17 +1443,17 @@ def _store_confirmed_filament_slot(dev_id: str, slot: dict[str, Any]) -> bool:
     changed = by_slot.get(slot_index) != slot
     by_slot[slot_index] = slot
     trays = [by_slot[index] for index in sorted(by_slot)]
-    _ams_cache[dev_id] = trays
-    cache_set(f"bambu:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
-    _last_ams_redis_write[dev_id] = time.monotonic()
-    _confirmed_filament_slots[(dev_id, slot_index)] = (
+    _ams_cache[(org_id, dev_id)] = trays
+    cache_set(f"bambu:org:{org_id}:ams:{dev_id}", trays, AMS_CACHE_TTL_SECONDS)
+    _last_ams_redis_write[(org_id, dev_id)] = time.monotonic()
+    _confirmed_filament_slots[(org_id, dev_id, slot_index)] = (
         time.monotonic() + FILAMENT_CONFIRMATION_GRACE_SECONDS,
         slot,
     )
     return changed
 
 
-def _handle_filament_setting_ack(dev_id: str, print_data: dict[str, Any]) -> bool:
+def _handle_filament_setting_ack(dev_id: str, print_data: dict[str, Any], *, org_id: int) -> bool:
     if print_data.get("command") != "ams_filament_setting":
         return False
     sequence_id = str(print_data.get("sequence_id") or "")
@@ -1454,13 +1464,13 @@ def _handle_filament_setting_ack(dev_id: str, print_data: dict[str, Any]) -> boo
 
     result = str(print_data.get("result") or "").strip().lower()
     ok = result in {"success", "ok"}
-    pending_key = _filament_pending_key(dev_id, sequence_id)
+    pending_key = _filament_pending_key(dev_id, sequence_id, org_id=org_id)
     pending = cache_get(pending_key)
     changed = False
     if ok and isinstance(pending, dict):
-        changed = _store_confirmed_filament_slot(dev_id, pending)
+        changed = _store_confirmed_filament_slot(dev_id, pending, org_id=org_id)
     cache_set(
-        _filament_ack_key(dev_id, sequence_id),
+        _filament_ack_key(dev_id, sequence_id, org_id=org_id),
         {
             "ok": ok,
             "result": result,
@@ -1478,10 +1488,10 @@ def _handle_filament_setting_ack(dev_id: str, print_data: dict[str, Any]) -> boo
     return changed
 
 
-def _wait_for_filament_ack(dev_id: str, sequence_id: str) -> None:
+def _wait_for_filament_ack(dev_id: str, sequence_id: str, *, org_id: int) -> None:
     from app.services.cache import cache_delete, cache_get
 
-    ack_key = _filament_ack_key(dev_id, sequence_id)
+    ack_key = _filament_ack_key(dev_id, sequence_id, org_id=org_id)
     deadline = time.monotonic() + FILAMENT_ACK_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         ack = cache_get(ack_key)
@@ -1493,7 +1503,7 @@ def _wait_for_filament_ack(dev_id: str, sequence_id: str) -> None:
             raise BambuError(f"принтер відхилив зміну AMS ({detail})")
         time.sleep(FILAMENT_ACK_POLL_SECONDS)
 
-    cache_delete(_filament_pending_key(dev_id, sequence_id))
+    cache_delete(_filament_pending_key(dev_id, sequence_id, org_id=org_id))
     log.warning(
         "bambu.ams.filament_ack_timeout dev_id=%s sequence_id=%s",
         dev_id,
@@ -1535,12 +1545,12 @@ def build_ams_filament_setting_payload(slot: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def sync_filament_slot(dev_id: str, slot: dict[str, Any]) -> None:
+def sync_filament_slot(dev_id: str, slot: dict[str, Any], *, org_id: int) -> None:
     """Publish one operator-edited AMS/external-spool setting."""
-    sync_filament_slots(dev_id, [slot])
+    sync_filament_slots(dev_id, [slot], org_id=org_id)
 
 
-def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
+def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]], *, org_id: int) -> None:
     """Publish slot edits, require printer ACKs, then refresh authoritative state."""
     from app.services.cache import cache_delete, cache_set
 
@@ -1548,50 +1558,50 @@ def sync_filament_slots(dev_id: str, slots: list[dict[str, Any]]) -> None:
     for slot in slots:
         payload = build_ams_filament_setting_payload(slot)
         sequence_id = str(payload["print"]["sequence_id"])
-        cache_delete(_filament_ack_key(dev_id, sequence_id))
+        cache_delete(_filament_ack_key(dev_id, sequence_id, org_id=org_id))
         cache_set(
-            _filament_pending_key(dev_id, sequence_id),
+            _filament_pending_key(dev_id, sequence_id, org_id=org_id),
             _filament_cache_entry(slot),
             FILAMENT_COMMAND_TTL_SECONDS,
         )
         try:
-            _publish(dev_id, payload, qos=1)
+            _publish(dev_id, payload, qos=1, org_id=org_id)
         except Exception:
-            cache_delete(_filament_pending_key(dev_id, sequence_id))
+            cache_delete(_filament_pending_key(dev_id, sequence_id, org_id=org_id))
             raise
         sequences.append(sequence_id)
 
     for sequence_id in sequences:
-        _wait_for_filament_ack(dev_id, sequence_id)
-    request_full_status(dev_id, qos=1)
+        _wait_for_filament_ack(dev_id, sequence_id, org_id=org_id)
+    request_full_status(dev_id, qos=1, org_id=org_id)
 
 
-def request_full_status(dev_id: str, *, qos: int = 0) -> None:
+def request_full_status(dev_id: str, *, org_id: int, qos: int = 0) -> None:
     """Request a complete state snapshot; required for delta-only P1/A1 reports.
 
     Bypasses the pushall throttle (force=True) — callers use this for the
     periodic worker refresh and explicit post-command reads, both already
     paced deliberately by their own caller.
     """
-    _maybe_pushall(dev_id, force=True, qos=qos)
+    _maybe_pushall(dev_id, force=True, qos=qos, org_id=org_id)
 
 
 # Spec: QoS 1 for stop/pause/resume — guaranteed delivery for safety-critical commands.
 
 
-def pause_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "pause", "param": "", "sequence_id": _next_seq()}}, qos=1)
+def pause_print(dev_id: str, *, org_id: int) -> None:
+    _publish(dev_id, {"print": {"command": "pause", "param": "", "sequence_id": _next_seq()}}, qos=1, org_id=org_id)
 
 
-def resume_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "resume", "param": "", "sequence_id": _next_seq()}}, qos=1)
+def resume_print(dev_id: str, *, org_id: int) -> None:
+    _publish(dev_id, {"print": {"command": "resume", "param": "", "sequence_id": _next_seq()}}, qos=1, org_id=org_id)
 
 
-def stop_print(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "stop", "param": "", "sequence_id": _next_seq()}}, qos=1)
+def stop_print(dev_id: str, *, org_id: int) -> None:
+    _publish(dev_id, {"print": {"command": "stop", "param": "", "sequence_id": _next_seq()}}, qos=1, org_id=org_id)
 
 
-def skip_objects(dev_id: str, object_ids: list[int]) -> None:
+def skip_objects(dev_id: str, object_ids: list[int], *, org_id: int) -> None:
     """Skip specific native Bambu object IDs from slice_info.config."""
     from app.services.skip_objects import build_bambu_skip_payload
 
@@ -1599,11 +1609,12 @@ def skip_objects(dev_id: str, object_ids: list[int]) -> None:
         dev_id,
         build_bambu_skip_payload(object_ids, sequence_id=_next_seq()),
         qos=1,
+        org_id=org_id,
     )
 
 
-def clear_print_error(dev_id: str) -> None:
-    _publish(dev_id, {"print": {"command": "clean_print_error", "param": "", "sequence_id": _next_seq()}}, qos=1)
+def clear_print_error(dev_id: str, *, org_id: int) -> None:
+    _publish(dev_id, {"print": {"command": "clean_print_error", "param": "", "sequence_id": _next_seq()}}, qos=1, org_id=org_id)
 
 
 def plate_gcode_entry(file_bytes: bytes) -> str | None:
@@ -1718,6 +1729,8 @@ def start_print(
     http_url: str | None = None,
     ftp_filename: str | None = None,
     task_id: str | None = None,
+    *,
+    org_id: int,
 ) -> None:
     """Send MQTT project_file command to start printing."""
     cmd = build_start_print_payload(
@@ -1729,7 +1742,7 @@ def start_print(
         ftp_filename=ftp_filename,
         task_id=task_id,
     )
-    _publish(dev_id, cmd, qos=1)
+    _publish(dev_id, cmd, qos=1, org_id=org_id)
 
 
 # ── Cloud upload + print (no LAN required) ───────────────────────────────────
@@ -1913,7 +1926,7 @@ async def init_lan_printers(org_id: int) -> None:
             )
         for row in rows:
             if row.bambu_dev_id and row.bambu_dev_ip and row.bambu_access_code:
-                start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+                start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code, org_id=org_id)
     except Exception:
         log.exception("Bambu LAN MQTT init failed (org_id=%s)", org_id)
 
@@ -1953,8 +1966,8 @@ def _init_cloud_sync(org: "Organization") -> None:
 
     devices = list_devices(org.id)
     for d in devices:
-        _dev_to_org[d["dev_id"]] = org.id
-        _state_cache.setdefault(d["dev_id"], {"ts": 0, "state": "unknown"})
+        _subscriptions.add((org.id, d["dev_id"]))
+        _state_cache.setdefault((org.id, d["dev_id"]), {"ts": 0, "state": "unknown"})
 
     user_id = _user_ids.get(org.id)
     if not user_id:
@@ -1968,10 +1981,11 @@ def _init_cloud_sync(org: "Organization") -> None:
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             protocol=mqtt.MQTTv311,
             client_id=f"monofarm-cloud-{org.id}",
+            userdata=org.id,
         )
         client.username_pw_set(f"u_{user_id}", _access_tokens[org.id])
         client.tls_set()
-        client.tls_insecure_set(True)
+        client.tls_insecure_set(False)
 
         client.on_connect = _make_on_connect(org.id)
         client.on_message = _on_message
@@ -2001,22 +2015,22 @@ async def shutdown(org_id: int | None = None) -> None:
             except Exception:
                 pass
 
-    if org_id is None:
-        for dev_id in list(_lan_mqtt_clients.keys()):
-            stop_lan_mqtt(dev_id)
+    for oid, dev_id in list(_lan_mqtt_clients):
+        if org_id is None or oid == org_id:
+            stop_lan_mqtt(dev_id, org_id=oid)
 
 
 # ── LAN MQTT (per-device, older firmware without cloud) ──────────────────────
 
 
-def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str) -> None:
+def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str, *, org_id: int) -> None:
     """Connect directly to a printer over LAN MQTT (port 8883, TLS, no cloud).
 
     Auth: username="bblp", password=access_code (LAN Access Code from display).
     Creates a dedicated paho client per device; reuses the same _on_message handler.
     Idempotent — stops and replaces any existing LAN client for this device.
     """
-    stop_lan_mqtt(dev_id)
+    stop_lan_mqtt(dev_id, org_id=org_id)
 
     try:
         import paho.mqtt.client as mqtt
@@ -2040,7 +2054,8 @@ def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str) -> None:
         client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             protocol=mqtt.MQTTv311,
-            client_id=f"monofarm-lan-{dev_id}",
+            client_id=f"monofarm-lan-{org_id}-{dev_id}",
+            userdata=org_id,
         )
         client.username_pw_set("bblp", access_code)
         client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
@@ -2050,18 +2065,19 @@ def start_lan_mqtt(dev_id: str, dev_ip: str, access_code: str) -> None:
         client.on_disconnect = _on_disconnect_lan
         client.on_message = _on_message
 
-        _state_cache.setdefault(dev_id, {"ts": 0, "state": "unknown"})
+        _subscriptions.add((org_id, dev_id))
+        _state_cache.setdefault((org_id, dev_id), {"ts": 0, "state": "unknown"})
         client.connect_async(dev_ip, 8883, MQTT_KEEPALIVE)
         client.loop_start()
-        _lan_mqtt_clients[dev_id] = client
+        _lan_mqtt_clients[(org_id, dev_id)] = client
         log.info("Bambu LAN MQTT loop started (dev_id=%s ip=%s)", dev_id, dev_ip)
     except Exception:
         log.exception("Bambu LAN MQTT startup failed (dev_id=%s ip=%s)", dev_id, dev_ip)
 
 
-def stop_lan_mqtt(dev_id: str) -> None:
+def stop_lan_mqtt(dev_id: str, *, org_id: int) -> None:
     """Stop and remove the LAN MQTT client for a device."""
-    client = _lan_mqtt_clients.pop(dev_id, None)
+    client = _lan_mqtt_clients.pop((org_id, dev_id), None)
     if client is not None:
         try:
             client.loop_stop()

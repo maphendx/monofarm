@@ -39,6 +39,7 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     name: Mapped[str] = mapped_column(String(120), default="")
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.operator)
     is_active: Mapped[bool] = mapped_column(default=True)

@@ -210,7 +210,7 @@ export default function AuthLayout({ children, activeTab }: AuthLayoutProps) {
               {([
                 { label: "Вхід",        href: "/login",    key: "login" as const },
                 { label: "Реєстрація",  href: "/register", key: "register" as const },
-              ]).map((tab) => {
+              ] as const).map((tab) => {
                 const isActive = activeTab === tab.key;
                 return (
                   <Link

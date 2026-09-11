@@ -139,7 +139,10 @@ def resolve_api_key(raw_key: str, db: Session) -> User | None:
         return None
     if key.expires_at and key.expires_at.replace(tzinfo=None) < datetime.utcnow():
         return None
+    from app.models.user import User as UserModel
+    user = db.get(UserModel, key.user_id)
+    if not user or not user.is_active or user.organization_id != key.organization_id:
+        return None
     key.last_used_at = datetime.now(timezone.utc)
     db.commit()
-    from app.models.user import User as UserModel
-    return db.get(UserModel, key.user_id)
+    return user

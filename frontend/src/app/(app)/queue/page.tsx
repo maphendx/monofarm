@@ -1,5 +1,7 @@
 "use client";
 
+import { AuthImage } from "@/components/ui/AuthImage";
+
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import type { ChangeEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -176,9 +178,8 @@ function PrinterSlot({
   onComplete: (t: PrintTask) => void;
   canEdit: boolean;
 }) {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const thumbSrc = task?.has_thumbnail && task?.gcode_file_id
-    ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
+    ? `/api/files/${task.gcode_file_id}/thumbnail` : null;
 
   if (!task) {
     return (
@@ -195,7 +196,7 @@ function PrinterSlot({
     <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3">
       <div className="flex items-start gap-2">
         {thumbSrc ? (
-          <img src={thumbSrc} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+          <AuthImage src={thumbSrc} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
         ) : (
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)]">3mf</div>
         )}
@@ -389,9 +390,8 @@ function QueueRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [targetBusy, setTargetBusy] = useState(false);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const thumbSrc = task.has_thumbnail && task.gcode_file_id
-    ? `${apiUrl}/api/files/${task.gcode_file_id}/thumbnail` : null;
+    ? `/api/files/${task.gcode_file_id}/thumbnail` : null;
 
   async function handleTargetGroupChange(e: ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
@@ -418,7 +418,7 @@ function QueueRow({
       <td className="max-w-[200px] px-3 py-2">
         <div className="flex items-center gap-2">
           {thumbSrc ? (
-            <img src={thumbSrc} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+            <AuthImage src={thumbSrc} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
           ) : (
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--surface-hi)] text-[10px] text-[var(--text-faint)]">3mf</div>
           )}
@@ -562,12 +562,6 @@ function QueuePageInner() {
   const [createOpen, setCreateOpen] = useState(false);
   const [sendRequest, setSendRequest] = useState<SendRequest | null>(null);
   const [completeTask, setCompleteTask] = useState<PrintTask | null>(null);
-
-  const distributeRef = useRef(false);
-  const [distributeResult, setDistributeResult] = useState<{
-    sent: { task_id: number; printer_name: string }[];
-    skipped: { task_id: number; reason: string }[];
-  } | null>(null);
 
   // ── Calendar-view state ──
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOfWeek());
@@ -745,22 +739,6 @@ function QueuePageInner() {
     } catch (err) { if (err instanceof ApiError) setError(err.message); }
   }
 
-  async function handle1Click() {
-    if (distributeRef.current) return;
-    distributeRef.current = true;
-    setDistributeResult(null);
-    try {
-      const taskIds = selected.size > 0 ? Array.from(selected) : undefined;
-      const res = await api<{
-        sent: { task_id: number; printer_id: number; printer_name: string }[];
-        skipped: { task_id: number; reason: string }[];
-      }>("/api/queue/bulk-distribute", { method: "POST", body: JSON.stringify({ task_ids: taskIds ?? null }) });
-      setDistributeResult(res);
-      await load();
-    } catch (err) { if (err instanceof ApiError) setError(err.message); }
-    finally { distributeRef.current = false; }
-  }
-
   if (loading) {
     if (view === "calendar") {
       return (
@@ -788,7 +766,8 @@ function QueuePageInner() {
                 </div>
                 {Array.from({ length: 7 }).map((_, j) => (
                   <div key={j} className="flex-1 border-r border-[var(--border)] bg-[var(--bg-elevated)]" style={{ minHeight: 80 }}>
-                    {j === 2 && i < 5 && <div className="skeleton mx-1 mt-4 h-4 rounded" style={{ width: `${30 + Math.random() * 40}%` }} />}
+                    {/* Deterministic spread — Math.random() here breaks hydration (server ≠ client) */}
+                    {j === 2 && i < 5 && <div className="skeleton mx-1 mt-4 h-4 rounded" style={{ width: `${30 + ((i * 17 + j * 29) % 41)}%` }} />}
                   </div>
                 ))}
               </div>
@@ -941,17 +920,9 @@ function QueuePageInner() {
           </div>
 
           {/* Alerts */}
-          {(error || distributeResult) && (
+          {error && (
             <div className="px-6 pt-3">
-              {error && (
-                <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
-              )}
-              {distributeResult && (
-                <div className="rounded-md border border-[rgba(34,197,94,.25)] bg-[rgba(34,197,94,.08)] px-3 py-2 text-sm text-[var(--state-ok)]">
-                  Розподілено: {distributeResult.sent.length} завдань
-                  {distributeResult.skipped.length > 0 && ` · Пропущено: ${distributeResult.skipped.length} (${distributeResult.skipped.map(s => s.reason).join(", ")})`}
-                </div>
-              )}
+              <div className="rounded-md border border-[rgba(239,68,68,.25)] bg-[rgba(239,68,68,.08)] px-3 py-2 text-sm text-[var(--state-error)]">{error}</div>
             </div>
           )}
 

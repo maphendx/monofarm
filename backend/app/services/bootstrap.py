@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import logging
 
 from sqlalchemy.orm import Session
@@ -15,24 +16,23 @@ def seed_admin(db: Session) -> None:
     """Create the default organization and initial admin user if none exist."""
     _seed_platform_admin(db)
 
-    if (
-        db.query(User).filter(User.organization_id.isnot(None)).count() > 0
-        or db.query(Organization).filter_by(slug="default-farm").count() > 0
-    ):
+    if db.query(User).filter(User.organization_id.isnot(None)).count() > 0:
         return
 
     from app.services.encryption import encrypt
-    # Create default org, seeding Bambu creds from .env if present
-    org = Organization(
-        name="Default Farm",
-        slug="default-farm",
-        bambu_email=encrypt(settings.BAMBU_EMAIL),
-        bambu_password=encrypt(settings.BAMBU_PASSWORD),
-        bambu_refresh_token=encrypt(settings.BAMBU_REFRESH_TOKEN),
-        bambu_region=settings.BAMBU_REGION,
-    )
-    db.add(org)
-    db.flush()
+    org = db.query(Organization).filter_by(slug="default-farm").first()
+    if not org:
+        # Create default org, seeding Bambu creds from .env if present
+        org = Organization(
+            name="Default Farm",
+            slug="default-farm",
+            bambu_email=encrypt(settings.BAMBU_EMAIL),
+            bambu_password=encrypt(settings.BAMBU_PASSWORD),
+            bambu_refresh_token=encrypt(settings.BAMBU_REFRESH_TOKEN),
+            bambu_region=settings.BAMBU_REGION,
+        )
+        db.add(org)
+        db.flush()
 
     admin = User(
         organization_id=org.id,
@@ -40,6 +40,7 @@ def seed_admin(db: Session) -> None:
         password_hash=hash_password(settings.ADMIN_PASSWORD),
         name="Admin",
         role=UserRole.admin,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(admin)
     db.commit()
@@ -61,6 +62,7 @@ def _seed_platform_admin(db: Session) -> None:
         password_hash=hash_password(password),
         name="Platform Admin",
         role=UserRole.admin,
+        email_verified_at=datetime.now(timezone.utc),
     )
     db.add(admin)
     db.commit()

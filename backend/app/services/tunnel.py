@@ -30,11 +30,13 @@ from typing import Any, Awaitable, Callable
 from fastapi import WebSocket
 
 from app.models.bambu_cloud_job import BambuCloudJobStatus
+from app.services.tunnel_router import Owner, RedisTunnelRouter
 
 log = logging.getLogger(__name__)
 
 # org_id → active WebSocket
 _tunnels: dict[int, WebSocket] = {}
+_router: RedisTunnelRouter | None = None
 _agent_capabilities: dict[int, set[str]] = {}
 # request_id → Future  (regular request/response)
 _pending: dict[str, asyncio.Future] = {}
@@ -51,19 +53,83 @@ UPLOAD_STALL_TIMEOUT = 180.0  # seconds without an agent progress message → de
 _UPLOAD_POLL = 5.0
 
 
+async def start_router() -> None:
+    """Start once per web/background-worker process, before accepting work."""
+    global _router
+    from app.core.config import settings
+
+    if _router is not None or not settings.REDIS_URL:
+        return
+    router = RedisTunnelRouter(settings.REDIS_URL, _deliver_agent_response, _fail_request)
+    await router.start()
+    _router = router
+
+
+async def stop_router() -> None:
+    global _router
+    if _router is not None:
+        await _router.stop()
+        _router = None
+
+
+class _RoutedConnection:
+    def __init__(self, org_id: int, owner: Owner):
+        self.org_id = org_id
+        self.owner = owner
+        self.router = _router
+
+    async def send_text(self, raw: str) -> None:
+        request_id = json.loads(raw).get("id")
+        await self.router.send(self.org_id, self.owner, raw, tracked=_pending_org.get(request_id) == self.org_id)
+
+
+def _connection(org_id: int):
+    if _router is not None:
+        owner = _router.owner(org_id)
+        return _RoutedConnection(org_id, owner) if owner else None
+    return _tunnels.get(org_id)
+
+
 def has_tunnel(org_id: int) -> bool:
+    if _router is not None:
+        return _router.owner(org_id) is not None
     return org_id in _tunnels
 
 
+def _capabilities(org_id: int) -> set[str] | frozenset[str]:
+    if _router is not None:
+        owner = _router.owner(org_id)
+        return owner.capabilities if owner else frozenset()
+    return _agent_capabilities.get(org_id, set())
+
+
 def has_capability(org_id: int, capability: str) -> bool:
-    return capability in _agent_capabilities.get(org_id, set())
+    return capability in _capabilities(org_id)
+
+
+async def _release_request(org_id: int, request_id: str) -> None:
+    if _router is not None:
+        await _router.release(org_id, request_id)
+
+
+def _fail_request(request_id: str, org_id: int, reason: str) -> None:
+    if _pending_org.get(request_id) != org_id:
+        return
+    future = _pending.get(request_id)
+    if future is not None and not future.done():
+        future.set_exception(RuntimeError(reason))
+    queue = _pending_streams.get(request_id)
+    if queue is not None:
+        while not queue.empty():
+            queue.get_nowait()
+        queue.put_nowait(RuntimeError(reason))
 
 
 # ── Telegram helpers ──────────────────────────────────────────────────────────
 
 async def send_tg_config(org_id: int, token: str | None) -> None:
     """Push a new bot token to the agent (fire-and-forget). token=None means disable."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         return
     try:
@@ -76,7 +142,7 @@ async def send_telegram(
     org_id: int, chat_id: int, text: str, parse_mode: str | None = "Markdown"
 ) -> bool:
     """Send a Telegram message via the org's local agent bot (fire-and-forget)."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         log.warning("send_telegram: no agent connected for org %s", org_id)
         return False
@@ -96,6 +162,8 @@ async def send_telegram(
 async def register(org_id: int, ws: WebSocket) -> None:
     if org_id in _tunnels:
         log.info("Agent reconnected for org %s — replacing old connection", org_id)
+    if _router is not None:
+        await _router.register(org_id, ws)
     _tunnels[org_id] = ws
     _agent_capabilities[org_id] = set()
     log.info("Agent connected for org %s (total: %s)", org_id, len(_tunnels))
@@ -106,7 +174,7 @@ async def register(org_id: int, ws: WebSocket) -> None:
 async def _subscribe_org_printers(org_id: int) -> None:
     """Send MOONRAKER_SUBSCRIBE for every active Moonraker printer in the org."""
     await asyncio.sleep(0.5)  # let the agent finish its own setup first
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         return
     from app.core.db import SessionLocal
@@ -119,7 +187,7 @@ async def _subscribe_org_printers(org_id: int) -> None:
             .all()
         )
     for p in printers:
-        ws = _tunnels.get(org_id)
+        ws = _connection(org_id)
         if not ws:
             break
         try:
@@ -171,16 +239,16 @@ async def unregister(org_id: int, ws: WebSocket | None = None) -> None:
         # A reconnect already replaced this socket — keep the live tunnel intact.
         log.info("Agent stale socket closed for org %s — replacement kept", org_id)
         return
+    if _router is not None and current is not None:
+        await _router.unregister(org_id, current)
     _tunnels.pop(org_id, None)
     _agent_capabilities.pop(org_id, None)
-    # Fail only this org's futures — other orgs' in-flight requests stay alive
-    for req_id, fut in list(_pending.items()):
-        if _pending_org.get(req_id) != org_id:
-            continue
-        if not fut.done():
-            fut.set_exception(RuntimeError(f"Agent disconnected (org {org_id})"))
-        _pending_upload_progress.pop(req_id, None)
-        _upload_progress_error_logged.discard((org_id, req_id))
+    # Fail this org's requests and streams, never another organization's work.
+    for req_id, pending_org in list(_pending_org.items()):
+        if pending_org == org_id and _router is None:
+            _fail_request(req_id, org_id, f"Agent disconnected (org {org_id})")
+            _pending_upload_progress.pop(req_id, None)
+            _upload_progress_error_logged.discard((org_id, req_id))
     log.info("Agent disconnected for org %s (total: %s)", org_id, len(_tunnels))
 
 
@@ -212,7 +280,7 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     reply_text: str
     parse_mode: str | None = None
     with SessionLocal() as db:
-        user = db.query(User).filter(User.telegram_link_code == code).first()
+        user = db.query(User).filter(User.telegram_link_code == code, User.organization_id == org_id_tunnel, User.is_active.is_(True)).first()
         if not user:
             reply_text = "Невірний код. Попроси адміна надіслати нове посилання."
         elif user.telegram_link_expires_at and user.telegram_link_expires_at < datetime.now(timezone.utc):
@@ -233,7 +301,7 @@ async def _handle_tg_claim_link(data: dict, org_id_tunnel: int) -> None:
     await send_telegram(org_id_tunnel, int(chat_id), reply_text, parse_mode)
 
 
-def _handle_status_push(data: dict) -> bool:
+def _handle_status_push(data: dict, org_id: int) -> bool:
     """Cache an agent status and report whether its U1 slots changed."""
     url = data.get("url") or ""
     raw = data.get("status") or {}
@@ -250,11 +318,11 @@ def _handle_status_push(data: dict) -> bool:
     from app.services.cache import cache_get, cache_set
 
     cache_url = _status_cache_url(url)
-    fresh_key = _status_cache_key("status", cache_url)
-    stale_key = _status_cache_key("stale", cache_url)
+    fresh_key = _status_cache_key("status", cache_url, org_id)
+    stale_key = _status_cache_key("stale", cache_url, org_id)
     previous = cache_get(stale_key)
     if not isinstance(previous, dict):
-        previous = _unwrap_cached_status(_status_cache.get(cache_url)) or {}
+        previous = _unwrap_cached_status(_status_cache.get((org_id, cache_url))) or {}
 
     status = _parse_moonraker_status(raw)
     previous_slots = previous.get("u1_filaments")
@@ -263,7 +331,7 @@ def _handle_status_push(data: dict) -> bool:
         status["u1_filaments"] = previous_slots
 
     # _status_cache is shared with moonraker module; tunnel path expects (timestamp, status)
-    _status_cache[cache_url] = (time.monotonic(), status)
+    _status_cache[(org_id, cache_url)] = (time.monotonic(), status)
     # Redis path used by moonraker.get_live_status (fresh + stale keys)
     cache_set(fresh_key, status, int(STATUS_CACHE_TTL))
     cache_set(stale_key, status, int(STATUS_CACHE_TTL * 10))
@@ -332,17 +400,24 @@ def _handle_anycubic_ace_push(data: dict, org_id: int) -> None:
     log.debug("ANYCUBIC_ACE_PUSH: cached %s", dev_id)
 
 
-async def handle_agent_message(data: dict, org_id: int = 0) -> None:
-    """Dispatch an incoming agent message to the waiting caller."""
+async def handle_agent_message(data: dict, org_id: int = 0, *, socket: WebSocket | None = None) -> None:
+    """Dispatch an incoming message only from the active authenticated socket."""
+    if socket is not None and (
+        _tunnels.get(org_id) is not socket
+        or (_router is not None and not _router.accepts_socket(org_id, socket))
+    ):
+        return
     msg_type = data.get("type")
 
     if msg_type == "AGENT_HELLO":
-        _agent_capabilities[org_id] = set(data.get("capabilities") or [])
+        _agent_capabilities[org_id] = {value for value in data.get("capabilities", []) if isinstance(value, str)}
+        if _router is not None:
+            await _router.set_capabilities(org_id, _agent_capabilities[org_id])
         log.info("Agent org %s capabilities: %s", org_id, sorted(_agent_capabilities[org_id]))
         return
 
     if msg_type == "STATUS_PUSH":
-        slots_changed = _handle_status_push(data)
+        slots_changed = _handle_status_push(data, org_id)
         if slots_changed:
             try:
                 from app.api.ws import broadcast_printer_snapshot
@@ -371,20 +446,26 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         return
 
     if msg_type == "TG_BOT_USERNAME":
-        await _handle_tg_bot_username({**data, "org_id": data.get("org_id") or org_id})
+        await _handle_tg_bot_username({**data, "org_id": org_id})
         return
 
     if msg_type == "TG_CLAIM_LINK":
         await _handle_tg_claim_link(data, org_id)
         return
 
+    if _router is not None and await _router.forward_response(org_id, data):
+        return
+    await _deliver_agent_response(data, org_id)
+
+
+async def _deliver_agent_response(data: dict, org_id: int) -> bool:
     req_id = data.get("id")
     if not req_id:
-        return
+        return False
 
     pending_org = _pending_org.get(req_id)
-    if pending_org is not None and pending_org != org_id:
-        return
+    if pending_org != org_id:
+        return False
 
     msg_type = data.get("type")
 
@@ -392,18 +473,24 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
         q = _pending_streams.get(req_id)
         if q:
             raw = data.get("data", "")
-            q.put_nowait(base64.b64decode(raw) if raw else b"")
-        return
+            try:
+                q.put_nowait(base64.b64decode(raw) if raw else b"")
+            except asyncio.QueueFull:
+                _fail_request(req_id, org_id, "Camera consumer is too slow")
+        return True
 
     if msg_type == "stream_end":
         q = _pending_streams.get(req_id)
         if q:
-            q.put_nowait(None)  # sentinel → generator stops
-        return
+            try:
+                q.put_nowait(None)  # sentinel → generator stops
+            except asyncio.QueueFull:
+                _fail_request(req_id, org_id, "Camera consumer is too slow")
+        return True
 
     if msg_type == "stream_start":
         # Nothing to do here — the generator is already waiting on the queue
-        return
+        return True
 
     if msg_type == "upload_progress":
         sent = data.get("sent")
@@ -417,7 +504,7 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
             or total < 0
             or (total > 0 and sent > total)
         ):
-            return
+            return True
         callback = _pending_upload_progress.get(req_id)
         if callback:
             try:
@@ -433,12 +520,13 @@ async def handle_agent_message(data: dict, org_id: int = 0) -> None:
                         req_id,
                         type(exc).__name__,
                     )
-        return
+        return True
 
     # Regular (non-streaming) response
     future = _pending.get(req_id)
     if future and not future.done():
         future.set_result(data)
+    return True
 
 
 async def proxy_request(
@@ -449,7 +537,7 @@ async def proxy_request(
     timeout: float = 8.0,
 ) -> dict:
     """Send an HTTP request through the agent tunnel, await JSON response."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
@@ -467,6 +555,7 @@ async def proxy_request(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
 
 async def bambu_camera_stream(
@@ -476,12 +565,12 @@ async def bambu_camera_stream(
     chunk_timeout: float = 30.0,
 ) -> AsyncGenerator[bytes, None]:
     """Stream Bambu A1/P1 camera via native binary protocol through the agent tunnel."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | RuntimeError | None] = asyncio.Queue(maxsize=16)
     _pending_streams[req_id] = q
     _pending_org[req_id] = org_id
 
@@ -492,6 +581,8 @@ async def bambu_camera_stream(
         }))
         while True:
             chunk = await asyncio.wait_for(q.get(), timeout=chunk_timeout)
+            if isinstance(chunk, RuntimeError):
+                raise chunk
             if chunk is None:
                 break
             yield chunk
@@ -500,6 +591,7 @@ async def bambu_camera_stream(
     finally:
         _pending_streams.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
 
 async def ffmpeg_stream(
@@ -512,12 +604,12 @@ async def ffmpeg_stream(
     This is the SimplyPrint approach: FFmpeg runs on the agent machine
     (farm PC / Pi) which is on the same LAN as the printer.
     """
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | RuntimeError | None] = asyncio.Queue(maxsize=16)
     _pending_streams[req_id] = q
     _pending_org[req_id] = org_id
 
@@ -527,6 +619,8 @@ async def ffmpeg_stream(
         }))
         while True:
             chunk = await asyncio.wait_for(q.get(), timeout=chunk_timeout)
+            if isinstance(chunk, RuntimeError):
+                raise chunk
             if chunk is None:
                 break
             yield chunk
@@ -535,6 +629,7 @@ async def ffmpeg_stream(
     finally:
         _pending_streams.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
 
 async def proxy_stream(
@@ -546,12 +641,12 @@ async def proxy_stream(
 
     Yields raw bytes chunks as they arrive from the agent.
     """
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
     req_id = str(uuid.uuid4())
-    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+    q: asyncio.Queue[bytes | RuntimeError | None] = asyncio.Queue(maxsize=16)
     _pending_streams[req_id] = q
     _pending_org[req_id] = org_id
 
@@ -559,6 +654,8 @@ async def proxy_stream(
         await ws.send_text(json.dumps({"id": req_id, "method": "STREAM", "url": url}))
         while True:
             chunk = await asyncio.wait_for(q.get(), timeout=chunk_timeout)
+            if isinstance(chunk, RuntimeError):
+                raise chunk
             if chunk is None:
                 break
             yield chunk
@@ -567,6 +664,7 @@ async def proxy_stream(
     finally:
         _pending_streams.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
 
 # ── File upload helpers ───────────────────────────────────────────────────────
@@ -591,7 +689,7 @@ async def send_bambu_upload(
     Returns the remote path on the printer (`cache/x.3mf` from v0.6.0 agents,
     bare filename from older ones). Raises RuntimeError on failure.
     """
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
@@ -653,6 +751,7 @@ async def send_bambu_upload(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
         _pending_upload_progress.pop(req_id, None)
         _upload_progress_error_logged.discard((org_id, req_id))
 
@@ -671,7 +770,7 @@ async def send_bambu_mqtt(
     timeout: float = 20.0,
 ) -> dict:
     """Publish one Bambu LAN MQTT command through the local agent."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
@@ -696,6 +795,7 @@ async def send_bambu_mqtt(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"BAMBU_MQTT failed: {resp.get('error')}")
@@ -711,7 +811,7 @@ async def send_anycubic_mqtt(
     **kwargs,
 ) -> dict:
     """Publish one Anycubic LAN MQTT control command through the local agent."""
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
@@ -736,6 +836,7 @@ async def send_anycubic_mqtt(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
 
     if resp.get("status", 0) >= 400 or resp.get("error"):
         raise RuntimeError(f"ANYCUBIC_MQTT failed: {resp.get('error')}")
@@ -766,7 +867,7 @@ async def send_moonraker_upload(
     from app.services.moonraker import (  # noqa: PLC0415
         _api_base, MoonrakerError, UPLOAD_TIMEOUT_MAX, upload_timeout_for_size,
     )
-    ws = _tunnels.get(org_id)
+    ws = _connection(org_id)
     if not ws:
         raise RuntimeError(f"No agent connected for org {org_id}")
 
@@ -803,7 +904,7 @@ async def send_moonraker_upload(
         }
         if print_options is not None:
             payload["print_options"] = print_options
-        capabilities = _agent_capabilities.get(org_id, set())
+        capabilities = _capabilities(org_id)
         if presigned_url and "moonraker_upload_url" in capabilities:
             # Fastest path: the agent downloads straight from R2 at its own ISP
             # speed — no base64 chunk relay through the cloud WebSocket.
@@ -850,6 +951,7 @@ async def send_moonraker_upload(
     finally:
         _pending.pop(req_id, None)
         _pending_org.pop(req_id, None)
+        await _release_request(org_id, req_id)
         _pending_upload_progress.pop(req_id, None)
         _upload_progress_error_logged.discard((org_id, req_id))
 
@@ -869,7 +971,7 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
 
     now = time.monotonic()
     cache_url = _status_cache_url(moonraker_url)
-    cached = _status_cache.get(cache_url)
+    cached = _status_cache.get((org_id, cache_url))
     if isinstance(cached, tuple) and len(cached) == 2:
         cached_at, cached_status = cached
         if isinstance(cached_at, (int, float)) and isinstance(cached_status, dict):
@@ -889,7 +991,7 @@ async def get_moonraker_status(org_id: int, moonraker_url: str) -> dict:
         log.debug("Tunnel Moonraker status failed %s: %s", moonraker_url, e)
         status = cached[1] if cached else {"state": "offline"}
 
-    _status_cache[cache_url] = (now, status)
+    _status_cache[(org_id, cache_url)] = (now, status)
     return status
 
 

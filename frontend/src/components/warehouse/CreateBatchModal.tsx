@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { Modal } from "@/components/ui/Modal";
 
 type BatchStatus = "draft" | "active" | "paused" | "done" | "cancelled";
@@ -60,7 +60,7 @@ export function CreateBatchModal({
   const selectedProductId = useRef(productId);
 
   useEffect(() => {
-    api<Product[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
+    apiAll<Product>("/api/warehouse/products/options").then(setProducts).catch(() => {});
     api<FarmTask[]>("/api/queue").then(setFarmTasks).catch(() => {});
     if (initialProductId) {
       api<Spec[]>(`/api/warehouse/products/${initialProductId}/specs`)

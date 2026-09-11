@@ -81,6 +81,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_production_requirements(self) -> "Settings":
+        if self.ENV == "production":
+            if len(self.SECRET_KEY.encode()) < 32 or self.SECRET_KEY.startswith("change-me"):
+                raise ValueError("Production SECRET_KEY must be a random secret of at least 32 bytes")
+            if self.ADMIN_PASSWORD == "change-me" or len(self.ADMIN_PASSWORD) < 12:
+                raise ValueError("Production ADMIN_PASSWORD must be explicitly set and at least 12 characters")
         if self.ENV == "production" and not self.ENCRYPTION_KEY:
             raise ValueError(
                 "ENCRYPTION_KEY must be set in production. "

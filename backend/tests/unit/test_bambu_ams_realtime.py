@@ -33,11 +33,11 @@ def test_parse_ams_detects_real_slot_changes(monkeypatch):
     monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
 
     ams = _ams_report()["print"]["ams"]
-    assert bambu._parse_ams("AMS-1", ams, None) is True
-    assert bambu._parse_ams("AMS-1", ams, None) is False
+    assert bambu._parse_ams("AMS-1", ams, None, org_id=42) is True
+    assert bambu._parse_ams("AMS-1", ams, None, org_id=42) is False
 
     changed = _ams_report(tray_color="00FF00FF")["print"]["ams"]
-    assert bambu._parse_ams("AMS-1", changed, None) is True
+    assert bambu._parse_ams("AMS-1", changed, None, org_id=42) is True
 
 
 def test_mqtt_ams_or_active_tray_change_emits_realtime_refresh(monkeypatch):
@@ -45,26 +45,26 @@ def test_mqtt_ams_or_active_tray_change_emits_realtime_refresh(monkeypatch):
     bambu._state_cache.clear()
     bambu._last_ams_redis_write.clear()
     bambu._last_state_redis_write.clear()
-    bambu._dev_to_org["AMS-2"] = 42
+    bambu._subscriptions.add((42, "AMS-2"))
     events: list[tuple[str, str]] = []
 
     monkeypatch.setattr("app.services.cache.cache_get", lambda _key: None)
     monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("app.services.cache.cache_delete", lambda _key: None)
-    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args: None)
+    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         bambu,
         "_publish_printer_refresh",
-        lambda dev_id, reason: events.append((dev_id, reason)),
+        lambda dev_id, reason, *, org_id: events.append((dev_id, reason)),
     )
 
-    bambu._handle_report_payload("AMS-2", _ams_report())
+    bambu._handle_report_payload("AMS-2", _ams_report(), org_id=42)
     assert events == [("AMS-2", "ams")]
 
-    bambu._handle_report_payload("AMS-2", _ams_report())
+    bambu._handle_report_payload("AMS-2", _ams_report(), org_id=42)
     assert events == [("AMS-2", "ams")]
 
-    bambu._handle_report_payload("AMS-2", _ams_report(tray_now="1"))
+    bambu._handle_report_payload("AMS-2", _ams_report(tray_now="1"), org_id=42)
     assert events == [("AMS-2", "ams"), ("AMS-2", "active_tray")]
 
 
@@ -76,10 +76,10 @@ def test_realtime_refresh_is_routed_through_redis(monkeypatch):
             published.append((channel, payload))
             return 1
 
-    bambu._dev_to_org["AMS-REDIS"] = 73
+    bambu._subscriptions.add((73, "AMS-REDIS"))
     monkeypatch.setattr("app.services.cache._r", lambda: FakeRedis())
 
-    bambu._publish_printer_refresh("AMS-REDIS", "ams")
+    bambu._publish_printer_refresh("AMS-REDIS", "ams", org_id=73)
 
     assert published[0][0] == PRINTER_EVENTS_CHANNEL
     assert '"org_id": 73' in published[0][1]
@@ -92,12 +92,12 @@ def test_bulk_filament_sync_requests_fresh_printer_report(monkeypatch):
     monkeypatch.setattr(
         bambu,
         "_publish",
-        lambda _dev_id, payload, qos=0: published.append((payload, qos)),
+        lambda _dev_id, payload, qos=0, *, org_id: published.append((payload, qos)),
     )
     monkeypatch.setattr(
         bambu,
         "_wait_for_filament_ack",
-        lambda dev_id, sequence_id: acknowledgements.append((dev_id, sequence_id)),
+        lambda dev_id, sequence_id, *, org_id: acknowledgements.append((dev_id, sequence_id)),
     )
 
     bambu.sync_filament_slots(
@@ -106,7 +106,7 @@ def test_bulk_filament_sync_requests_fresh_printer_report(monkeypatch):
             {"slot": 0, "type": "PLA", "color": "#ff0000", "empty": False},
             {"slot": 1, "empty": True},
         ],
-    )
+     org_id=42)
 
     assert [item[0]["print"]["command"] for item in published[:-1]] == [
         "ams_filament_setting",
@@ -128,7 +128,7 @@ def test_successful_filament_ack_updates_ams_cache_before_refresh(monkeypatch):
     bambu._state_cache.clear()
     bambu._last_ams_redis_write.clear()
     bambu._last_state_redis_write.clear()
-    bambu._dev_to_org["AMS-ACK"] = 42
+    bambu._subscriptions.add((42, "AMS-ACK"))
     cache: dict[str, object] = {}
     refreshes: list[tuple[str, str]] = []
 
@@ -138,14 +138,14 @@ def test_successful_filament_ack_updates_ams_cache_before_refresh(monkeypatch):
         lambda key, value, _ttl: cache.__setitem__(key, value),
     )
     monkeypatch.setattr("app.services.cache.cache_delete", lambda key: cache.pop(key, None))
-    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args: None)
+    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         bambu,
         "_publish_printer_refresh",
-        lambda dev_id, reason: refreshes.append((dev_id, reason)),
+        lambda dev_id, reason, *, org_id: refreshes.append((dev_id, reason)),
     )
 
-    def publish_with_immediate_ack(dev_id: str, payload: dict, qos: int = 0) -> None:
+    def publish_with_immediate_ack(dev_id: str, payload: dict, qos: int = 0, *, org_id: int) -> None:
         command = payload.get("print", {}).get("command")
         if command != "ams_filament_setting":
             return
@@ -158,16 +158,16 @@ def test_successful_filament_ack_updates_ams_cache_before_refresh(monkeypatch):
                     "result": "success",
                 }
             },
-        )
+         org_id=42)
 
     monkeypatch.setattr(bambu, "_publish", publish_with_immediate_ack)
 
     bambu.sync_filament_slot(
         "AMS-ACK",
         {"slot": 0, "type": "PLA", "color": "#123456", "empty": False},
-    )
+     org_id=42)
 
-    assert bambu.get_ams_filaments("AMS-ACK") == [
+    assert bambu.get_ams_filaments("AMS-ACK", org_id=42) == [
         {
             "slot": 0,
             "color": "#123456",
@@ -189,15 +189,15 @@ def test_partial_external_report_preserves_last_full_ams(monkeypatch):
     monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
 
     full = _ams_report()["print"]["ams"]
-    assert bambu._parse_ams("AMS-PARTIAL", full, None) is True
+    assert bambu._parse_ams("AMS-PARTIAL", full, None, org_id=42) is True
 
     external = {
         "tray_type": "PETG",
         "tray_color": "00FF00FF",
         "tray_sub_brands": "Generic",
     }
-    assert bambu._parse_ams("AMS-PARTIAL", {}, external) is True
-    assert [slot["slot"] for slot in bambu._ams_cache["AMS-PARTIAL"]] == [0, 254]
+    assert bambu._parse_ams("AMS-PARTIAL", {}, external, org_id=42) is True
+    assert [slot["slot"] for slot in bambu._ams_cache[(42, "AMS-PARTIAL")]] == [0, 254]
 
 
 def test_authoritative_empty_ams_report_clears_stale_slots(monkeypatch):
@@ -207,9 +207,9 @@ def test_authoritative_empty_ams_report_clears_stale_slots(monkeypatch):
     monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
 
     full = _ams_report()["print"]["ams"]
-    assert bambu._parse_ams("AMS-REMOVED", full, None) is True
-    assert bambu._parse_ams("AMS-REMOVED", {"ams": []}, None) is True
-    assert bambu._ams_cache["AMS-REMOVED"] == []
+    assert bambu._parse_ams("AMS-REMOVED", full, None, org_id=42) is True
+    assert bambu._parse_ams("AMS-REMOVED", {"ams": []}, None, org_id=42) is True
+    assert bambu._ams_cache[(42, "AMS-REMOVED")] == []
 
 
 def test_ams_cache_outlives_periodic_full_refresh():

@@ -15,44 +15,44 @@ type MonoOpts = {
   blink?: boolean;
 };
 function monoSVG(o: MonoOpts = {}): string {
-  const ant = o.antenna || "#22d3ee";
+  const ant = o.antenna || "#38bdf8";
   const arms = o.arms || "down";
   const legs = o.legs || "stand";
   const mouth = o.mouth || "smile";
   const blink = !!o.blink;
 
   const eyes = blink
-    ? '<rect x="2" y="5" width="2" height="1" fill="#083344"/><rect x="6" y="5" width="2" height="1" fill="#083344"/>'
-    : '<rect x="2" y="4" width="2" height="2" fill="#083344"/><rect x="6" y="4" width="2" height="2" fill="#083344"/>'
+    ? '<rect x="2" y="5" width="2" height="1" fill="#082f49"/><rect x="6" y="5" width="2" height="1" fill="#082f49"/>'
+    : '<rect x="2" y="4" width="2" height="2" fill="#082f49"/><rect x="6" y="4" width="2" height="2" fill="#082f49"/>'
       + '<rect x="3" y="4" width="1" height="1" fill="#fff" opacity="0.65"/><rect x="7" y="4" width="1" height="1" fill="#fff" opacity="0.65"/>';
 
   let m: string;
-  if (mouth === "worried") m = '<rect x="3" y="6" width="4" height="1" fill="#155e75" opacity="0.5"/>';
-  else if (mouth === "open") m = '<rect x="4" y="6" width="2" height="1" fill="#083344" opacity="0.7"/>';
-  else m = '<rect x="3" y="7" width="1" height="1" fill="#155e75" opacity="0.45"/><rect x="6" y="7" width="1" height="1" fill="#155e75" opacity="0.45"/>';
+  if (mouth === "worried") m = '<rect x="3" y="6" width="4" height="1" fill="#0369a1" opacity="0.5"/>';
+  else if (mouth === "open") m = '<rect x="4" y="6" width="2" height="1" fill="#082f49" opacity="0.7"/>';
+  else m = '<rect x="3" y="7" width="1" height="1" fill="#0369a1" opacity="0.45"/><rect x="6" y="7" width="1" height="1" fill="#0369a1" opacity="0.45"/>';
 
   let a: string;
-  if (arms === "up") a = '<rect x="0" y="5" width="2" height="2" fill="#0891b2"/><rect x="8" y="5" width="2" height="2" fill="#0891b2"/>';
-  else if (arms === "wave") a = '<rect x="0" y="5" width="2" height="2" fill="#0891b2"/><rect x="8" y="8" width="2" height="2" fill="#0891b2"/>';
-  else a = '<rect x="0" y="7" width="2" height="2" fill="#0891b2"/><rect x="8" y="7" width="2" height="2" fill="#0891b2"/>';
+  if (arms === "up") a = '<rect x="0" y="5" width="2" height="2" fill="#0ea5e9"/><rect x="8" y="5" width="2" height="2" fill="#0ea5e9"/>';
+  else if (arms === "wave") a = '<rect x="0" y="5" width="2" height="2" fill="#0ea5e9"/><rect x="8" y="8" width="2" height="2" fill="#0ea5e9"/>';
+  else a = '<rect x="0" y="7" width="2" height="2" fill="#0ea5e9"/><rect x="8" y="7" width="2" height="2" fill="#0ea5e9"/>';
 
   let l: string;
-  if (legs === "walkA") l = '<rect x="3" y="11" width="2" height="2" fill="#155e75"/><rect x="5" y="11" width="2" height="2" fill="#155e75"/>';
-  else if (legs === "walkB") l = '<rect x="3" y="10" width="2" height="2" fill="#155e75"/><rect x="5" y="11" width="2" height="2" fill="#155e75"/>';
-  else l = '<rect x="3" y="11" width="2" height="2" fill="#155e75"/><rect x="5" y="10" width="2" height="2" fill="#155e75"/>';
+  if (legs === "walkA") l = '<rect x="3" y="11" width="2" height="2" fill="#0369a1"/><rect x="5" y="11" width="2" height="2" fill="#0369a1"/>';
+  else if (legs === "walkB") l = '<rect x="3" y="10" width="2" height="2" fill="#0369a1"/><rect x="5" y="11" width="2" height="2" fill="#0369a1"/>';
+  else l = '<rect x="3" y="11" width="2" height="2" fill="#0369a1"/><rect x="5" y="10" width="2" height="2" fill="#0369a1"/>';
 
   return `<svg width="60" height="78" viewBox="0 0 10 13" shape-rendering="crispEdges" style="image-rendering:pixelated;">
     <rect x="4" y="0" width="2" height="1" fill="${ant}"/>
-    <rect x="4" y="1" width="2" height="1" fill="#0891b2"/>
-    <rect x="2" y="2" width="6" height="1" fill="#cffafe"/>
-    <rect x="1" y="3" width="8" height="3" fill="#cffafe"/>
-    <rect x="2" y="6" width="6" height="1" fill="#cffafe"/>
+    <rect x="4" y="1" width="2" height="1" fill="#0ea5e9"/>
+    <rect x="2" y="2" width="6" height="1" fill="#f0f9ff"/>
+    <rect x="1" y="3" width="8" height="3" fill="#f0f9ff"/>
+    <rect x="2" y="6" width="6" height="1" fill="#f0f9ff"/>
     ${eyes}
     <rect x="1" y="5" width="1" height="1" fill="#f9a8d4" opacity="0.6"/>
     <rect x="8" y="5" width="1" height="1" fill="#f9a8d4" opacity="0.6"/>
     ${m}
-    <rect x="2" y="7" width="6" height="3" fill="#0891b2"/>
-    <rect x="3" y="8" width="4" height="1" fill="#155e75" opacity="0.35"/>
+    <rect x="2" y="7" width="6" height="3" fill="#0ea5e9"/>
+    <rect x="3" y="8" width="4" height="1" fill="#0369a1" opacity="0.35"/>
     ${a}
     ${l}
   </svg>`;
@@ -60,9 +60,9 @@ function monoSVG(o: MonoOpts = {}): string {
 
 /* printed-part sprites (pixel voxels in cyan family) */
 const PARTS = [
-  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="1" y="1" width="6" height="6" fill="#0891b2"/><rect x="1" y="1" width="6" height="2" fill="#22d3ee"/><rect x="1" y="6" width="6" height="1" fill="#155e75"/><rect x="6" y="1" width="1" height="6" fill="#155e75" opacity=".6"/></svg>`,
-  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="1" y="1" width="6" height="6" fill="#155e75"/><rect x="2" y="2" width="4" height="4" fill="#22d3ee"/><rect x="3" y="3" width="2" height="2" fill="#083344"/></svg>`,
-  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="3" y="0" width="2" height="8" fill="#67e8f9"/><rect x="0" y="3" width="8" height="2" fill="#67e8f9"/><rect x="2" y="2" width="4" height="4" fill="#0891b2"/><rect x="3" y="3" width="2" height="2" fill="#083344"/></svg>`,
+  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="1" y="1" width="6" height="6" fill="#0ea5e9"/><rect x="1" y="1" width="6" height="2" fill="#38bdf8"/><rect x="1" y="6" width="6" height="1" fill="#0369a1"/><rect x="6" y="1" width="1" height="6" fill="#0369a1" opacity=".6"/></svg>`,
+  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="1" y="1" width="6" height="6" fill="#0369a1"/><rect x="2" y="2" width="4" height="4" fill="#38bdf8"/><rect x="3" y="3" width="2" height="2" fill="#082f49"/></svg>`,
+  `<svg width="28" height="28" viewBox="0 0 8 8" shape-rendering="crispEdges" style="image-rendering:pixelated;"><rect x="3" y="0" width="2" height="8" fill="#67e8f9"/><rect x="0" y="3" width="8" height="2" fill="#67e8f9"/><rect x="2" y="2" width="4" height="4" fill="#0ea5e9"/><rect x="3" y="3" width="2" height="2" fill="#082f49"/></svg>`,
 ];
 
 const CSS = `
@@ -305,7 +305,7 @@ export default function NotFound() {
         const pcx = p.x * stageW();
         if (p.y >= catchY && p.y <= catchY + 46 && Math.abs(pcx - monoCx) < (MONO_W / 2 + 14)) {
           score++; scoreEl.textContent = String(score);
-          burst(pcx, catchY + 10, "#22d3ee");
+          burst(pcx, catchY + 10, "#38bdf8");
           p.el.remove(); parts.splice(i, 1);
           scoreEl.animate([{ transform: "scale(1.3)", color: "#67e8f9" }, { transform: "scale(1)" }], { duration: 240, easing: "cubic-bezier(.34,1.56,.64,1)" });
           continue;

@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CalendarEntry, CalendarLane, Printer, PrintHistoryItem } from "@/lib/types";
+import type { CalendarEntry, CalendarLane, GcodeFile, Printer, PrintHistoryItem } from "@/lib/types";
 import { stateLabel } from "@/lib/printerLabels";
 import type { ScheduleModalMode } from "./ScheduleModal";
 import { ScheduleJobBlock } from "./ScheduleJobBlock";
@@ -1201,7 +1201,7 @@ export function ScheduleCalendar({
               </div>
             ) : (
               grouped.map(({ groupId, groupName, groupColor, lanes: groupLanes }) => (
-                <Fragment key={groupId ?? "__ungrouped"}>
+                <Fragment key={groupId ?? `by-${groupName ?? "none"}`}>
                   {/* Group header row */}
                   {groupName && (
                     <div
@@ -1326,7 +1326,7 @@ export function ScheduleCalendar({
                               filament_meta: __draggedTaskForCompat.filament_meta,
                               original_name: __draggedTaskForCompat.file_name ?? __draggedTaskForCompat.title,
                               tags: __draggedTaskForCompat.tags ?? [],
-                            } as any;
+                            } as unknown as GcodeFile;
                             const printer = printerById.get(lane.printer_id);
                             if (printer && printerTypeMismatch(mockFile, printer)) {
                               fileIncompat = true;

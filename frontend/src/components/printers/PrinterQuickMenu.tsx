@@ -316,7 +316,7 @@ function QuickMenuInner({
 
       <div
         data-testid="printer-quick-menu"
-        className="fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
+        className="anim-menu fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
         style={{ left, top, width: MENU_WIDTH, maxHeight: maxH }}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
@@ -461,7 +461,7 @@ function QuickMenuInner({
       {submenu && (
         <div
           data-testid="printer-quick-submenu"
-          className="fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
+          className="anim-menu fixed z-50 overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-1.5 shadow-lg"
           style={{
             left: submenuLeft,
             top: submenuTop,

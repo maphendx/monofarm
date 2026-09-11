@@ -166,22 +166,22 @@ def test_bambu_health_endpoint_reports_auth_printers_and_jobs(client, auth_heade
     db_session.commit()
 
     bambu._mqtt_clients[test_org.id] = object()
-    bambu._dev_to_org["OBS-ONLINE"] = test_org.id
-    bambu._dev_to_org["OBS-OFFLINE"] = test_org.id
-    bambu._state_cache["OBS-ONLINE"] = {
+    bambu._subscriptions.add((test_org.id, "OBS-ONLINE"))
+    bambu._subscriptions.add((test_org.id, "OBS-OFFLINE"))
+    bambu._state_cache[(test_org.id, "OBS-ONLINE")] = {
         "ts": time.monotonic(),
         "state": "printing",
         "last_message_at": now.isoformat(),
     }
-    bambu._state_cache["OBS-OFFLINE"] = {"ts": time.monotonic(), "state": "offline"}
+    bambu._state_cache[(test_org.id, "OBS-OFFLINE")] = {"ts": time.monotonic(), "state": "offline"}
     try:
         resp = client.get("/api/orgs/me/bambu-health", headers=auth_headers)
     finally:
         bambu._mqtt_clients.pop(test_org.id, None)
-        bambu._dev_to_org.pop("OBS-ONLINE", None)
-        bambu._dev_to_org.pop("OBS-OFFLINE", None)
-        bambu._state_cache.pop("OBS-ONLINE", None)
-        bambu._state_cache.pop("OBS-OFFLINE", None)
+        bambu._subscriptions.discard((test_org.id, "OBS-ONLINE"))
+        bambu._subscriptions.discard((test_org.id, "OBS-OFFLINE"))
+        bambu._state_cache.pop((test_org.id, "OBS-ONLINE"), None)
+        bambu._state_cache.pop((test_org.id, "OBS-OFFLINE"), None)
 
     assert resp.status_code == 200
     body = resp.json()

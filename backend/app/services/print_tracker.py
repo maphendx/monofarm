@@ -28,11 +28,11 @@ def _current_state(row: Printer) -> dict:
     from app.services import bambu, moonraker
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
-        cached = bambu.get_cached_state(row.bambu_dev_id)
+        cached = bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id)
         return {"state": cached.get("state", "unknown"), "file": cached.get("filename")}
 
     if row.moonraker_url:
-        live = moonraker.get_live_status(row.moonraker_url)
+        live = moonraker.get_live_status(row.moonraker_url, org_id=row.organization_id)
         return {
             "state": live.get("state", "unknown"),
             "file": live.get("filename"),

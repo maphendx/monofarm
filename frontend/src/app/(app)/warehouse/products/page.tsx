@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { API_URL, ApiError, api, getToken } from "@/lib/api";
+import { API_URL, ApiError, api, apiAll, getToken } from "@/lib/api";
 import { matchTokens } from "@/lib/search";
 import { generateEan13, isValidEan13 } from "@/lib/ean13";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
@@ -681,7 +681,7 @@ function SpecModal({ product, onClose }: { product: Product; onClose: () => void
 
   useEffect(() => {
     if (addComp && catalog.length === 0) {
-      api<CatalogItem[]>("/api/warehouse/products/options").then(setCatalog).catch(() => {});
+      apiAll<CatalogItem>("/api/warehouse/products/options").then(setCatalog).catch(() => {});
     }
     if (!addComp) { setCSearch(""); setCDropOpen(false); }
   }, [addComp, catalog.length]);
@@ -1417,8 +1417,8 @@ export default function ProductsPage() {
   const load = useCallback(async (archived: boolean) => {
     try {
       const [prods, stk, cs] = await Promise.all([
-        api<Product[]>(`/api/warehouse/products${archived ? "?archived=true" : ""}`),
-        api<StockEntry[]>("/api/warehouse/stock/summary"),
+        apiAll<Product>(`/api/warehouse/products${archived ? "?archived=true" : ""}`),
+        apiAll<StockEntry>("/api/warehouse/stock/summary"),
         api<ProductCat[]>("/api/warehouse/categories"),
       ]);
       setProducts(prods);
@@ -1429,7 +1429,7 @@ export default function ProductsPage() {
 
   const refreshStock = useCallback(async () => {
     try {
-      const stk = await api<StockEntry[]>("/api/warehouse/stock/summary");
+      const stk = await apiAll<StockEntry>("/api/warehouse/stock/summary");
       setStock(stk);
     } catch { /* silent */ }
   }, []);

@@ -83,7 +83,7 @@ Tests use a separate `printfarm_test` Postgres DB (override with `TEST_DATABASE_
 | `/folders` | files.py (folders_router) | gcode folder CRUD |
 | `/history` | history.py | print history log |
 | `/analytics` | analytics.py | summary, daily, printer stats, filament usage |
-| `/warehouse` | warehouse.py | full ERP — see Warehouse module |
+| `/warehouse` | warehouse.py + warehouse_modules/ | full ERP — see Warehouse module |
 | `/keycrm` | keycrm.py | KeyCRM webhook receiver (orders → warehouse orders) |
 | `/api/billing` | billing.py | Lemon Squeezy checkout, webhook, cancel |
 | `/api/agent` | agent.py + agent_tg.py | farm agent WebSocket tunnel + TG endpoints; version check |
@@ -108,9 +108,11 @@ Tests use a separate `printfarm_test` Postgres DB (override with `TEST_DATABASE_
 - `go2rtc.py` — camera stream proxy via go2rtc sidecar (`GO2RTC_URL`).
 - `bootstrap.py` — seeds admin user + default org on first start.
 
-## Warehouse module (`api/warehouse.py`, `models/warehouse.py`)
+## Warehouse module (`api/warehouse.py`, `api/warehouse_modules/`, `models/warehouse.py`)
 
 Categories → Products (SKU, barcode, cost/sale price, thresholds; CSV import/export) → Specifications (BOM: components + operations) → Stock per warehouse → Movements ledger (PURCHASE_IN / SALE_OUT / RETURN_IN / TRANSFER / ADJUSTMENT / PRODUCTION_IN / PRODUCTION_OUT / WRITE_OFF) → Production Batches (open/close writes production movements) → Orders (reserve → ship → SALE_OUT; source: manual/keycrm) → Counterparties (balance tracking) → Cash Flow → Analytics. Warehouses (physical/virtual/consignment) have Zones → Cells → CellStock; invariant sum(cells) ≤ StockEntry.qty.
+
+`api/warehouse.py` only composes domain routers. Endpoint implementations live in `api/warehouse_modules/` by domain; cross-domain stock, AVCO, bin and serialization invariants live in `common.py`. Large collection endpoints use bounded `skip`/`limit` pagination (100 by default, 500 maximum), while frontend views that need a complete collection traverse all pages with `apiAll()`.
 
 **KeyCRM:** webhook at `POST /api/keycrm/webhook/{org_slug}`, HMAC-SHA256 validated via org's `keycrm_webhook_secret`. Creates/updates `Order` + `OrderItem`.
 
@@ -210,3 +212,27 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - Run graphify commands via the project venv: `. .venv-graphify/bin/activate` (or call `.venv-graphify/bin/graphify` directly).
+
+## Tenant security invariants
+
+- Access JWTs require `typ=access` and `ver`; authenticate against the current user organization, role, active flag and `session_version` through `authenticate_user`. Password/account security changes revoke credentials. Migration `0086` adds the version.
+- Moonraker and Bambu caches, Bambu MQTT routing/acknowledgments, and go2rtc stream names must include organization identity. Pass the required `org_id`; never fall back to URL-only or serial-only keys.
+- File thumbnails require organization authentication. Use `AuthImage` for API thumbnail URLs; do not restore public ID-only thumbnail access.
+- Agent connections/configuration require a tenant-admin session. Use the authenticated tunnel organization, never an organization supplied in an agent payload.
+- See `docs/SECURITY_REVIEW_2026-09-10.md` for verification, deployment requirements and remaining confidentiality boundaries.
+
+## Agent tunnel routing
+
+- `services/tunnel_router.py` routes agent commands/responses over Redis Pub/Sub between web and background-worker processes. The socket owner has a 15-second Redis lease and a unique connection ID; requests remain pinned to that connection.
+- All web and worker instances must share a private `REDIS_URL`. Without Redis, tunnels support only one web process. Redis routing failures fail closed; do not silently use process-local presence when Redis is configured.
+- Keep the agent wire protocol unchanged when changing internal routing. Route all request senders through `tunnel.py`; propagate the authenticated organization and preserve upload progress, camera cleanup and connection fencing.
+- Never automatically retry an ambiguously delivered printer command. Redis delivery permits and acknowledgments are transport guards, not proof of physical execution.
+- See `docs/AGENT_TUNNEL_ROUTING.md` for lifecycle, tests, limits and deployment requirements.
+
+## Edge agent module boundaries
+
+- `agent/monofarm_agent.py` is a compatibility facade and CLI. Keep implementation in `agent/core/`, `agent/transports/`, or `agent/printers/`.
+- `core/runtime.py` owns the canonical connection/reconnect lifecycle. `transports/websocket.py` owns wire parsing and dispatch. Printer-specific protocols stay in their corresponding module.
+- Linux/source distribution is a complete archive defined by `agent/source_manifest.json`; keep it current whenever a runtime file is added or removed. Pre-0.8.16 flat installs rely on the facade bootstrap.
+- Windows continues to enter through `monofarm_tray.py`; keep the PyInstaller hidden imports synchronized with package changes.
+- See `docs/EDGE_AGENT_ARCHITECTURE.md` for the module map and compatibility contract.

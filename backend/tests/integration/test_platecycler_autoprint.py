@@ -362,7 +362,7 @@ def test_start_next_for_printer_uses_hybrid_lan_dispatch_when_tunnel_available(
     dispatch_cloud_job instead fails in production: Bambu Cloud's own upload
     pipeline does not reliably process PlateCycler's re-zipped 3MF."""
     monkeypatch.setattr(core_db, "SessionLocal", lambda: _SessionContext(db_session))
-    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id: {"state": "idle"})
+    monkeypatch.setattr(bambu, "get_cached_state", lambda _dev_id, *, org_id: {"state": "idle"})
     monkeypatch.setattr(bambu_lan_dispatch, "has_agent_tunnel", lambda _org_id: True)
 
     def _fail_if_called(_job_id):

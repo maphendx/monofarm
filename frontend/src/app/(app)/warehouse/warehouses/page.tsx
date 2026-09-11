@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
@@ -137,7 +137,7 @@ export default function WarehousesPage() {
     try {
       const [whs, stk] = await Promise.all([
         api<Warehouse[]>("/api/warehouse/warehouses"),
-        api<StockEntry[]>("/api/warehouse/stock/summary"),
+        apiAll<StockEntry>("/api/warehouse/stock/summary"),
       ]);
       setWarehouses(whs);
       setStock(stk);

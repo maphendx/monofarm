@@ -15,6 +15,9 @@ _RESEND_URL = "https://api.resend.com/emails"
 
 def _send(to: str, subject: str, html: str) -> bool:
     if not settings.RESEND_API_KEY:
+        if settings.ENV == "production":
+            log.error("Email delivery disabled: RESEND_API_KEY is not configured")
+            return False
         log.info("[email dev] to=%s subj=%s\n%s", to, subject, html)
         return True
     try:
@@ -31,7 +34,7 @@ def _send(to: str, subject: str, html: str) -> bool:
             timeout=10,
         )
         if resp.status_code >= 300:
-            log.error("Resend error %s: %s", resp.status_code, resp.text)
+            log.error("Resend delivery failed with status %s", resp.status_code)
             return False
         return True
     except Exception:  # noqa: BLE001

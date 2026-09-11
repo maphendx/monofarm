@@ -81,7 +81,7 @@ async function sendViaBrowserPrint(zpl: string): Promise<"ok" | "not_available" 
   const BP = (window as any).BrowserPrint;
   return new Promise((resolve) => {
     BP.getDefaultDevice("printer",
-      (device: Record<string, unknown> & { send: Function }) => {
+      (device: Record<string, unknown> & { send: (...args: unknown[]) => void }) => {
         if (!device) { resolve("not_available"); return; }
         device.send(zpl, () => resolve("ok"), () => resolve("error"));
       },

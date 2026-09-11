@@ -23,18 +23,18 @@ def test_cached_status_matches_agent_url_without_trailing_slash(monkeypatch):
 
     def fake_cache_get(key: str):
         requested.append(key)
-        if key == f"mr:status:{U1_URL}":
+        if key == f"mr:org:5:status:{U1_URL}":
             return {"state": "idle", "u1_filaments": U1_SLOTS}
         return None
 
     monkeypatch.setattr("app.services.cache.cache_get", fake_cache_get)
     moonraker._status_cache.clear()
 
-    status = moonraker.get_cached_live_status(f"{U1_URL}/")
+    status = moonraker.get_cached_live_status(f"{U1_URL}/", org_id=5)
 
     assert status is not None
     assert status["u1_filaments"] == U1_SLOTS
-    assert requested[0] == f"mr:status:{U1_URL}"
+    assert requested[0] == f"mr:org:5:status:{U1_URL}"
 
 
 def test_u1_task_config_slots_are_verified_by_the_printer():
@@ -50,7 +50,7 @@ def test_u1_task_config_slots_are_verified_by_the_printer():
 
 def test_status_push_keeps_last_u1_colors_when_packet_is_incomplete(monkeypatch):
     stored: dict[str, dict] = {
-        f"mr:stale:{U1_URL}": {"state": "idle", "u1_filaments": U1_SLOTS},
+        f"mr:org:5:stale:{U1_URL}": {"state": "idle", "u1_filaments": U1_SLOTS},
     }
 
     monkeypatch.setattr("app.services.cache.cache_get", lambda key: stored.get(key))
@@ -63,16 +63,16 @@ def test_status_push_keeps_last_u1_colors_when_packet_is_incomplete(monkeypatch)
     changed = tunnel._handle_status_push({
         "url": f"{U1_URL}/",
         "status": {"print_stats": {"state": "standby"}},
-    })
+    }, org_id=5)
 
     assert changed is False
-    assert stored[f"mr:status:{U1_URL}"]["u1_filaments"] == U1_SLOTS
+    assert stored[f"mr:org:5:status:{U1_URL}"]["u1_filaments"] == U1_SLOTS
 
 
 def test_u1_color_change_pushes_fresh_printer_snapshot(monkeypatch):
     pushed: list[int] = []
 
-    monkeypatch.setattr(tunnel, "_handle_status_push", lambda _data: True)
+    monkeypatch.setattr(tunnel, "_handle_status_push", lambda _data, _org_id: True)
 
     async def fake_broadcast(org_id: int) -> None:
         pushed.append(org_id)

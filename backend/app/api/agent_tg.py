@@ -10,12 +10,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_org
+from app.api.deps import get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
-from app.models.user import User
+from app.models.user import User, UserRole
 
-router = APIRouter(prefix="/api/agent", tags=["agent-tg"])
+router = APIRouter(prefix="/api/agent", tags=["agent-tg"], dependencies=[Depends(require_roles(UserRole.admin))])
 
 
 class TgCommandRequest(BaseModel):
@@ -87,15 +87,15 @@ def tg_command(
 
 # ── handlers ──────────────────────────────────────────────────────────────────
 
-def _user_by_chat(db: Session, chat_id: int) -> User | None:
-    return db.query(User).filter(User.telegram_chat_id == chat_id).first()
+def _user_by_chat(db: Session, chat_id: int, org_id: int) -> User | None:
+    return db.query(User).filter(User.telegram_chat_id == chat_id, User.organization_id == org_id, User.is_active.is_(True)).first()
 
 
 def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str]) -> dict:
     if args:
         from datetime import datetime, timezone
         code = (args[0] or "").strip()
-        user = db.query(User).filter(User.telegram_link_code == code).first()
+        user = db.query(User).filter(User.telegram_link_code == code, User.organization_id == org.id, User.is_active.is_(True)).first()
         if not user:
             return {"text": "Невірний код. Попроси адміна надіслати нове посилання.", "parse_mode": None}
         if user.telegram_link_expires_at and user.telegram_link_expires_at < datetime.now(timezone.utc):
@@ -116,7 +116,7 @@ def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str])
             "parse_mode": None,
         }
 
-    user = _user_by_chat(db, chat_id)
+    user = _user_by_chat(db, chat_id, org.id)
     if user:
         name = user.name or user.email
         text = f"Вітаю, {name}.\nКоманди: /план, /статус."
@@ -129,7 +129,7 @@ def _handle_start(db: Session, org: Organization, chat_id: int, args: list[str])
 
 
 def _handle_plan(db: Session, org: Organization, chat_id: int) -> dict:
-    user = _user_by_chat(db, chat_id)
+    user = _user_by_chat(db, chat_id, org.id)
     if not user:
         return {"text": "Не зареєстрований. Попроси адміна посилання.", "parse_mode": None}
     from app.services.daily_report import build_daily_plan_text
@@ -138,7 +138,7 @@ def _handle_plan(db: Session, org: Organization, chat_id: int) -> dict:
 
 
 def _handle_status(db: Session, org: Organization, chat_id: int) -> dict:
-    user = _user_by_chat(db, chat_id)
+    user = _user_by_chat(db, chat_id, org.id)
     if not user:
         return {"text": "Не зареєстрований.", "parse_mode": None}
     from app.services.daily_report import build_status_text

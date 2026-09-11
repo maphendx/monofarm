@@ -34,10 +34,10 @@ def test_expired_live_cache_uses_last_known_bambu_state(monkeypatch):
     monkeypatch.setattr(
         cache,
         "cache_get",
-        lambda key: stale if key == "bambu:state:stale:dev-1" else None,
+        lambda key: stale if key == "bambu:org:1:state:stale:dev-1" else None,
     )
 
-    result = bambu.get_cached_state("dev-1")
+    result = bambu.get_cached_state("dev-1", org_id=1)
 
     assert result["state"] == "printing"
     assert result["state_stale"] is True

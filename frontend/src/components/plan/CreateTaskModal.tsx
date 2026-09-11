@@ -6,7 +6,7 @@ import { CreateTagModal } from "@/components/ui/CreateTagModal";
 import { Modal } from "@/components/ui/Modal";
 import { TagPicker } from "@/components/ui/TagPicker";
 import { useTags } from "@/hooks/useTags";
-import { ApiError, api, getToken } from "@/lib/api";
+import { ApiError, api, apiAll, getToken } from "@/lib/api";
 import type { PrintTask } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -39,7 +39,7 @@ export function CreateTaskModal({
   const { tags, reload: reloadTags, setTaskTags } = useTags();
 
   useEffect(() => {
-    if (open) api<ProductOption[]>("/api/warehouse/products/options").then(setProducts).catch(() => {});
+    if (open) apiAll<ProductOption>("/api/warehouse/products/options").then(setProducts).catch(() => {});
   }, [open]);
 
   function reset() {

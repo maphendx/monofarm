@@ -53,8 +53,8 @@ def test_bambu_loaded_filaments_sync_to_mqtt(client, auth_headers, test_org, mon
 
     captured = []
     refreshes = []
-    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
-    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args: None)
+    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0, *, org_id: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         bambu,
         "publish_printer_refresh",
@@ -121,7 +121,7 @@ def test_bambu_loaded_filaments_only_sends_changed_slots(
     monkeypatch.setattr(
         bambu,
         "sync_filament_slots",
-        lambda _dev_id, slots: captured.append(slots),
+        lambda _dev_id, slots, *, org_id: captured.append(slots),
     )
 
     resp = client.put(
@@ -194,8 +194,8 @@ def test_assign_bambu_slot_syncs_to_handy(client, auth_headers, test_filament, t
 
     captured = []
     refreshes = []
-    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0: captured.append((dev_id, payload, qos)))
-    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args: None)
+    monkeypatch.setattr(bambu, "_publish", lambda dev_id, payload, qos=0, *, org_id: captured.append((dev_id, payload, qos)))
+    monkeypatch.setattr(bambu, "_wait_for_filament_ack", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         bambu,
         "publish_printer_refresh",

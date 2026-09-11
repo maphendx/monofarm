@@ -159,8 +159,8 @@ def test_print_tracker_finalizes_active_moonraker_job(db_session, test_org, monk
         {"state": "printing", "filename": "part.gcode", "progress_pct": 40, "eta_minutes": 12},
         {"state": "operational", "filename": "part.gcode", "progress_pct": 100, "eta_minutes": 0},
     ])
-    monkeypatch.setattr(moonraker, "get_live_status", lambda _url: next(states))
-    monkeypatch.setattr(moonraker, "get_remote_file_meta", lambda _url, _name: {})
+    monkeypatch.setattr(moonraker, "get_live_status", lambda _url, *, org_id: next(states))
+    monkeypatch.setattr(moonraker, "get_remote_file_meta", lambda _url, _name, *, org_id: {})
     print_tracker._prev.clear()
 
     print_tracker._check_org(db_session, test_org)

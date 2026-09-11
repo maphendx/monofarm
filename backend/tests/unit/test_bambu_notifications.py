@@ -34,10 +34,10 @@ def test_bambu_pause_with_error_emits_failed_alert(monkeypatch):
     printer = SimpleNamespace(id=77, name="A3", organization_id=5)
     db = _FakeDb(printer)
 
-    bambu._dev_to_org.clear()
+    bambu._subscriptions.clear()
     bambu._state_cache.clear()
-    bambu._dev_to_org["DEV-1"] = 5
-    bambu._state_cache["DEV-1"] = {"state": "printing", "error_msg": None, "filename": "benchy.3mf"}
+    bambu._subscriptions.add((5, "DEV-1"))
+    bambu._state_cache[(5, "DEV-1")] = {"state": "printing", "error_msg": None, "filename": "benchy.3mf"}
 
     import app.core.db as db_mod
     monkeypatch.setattr(db_mod, "SessionLocal", lambda: db)
@@ -65,7 +65,7 @@ def test_bambu_pause_with_error_emits_failed_alert(monkeypatch):
                 "print_error": 0x0500C010,
             }
         },
-    )
+     org_id=5)
 
     assert len(captured) == 1
     alert = captured[0]

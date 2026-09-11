@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { API_URL, api, getToken } from "@/lib/api";
+import { API_URL, api, apiAll, getToken } from "@/lib/api";
 import { matchTokens } from "@/lib/search";
 import { AuthImage } from "@/components/ui/AuthImage";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -119,8 +119,8 @@ export default function SpecsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const specsPromise = api<SpecSummary[]>("/api/warehouse/specs/defaults/summary").catch(() => [] as SpecSummary[]);
-      const prods = await api<Product[]>("/api/warehouse/products");
+      const specsPromise = apiAll<SpecSummary>("/api/warehouse/specs/defaults/summary").catch(() => [] as SpecSummary[]);
+      const prods = await apiAll<Product>("/api/warehouse/products");
       setProducts(prods);
       setSpecByProduct({});
       setLoading(false);

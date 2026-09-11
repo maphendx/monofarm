@@ -1,4 +1,5 @@
 import { clearStoredImpersonation, getActiveImpersonationOrgId } from "@/lib/impersonation-store";
+import { clearPrintTransfers } from "@/lib/printTransferStore";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const TOKEN_KEY = "monofarm_token";
@@ -17,11 +18,19 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string) {
+  if (localStorage.getItem(TOKEN_KEY) !== token) clearPrivateClientState();
   localStorage.setItem(TOKEN_KEY, token);
 }
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  clearPrivateClientState();
+}
+
+function clearPrivateClientState() {
+  localStorage.removeItem("printers_cache");
+  localStorage.removeItem("monofarm_dashboard_filters");
+  clearPrintTransfers();
   clearStoredImpersonation();
 }
 
@@ -56,6 +65,28 @@ export async function api<T>(
   }
   if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
+}
+
+const API_PAGE_SIZE = 500;
+
+/** Fetch every page from an offset-paginated list endpoint.
+ *
+ * Existing warehouse screens still need complete collections for kanban
+ * grouping and client-side filters. Keeping the loop here lets each backend
+ * request stay bounded while those screens migrate independently to
+ * server-driven paging.
+ */
+export async function apiAll<T>(path: string, options: RequestInit = {}): Promise<T[]> {
+  const items: T[] = [];
+
+  for (let skip = 0; ; skip += API_PAGE_SIZE) {
+    const url = new URL(path, "http://monofarm.local");
+    url.searchParams.set("skip", String(skip));
+    url.searchParams.set("limit", String(API_PAGE_SIZE));
+    const page = await api<T[]>(`${url.pathname}${url.search}`, options);
+    items.push(...page);
+    if (page.length < API_PAGE_SIZE) return items;
+  }
 }
 
 // ── Calendar / Schedule helpers ───────────────────────────────────────────────

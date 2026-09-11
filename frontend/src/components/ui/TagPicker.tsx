@@ -59,7 +59,7 @@ export function TagPicker({ available, selected, onChange, disabled, onCreateTag
       )}
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+        <div className="anim-menu absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
           {available.length === 0 ? (
             <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Тегів немає</p>
           ) : (

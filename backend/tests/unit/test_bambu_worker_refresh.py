@@ -22,8 +22,8 @@ class _Db:
 
 
 def test_subscription_refresh_requests_full_status_for_existing_devices(monkeypatch):
-    bambu._dev_to_org.clear()
-    bambu._dev_to_org["EXISTING"] = 7
+    bambu._subscriptions.clear()
+    bambu._subscriptions.add((7, "EXISTING"))
     subscribed: list[tuple[str, int]] = []
     refreshed: list[str] = []
 
@@ -41,7 +41,7 @@ def test_subscription_refresh_requests_full_status_for_existing_devices(monkeypa
     monkeypatch.setattr(
         bambu,
         "request_full_status",
-        lambda dev_id: refreshed.append(dev_id),
+        lambda dev_id, *, org_id: refreshed.append(dev_id),
         raising=False,
     )
 

@@ -1,9 +1,23 @@
 # Monofarm — Roadmap + Build Playbook
 
-**Оновлено:** 2026-05-30 · Аналіз: [RELEASE_AUDIT.md](RELEASE_AUDIT.md)
+**Оновлено:** 2026-09-11 · Аналіз: [RELEASE_AUDIT.md](RELEASE_AUDIT.md)
 
 > Це не просто список — це **playbook для виконання**. Для кожної задачі: які файли, який підхід, які граблі, як перевірити, що блокує (я vs користувач).
 > Майбутній Claude: читай розділ «Граблі кодбази» ПЕРЕД тим, як писати код. Ці конвенції вистраждані — порушиш → зламаєш облік/гроші.
+
+---
+
+## Архітектурний backlog — 2026-09-11
+
+| # | Стан | Напрям |
+| --- | --- | --- |
+| 1 | ✅ Код готовий локально | Edge-агент розділено на core, transports, printers; збережено facade, wire protocol, Linux/source update і PyInstaller entrypoint. |
+| 2 | ⏳ | Винести Bambu A1 Mini + Chitu C1M G-code та is_a1_mini() у механізми/профілі для JobOx, 3DQue, Quinly, P1S і Voron. |
+| 3 | ⏳ | Ввести серверний state manager фронтенду (TanStack Query або SWR) для dedup, background refresh та optimistic updates. |
+| 4 | 🔴 GTM | Прибрати /upgrade-free, прив’язати extra printer slots до Lemon Squeezy, додати /, /terms, /privacy та email password reset. |
+| 5 | 🔴 Ops | Розгорнути managed/HA Redis для tunnel routing, додати availability alerts, runbook та capacity/failure testing. |
+
+Деталі виконаного пункту 1: [EDGE_AGENT_ARCHITECTURE.md](EDGE_AGENT_ARCHITECTURE.md).
 
 ---
 

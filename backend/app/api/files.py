@@ -545,9 +545,13 @@ def download_file(
 
 
 @router.get("/{file_id}/thumbnail")
-def get_thumbnail(file_id: int, db: Session = Depends(get_db)):
+def get_thumbnail(
+    file_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+):
     from fastapi.responses import RedirectResponse
-    row = db.query(GcodeFile).filter(GcodeFile.id == file_id).first()
+    row = db.query(GcodeFile).filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id).first()
     if not row:
         raise HTTPException(status_code=404)
     thumb_name = row.stored_name + ".thumb.png"
@@ -555,11 +559,11 @@ def get_thumbnail(file_id: int, db: Session = Depends(get_db)):
         url = storage_svc.presigned_url(thumb_name, row.organization_id)
         if not url:
             raise HTTPException(status_code=404)
-        return RedirectResponse(url)
+        return RedirectResponse(url, headers={"Cache-Control": "no-store"})
     path = GCODES_DIR / thumb_name
     if not path.exists():
         raise HTTPException(status_code=404)
-    return FileResponse(path, media_type="image/png")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{file_id}/send/{printer_id}", response_model=SendResult | BambuQueuedResult)

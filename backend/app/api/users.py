@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_org, require_roles
 from app.core.config import settings
 from app.core.db import get_db
-from app.core.security import create_invite_token, hash_password
+from app.core.security import create_invite_token, hash_password, revoke_user_credentials
 from app.models.organization import PLAN_LIMITS, Organization
 from app.models.user import CustomRole, User, UserRole
 from app.schemas.user import CustomRoleCreate, CustomRoleOut, CustomRoleUpdate, UserAdminOut, UserCreate, UserUpdate
@@ -128,6 +128,12 @@ def update_user(
 
     if payload.name is not None:
         user.name = payload.name
+    if (
+        payload.password
+        or (payload.role is not None and payload.role != user.role)
+        or (payload.is_active is not None and payload.is_active != user.is_active)
+    ):
+        revoke_user_credentials(user, db)
     if payload.role is not None:
         user.role = payload.role
     if payload.is_active is not None:

@@ -41,18 +41,20 @@ def renew() -> bool:
     if r is None:
         return True
     wid = _worker_id()
-    current = r.get(LOCK_KEY)
-    if current and current.decode() == wid:
-        r.expire(LOCK_KEY, LOCK_TTL)
+    renewed = r.eval("""
+        local current = redis.call('GET', KEYS[1])
+        if current == ARGV[1] then
+            redis.call('EXPIRE', KEYS[1], ARGV[2])
+            return 1
+        end
+        if not current then
+            return redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2]) and 1 or 0
+        end
+        return 0
+    """, 1, LOCK_KEY, wid, LOCK_TTL)
+    if renewed:
         return True
-    if current is None:
-        # Key expired (Redis restart / TTL mismatch) — try to re-acquire rather
-        # than immediately yielding leadership to no one.
-        reacquired = r.set(LOCK_KEY, wid, nx=True, ex=LOCK_TTL)
-        if reacquired:
-            log.info("Scheduler leader lock re-acquired after expiry (%s)", wid)
-            return True
-    log.warning("Scheduler leader lock lost (now held by %s)", current)
+    log.warning("Scheduler leader lock lost")
     return False
 
 
@@ -63,7 +65,11 @@ def release() -> None:
     if r is None:
         return
     wid = _worker_id()
-    current = r.get(LOCK_KEY)
-    if current and current.decode() == wid:
-        r.delete(LOCK_KEY)
+    removed = r.eval("""
+        if redis.call('GET', KEYS[1]) == ARGV[1] then
+            return redis.call('DEL', KEYS[1])
+        end
+        return 0
+    """, 1, LOCK_KEY, wid)
+    if removed:
         log.info("Scheduler leader lock released")

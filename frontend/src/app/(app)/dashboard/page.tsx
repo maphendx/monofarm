@@ -1,13 +1,19 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { LayoutGrid, List, Rows3, Workflow } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
+
+import { startViewTransition } from "@/lib/viewTransition";
 
 import { DashboardPet } from "@/components/dashboard/DashboardPet";
+import { CompactTile } from "@/components/dashboard/CompactTile";
 import { FlowView } from "@/components/dashboard/FlowView";
-import { AutoDispatchModal } from "@/components/files/AutoDispatchModal";
+import { ListRow } from "@/components/dashboard/ListRow";
 import { SendModal } from "@/components/files/SendModal";
 import { PrinterCard } from "@/components/printers/PrinterCard";
 import { printerNeedsClearBed } from "@/components/printers/printerCardModel";
@@ -16,9 +22,10 @@ import { PrinterGroupActionsMenu } from "@/components/printers/PrinterGroupActio
 import { PrinterGroupsModal } from "@/components/printers/PrinterGroupsModal";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Select } from "@/components/ui/Select";
 import { ApiError, api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
-import { useT } from "@/lib/i18n";
+import { useT, type TKey } from "@/lib/i18n";
 import {
   kindLabel,
   printerTone,
@@ -129,13 +136,13 @@ type GroupBy = "mygroup" | "none" | "kind" | "state";
 
 const FILTER_VALUES: Filter[] = ["printing", "attention", "idle", "paused", "awaiting", "offline"];
 
-const FILTER_LABEL: Record<Filter, string> = {
-  printing: "Printing",
-  attention: "Requires attention",
-  idle: "Idle & ready",
-  paused: "Paused",
-  awaiting: "Awaiting",
-  offline: "Offline / not connected",
+const FILTER_LABEL_KEY: Record<Filter, TKey> = {
+  printing: "dashboard.filterPrinting",
+  attention: "dashboard.filterAttention",
+  idle: "dashboard.filterIdle",
+  paused: "dashboard.filterPaused",
+  awaiting: "dashboard.filterAwaiting",
+  offline: "dashboard.filterOffline",
 };
 
 function matchesFilter(p: Printer, f: Filter): boolean {
@@ -226,30 +233,6 @@ function groupPrinters(
   }));
 }
 
-// ── compact select ────────────────────────────────────────────────────────────
-
-function CompactSelect<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  options: { id: T; label: string }[];
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1.5 text-sm text-[var(--text)] outline-none hover:border-[var(--border-strong)]   "
-    >
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>{o.label}</option>
-      ))}
-    </select>
-  );
-}
-
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -297,11 +280,58 @@ export default function DashboardPage() {
     setLocalOrder(null);
     try { localStorage.setItem("monofarm_printer_group_by", v); } catch {}
   }
+
+  // Card "hands off" to the printer page: a ghost of the card lifts and dissolves
+  // on top while navigation and the page fade-in run underneath — zero delay,
+  // nothing blocks on the router.
+  function openPrinterPage(p: Printer) {
+    const card = document.querySelector<HTMLElement>(`[data-printer-id="${p.id}"]`);
+    if (card && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const r = card.getBoundingClientRect();
+      const ghost = card.cloneNode(true) as HTMLElement;
+      ghost.style.cssText = [
+        "position: fixed",
+        `left: ${r.left}px`, `top: ${r.top}px`,
+        `width: ${r.width}px`, `height: ${r.height}px`,
+        "margin: 0", "z-index: 45", "pointer-events: none",
+        "transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out), box-shadow 200ms var(--ease-out)",
+      ].join("; ");
+      document.body.appendChild(ghost);
+      requestAnimationFrame(() => {
+        ghost.style.transform = "scale(1.03)";
+        ghost.style.opacity = "0";
+        ghost.style.boxShadow = "0 12px 32px rgba(0,0,0,.35)";
+      });
+      setTimeout(() => ghost.remove(), 240);
+    }
+    router.push(`/printers/${p.id}` as Route);
+  }
+
+type DashView = "cards" | "compact" | "list" | "flow";
+
+  // Cards ↔ flow toggle cross-fades via View Transitions; other switches are instant.
+  function switchView(v: DashView) {
+    if (v === view) return;
+    try { localStorage.setItem("monofarm_dashboard_view", v); } catch {}
+    if (v === "cards" || v === "flow") {
+      const animated = startViewTransition(() => {
+        flushSync(() => setView(v));
+      });
+      if (!animated) setView(v);
+    } else {
+      setView(v);
+    }
+  }
   const [groupsOpen, setGroupsOpen] = useState(false);
-  const [autoDispatchOpen, setAutoDispatchOpen] = useState(false);
   const [selected, setSelected] = useState<Printer | null>(null);
   const [printPrinter, setPrintPrinter] = useState<Printer | null>(null);
-  const [view, setView] = useState<"cards" | "flow">("cards");
+  const [view, setView] = useState<DashView>("cards");
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("monofarm_dashboard_view") as DashView | null;
+      if (saved === "cards" || saved === "compact" || saved === "list" || saved === "flow") setView(saved);
+    } catch {}
+  }, []);
   const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [localOrder, setLocalOrder] = useState<number[] | null>(null);
@@ -370,7 +400,7 @@ export default function DashboardPage() {
       : displayPrinters.filter((p) => activeFilters.some((f) => matchesFilter(p, f)));
 
     if (tagFilter.length > 0) {
-      result = result.filter((p) => tagFilter.every((id) => p.tags?.some((t) => t.id === id)));
+      result = result.filter((p) => tagFilter.every((id) => p.tags?.some((tag) => tag.id === id)));
     }
 
     if (activeFilters.length === 1 && activeFilters[0] === "printing") {
@@ -380,18 +410,22 @@ export default function DashboardPage() {
   }, [displayPrinters, activeFilters, tagFilter]);
 
   // 2+ active filters in cards view → split the board into resizable "magnetic window" panels
-  const splitPanels = useMemo(() => {
-    if (activeFilters.length < 2 || view !== "cards") return null;
-    return activeFilters.map((f) => {
-      const items = filtered.filter((p) => matchesFilter(p, f));
-      return { key: f, label: FILTER_LABEL[f], items: f === "printing" ? sortByEta(items) : items };
-    });
-  }, [activeFilters, filtered, view]);
+  const splitPanels =
+    activeFilters.length >= 2 && view === "cards"
+      ? activeFilters.map((f) => {
+          const items = filtered.filter((p) => matchesFilter(p, f));
+          return {
+            key: f,
+            labelKey: FILTER_LABEL_KEY[f],
+            items: f === "printing" ? sortByEta(items) : items,
+          };
+        })
+      : null;
 
   // All tags currently assigned to at least one printer (for the filter chips)
   const availableTags = useMemo(() => {
     const byId = new Map<number, Printer["tags"][number]>();
-    for (const p of printers) for (const t of p.tags ?? []) byId.set(t.id, t);
+    for (const p of printers) for (const tag of p.tags ?? []) byId.set(tag.id, tag);
     return [...byId.values()].sort((a, b) => (a.display || "").localeCompare(b.display || ""));
   }, [printers]);
 
@@ -399,8 +433,8 @@ export default function DashboardPage() {
     const c = { all: printers.length, snapmaker_u1: 0, problems: 0 };
     for (const p of printers) {
       if (p.kind === "snapmaker_u1") c.snapmaker_u1++;
-      const t = printerTone(p);
-      if (t === "bad" || t === "warn") c.problems++;
+      const tone = printerTone(p);
+      if (tone === "bad" || tone === "warn") c.problems++;
     }
     return c;
   }, [printers]);
@@ -454,12 +488,24 @@ export default function DashboardPage() {
     return { attention, idle, paused, printing, awaiting, offline, nextFinish };
   }, [printers]);
 
+  function renderPrinterItem(p: Printer) {
+    if (view === "compact") return <CompactTile printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
+    if (view === "list") return <ListRow printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
+    return <PrinterCard printer={p} onClick={openPrinterPage} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />;
+  }
+
+  function itemsGridCls(): string {
+    if (view === "compact") return "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6";
+    if (view === "list") return "flex flex-col gap-1.5";
+    return GRID;
+  }
+
   function renderPrinterSection(items: Printer[]) {
     if (!isGrouped) {
       return (
-        <div className={GRID}>
+        <div className={itemsGridCls()}>
           {items.map((p) => (
-            <PrinterCard key={p.id} printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
+            renderPrinterItem(p)
           ))}
         </div>
       );
@@ -487,8 +533,8 @@ export default function DashboardPage() {
                   />
                 )}
               </div>
-              <div className={GRID}>
-                {g.items.map((p) => (
+              <div className={itemsGridCls()}>
+                {g.items.map((p) => view === "cards" ? (
                   <div
                     key={p.id}
                     draggable={groupBy === "mygroup"}
@@ -502,8 +548,10 @@ export default function DashboardPage() {
                       dragOverId === p.id && dragPrinterId !== p.id ? "ring-2 ring-[var(--accent)] rounded-xl" : "",
                     ].join(" ")}
                   >
-                    <PrinterCard printer={p} onClick={(p) => router.push(`/printers/${p.id}`)} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
+                    <PrinterCard printer={p} onClick={openPrinterPage} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />
                   </div>
+                ) : (
+                  renderPrinterItem(p)
                 ))}
               </div>
             </section>
@@ -519,7 +567,7 @@ export default function DashboardPage() {
       {printers.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-7">
           <StatusCard
-            label="Next printer finish"
+            label={t("dashboard.nextFinish")}
             value={statusStats.nextFinish
               ? statusStats.nextFinish.eta >= 60
                 ? `${Math.floor(statusStats.nextFinish.eta / 60)}h ${statusStats.nextFinish.eta % 60}m`
@@ -531,12 +579,12 @@ export default function DashboardPage() {
             dimmed={activeFilters.length > 0 && !activeFilters.includes("printing")}
             onClick={() => toggleFilter("printing")}
           />
-          <StatusCard label="Requires attention" value={statusStats.attention} color="var(--state-error)" active={activeFilters.includes("attention")} dimmed={activeFilters.length > 0 && !activeFilters.includes("attention")} onClick={() => toggleFilter("attention")} />
-          <StatusCard label="Idle & ready" value={statusStats.idle} color="var(--state-ok)" active={activeFilters.includes("idle")} dimmed={activeFilters.length > 0 && !activeFilters.includes("idle")} onClick={() => toggleFilter("idle")} />
-          <StatusCard label="Paused" value={statusStats.paused} color="var(--state-warn)" active={activeFilters.includes("paused")} dimmed={activeFilters.length > 0 && !activeFilters.includes("paused")} onClick={() => toggleFilter("paused")} />
-          <StatusCard label="Awaiting" value={statusStats.awaiting} color="var(--state-warn)" active={activeFilters.includes("awaiting")} dimmed={activeFilters.length > 0 && !activeFilters.includes("awaiting")} onClick={() => toggleFilter("awaiting")} />
-          <StatusCard label="Printing" value={statusStats.printing} color="var(--state-print)" active={activeFilters.includes("printing")} dimmed={activeFilters.length > 0 && !activeFilters.includes("printing")} onClick={() => toggleFilter("printing")} />
-          <StatusCard label="Offline / not connected" value={statusStats.offline} color="var(--state-offline)" active={activeFilters.includes("offline")} dimmed={activeFilters.length > 0 && !activeFilters.includes("offline")} onClick={() => toggleFilter("offline")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.attention)} value={statusStats.attention} color="var(--state-error)" active={activeFilters.includes("attention")} dimmed={activeFilters.length > 0 && !activeFilters.includes("attention")} onClick={() => toggleFilter("attention")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.idle)} value={statusStats.idle} color="var(--state-ok)" active={activeFilters.includes("idle")} dimmed={activeFilters.length > 0 && !activeFilters.includes("idle")} onClick={() => toggleFilter("idle")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.paused)} value={statusStats.paused} color="var(--state-warn)" active={activeFilters.includes("paused")} dimmed={activeFilters.length > 0 && !activeFilters.includes("paused")} onClick={() => toggleFilter("paused")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.awaiting)} value={statusStats.awaiting} color="var(--state-warn)" active={activeFilters.includes("awaiting")} dimmed={activeFilters.length > 0 && !activeFilters.includes("awaiting")} onClick={() => toggleFilter("awaiting")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.printing)} value={statusStats.printing} color="var(--state-print)" active={activeFilters.includes("printing")} dimmed={activeFilters.length > 0 && !activeFilters.includes("printing")} onClick={() => toggleFilter("printing")} />
+          <StatusCard label={t(FILTER_LABEL_KEY.offline)} value={statusStats.offline} color="var(--state-offline)" active={activeFilters.includes("offline")} dimmed={activeFilters.length > 0 && !activeFilters.includes("offline")} onClick={() => toggleFilter("offline")} />
         </div>
       )}
       {activeFilters.length >= 2 && (
@@ -549,7 +597,7 @@ export default function DashboardPage() {
               onClick={() => toggleFilter(f)}
               className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-0.5 text-[var(--text-hi)] transition hover:opacity-80"
             >
-              {FILTER_LABEL[f]} ✕
+              {t(FILTER_LABEL_KEY[f])} ✕
             </button>
           ))}
           <button
@@ -570,17 +618,17 @@ export default function DashboardPage() {
               ? `${filtered.length} з ${counts.all}`
               : counts.all}
           </span>
-          <CompactSelect value={groupBy} onChange={handleGroupByChange} options={GROUP_OPTS} />
+          <Select value={groupBy} onChange={handleGroupByChange} options={GROUP_OPTS} ariaLabel={t("dashboard.grouping")} />
           {availableTags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
-              {availableTags.map((t) => {
-                const active = tagFilter.includes(t.id);
+              {availableTags.map((tag) => {
+                const active = tagFilter.includes(tag.id);
                 return (
                   <button
-                    key={t.id}
+                    key={tag.id}
                     type="button"
                     onClick={() =>
-                      setTagFilter(active ? tagFilter.filter((id) => id !== t.id) : [...tagFilter, t.id])
+                      setTagFilter(active ? tagFilter.filter((id) => id !== tag.id) : [...tagFilter, tag.id])
                     }
                     className={[
                       "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition",
@@ -591,9 +639,9 @@ export default function DashboardPage() {
                   >
                     <span
                       className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: t.color ?? "var(--text-faint)" }}
+                      style={{ backgroundColor: tag.color ?? "var(--text-faint)" }}
                     />
-                    {t.display || t.label}
+                    {tag.display || tag.label}
                   </button>
                 );
               })}
@@ -630,31 +678,25 @@ export default function DashboardPage() {
               {t("printers.groups")}
             </button>
           )}
-          {statusStats.idle > 0 && (user.role === "admin" || user.role === "operator") && (
-            <button
-              onClick={() => setAutoDispatchOpen(true)}
-              className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              title="Авто-розподіл завдань по вільних принтерах"
-            >
-              ⚡ Розподілити
-            </button>
-          )}
-          {/* view toggle */}
+          {/* view toggle: grid · compact · list · flow */}
           <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
-            <button
-              onClick={() => setView("cards")}
-              title="Картки"
-              className={`px-2.5 py-1.5 text-xs transition ${view === "cards" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-            </button>
-            <button
-              onClick={() => setView("flow")}
-              title="Потік виробництва"
-              className={`px-2.5 py-1.5 text-xs transition border-l border-[var(--border)] ${view === "flow" ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/></svg>
-            </button>
+            {([
+              { v: "cards",   titleKey: "dashboard.viewGrid",   Ic: LayoutGrid },
+              { v: "compact", titleKey: "dashboard.viewCompact", Ic: Rows3 },
+              { v: "list",    titleKey: "dashboard.viewList",    Ic: List },
+              { v: "flow",    titleKey: "dashboard.viewFlow",    Ic: Workflow },
+            ] as const).map(({ v, titleKey, Ic }, i) => (
+              <button
+                key={v}
+                onClick={() => switchView(v)}
+                title={t(titleKey)}
+                aria-label={t(titleKey)}
+                aria-pressed={view === v}
+                className={`px-2.5 py-1.5 transition ${i > 0 ? "border-l border-[var(--border)]" : ""} ${view === v ? "bg-[var(--surface-2)] text-[var(--text-hi)]" : "text-[var(--text-muted)] hover:bg-[var(--surface-hi)]"}`}
+              >
+                <Ic size={13} strokeWidth={1.7} />
+              </button>
+            ))}
           </div>
 
           {user.role === "admin" && (
@@ -704,7 +746,7 @@ export default function DashboardPage() {
               )}
               <Panel id={panel.key} order={i} minSize={18} className="dashboard-split-panel">
                 <div className="mb-2 flex items-center gap-2 px-1">
-                  <span className="text-sm font-semibold">{panel.label}</span>
+                  <span className="text-sm font-semibold">{t(panel.labelKey)}</span>
                   <span className="rounded-full bg-[var(--surface-hi)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
                     {panel.items.length}
                   </span>
@@ -741,13 +783,6 @@ export default function DashboardPage() {
         onChange={() => { setLocalOrder(null); reload(); }}
         externalPrinters={printers}
       />
-
-      {autoDispatchOpen && (
-        <AutoDispatchModal
-          printers={printers}
-          onClose={() => setAutoDispatchOpen(false)}
-        />
-      )}
 
       <PrinterDetailModal
         printer={selected}

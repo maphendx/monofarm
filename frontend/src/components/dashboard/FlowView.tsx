@@ -10,8 +10,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import type { Printer } from "@/lib/types";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -111,8 +112,8 @@ export function FlowView({ printers }: Props) {
         api<{ units_produced: number; units_sold: number; stock_value: number }>(
           "/api/warehouse/analytics"
         ),
-        api<{ id: number }[]>("/api/warehouse/orders?order_status=new"),
-        api<{ id: number }[]>("/api/warehouse/orders?order_status=reserved"),
+        apiAll<{ id: number }>("/api/warehouse/orders?order_status=new"),
+        apiAll<{ id: number }>("/api/warehouse/orders?order_status=reserved"),
       ]);
       const analytics = a.status === "fulfilled" ? a.value : null;
       // o is the "new" orders result; index 2 would be "reserved" — but allSettled index 1 and 2
@@ -214,7 +215,7 @@ export function FlowView({ printers }: Props) {
 
     function makeNode(
       id: string, xPct: number, yPct: number, html: string,
-      href?: string,
+      href?: Route,
     ): HTMLDivElement {
       const d = document.createElement(href ? "button" : "div");
       d.style.cssText = [

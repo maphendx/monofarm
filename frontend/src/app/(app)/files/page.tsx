@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AuthImage } from "@/components/ui/AuthImage";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import { ApiError, api, getToken } from "@/lib/api";
@@ -259,6 +261,7 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
   onClick: () => void; onRename: () => void; onDelete: () => void;
   onDragOver: (e: React.DragEvent) => void; onDragLeave: () => void; onDrop: (e: React.DragEvent) => void;
 }) {
+  "use memo";
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -349,6 +352,7 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
   onRename: () => void; onAssignGroup: (groupId: number | null) => void;
   onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
+  "use memo";
   const [confirmDel, setConfirmDel] = useState(false);
   const [dlBusy, setDlBusy] = useState(false);
   const ext = file.original_name.split(".").pop()?.toLowerCase() ?? "";
@@ -364,7 +368,7 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
     setDlBusy(true);
     try {
       const token = getToken();
-      const resp = await fetch(`${API_URL}/api/files/${file.id}/download`, {
+      const resp = await fetch(`/api/files/${file.id}/download`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!resp.ok) return;
@@ -394,14 +398,10 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
       {/* thumbnail */}
       <div className="relative h-24 w-full overflow-hidden rounded-lg bg-[var(--surface)]/80 flex items-center justify-center">
         {file.has_thumbnail ? (
-          <img
-            src={`${API_URL}/api/files/${file.id}/thumbnail`} alt=""
+          <AuthImage
+            src={`/api/files/${file.id}/thumbnail`} alt=""
             className="h-full w-full object-cover"
-            onError={e => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-              const next = e.currentTarget.nextElementSibling as HTMLElement | null;
-              if (next) next.style.display = "flex";
-            }}
+            fallback={<span className="text-3xl">{ext === "3mf" ? "📦" : "📄"}</span>}
           />
         ) : null}
         <span className={["text-3xl items-center justify-center", file.has_thumbnail ? "hidden" : "flex"].join(" ")}>
@@ -551,6 +551,16 @@ export default function FilesPage() {
   // Slicer (Orca) auto-open shows a save / print / queue chooser first
   const [sendAskMode, setSendAskMode] = useState(false);
   const [search, setSearch] = useState("");
+  const [deferredSearch, setDeferredSearch] = useState("");
+  const [isSearchPending, startSearchTransition] = useTransition();
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearch(val);
+    startSearchTransition(() => {
+      setDeferredSearch(val);
+    });
+  };
 
   // Navigation: null = root, number = inside folder
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
@@ -757,7 +767,7 @@ export default function FilesPage() {
   const visibleFiles = (currentFolderId === null
     ? files.filter(f => f.folder_id === null)
     : files.filter(f => f.folder_id === currentFolderId)
-  ).filter(f => f.original_name.toLowerCase().includes(search.toLowerCase()));
+  ).filter(f => f.original_name.toLowerCase().includes(deferredSearch.toLowerCase()));
 
   const targetPrinter = defaultPrinterId ? printers.find(p => p.id === defaultPrinterId) : null;
 
@@ -813,7 +823,7 @@ export default function FilesPage() {
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">🔍</span>
           <input
             type="text" placeholder="Пошук…" value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={handleSearchChange}
             className="w-48 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-2)]/60 py-2 pl-8 pr-3 text-sm text-[var(--text)] placeholder-neutral-500 outline-none focus:border-accent transition"
           />
         </div>

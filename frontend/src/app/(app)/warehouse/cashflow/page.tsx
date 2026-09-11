@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -80,7 +80,7 @@ function CreateTxModal({ open, onClose, onCreated }: {
     setError(null); setAmount(""); setCpId(""); setDescription("");
     setType("income"); setCategory("order_payment");
     setTxDate(new Date().toISOString().slice(0, 10));
-    api<Counterparty[]>("/api/warehouse/counterparties").then(setCounterparties).catch(() => {});
+    apiAll<Counterparty>("/api/warehouse/counterparties").then(setCounterparties).catch(() => {});
   }, [open]);
 
   // Auto-switch category to sensible default when type changes
@@ -224,7 +224,7 @@ export default function CashFlowPage() {
       const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
       if (typeFilter !== "all") params.set("type", typeFilter);
       const [txs, sum] = await Promise.all([
-        api<CashTx[]>(`/api/warehouse/cashflow?${params}`),
+        apiAll<CashTx>(`/api/warehouse/cashflow?${params}`),
         api<Summary>(`/api/warehouse/cashflow/summary?date_from=${dateFrom}&date_to=${dateTo}`),
       ]);
       setTransactions(txs);

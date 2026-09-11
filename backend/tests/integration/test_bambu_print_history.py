@@ -178,7 +178,7 @@ def test_print_tracker_still_records_moonraker_history(db_session, test_org, mon
         {"state": "printing", "filename": "moonraker.gcode"},
         {"state": "operational", "filename": "moonraker.gcode"},
     ])
-    monkeypatch.setattr(moonraker, "get_live_status", lambda _url: next(states))
+    monkeypatch.setattr(moonraker, "get_live_status", lambda _url, *, org_id: next(states))
     print_tracker._prev.clear()
 
     print_tracker._check_org(db_session, test_org)

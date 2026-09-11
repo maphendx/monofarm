@@ -2,133 +2,83 @@
 
 import {
   BookOpen,
+  CalendarDays,
   ChevronsLeft,
   ChevronsRight,
+  Disc3,
+  FolderOpen,
+  History,
+  LayoutGrid,
+  LineChart,
+  ListChecks,
+  MessageSquare,
   Search,
+  Settings2,
+  Warehouse as WarehouseIcon,
 } from "lucide-react";
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import type { User } from "@/lib/types";
 
-// ── nav icons — exact paths from Monofarm Design System (stroke 1.7) ──────────
+const ICON_PROPS = { size: 18, strokeWidth: 1.7, className: "shrink-0" } as const;
 
-type NavIconProps = { size?: number; className?: string };
-const sw = "1.7" as const;
-const sc = { strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+type NavIconProps = { size?: number; className?: string; strokeWidth?: number | string };
+type NavIcon = ComponentType<NavIconProps>;
 
-function DashboardIcon({ size = 18, className = "" }: NavIconProps) {
+// Custom glyph — lucide's "printer" is an office printer with paper, wrong domain.
+// Original Monofarm 3D-printer glyph (stroke 1.7, lucide-style grid).
+function Printer3DIcon({ size = 18, className = "" }: NavIconProps) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="3" y="15" width="7" height="6" rx="1.6"/>
-      <rect x="14" y="3" width="7" height="6" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/>
-    </svg>
-  );
-}
-function PlanIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <rect x="3" y="4" width="7" height="16" rx="1.6"/><rect x="14" y="4" width="7" height="10" rx="1.6"/>
-    </svg>
-  );
-}
-function HistoryIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M3.6 9a9 9 0 1 0 2.3-3.8"/><path d="M3.5 4.5V9H8"/><path d="M12 8v4.2l3 1.8"/>
-    </svg>
-  );
-}
-function FilamentIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="2.6"/><path d="M18.4 7.4 22 5.8"/>
-    </svg>
-  );
-}
-function FilesIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z"/><path d="M13 3v6h6"/>
-    </svg>
-  );
-}
-function PrinterNavIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <rect x="4" y="3" width="16" height="18" rx="2.2"/><rect x="7" y="5.6" width="10" height="8.4" rx="1.2"/>
-      <path d="M8.8 11.6h6.4"/><path d="M10.8 11.6v-1.8h2.4v1.8"/><path d="M4 17h16"/>
-    </svg>
-  );
-}
-function TasksIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M3.5 7l1.5 1.5L8 5.2"/><path d="M3.5 16.6l1.5 1.5L8 14.8"/>
-      <path d="M11.5 6.7h9"/><path d="M11.5 16.3h9"/>
-    </svg>
-  );
-}
-function WarehouseIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <rect x="3" y="4" width="18" height="16" rx="1.6"/><path d="M3 12h18"/>
-      <rect x="6" y="6.6" width="4.4" height="3.4" rx="0.6"/><rect x="13.2" y="14" width="4.6" height="3.6" rx="0.6"/>
-    </svg>
-  );
-}
-function AnalyticsIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M4 4v15a1 1 0 0 0 1 1h15"/><path d="M7.5 14.5l3.5-4 3 2.2 4.5-6"/>
-    </svg>
-  );
-}
-function SettingsNavIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M4 7h8.4"/><path d="M16.6 7H20"/><circle cx="14.5" cy="7" r="2.1"/>
-      <path d="M4 17h3.4"/><path d="M11.6 17H20"/><circle cx="9.5" cy="17" r="2.1"/>
-    </svg>
-  );
-}
-function SupportIcon({ size = 18, className = "" }: NavIconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} {...sc} className={`shrink-0 ${className}`}>
-      <path d="M20 4H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3v4l4.5-4H20a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 ${className}`}
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="18" rx="2.2" />
+      <rect x="7" y="5.6" width="10" height="8.4" rx="1.2" />
+      <path d="M8.8 11.6h6.4" />
+      <path d="M10.8 11.6v-1.8h2.4v1.8" />
+      <path d="M4 17h16" />
     </svg>
   );
 }
 
-type NavIcon = typeof DashboardIcon;
-
-const NAV_GROUPS: { label: string | null; items: { href: string; Ic: NavIcon; tKey: string }[] }[] = [
+const NAV_GROUPS: { label: string | null; items: { href: Route; Ic: NavIcon; tKey: string }[] }[] = [
   {
     label: null,
     items: [
-      { href: "/dashboard", Ic: DashboardIcon, tKey: "nav.dashboard" },
-      { href: "/queue",     Ic: PlanIcon,      tKey: "nav.plan" },
-      { href: "/history",   Ic: HistoryIcon,   tKey: "nav.history" },
+      { href: "/dashboard", Ic: LayoutGrid,    tKey: "nav.dashboard" },
+      { href: "/queue",     Ic: CalendarDays,  tKey: "nav.plan" },
+      { href: "/history",   Ic: History,       tKey: "nav.history" },
     ],
   },
   {
-    label: "Друк",
+    label: "nav.groupPrint",
     items: [
-      { href: "/materials", Ic: FilamentIcon,   tKey: "nav.filament" },
-      { href: "/files",     Ic: FilesIcon,      tKey: "nav.files" },
-      { href: "/printers",  Ic: PrinterNavIcon, tKey: "nav.printers" },
+      { href: "/materials", Ic: Disc3,         tKey: "nav.filament" },
+      { href: "/files",     Ic: FolderOpen,    tKey: "nav.files" },
+      { href: "/printers",  Ic: Printer3DIcon, tKey: "nav.printers" },
     ],
   },
   {
-    label: "Управління",
+    label: "nav.groupManage",
     items: [
-      { href: "/tasks",     Ic: TasksIcon,     tKey: "nav.tasks" },
+      { href: "/tasks",     Ic: ListChecks,    tKey: "nav.tasks" },
       { href: "/warehouse", Ic: WarehouseIcon, tKey: "nav.warehouse" },
-      { href: "/analytics", Ic: AnalyticsIcon, tKey: "nav.analytics" },
+      { href: "/analytics", Ic: LineChart,     tKey: "nav.analytics" },
     ],
   },
 ];
@@ -141,7 +91,7 @@ export function Sidebar({
   onPinToggle,
   onSearch,
 }: {
-  user: User;
+  user?: User | null;
   pinned: boolean;
   onPinToggle: () => void;
   onSearch: () => void;
@@ -168,7 +118,7 @@ export function Sidebar({
     return () => clearInterval(id);
   }, []);
 
-  const isAdmin = user.role === "admin";
+  const isAdmin = user?.role === "admin";
 
   // Map href → module key. null = always visible (admin-only items use role check separately).
   const MODULE_MAP: Record<string, string> = {
@@ -185,17 +135,37 @@ export function Sidebar({
 
   function canSee(href: string): boolean {
     if (isAdmin) return true;
-    if (!user.allowed_modules) return true; // null = unrestricted
+    if (!user || !user.allowed_modules) return true; // null = unrestricted
     const mod = MODULE_MAP[href];
     return !mod || user.allowed_modules.includes(mod);
   }
 
-  const txt = pinned
+  // Labels fade out when the sidebar is collapsed (icons + tooltips take over).
+  const lbl = pinned
     ? "opacity-100"
-    : "opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100";
+    : "invisible opacity-0 transition-opacity duration-150";
 
-  const linkCls = (href: string) =>
-    ["nav-link h-9 overflow-hidden", pathname === href || pathname.startsWith(href + "/") ? "active" : ""].join(" ");
+  // Custom hover tooltip — replaces the native `title` (slow, unstyled).
+  const tip = (text: string) => (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 py-1 text-xs font-medium text-[var(--text)] opacity-0 shadow-lg transition-opacity duration-150 group-hover/item:delay-300 group-hover/item:opacity-100"
+    >
+      {text}
+    </span>
+  );
+
+  const navItem = (href: string, icon: ReactNode, label: string) => (
+    <Link
+      href={href as Route}
+      aria-label={label}
+      className={["nav-link group/item relative h-9", pathname === href || pathname.startsWith(href + "/") ? "active" : ""].join(" ")}
+    >
+      {icon}
+      <span className={`whitespace-nowrap ${lbl}`}>{label}</span>
+      {!pinned && tip(label)}
+    </Link>
+  );
 
   const agentColor = agentConnected === null ? "bg-[var(--text-faint)]"
     : agentConnected ? "bg-[var(--state-ok)]"
@@ -203,10 +173,10 @@ export function Sidebar({
 
   return (
     <aside className={[
-      "group/sidebar fixed inset-y-0 left-0 z-40 flex flex-col",
-      "border-r border-[var(--border)] bg-[var(--bg-elevated)]",
+      "fixed inset-y-0 left-0 z-40 flex flex-col",
+      "border-r border-[var(--border)] bg-[var(--bg)]",
       "transition-[width] duration-200 ease-out",
-      pinned ? "w-[220px]" : "w-14 hover:w-[220px]",
+      pinned ? "w-[220px]" : "w-14",
     ].join(" ")}>
 
       {/* Brand */}
@@ -219,33 +189,29 @@ export function Sidebar({
           </g>
           <circle cx="32" cy="32" r="7" fill="var(--accent)"/>
         </svg>
-        <span className={`whitespace-nowrap font-mono text-sm font-semibold tracking-[0.06em] uppercase ${txt}`}>
-          MONO<span className="text-[var(--accent)]">FARM</span>
+        <span className={`whitespace-nowrap text-sm font-semibold tracking-tight ${lbl}`}>
+          mono<span className="text-[var(--accent)]">farm</span>
         </span>
       </div>
 
       {/* Main nav */}
-      <nav className="flex flex-1 flex-col overflow-hidden px-2 py-3">
+      <nav className="flex flex-1 flex-col px-2 py-3">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? "mt-1" : ""}>
             {group.label && (
-              <p className={`mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)] ${txt}`}>
-                {group.label}
+              <p className={`mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)] ${lbl}`}>
+                {t(group.label as Parameters<typeof t>[0])}
               </p>
             )}
             <div className="flex flex-col gap-0.5">
               {group.items
                 .filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin)
                 .filter((item) => canSee(item.href))
-                .map((item) => {
-                  const label = t(item.tKey as Parameters<typeof t>[0]);
-                  return (
-                    <Link key={item.href} href={item.href} title={label} className={linkCls(item.href)}>
-                      <item.Ic size={18} />
-                      <span className={`whitespace-nowrap ${txt}`}>{label}</span>
-                    </Link>
-                  );
-                })}
+                .map((item) => (
+                  <div key={item.href}>
+                    {navItem(item.href, <item.Ic {...ICON_PROPS} />, t(item.tKey as Parameters<typeof t>[0]))}
+                  </div>
+                ))}
             </div>
           </div>
         ))}
@@ -253,31 +219,17 @@ export function Sidebar({
 
       {/* Settings (admin only) + Support + Learn (everyone) */}
       <div className="px-2 py-2">
-        {isAdmin && (
-          <Link href="/settings" title={t("nav.settings")} className={linkCls("/settings")}>
-            <SettingsNavIcon size={18} />
-            <span className={`whitespace-nowrap ${txt}`}>{t("nav.settings")}</span>
-          </Link>
-        )}
-        <Link href="/support" title={t("nav.support")} className={linkCls("/support")}>
-          <SupportIcon size={18} />
-          <span className={`whitespace-nowrap ${txt}`}>{t("nav.support")}</span>
-        </Link>
-        <Link href="/learn" title={t("nav.learn")} className={linkCls("/learn")}>
-          <BookOpen size={18} strokeWidth={1.7} className="shrink-0" />
-          <span className={`whitespace-nowrap ${txt}`}>{t("nav.learn")}</span>
-        </Link>
+        {isAdmin && navItem("/settings", <Settings2 {...ICON_PROPS} />, t("nav.settings"))}
+        {navItem("/support", <MessageSquare {...ICON_PROPS} />, t("nav.support"))}
+        {navItem("/learn", <BookOpen {...ICON_PROPS} />, t("nav.learn"))}
       </div>
 
       {/* Bottom toolbar ──────────────────────────────────────────────────────
           Pin arrow: always visible (w-14 = exact collapsed sidebar width).
-          Theme · search · agent: hidden when collapsed, shown on hover/pinned.
+          Theme · search · agent: visible when expanded, clipped when collapsed.
       ─────────────────────────────────────────────────────────────────────── */}
       <div className="py-2">
-        <div className={[
-          "flex items-center",
-          pinned ? "overflow-visible" : "overflow-hidden group-hover/sidebar:overflow-visible"
-        ].join(" ")}>
+        <div className="flex items-center overflow-hidden">
 
           {/* Pin / unpin — always visible */}
           <button
@@ -291,13 +243,8 @@ export function Sidebar({
             }
           </button>
 
-          {/* Theme · search · agent — appear only when sidebar is expanded */}
-          <div className={[
-            "flex flex-1 items-center",
-            pinned
-              ? "opacity-100 overflow-visible"
-              : "opacity-0 overflow-hidden group-hover/sidebar:opacity-100 group-hover/sidebar:overflow-visible transition-opacity duration-150",
-          ].join(" ")}>
+          {/* Theme · search · agent — visible when the sidebar is expanded */}
+          <div className="flex flex-1 items-center">
 
             <div className="flex flex-1 items-center justify-center">
               <ThemeToggle compact />
@@ -344,6 +291,31 @@ export function Sidebar({
         </div>
       </div>
 
+    </aside>
+  );
+}
+
+export function SidebarFallback({ pinned = false }: { pinned?: boolean }) {
+  return (
+    <aside className={[
+      "fixed inset-y-0 left-0 z-40 flex flex-col",
+      "border-r border-[var(--border)] bg-[var(--bg)]",
+      "transition-[width] duration-200 ease-out",
+      pinned ? "w-[220px]" : "w-14",
+    ].join(" ")}>
+      <div className="flex h-14 shrink-0 items-center gap-3 overflow-hidden px-4">
+        <svg width="22" height="22" viewBox="0 0 64 64" fill="none" className="shrink-0" aria-hidden="true">
+          <g stroke="var(--accent)" strokeWidth="3" fill="none" opacity=".55">
+            <circle cx="14" cy="14" r="4"/><circle cx="32" cy="14" r="4"/><circle cx="50" cy="14" r="4"/>
+            <circle cx="14" cy="32" r="4"/>                                  <circle cx="50" cy="32" r="4"/>
+            <circle cx="14" cy="50" r="4"/><circle cx="32" cy="50" r="4"/><circle cx="50" cy="50" r="4"/>
+          </g>
+          <circle cx="32" cy="32" r="7" fill="var(--accent)"/>
+        </svg>
+        <span className="whitespace-nowrap text-sm font-semibold tracking-tight">
+          mono<span className="text-[var(--accent)]">farm</span>
+        </span>
+      </div>
     </aside>
   );
 }

@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 
-import monofarm_agent
+from printers import moonraker
 
 
 class _FakeWebSocket:
@@ -37,16 +37,16 @@ class _SlowMoonrakerClient:
 
 
 def test_moonraker_upload_heartbeats_while_waiting_for_printer(monkeypatch) -> None:
-    monkeypatch.setattr(monofarm_agent, "MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL", 0.01)
+    monkeypatch.setattr(moonraker, "MOONRAKER_UPLOAD_HEARTBEAT_INTERVAL", 0.01)
     monkeypatch.setattr(
-        monofarm_agent.httpx,
+        moonraker.httpx,
         "AsyncClient",
         lambda **_kwargs: _SlowMoonrakerClient(),
     )
     ws = _FakeWebSocket()
     payload = base64.b64encode(b"G28\n" * 1024).decode()
 
-    asyncio.run(monofarm_agent.handle_moonraker_upload(ws, {
+    asyncio.run(moonraker.handle_moonraker_upload(ws, {
         "id": "upload-1",
         "url": "http://192.168.31.210",
         "filename": "part.gcode",
@@ -70,7 +70,7 @@ def test_moonraker_print_options_are_applied_locally() -> None:
         b"SM_PRINT_FLOW_CALIBRATE EXTRUDER=1\n"
     )
 
-    result = monofarm_agent.apply_moonraker_print_options(source, {
+    result = moonraker.apply_moonraker_print_options(source, {
         "auto_bed_leveling": False,
         "timelapse": False,
         "ai_detection": False,

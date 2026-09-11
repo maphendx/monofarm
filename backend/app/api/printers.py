@@ -16,7 +16,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_org, require_roles
+from app.api.deps import authenticate_user, get_current_org, require_roles
 from app.core.db import get_db
 from app.models.organization import Organization
 from app.models.bambu_cloud_job import BambuCloudJob
@@ -187,7 +187,7 @@ def _sync_bambu_rows(db: Session, devices: list[dict], org_id: int) -> dict[str,
 
 
 def _resolve_filament_for_file(
-    db: Session, filename: str | None, moonraker_url: str | None = None, org_id: int | None = None
+    db: Session, filename: str | None, moonraker_url: str | None, org_id: int
 ) -> dict | None:
     """Find filament_meta for the file currently being printed.
 
@@ -196,15 +196,16 @@ def _resolve_filament_for_file(
     """
     if not filename:
         return None
-    q = db.query(PrintTask).filter(PrintTask.file_name == filename, PrintTask.filament_meta.isnot(None))
-    if org_id is not None:
-        q = q.filter(PrintTask.organization_id == org_id)
+    q = db.query(PrintTask).filter(
+        PrintTask.file_name == filename, PrintTask.filament_meta.isnot(None),
+        PrintTask.organization_id == org_id,
+    )
     task = q.order_by(PrintTask.created_at.desc()).first()
     if task and task.filament_meta:
         return task.filament_meta
     # Fall back to Moonraker — for files uploaded outside our system
     if moonraker_url:
-        remote = moonraker.get_remote_file_meta(moonraker_url, filename)
+        remote = moonraker.get_remote_file_meta(moonraker_url, filename, org_id=org_id)
         return remote or None
     return None
 
@@ -393,10 +394,10 @@ def _to_dto(
 
     # Bambu Lab — live state from MQTT cache, AMS filaments from cache
     if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
-        live = bambu.get_cached_state(printer.bambu_dev_id)
+        live = bambu.get_cached_state(printer.bambu_dev_id, org_id=printer.organization_id)
         live = _apply_bed_cleared_flag(printer, live, db)
         live = _apply_error_cleared_flag(printer, live, db)
-        ams_trays = bambu.get_ams_filaments(printer.bambu_dev_id)
+        ams_trays = bambu.get_ams_filaments(printer.bambu_dev_id, org_id=printer.organization_id)
         persisted = printer.loaded_filaments or []
         live_by_slot = {t["slot"]: t for t in ams_trays}
         persisted_slots = {s["slot"] for s in persisted}
@@ -456,7 +457,7 @@ def _to_dto(
 
     # Manual (U1, other) — if Moonraker URL is set, prefer live data
     if printer.moonraker_url:
-        live = prefetched_live if prefetched_live is not None else moonraker.get_live_status(printer.moonraker_url)
+        live = prefetched_live if prefetched_live is not None else moonraker.get_live_status(printer.moonraker_url, org_id=printer.organization_id)
         live = _apply_bed_cleared_flag(printer, live, db)
         live = _apply_error_cleared_flag(printer, live, db)
         filename = None if live.get("_bed_clear_forced") else (live.get("filename") or printer.manual_job)
@@ -672,12 +673,12 @@ async def get_printer(
                 )
             else:
                 live = await asyncio.wait_for(
-                    asyncio.to_thread(moonraker.get_live_status, row.moonraker_url),
+                    asyncio.to_thread(moonraker.get_live_status, row.moonraker_url, org_id=row.organization_id),
                     timeout=1.8,
                 )
         except Exception as e:
             log.debug("Printer detail live status timed out printer=%s: %s", row.id, e)
-            live = moonraker.get_cached_live_status(row.moonraker_url) or {"state": "offline"}
+            live = moonraker.get_cached_live_status(row.moonraker_url, org_id=row.organization_id) or {"state": "offline"}
     from app.models.printer_slot import PrinterSlot as _PrinterSlot
     slot_rows = db.query(_PrinterSlot).filter(_PrinterSlot.printer_id == row.id).all()
     pslots = [{
@@ -706,13 +707,7 @@ async def webcam_snapshot(
 
     Accepts token as query param (for <img> tags that can't set headers).
     """
-    from app.core.security import decode_token
-    payload = decode_token(token or "")
-    if not payload:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    user = db.get(User, int(payload.get("sub", 0)))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid user")
+    user = authenticate_user(token or "", db)
     row = db.query(Printer).filter(Printer.id == printer_id, Printer.organization_id == user.organization_id).first()
     if not row or not row.moonraker_url:
         raise HTTPException(status_code=404, detail="No Moonraker URL")
@@ -775,14 +770,8 @@ async def camera_snapshot(
     Bambu frames are captured through the farm agent tunnel. Moonraker falls
     back to the existing webcam snapshot proxy behavior.
     """
-    from app.core.security import decode_token
 
-    payload = decode_token(token or "")
-    if not payload:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    user = db.get(User, int(payload.get("sub", 0)))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid user")
+    user = authenticate_user(token or "", db)
     row = db.query(Printer).filter(
         Printer.id == printer_id,
         Printer.organization_id == user.organization_id,
@@ -875,15 +864,9 @@ async def camera_stream(
     Falls back to FFmpeg if available.
     Accepts token as query param (for <img> tags that can't set headers).
     """
-    from app.core.security import decode_token
     from app.services import go2rtc
 
-    payload = decode_token(token or "")
-    if not payload:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    user = db.get(User, int(payload.get("sub", 0)))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid user")
+    user = authenticate_user(token or "", db)
     row = db.query(Printer).filter(
         Printer.id == printer_id,
         Printer.organization_id == user.organization_id,
@@ -892,11 +875,6 @@ async def camera_stream(
         raise HTTPException(status_code=404, detail="Camera not available: set LAN IP in printer settings")
 
     org_id = user.organization_id
-
-    # go2rtc stream URL — uses bambu:// for A1/P1 (port 6000), rtsps:// for X1 (port 322)
-    go2rtc._stream_url(row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
-    go2rtc.stream_name(row.bambu_dev_id)
-    # go2rtc MJPEG endpoint — accessed locally at localhost:1984 from farm PC
 
     # ── Tunnel path: native Bambu binary protocol via agent ───────────────────
     # Agent on farm PC connects directly to printer:6000 using the documented
@@ -912,26 +890,26 @@ async def camera_stream(
                 log.warning("Bambu camera tunnel error printer %s: %s", printer_id, exc)
 
         return StreamingResponse(
-            _bambu_cam_stream(),
+            _authenticated_camera_stream(_bambu_cam_stream(), token or ""),
             media_type="multipart/x-mixed-replace; boundary=frame",
             headers={"Cache-Control": "no-store"},
         )
 
     # ── go2rtc path (local, when backend is on the same LAN as printers) ──────
     if go2rtc.is_available():
-        await go2rtc.register_stream(row.bambu_dev_id, row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "")
+        await go2rtc.register_stream(row.bambu_dev_id, row.bambu_access_code, row.bambu_dev_ip, row.bambu_model or "", org_id=org_id)
 
         async def _go2rtc_proxy():
             try:
                 async with httpx.AsyncClient(timeout=None) as client:
-                    async with client.stream("GET", go2rtc.mjpeg_url(row.bambu_dev_id)) as resp:
+                    async with client.stream("GET", go2rtc.mjpeg_url(row.bambu_dev_id, org_id=org_id)) as resp:
                         async for chunk in resp.aiter_bytes(32768):
                             yield chunk
             except Exception as exc:
                 log.warning("go2rtc stream error printer %s: %s", printer_id, exc)
 
         return StreamingResponse(
-            _go2rtc_proxy(),
+            _authenticated_camera_stream(_go2rtc_proxy(), token or ""),
             media_type="multipart/x-mixed-replace; boundary=frame",
             headers={"Cache-Control": "no-store"},
         )
@@ -979,10 +957,28 @@ async def camera_stream(
             await proc.wait()
 
     return StreamingResponse(
-        _ffmpeg_generate(),
+        _authenticated_camera_stream(_ffmpeg_generate(), token or ""),
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-store"},
     )
+
+
+async def _authenticated_camera_stream(chunks, token: str):
+    from contextlib import aclosing
+    import time
+    from app.core.db import SessionLocal
+
+    checked_at = float("-inf")
+    async with aclosing(chunks):
+        async for chunk in chunks:
+            if time.monotonic() - checked_at >= 30:
+                with SessionLocal() as db:
+                    try:
+                        authenticate_user(token, db)
+                    except HTTPException:
+                        return
+                checked_at = time.monotonic()
+            yield chunk
 
 
 @router.get("", response_model=list[PrinterOut])
@@ -1014,7 +1010,7 @@ async def list_printers(
         if _tunnel.has_tunnel(org.id):
             fetchers = [_tunnel.get_moonraker_status(org.id, r.moonraker_url) for r in moonraker_rows]
         else:
-            fetchers = [asyncio.to_thread(moonraker.get_live_status, r.moonraker_url) for r in moonraker_rows]
+            fetchers = [asyncio.to_thread(moonraker.get_live_status, r.moonraker_url, org_id=r.organization_id) for r in moonraker_rows]
         results = await asyncio.gather(*fetchers, return_exceptions=True)
         live_by_url: dict[str, dict] = {}
         for r, res in zip(moonraker_rows, results):
@@ -1309,7 +1305,7 @@ def create_printer(
     db.refresh(row)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         if row.bambu_lan_mode and row.bambu_dev_ip and row.bambu_access_code:
-            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code, org_id=row.organization_id)
         else:
             bambu.subscribe_device(row.bambu_dev_id, org.id)
     return _to_dto(row, db)
@@ -1369,9 +1365,9 @@ def update_printer(
     # Restart LAN MQTT if relevant fields changed on a Bambu printer
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         if row.bambu_lan_mode and row.bambu_dev_ip and row.bambu_access_code:
-            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code)
+            bambu.start_lan_mqtt(row.bambu_dev_id, row.bambu_dev_ip, row.bambu_access_code, org_id=row.organization_id)
         else:
-            bambu.stop_lan_mqtt(row.bambu_dev_id)
+            bambu.stop_lan_mqtt(row.bambu_dev_id, org_id=row.organization_id)
 
     return _to_dto(row, db)
 
@@ -1413,12 +1409,12 @@ def set_loaded_filaments(
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         changed = _changed_bambu_filaments(
             row.loaded_filaments or [],
-            bambu.get_ams_filaments(row.bambu_dev_id),
+            bambu.get_ams_filaments(row.bambu_dev_id, org_id=row.organization_id),
             normalized,
         )
         try:
             if changed:
-                bambu.sync_filament_slots(row.bambu_dev_id, changed)
+                bambu.sync_filament_slots(row.bambu_dev_id, changed, org_id=row.organization_id)
         except bambu.BambuError as exc:
             raise HTTPException(status_code=502, detail=f"Не вдалося синхронізувати AMS: {exc}") from exc
     row.loaded_filaments = normalized
@@ -1537,7 +1533,7 @@ async def _moonraker_action(
             await asyncio.to_thread(action_fn, row.moonraker_url)
     except (moonraker.MoonrakerError, RuntimeError) as e:
         raise HTTPException(status_code=502, detail=str(e))
-    moonraker.invalidate_status(row.moonraker_url)
+    moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
     return {"ok": True, "action": action_name}
 
 
@@ -1727,13 +1723,13 @@ async def _dispatch(
                     row.bambu_access_code.strip(), payload,
                 )
             else:
-                await asyncio.to_thread(bambu_fn, row.bambu_dev_id)
+                await asyncio.to_thread(bambu_fn, row.bambu_dev_id, org_id=row.organization_id)
         except (bambu.BambuError, RuntimeError) as e:
             raise HTTPException(status_code=502, detail=str(e))
         # Optimistically set transitional state — MQTT will correct it within seconds
-        if optimistic_state and row.bambu_dev_id in bambu._state_cache:  # noqa: SLF001
-            bambu._state_cache[row.bambu_dev_id]["state"] = optimistic_state  # noqa: SLF001
-            bambu._state_cache[row.bambu_dev_id]["ts"] = _time.monotonic()  # noqa: SLF001
+        if optimistic_state and (row.organization_id, row.bambu_dev_id) in bambu._state_cache:  # noqa: SLF001
+            bambu._state_cache[(row.organization_id, row.bambu_dev_id)]["state"] = optimistic_state  # noqa: SLF001
+            bambu._state_cache[(row.organization_id, row.bambu_dev_id)]["ts"] = _time.monotonic()  # noqa: SLF001
         if action == "cancel":
             # Cancel means "I'm done with whatever this printer thinks it's
             # doing" — force idle regardless of what live telemetry reports.
@@ -1758,7 +1754,7 @@ async def _dispatch(
                 await asyncio.to_thread(mr_fn, row.moonraker_url)
         except (moonraker.MoonrakerError, RuntimeError) as e:
             raise HTTPException(status_code=502, detail=str(e))
-        moonraker.invalidate_status(row.moonraker_url)
+        moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
         if action == "cancel":
             row.bed_cleared_at = datetime.now(timezone.utc)
             db.commit()
@@ -1845,13 +1841,13 @@ async def print_clear_bed(
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         from app.services import bambu
-        live = bambu.get_cached_state(row.bambu_dev_id)
-        bambu.mark_bed_cleared(row.bambu_dev_id, live.get("filename"))
+        live = bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id)
+        bambu.mark_bed_cleared(row.bambu_dev_id, live.get("filename"), org_id=row.organization_id)
 
     elif row.moonraker_url:
-        live = moonraker.get_cached_live_status(row.moonraker_url) or {}
-        moonraker.mark_bed_cleared(row.moonraker_url, live.get("filename"))
-        moonraker.invalidate_status(row.moonraker_url)
+        live = moonraker.get_cached_live_status(row.moonraker_url, org_id=row.organization_id) or {}
+        moonraker.mark_bed_cleared(row.moonraker_url, live.get("filename"), org_id=row.organization_id)
+        moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
 
     else:
         row.manual_status = "idle"
@@ -1902,7 +1898,7 @@ async def print_clear_error(
                     payload,
                 )
             else:
-                await asyncio.to_thread(bambu.clear_print_error, row.bambu_dev_id)
+                await asyncio.to_thread(bambu.clear_print_error, row.bambu_dev_id, org_id=row.organization_id)
         except (bambu.BambuError, RuntimeError):
             pass  # best-effort — the operator-visible state no longer depends on this
 
@@ -1911,7 +1907,7 @@ async def print_clear_error(
             await asyncio.to_thread(moonraker.send_gcode, row.moonraker_url, "FIRMWARE_RESTART")
         except Exception:
             pass
-        moonraker.invalidate_status(row.moonraker_url)
+        moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
 
     else:
         # Manual printers have no live telemetry to auto-correct against later
@@ -1943,7 +1939,7 @@ async def print_skip_object(
             await asyncio.to_thread(moonraker.skip_object, row.moonraker_url)
         except moonraker.MoonrakerError as e:
             raise HTTPException(status_code=502, detail=str(e))
-        moonraker.invalidate_status(row.moonraker_url)
+        moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
         return {"ok": True, "action": "skip_object"}
     raise HTTPException(status_code=400, detail="Принтер не підтримує цю дію")
 
@@ -1952,7 +1948,7 @@ async def _bambu_skip_objects_state(row: Printer, db: Session, org_id: int) -> d
     if row.kind != PrinterKind.bambu or not row.bambu_dev_id:
         raise HTTPException(status_code=400, detail="Skip Objects доступний лише для Bambu Lab")
 
-    live = bambu.get_cached_state(row.bambu_dev_id)
+    live = bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id)
     if live.get("state") not in {"printing", "paused"}:
         return {
             "available": False,
@@ -2087,7 +2083,7 @@ async def print_skip_objects(
             while True:
                 live_skipped = {
                     int(value)
-                    for value in bambu.get_cached_state(row.bambu_dev_id).get("skipped_object_ids", [])
+                    for value in bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id).get("skipped_object_ids", [])
                     if str(value).lstrip("-").isdigit()
                 }
                 if set(object_ids).issubset(live_skipped):
@@ -2103,7 +2099,7 @@ async def print_skip_objects(
                 await asyncio.sleep(BAMBU_SKIP_RECONCILE_POLL_SECONDS)
     else:
         try:
-            await asyncio.to_thread(bambu.skip_objects, row.bambu_dev_id, object_ids)
+            await asyncio.to_thread(bambu.skip_objects, row.bambu_dev_id, object_ids, org_id=row.organization_id)
         except (bambu.BambuError, RuntimeError) as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -2132,7 +2128,7 @@ async def send_gcode(
     row = _require_printer(printer_id, db, org.id)
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
         try:
-            await asyncio.to_thread(bambu.send_gcode, row.bambu_dev_id, payload.script)
+            await asyncio.to_thread(bambu.send_gcode, row.bambu_dev_id, payload.script, org_id=row.organization_id)
         except bambu.BambuError as e:
             raise HTTPException(status_code=502, detail=str(e))
         return {"ok": True}
@@ -2165,7 +2161,7 @@ async def set_speed_profile(
     if row.kind != PrinterKind.bambu or not row.bambu_dev_id:
         raise HTTPException(status_code=400, detail="Тільки для Bambu принтерів")
     try:
-        await asyncio.to_thread(bambu.set_speed_profile, row.bambu_dev_id, payload.profile)
+        await asyncio.to_thread(bambu.set_speed_profile, row.bambu_dev_id, payload.profile, org_id=row.organization_id)
     except bambu.BambuError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"ok": True}

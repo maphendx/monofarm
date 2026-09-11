@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { Modal } from "@/components/ui/Modal";
 import { FilterDropdown } from "@/components/warehouse/FilterDropdown";
@@ -186,8 +186,8 @@ function CreateOrderModal({ open, onClose, onCreated }: {
     setLines([{ product_id: "", quantity: "1", unit_price: "" }]);
     setError(null);
     Promise.all([
-      api<Product[]>("/api/warehouse/products/options"),
-      api<Counterparty[]>("/api/warehouse/counterparties"),
+      apiAll<Product>("/api/warehouse/products/options"),
+      apiAll<Counterparty>("/api/warehouse/counterparties"),
     ]).then(([p, c]) => { setProducts(p); setCounterparties(c); }).catch(() => {});
   }, [open]);
 
@@ -349,7 +349,7 @@ function EditOrderModal({ open, onClose, order, onSaved }: {
     setStatus(order.status);
     setDueDate(order.due_date ?? "");
     setNotes(order.notes ?? "");
-    api<Counterparty[]>("/api/warehouse/counterparties").then(setCounterparties).catch(() => {});
+    apiAll<Counterparty>("/api/warehouse/counterparties").then(setCounterparties).catch(() => {});
   }, [open, order]);
 
   async function submit(e: React.FormEvent) {
@@ -907,7 +907,7 @@ export default function OrdersPage() {
   const { version } = useWarehouseStream();
 
   const load = useCallback(async () => {
-    try { setOrders(await api<Order[]>("/api/warehouse/orders")); }
+    try { setOrders(await apiAll<Order>("/api/warehouse/orders")); }
     finally { setLoading(false); }
   }, []);
 

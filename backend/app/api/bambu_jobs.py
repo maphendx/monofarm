@@ -235,7 +235,7 @@ def get_bambu_health(
     offline = 0
     last_message_at: datetime | None = None
     for printer in bambu_cloud_printers:
-        state = bambu.get_cached_state(printer.bambu_dev_id or "")
+        state = bambu.get_cached_state(printer.bambu_dev_id or "", org_id=printer.organization_id)
         if state.get("state") == "offline":
             offline += 1
         else:
@@ -277,7 +277,7 @@ def get_bambu_health(
         BambuCloudJob.failed_at.isnot(None),
         BambuCloudJob.failed_at >= recent_cutoff,
     )
-    tracked_devices = sorted(dev for dev, oid in bambu._dev_to_org.items() if oid == org.id)
+    tracked_devices = sorted(dev for oid, dev in bambu._subscriptions if oid == org.id)
     return BambuHealthOut(
         auth=BambuHealthAuth(
             configured=bool(org.bambu_access_token or org.bambu_auth_type or org.bambu_refresh_token),

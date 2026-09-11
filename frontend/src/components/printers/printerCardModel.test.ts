@@ -29,6 +29,7 @@ const printer = (overrides: Partial<Printer> = {}): Printer => ({
   group_name: null,
   loaded_filaments: [],
   state: "idle",
+  state_stale: false,
   flags: [],
   job: null,
   eta_minutes: null,
@@ -58,6 +59,9 @@ const printer = (overrides: Partial<Printer> = {}): Printer => ({
   autoprint_delay_seconds: 0,
   autoprint_eject_last_plate: true,
   autoprint_error: null,
+  bambu_has_ams: false,
+  anycubic_dev_ip: null,
+  anycubic_model_name: null,
   tags: [],
   ...overrides,
 });

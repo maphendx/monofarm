@@ -14,12 +14,8 @@ interface StreamState {
 }
 
 export function usePrinterStream(): StreamState & { reload: () => void; upsertPrinter: (printer: Printer) => void } {
-  const [printers, setPrinters] = useState<Printer[]>(() => {
-    try {
-      const cached = localStorage.getItem("printers_cache");
-      return cached ? JSON.parse(cached) : [];
-    } catch { return []; }
-  });
+  // Printer names, jobs and LAN addresses must not survive an authenticated session.
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +33,7 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
   }, []);
 
   useEffect(() => {
+    try { localStorage.removeItem("printers_cache"); } catch {}
     let cancelled = false;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
 
@@ -69,7 +66,6 @@ export function usePrinterStream(): StreamState & { reload: () => void; upsertPr
             const data = msg.data as Printer[];
             setPrinters(data);
             setLoading(false);
-            try { localStorage.setItem("printers_cache", JSON.stringify(data)); } catch {}
           }
         } catch { /* ignore malformed frames */ }
       };

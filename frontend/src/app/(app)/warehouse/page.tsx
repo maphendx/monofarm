@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 
@@ -99,9 +99,9 @@ export default function WarehouseDashboard() {
     try {
       const [d, b, m, orders] = await Promise.all([
         api<DashboardSummary>("/api/warehouse/dashboard"),
-        api<Batch[]>("/api/warehouse/batches"),
+        apiAll<Batch>("/api/warehouse/batches"),
         api<MovementListOut>("/api/warehouse/movements?limit=5"),
-        api<OrderListItem[]>("/api/warehouse/orders?order_status=new"),
+        apiAll<OrderListItem>("/api/warehouse/orders?order_status=new"),
       ]);
       setSummary(d);
       setBatches(b);

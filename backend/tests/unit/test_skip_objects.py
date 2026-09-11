@@ -87,25 +87,25 @@ def test_parses_bambu_objects_from_disk_without_loading_whole_file(tmp_path):
 def test_bambu_report_tracks_skipped_objects_in_realtime(monkeypatch):
     bambu._state_cache.clear()
     bambu._last_state_redis_write.clear()
-    bambu._dev_to_org["SKIP-REPORT"] = 42
+    bambu._subscriptions.add((42, "SKIP-REPORT"))
     refreshes: list[tuple[str, str]] = []
 
     monkeypatch.setattr("app.services.cache.cache_get", lambda _key: None)
     monkeypatch.setattr("app.services.cache.cache_set", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("app.services.cache.cache_delete", lambda _key: None)
-    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args: None)
+    monkeypatch.setattr(bambu, "_sync_cloud_job_from_report", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         bambu,
         "_publish_printer_refresh",
-        lambda dev_id, reason: refreshes.append((dev_id, reason)),
+        lambda dev_id, reason, *, org_id: refreshes.append((dev_id, reason)),
     )
 
     bambu._handle_report_payload(
         "SKIP-REPORT",
         {"print": {"gcode_state": "RUNNING", "s_obj": [155, "165"]}},
-    )
+     org_id=42)
 
-    assert bambu._state_cache["SKIP-REPORT"]["skipped_object_ids"] == [155, 165]
+    assert bambu._state_cache[(42, "SKIP-REPORT")]["skipped_object_ids"] == [155, 165]
     assert refreshes == [("SKIP-REPORT", "skip_objects")]
 
 

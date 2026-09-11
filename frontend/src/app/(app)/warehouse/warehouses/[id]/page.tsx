@@ -6,7 +6,7 @@ import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { matchTokens } from "@/lib/search";
 import QRCode from "react-qr-code";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, apiAll } from "@/lib/api";
 import { useConfirm } from "@/hooks/useConfirm";
 import { CellCombobox } from "@/components/warehouse/CellCombobox";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
@@ -337,7 +337,7 @@ function CellModal({
     setAssignOpen(true);
     setAssignSearch(""); setAssignPid(null); setAssignQty("1");
     if (allProducts.length === 0)
-      api<AllProduct[]>("/api/warehouse/products/options").then(setAllProducts).catch(() => {});
+      apiAll<AllProduct>("/api/warehouse/products/options").then(setAllProducts).catch(() => {});
   }
 
   async function submitAssign() {
