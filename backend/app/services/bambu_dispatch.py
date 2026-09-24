@@ -208,6 +208,41 @@ def build_idempotency_key(org_id: int, printer_id: int, gcode_file_id: int | Non
     return f"bcj:{digest}"
 
 
+def _assert_dispatch_target(existing: BambuCloudJob, payload: dict, plan: dict | None) -> None:
+    from fastapi import HTTPException
+    if (existing.request_payload_json or {}).get("plate") != payload.get("plate"):
+        raise HTTPException(409, "Для цього файлу вже створено запуск іншої пластини")
+    if (existing.output_plan or {}).get("print_task_id") != (plan or {}).get("print_task_id"):
+        raise HTTPException(409, "Для цього файлу вже створено запуск іншої задачі")
+
+
+def _reserve_material_for_job(db: Session, org_id: int, printer_id: int, job: BambuCloudJob) -> None:
+    """Freeze physical material identity before any printer command."""
+    from app.models.gcode_file import GcodeFile
+    from app.models.printer import Printer
+    from app.models.organization import Organization
+    from app.services import filament_inventory, filament_reservations
+    from fastapi import HTTPException
+
+    file = db.query(GcodeFile).filter_by(id=job.gcode_file_id, organization_id=org_id).first()
+    printer = db.query(Printer).filter_by(id=printer_id, organization_id=org_id).first()
+    if printer is None:
+        raise HTTPException(404, "Принтер не знайдено")
+    payload = dict(job.request_payload_json or {})
+    demand = filament_inventory.mapped_demand(db, org_id, file, printer, payload) if file else {}
+    plan = filament_inventory.capture_material_plan(db, org_id, printer_id, demand if demand else None)
+    payload["material_plan"] = plan
+    job.request_payload_json = payload
+    org = db.get(Organization, org_id)
+    rows = filament_inventory.preflight_for_print(db, org, printer, demand)
+    if org.preflight_block_dispatch and any(r.status in ("blocked", "unmapped") for r in rows):
+        raise HTTPException(409, "; ".join(r.reason or "Матеріал недоступний" for r in rows if r.status in ("blocked", "unmapped")))
+    filament_reservations.reserve_for_job(
+        db, org_id, job.id, {i: r["grams"] for i, r in demand.items()},
+        filament_by_slot={int(i): r["filament_id"] for i, r in plan.items() if r["filament_id"]},
+    )
+
+
 def create_cloud_job(
     db: Session,
     *,
@@ -222,6 +257,7 @@ def create_cloud_job(
     request_payload: dict[str, Any] | None = None,
     dispatch_mode: str = "cloud",
     idempotency_key: str | None = None,
+    output_plan: dict[str, Any] | None = None,
 ) -> BambuCloudJob:
     """Create (or replay) a `BambuCloudJob` for this dispatch request.
 
@@ -235,6 +271,10 @@ def create_cloud_job(
         gcode_file_id,
         file_sha256,
     )
+    request_payload = dict(request_payload or {})
+    if output_plan and output_plan.get("plate") is not None:
+        if request_payload.get("plate") is None:
+            request_payload["plate"] = output_plan["plate"]
 
     existing = (
         db.query(BambuCloudJob)
@@ -247,6 +287,7 @@ def create_cloud_job(
         .first()
     )
     if existing:
+        _assert_dispatch_target(existing, request_payload, output_plan)
         log_event(
             log,
             logging.INFO,
@@ -272,9 +313,12 @@ def create_cloud_job(
         correlation_id=uuid.uuid4().hex,
         idempotency_key=idempotency_key,
         request_payload_json=request_payload,
+        output_plan=output_plan,
     )
-    db.add(job)
     try:
+        db.add(job)
+        db.flush()  # job.id needed for reservation references
+        _reserve_material_for_job(db, org_id, printer_id, job)
         db.commit()
     except IntegrityError:
         # Concurrent duplicate request raced us to the unique idempotency_key index.
@@ -286,6 +330,7 @@ def create_cloud_job(
             .first()
         )
         if existing:
+            _assert_dispatch_target(existing, request_payload, output_plan)
             log_event(
                 log,
                 logging.INFO,
@@ -562,7 +607,7 @@ def _url_value(value: Any) -> str:
     return ""
 
 
-def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
+def fetch_project_profile(org_id: int, project_id: str, selected_plate: int | None = None) -> dict[str, Any]:
     """Poll `GET /project/{id}` until Bambu finishes parsing the uploaded .3mf.
 
     Bambu attaches a profile (slice metadata + plate thumbnails) to the project
@@ -607,6 +652,10 @@ def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
         for plate in plates:
             if not isinstance(plate, dict):
                 continue
+            if selected_plate is not None and str(plate.get("index") or 1) != str(selected_plate):
+                continue
+            if selected_plate is not None:
+                plate_index = selected_plate
             thumb_url = _url_value(
                 plate.get("thumbnail") or plate.get("thumbnail_url")
                 or plate.get("cover") or plate.get("cover_url")
@@ -618,11 +667,15 @@ def fetch_project_profile(org_id: int, project_id: str) -> dict[str, Any]:
                 except (TypeError, ValueError):
                     plate_index = 1
                 break
+        if selected_plate is not None and plate_index != selected_plate:
+            continue
+        if selected_plate is not None and not any(str(p.get("index") or 1) == str(selected_plate) for p in plates if isinstance(p, dict)):
+            continue
         if profile_id and cover:
             return {"profile_id": profile_id, "cover": cover, "plate_index": plate_index}
 
     log.warning("bambu.cloud.project.profile_pending org_id=%s project_id=%s — dispatching with defaults", org_id, project_id)
-    return {"profile_id": None, "cover": "", "plate_index": 1}
+    return {"profile_id": None, "cover": "", "plate_index": selected_plate or 1}
 
 
 def create_task_with_retry(org_id: int, task_body: dict[str, Any]) -> dict[str, Any]:
@@ -737,7 +790,9 @@ def dispatch_cloud_job(job_id: int) -> BambuCloudJob:
         # A zero/placeholder profileId is treated as unset by Bambu, so when the
         # profile/cover is still pending after the poll window, fail retryable instead
         # of sending a doomed request.
-        profile_info = fetch_project_profile(org_id, project_id)
+        selected_plate = (job.request_payload_json or {}).get("plate")
+        profile_info = (fetch_project_profile(org_id, project_id, selected_plate=selected_plate)
+                        if selected_plate is not None else fetch_project_profile(org_id, project_id))
         if not profile_info["profile_id"] or not profile_info["cover"]:
             return fail_job(
                 job_id, BambuErrorCode.TASK_CREATE_FAILED,

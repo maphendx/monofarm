@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { PrinterQuickMenu, type QuickMenuPos } from "@/components/printers/PrinterQuickMenu";
 import { SkipObjectsModal } from "@/components/printers/SkipObjectsModal";
+import { PrintOutputModal } from "@/components/printers/PrintOutputModal";
 import { SlotStrip } from "@/components/printers/SlotStrip";
 import { API_URL, ApiError, api, getToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -325,18 +326,11 @@ export function PrinterCard({
               </button>
             )}
             {needsClearBed && (
-              confirmClearBed ? (
-                <>
-                  <button type="button" className="pc-action collect" disabled={busy !== null} onClick={(e) => act(e, "clear-bed")}>{busy === "clear-bed" ? "…" : t("common.confirm")}</button>
-                  {printer.last_gcode_file_id && <button type="button" className="pc-action start" disabled={busy !== null} onClick={reprint}>{busy === "reprint" ? "…" : t("printers.reprint")}</button>}
-                  <button type="button" className="pc-action" disabled={busy !== null} onClick={() => setConfirmClearBed(false)}>{t("common.no")}</button>
-                </>
-              ) : (
                 <button type="button" className="pc-action collect" disabled={busy !== null} onClick={(e) => { e.stopPropagation(); setConfirmClearBed(true); }}>
                   {t("printers.collectBed")}
                 </button>
-              )
             )}
+            {canStartPrint && printer.last_gcode_file_id && <button type="button" className="pc-action start" disabled={busy !== null} onClick={reprint}>{busy === "reprint" ? "…" : t("printers.reprint")}</button>}
             {isPrinting && (
               <button type="button" className="pc-action pause" disabled={busy !== null} onClick={(e) => act(e, "pause")}>
                 <Pause size={14} strokeWidth={2} aria-hidden="true" /> {busy === "pause" ? "…" : t("printers.pause")}
@@ -419,6 +413,10 @@ export function PrinterCard({
           <SkipObjectsModal open printer={printer} onClose={() => setSkipObjectsOpen(false)} />
         </div>
       )}
+      {confirmClearBed && <PrintOutputModal printer={printer} onClose={() => setConfirmClearBed(false)} onSaved={() => {
+        setConfirmClearBed(false);
+        onUpdated?.({ ...printer, state: "idle", job: null, progress_pct: null, eta_minutes: null });
+      }} />}
     </div>
   );
 }

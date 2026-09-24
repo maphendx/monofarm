@@ -16,9 +16,11 @@ import {
 } from "@/lib/printerLabels";
 import { BambuJobStatusBadge } from "@/components/printers/BambuJobStatusBadge";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
+import { AssignSpoolModal } from "@/components/printers/AssignSpoolModal";
 import { AutoPrintCard } from "@/components/printers/AutoPrintCard";
 import { PrinterAmsOverview } from "@/components/printers/PrinterAmsOverview";
 import { SkipObjectsModal } from "@/components/printers/SkipObjectsModal";
+import { PrintOutputModal } from "@/components/printers/PrintOutputModal";
 import { StartPrintModal } from "@/components/printers/StartPrintModal";
 import { SlotPicker, SlotStrip, slotLabel } from "@/components/printers/SlotStrip";
 import { printerCanStartPrint, printerNeedsClearBed } from "@/components/printers/printerCardModel";
@@ -767,23 +769,11 @@ function JobHeroCard({
             )
           )}
           {needsClearBed && (
-            confirmClearBed ? (
-              <div className="flex items-center gap-2 rounded-md border border-[rgba(34,197,94,.2)] bg-[rgba(34,197,94,.08)] px-3 py-2">
-                <span className="text-xs text-[var(--state-ok)]">Стіл справді очищено?</span>
-                <button onClick={() => act("clear-bed")} disabled={busy !== null}
-                  className="text-xs font-bold text-[var(--state-ok)] hover:underline disabled:opacity-40">
-                  {busy === "clear-bed" ? "…" : "Так"}
-                </button>
-                <span className="text-[var(--text-muted)]">·</span>
-                <button onClick={() => setConfirmClearBed(false)} className="text-xs text-[var(--text-muted)] hover:underline">Ні</button>
-              </div>
-            ) : (
               <button onClick={() => setConfirmClearBed(true)} disabled={busy !== null}
                 className="flex items-center gap-1.5 rounded-md border border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] px-4 py-2 text-xs font-medium text-[var(--state-ok)] shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] transition hover:bg-[rgba(34,197,94,.15)] disabled:opacity-40">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 Стіл очищено
               </button>
-            )
           )}
           {isError && (
             <button onClick={() => act("clear-error")} disabled={busy !== null}
@@ -802,6 +792,10 @@ function JobHeroCard({
 
       {err && <p className="px-5 pb-3.5 text-xs text-[var(--state-error)]">{err}</p>}
       <SkipObjectsModal open={skipObjectsOpen} printer={printer} onClose={() => setSkipObjectsOpen(false)} />
+      {confirmClearBed && <PrintOutputModal printer={printer} onClose={() => setConfirmClearBed(false)} onSaved={() => {
+        setConfirmClearBed(false);
+        onUpdated({ ...printer, state: "idle", job: null, progress_pct: null, eta_minutes: null });
+      }} />}
     </div>
   );
 }
@@ -1548,6 +1542,7 @@ function LoadedFilamentsCard({
   const user = useUser();
   const canEdit = user.role === "admin" || user.role === "operator";
   const isBambu = printer.kind === "bambu";
+  const t = useT();
 
   const [slots, setSlots] = useState<FilamentSlot[]>(printer.loaded_filaments ?? []);
   const [inventory, setInventory] = useState<Filament[]>([]);
@@ -1724,11 +1719,9 @@ function LoadedFilamentsCard({
 
       {/* ── quick pick (click a spool tile directly, no edit mode) ── */}
       {quickPickSlot !== null && (
-        <ColorPaletteModal
-          slotLabel={quickPickSlot === 254 ? "Зовнішня" : `AMS ${Math.floor(quickPickSlot / 4) + 1} · слот ${(quickPickSlot % 4) + 1}`}
-          onPick={(c) => quickSetColor(quickPickSlot, c)}
-          onClose={() => setQuickPickSlot(null)}
-        />
+        <AssignSpoolModal printer={printer} slotIndex={quickPickSlot}
+          onSaved={(updated) => { onUpdated(updated); void api<Filament[]>("/api/materials").then(setInventory).catch(() => {}); }}
+          onClose={() => setQuickPickSlot(null)} />
       )}
 
       <Card title={isBambu ? "Філамент" : "Пластик в принтері"}>
@@ -1770,6 +1763,8 @@ function LoadedFilamentsCard({
             </div>
           )}
         </div>
+
+        {isBambu && canEdit && !editing && <button type="button" className="btn btn-secondary mb-3" onClick={() => setQuickPickSlot(normalizedPrinterSlots(printer, { allSources: true })[0]?.slot ?? 254)}>{t("materialStock.assignSpool")}</button>}
 
         {groups.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-4 text-center">

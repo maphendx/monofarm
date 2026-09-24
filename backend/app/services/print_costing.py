@@ -1,25 +1,23 @@
 """Filament consumption accounting after a print finishes.
 
 Called by print_tracker on state transition printing → complete/cancelled/error
-for any printer kind. Mirrors the lifecycle from print_history_bambu.py.
+for any printer kind, and by the Bambu cloud-job history sync. Mirrors the
+lifecycle from print_history_bambu.py.
 
-Idempotency: one print = one set of FilamentLog deductions = one PrintHistory
-update. Deductions are tagged with reason="print_history:{history.id}:slot{N}";
-presence of that tag is the guard against double-write on reconnect / repeated
-polling cycles.
+The heavy lifting lives in ``print_accounting``: consumption resolution
+(telemetry → plan → progress hierarchy), spool deduction, warehouse material
+WRITE_OFF and material cost — one idempotent pipeline per physical run.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.models.filament import Filament, FilamentLog
 from app.models.print_history import PrintHistory
 from app.models.printer import Printer
-from app.models.printer_slot import PrinterSlot
+from app.services import print_accounting, workflow_events
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +31,8 @@ def finalize_print(
 ) -> None:
     """Close an in-progress history entry with consumption accounting.
 
-    Works for any printer kind — consumption is resolved via the printer driver.
-    Does nothing if the entry is already finalized.
+    Works for any printer kind. Does nothing if the entry is already finalized
+    or its consumption was already recorded (tracker retry, cloud sync, replay).
     """
     if history.result != "in_progress":
         return
@@ -51,69 +49,32 @@ def finalize_print(
     )
     history.duration_minutes = max(0, int(delta.total_seconds() / 60))
 
-    # Consumption via kind-aware driver
-    from app.services.printer_driver import get_driver
-    slot_grams = get_driver(printer.kind).get_slot_consumption(
-        printer, history.file_name, history.filament_g, db=db
-    )
-    if not slot_grams:
-        return
+    from app.services.telegram_notify import notify_failed_history
+    notify_failed_history(db, history)
 
-    slots_used = []
-    total_cost = Decimal("0")
+    if not print_accounting.run_already_deducted(db, history.id):
+        consumption = print_accounting.resolve_consumption(db, history, printer, result)
+        applied = print_accounting.apply_consumption(db, history, printer, consumption)
+    else:
+        applied = print_accounting.AppliedConsumption()
+        log.info("print_accounting: history=%s already deducted — skipping", history.id)
 
-    for slot_index, grams in slot_grams.items():
-        slot = db.query(PrinterSlot).filter_by(
-            printer_id=printer.id, slot_index=slot_index
-        ).first()
-        if slot is None or slot.filament_id is None:
-            slots_used.append({"slot_index": slot_index, "grams": round(grams, 1)})
-            continue
+    if history.bambu_cloud_job_id is not None:
+        # Actual consumption recorded — the reservation's job is done.
+        from app.services import filament_reservations
+        try:
+            filament_reservations.consume_for_job(db, history.bambu_cloud_job_id)
+        except Exception:  # noqa: BLE001 — bookkeeping must not break accounting
+            log.exception("reservation consume failed for job=%s", history.bambu_cloud_job_id)
 
-        filament = db.get(Filament, slot.filament_id)
-        if filament is None:
-            slots_used.append({"slot_index": slot_index, "grams": round(grams, 1)})
-            continue
-
-        # Idempotency guard — tag format must not change without a data migration
-        reason_key = f"print_history:{history.id}:slot{slot_index}"
-        existing = db.query(FilamentLog).filter(
-            FilamentLog.filament_id == filament.id,
-            FilamentLog.reason == reason_key,
-        ).first()
-        if existing:
-            log.debug(
-                "print_costing: skip double-deduction filament=%s slot=%s history=%s",
-                filament.id, slot_index, history.id,
-            )
-        else:
-            deduct = max(0, int(round(grams)))
-            new_remaining = max(0, filament.grams_remaining - deduct)
-            filament.grams_remaining = new_remaining
-            db.add(FilamentLog(
-                organization_id=filament.organization_id,
-                filament_id=filament.id,
-                delta_grams=-deduct,
-                grams_after=new_remaining,
-                reason=reason_key,
-            ))
-
-        cost_per_kg = filament.cost_per_kg or 0
-        slot_cost = Decimal(str(round(grams, 3))) / Decimal("1000") * Decimal(str(cost_per_kg))
-        total_cost += slot_cost
-
-        slots_used.append({
-            "slot_index": slot_index,
-            "filament_id": filament.id,
-            "grams": round(grams, 1),
-            "material": filament.material,
-            "color": filament.color,
-            "hex_color": filament.hex_color,
-        })
-
-    history.slots_used = slots_used if slots_used else None
-    history.material_cost = total_cost if total_cost > 0 else None
-    history.filament_g = sum(s["grams"] for s in slots_used) if slots_used else history.filament_g
+    for filament, prev_remaining in applied.low_filaments:
+        workflow_events.publish_event(
+            db, filament.organization_id, workflow_events.FILAMENT_LOW,
+            workflow_events.filament_low_payload(filament),
+        )
+        # Ready-made Telegram rule (no workflow engine involved).
+        from app.services.telegram_notify import notify_filament_low_if_crossed
+        notify_filament_low_if_crossed(db, filament.organization_id, filament, prev_grams=prev_remaining)
 
     db.flush()
 

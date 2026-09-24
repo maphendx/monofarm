@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useT } from "@/lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWarehouseStream } from "@/hooks/useWarehouseStream";
 import { api } from "@/lib/api";
@@ -39,6 +42,8 @@ const PAGE_SIZE = 50;
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MovementsPage() {
+  const productId = useSearchParams().get("product_id");
+  const t = useT();
   const [items,          setItems]          = useState<Movement[]>([]);
   const [nextCursor,     setNextCursor]     = useState<string | null>(null);
   const [hasMore,        setHasMore]        = useState(false);
@@ -55,6 +60,7 @@ export default function MovementsPage() {
 
   function buildParams(cursor: string | null) {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    if (productId) params.set("product_id", productId);
     const types  = FILTER_MAP[filter];
     if (types?.length === 1) params.set("movement_type", types[0]);
     if (cursor) params.set("cursor", cursor);
@@ -68,6 +74,7 @@ export default function MovementsPage() {
     try {
       const types  = FILTER_MAP[f];
       const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    if (productId) params.set("product_id", productId);
       if (types?.length === 1) params.set("movement_type", types[0]);
       const res = await api<{ items: Movement[]; next_cursor: string | null; has_more: boolean; total: number | null }>(
         `/api/warehouse/movements?${params}`,
@@ -77,7 +84,7 @@ export default function MovementsPage() {
       setHasMore(res.has_more);
       if (res.total != null) setTotal(res.total);
     } finally { inFlight.current = false; setInitialLoading(false); }
-  }, []);
+  }, [productId]);
 
   async function loadMore() {
     if (inFlight.current || !nextCursor) return;
@@ -222,7 +229,7 @@ export default function MovementsPage() {
                   )}
                   {colVis.isVisible("reason") && (
                     <td className="px-4 py-3 text-xs text-[var(--text-faint)]">
-                      {m.reason
+                      {m.reason?.match(/^print_history:(\d+):slot/) ? <Link className="text-[var(--accent)]" href={`/history?run_id=${m.reason.match(/^print_history:(\d+):slot/)?.[1]}`}>{t("spoolUsage.printRun")} #{m.reason.match(/^print_history:(\d+):slot/)?.[1]}</Link> : m.reason
                         ? m.reason.startsWith("Задача #")
                           ? <span className="inline-flex items-center gap-1"><span className="rounded bg-[var(--accent)]/10 px-1 py-px text-[10px] text-[var(--accent)]">авто</span>{m.reason}</span>
                           : m.reason

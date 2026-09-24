@@ -113,6 +113,20 @@ class Organization(Base):
     tg_bot_token:    Mapped[str] = mapped_column(String(512), default="", server_default="")  # Fernet-encrypted
     tg_bot_username: Mapped[str] = mapped_column(String(64),  default="", server_default="")  # cached after agent getMe
 
+    # Ready-made notification rules (work without the workflow engine).
+    # Delivered through the org's existing Telegram bot connection.
+    notify_print_failed: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    notify_filament_low: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+
+    # Pre-flight material validation (validation only, never the accounting math).
+    filament_safety_margin_pct: Mapped[int] = mapped_column(Integer, default=5, server_default="5", nullable=False)
+    preflight_block_dispatch: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
+    # Experimental workflow editor. New orgs start disabled; an admin can turn
+    # it on deliberately. Already-enabled automations keep executing while the
+    # flag is off — hiding the UI must not silently stop live processes.
+    workflows_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
     # KeyCRM integration
     keycrm_api_key:        Mapped[str] = mapped_column(String(255), default="", server_default="")
     keycrm_webhook_secret: Mapped[str] = mapped_column(String(255), default="", server_default="")

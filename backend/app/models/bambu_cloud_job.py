@@ -68,6 +68,9 @@ class BambuCloudJob(Base):
     bambu_task_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     request_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Frozen at send time from the file's GcodeFileOutput links: items, warehouse,
+    # plate and task/batch links. Later config changes never alter a queued/running job.
+    output_plan: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     project_response_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     task_response_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 

@@ -2,7 +2,7 @@ import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -64,6 +64,12 @@ class PrintTask(Base):
     product_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("wh_products.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Production output of this task was already accounted from print runs
+    # (batch counters or stock receipt); task completion must not re-account it.
+    output_accounted_from_runs: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
+    output_accounting_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

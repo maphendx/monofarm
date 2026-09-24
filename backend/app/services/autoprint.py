@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.bambu_cloud_job import BambuCloudJob, BambuCloudJobStatus
 from app.models.plan import PlanEntry
 from app.models.printer import Printer
+from app.services import file_outputs
 from app.services.bambu_job_state import ACTIVE_STATUSES, TERMINAL_STATUSES
 
 _printer_locks: dict[int, asyncio.Lock] = {}
@@ -215,6 +216,9 @@ async def start_next_for_printer(
                 file_name=gcode.original_name,
                 dispatch_mode="lan" if use_lan_dispatch else "cloud",
                 idempotency_key=f"autoprint:{printer.organization_id}:{entry.id}:{run_index}",
+                output_plan=file_outputs.build_output_plan(
+                    db, printer.organization_id, gcode.id, task_id=entry.task_id,
+                ),
                 request_payload={
                     "source": "platecycler_autoprint",
                     "start_via": start_via,

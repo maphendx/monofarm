@@ -11,6 +11,7 @@ from app.models.print_history import PrintHistory
 from app.models.printer import Printer
 from app.services.bambu_errors import to_user_message
 from app.services.bambu_observability import log_event
+from app.services import workflow_events
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ def sync_bambu_cloud_job_history(
             result="in_progress",
             source=job.dispatch_mode or "cloud",
             bambu_cloud_job_id=job.id,
+            material_plan=(job.request_payload_json or {}).get("material_plan"),
         )
         db.add(entry)
         db.flush()
@@ -81,6 +83,16 @@ def sync_bambu_cloud_job_history(
 
     if job.status in _TERMINAL_STATUSES:
         _finalize_entry(entry, job, now=now)
+        from app.services.telegram_notify import notify_failed_history
+        notify_failed_history(db, entry)
+        event_type = workflow_events.PRINT_RESULT_EVENTS.get(entry.result)
+        if event_type:
+            workflow_events.publish_event(
+                db, job.organization_id, event_type,
+                workflow_events.print_event_payload(
+                    entry, entry.printer_name or f"Printer #{job.printer_id}",
+                ),
+            )
     elif job.status == BambuCloudJobStatus.printing:
         entry.result = "in_progress"
         entry.finished_at = None

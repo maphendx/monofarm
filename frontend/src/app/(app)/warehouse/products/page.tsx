@@ -1608,7 +1608,7 @@ export default function ProductsPage() {
             <p style="font-size:12px;font-weight:600;margin:0 0 2px">${p.name}</p>
             <p style="font-size:10px;color:#666;margin:0 0 2px;font-family:monospace">${p.sku}</p>
             ${p.categories?.length ? `<p style="font-size:9px;color:#999;margin:0">${p.categories.slice(0,2).join(", ")}</p>` : ""}
-            ${p.sale_price ? `<p style="font-size:11px;font-weight:600;color:#0891b2;margin:4px 0 0">${parseFloat(p.sale_price).toLocaleString("uk-UA")} ₴</p>` : ""}
+            ${p.sale_price ? `<p style="font-size:11px;font-weight:600;color:#0284c7;margin:4px 0 0">${parseFloat(p.sale_price).toLocaleString("uk-UA")} ₴</p>` : ""}
           </div>
           ${barcodeImg ? `<div style="border-top:1px solid #eee;padding:4px;text-align:center"><img src="${barcodeImg}" style="height:45px;max-width:100%" /></div>` : ""}
         </div>`;

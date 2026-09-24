@@ -16,7 +16,7 @@
   /* Borders */
   --border:        rgba(0,0,0,.07);
   --border-strong: rgba(0,0,0,.12);
-  --border-focus:  rgba(8,145,178,.40);
+  --border-focus:  rgba(2,132,199,.40);
 
   /* Text */
   --text:       #18181b;
@@ -25,12 +25,12 @@
   --text-faint: #71717a;
   --text-dim:   #a1a1aa;
 
-  /* Accent */
-  --accent:        #0891b2;
-  --accent-hi:     #0e7490;
-  --accent-soft:   rgba(8,145,178,.10);
-  --accent-ring:   rgba(8,145,178,.20);
-  --accent-strong: #0e7490;
+  /* Accent — sky palette, one tone darker than dark theme for white-bg contrast */
+  --accent:        #0284c7;
+  --accent-hi:     #0369a1;
+  --accent-soft:   rgba(2,132,199,.10);
+  --accent-ring:   rgba(2,132,199,.22);
+  --accent-strong: #0369a1;
 
   /* Printer / item states */
   --state-print:   #0284c7;
@@ -779,3 +779,24 @@ input[type="checkbox"]:disabled { opacity: 0.4; cursor: not-allowed; }
 /* Text helpers */
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
+
+/* ── Workflow canvas (React Flow) ─────────────────────────────────────────── */
+.workflow-canvas {
+  --xy-background-color: var(--bg);
+  --xy-edge-stroke: var(--border-strong);
+  --xy-edge-stroke-selected: var(--accent);
+  --xy-edge-stroke-width: 1.5;
+  --xy-handle-background-color: var(--accent);
+  --xy-handle-border-color: var(--bg-elevated);
+  --xy-controls-button-background-color: var(--bg-elevated);
+  --xy-controls-button-background-color-hover: var(--surface-hi);
+  --xy-controls-button-color: var(--text-muted);
+  --xy-controls-button-color-hover: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: var(--shadow-md);
+  --xy-attribution-background-color-default: transparent;
+}
+.workflow-canvas .react-flow__attribution { display: none; }
+.workflow-canvas .react-flow__handle { border-radius: 50%; }
+.workflow-canvas .react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent) !important; }
+.workflow-canvas .react-flow__edge:hover .react-flow__edge-path { stroke: var(--accent); }

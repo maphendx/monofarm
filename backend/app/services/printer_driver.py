@@ -35,19 +35,7 @@ class PrinterDriver(Protocol):
         """
         ...
 
-    def get_slot_consumption(
-        self,
-        printer: "Printer",
-        filename: str | None,
-        filament_g_total: float | None,
-        db: "Session | None" = None,
-    ) -> dict[int, float]:
-        """Return {slot_index: grams_used} for a completed print.
 
-        Falls back to distributing filament_g_total equally across loaded slots
-        when per-slot data is unavailable.
-        """
-        ...
 
 
 # ── Moonraker (Klipper-based: U1, other) ─────────────────────────────────────
@@ -97,26 +85,6 @@ class MoonrakerDriver:
 
         db.flush()
         return slots
-
-    def get_slot_consumption(
-        self,
-        printer: "Printer",
-        filename: str | None,
-        filament_g_total: float | None,
-        db: "Session | None" = None,
-    ) -> dict[int, float]:
-        from app.services import moonraker
-
-        if printer.moonraker_url and filename:
-            try:
-                meta = moonraker.get_remote_file_meta(printer.moonraker_url, filename, org_id=printer.organization_id)
-                used_g: list[float] = meta.get("used_g") or []
-                if used_g:
-                    return {i: g for i, g in enumerate(used_g) if g and g > 0}
-            except Exception as e:
-                log.debug("MoonrakerDriver.get_slot_consumption: meta fetch failed: %s", e)
-
-        return _fallback_consumption(db, printer, filament_g_total)
 
 
 # ── Bambu Lab ─────────────────────────────────────────────────────────────────
@@ -171,28 +139,6 @@ class BambuDriver:
         db.flush()
         return slots
 
-    def get_slot_consumption(
-        self,
-        printer: "Printer",
-        filename: str | None,
-        filament_g_total: float | None,
-        db: "Session | None" = None,
-    ) -> dict[int, float]:
-        """For Bambu: use filament_g from MQTT state as single-slot total for now.
-
-        Bambu does not expose per-AMS-slot grams used via the available APIs.
-        When filament_g_total is known, attribute it to the active_tray slot;
-        fall back to equal distribution across all loaded slots.
-        """
-        if printer.bambu_dev_id and filament_g_total and filament_g_total > 0:
-            from app.services import bambu
-            state = bambu.get_cached_state(printer.bambu_dev_id, org_id=printer.organization_id)
-            active = state.get("active_tray")
-            if active is not None and active != 254:
-                return {int(active): filament_g_total}
-
-        return _fallback_consumption(db, printer, filament_g_total)
-
 
 # ── Fallback / resolver ───────────────────────────────────────────────────────
 
@@ -204,9 +150,6 @@ class _ManualDriver:
 
     def sync_slots(self, db: "Session", printer: "Printer") -> list:
         return []
-
-    def get_slot_consumption(self, printer, filename, filament_g_total, db=None) -> dict:
-        return _fallback_consumption(db, printer, filament_g_total)
 
 
 _DRIVERS: dict[PrinterKind, PrinterDriver] = {
@@ -220,18 +163,4 @@ def get_driver(kind: PrinterKind) -> PrinterDriver:
     return _DRIVERS.get(kind, _DRIVERS[PrinterKind.other])
 
 
-def _fallback_consumption(
-    db: "Session | None", printer: "Printer", total_g: float | None
-) -> dict[int, float]:
-    """Distribute total_g equally across all loaded slots."""
-    if not total_g or total_g <= 0 or db is None:
-        return {}
-    from app.models.printer_slot import PrinterSlot
-    loaded = db.query(PrinterSlot).filter(
-        PrinterSlot.printer_id == printer.id,
-        PrinterSlot.filament_id.isnot(None),
-    ).all()
-    if not loaded:
-        return {}
-    per_slot = total_g / len(loaded)
-    return {s.slot_index: per_slot for s in loaded}
+

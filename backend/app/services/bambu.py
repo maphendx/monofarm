@@ -634,7 +634,7 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any], *, org_id: int)
             else prev.get("skipped_object_ids", [])
         ),
     }
-    if state in ("paused", "printing", "error") and error_msg and error_msg != prev.get("error_msg"):
+    if state in ("paused", "printing") and error_msg and error_msg != prev.get("error_msg"):
         from app.core.db import SessionLocal as _SessionLocal
         from app.models.printer import Printer
 
@@ -648,19 +648,36 @@ def _handle_report_payload(dev_id: str, payload: dict[str, Any], *, org_id: int)
                 )
                 .first()
             )
-            if printer is not None:
+            from app.models.bambu_cloud_job import BambuCloudJob
+            from app.services.bambu_job_state import ACTIVE_STATUSES
+            active_job = db.query(BambuCloudJob.id).filter(
+                BambuCloudJob.organization_id == org_id_local,
+                BambuCloudJob.printer_id == printer.id if printer else False,
+                BambuCloudJob.status.in_(ACTIVE_STATUSES),
+            ).first()
+            if printer is not None and active_job is None:
+                from app.models.print_history import PrintHistory
                 from app.services.telegram_notify import send_print_event_notification
 
+                active_history = db.query(PrintHistory.id).filter(
+                    PrintHistory.organization_id == org_id_local,
+                    PrintHistory.printer_id == printer.id,
+                    PrintHistory.result == "in_progress",
+                ).order_by(PrintHistory.id.desc()).first()
+                # Repeated files must still warn on a later physical run. For
+                # untracked jobs keep the legacy five-minute warning window.
+                warning_scope = f"history:{active_history.id}" if active_history else f"window:{int(time.time() // 300)}"
                 send_print_event_notification(
                     db,
                     org_id_local or 0,
-                    event="failed",
+                    event="paused",
                     printer_name=printer.name,
                     printer_id=printer.id,
                     file_name=filename,
                     reason=error_msg,
-                    dedupe_key=f"{printer.id}:failed:{error_msg}",
+                    dedupe_key=f"{printer.id}:{warning_scope}:warning:{filename}:{error_msg}",
                 )
+                db.commit()
     state_changed = updated.get("state") != prev.get("state")
     _state_cache[(org_id, dev_id)] = updated
     if state_changed:
@@ -1013,24 +1030,14 @@ def _sync_cloud_job_from_report(
                 send_print_event_notification(
                     db,
                     job.organization_id,
-                    event="failed",
+                    event="paused",
                     printer_name=printer.name,
                     printer_id=printer.id,
                     file_name=job.file_name or filename,
                     reason=error_msg,
                     dedupe_key=f"{job.id}:error:{error_msg}",
                 )
-            if target_status == BambuCloudJobStatus.failed:
-                send_print_event_notification(
-                    db,
-                    job.organization_id,
-                    event="failed",
-                    printer_name=printer.name,
-                    printer_id=printer.id,
-                    file_name=job.file_name or filename,
-                    reason=error_msg or job.error_msg,
-                    dedupe_key=f"{job.id}:failed",
-                )
+            db.commit()
         if progress_pct is not None:
             log_event(
                 log,

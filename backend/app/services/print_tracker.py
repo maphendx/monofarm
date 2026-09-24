@@ -15,7 +15,7 @@ from app.models.organization import Organization
 from app.models.plan import PlanEntry
 from app.models.print_history import PrintHistory
 from app.models.printer import Printer, PrinterKind
-from app.services.telegram_notify import send_print_event_notification
+from app.services import workflow_events
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +78,18 @@ def _check_org(db, org: Organization) -> None:
         prev = _prev.get(row.id, {})
         prev_state = prev.get("state", "unknown")
 
+        if prev and prev_state != state:
+            workflow_events.publish_event(
+                db, org.id, workflow_events.PRINTER_STATE_CHANGED,
+                {
+                    "printer_id": row.id,
+                    "printer_name": row.name,
+                    "previous_state": prev_state,
+                    "state": state,
+                    "error_msg": current.get("error_msg"),
+                },
+            )
+
         job = _active_dispatch_job(db, row)
         if job is not None:
             # The job (not this tracker) owns the history row. Cloud jobs are
@@ -97,6 +109,7 @@ def _check_org(db, org: Organization) -> None:
                     filaments = [{"slot": i, "type": f.get("type"), "color": f.get("color"), "color_hex": f.get("color_hex")} for i, f in enumerate(row.loaded_filaments) if f]
                 except Exception:
                     pass
+            from app.services.filament_inventory import capture_material_plan
             entry = PrintHistory(
                 organization_id=org.id,
                 printer_id=row.id,
@@ -106,6 +119,7 @@ def _check_org(db, org: Organization) -> None:
                 started_at=now,
                 result="in_progress",
                 slots_used=filaments,
+                material_plan=capture_material_plan(db, org.id, row.id),
             )
             db.add(entry)
             db.commit()
@@ -128,19 +142,12 @@ def _check_org(db, org: Organization) -> None:
         # printing → done: close history entry
         elif prev_state in PRINTING_STATES and state not in PRINTING_STATES:
             result = "completed" if state in ("operational", "idle") else ("failed" if state == "error" or error_msg else "cancelled")
-            _finalize_print(db, row, now, result)
-            if result == "failed":
-                send_print_event_notification(
-                    db,
-                    org.id,
-                    event=result,
-                    printer_name=row.name,
-                    printer_id=row.id,
-                    file_name=current.get("file"),
-                    reason=error_msg,
-                    dedupe_key=f"{row.id}:{result}:{current.get('file') or '-'}:{int(now.timestamp() // 300)}",
-                )
+            _finalize_print(db, row, now, result, reason=error_msg)
             log.info("PrintHistory: %s on %s", result, row.name)
+
+        elif (state == "error" or (state == "paused" and error_msg)) and prev_state not in PRINTING_STATES:
+            # Persisted history survives worker restarts, unlike _prev.
+            _finalize_print(db, row, now, "failed", reason=error_msg)
 
         # Restart recovery: if worker restarted while printer was printing, _prev
         # was cleared so the printing→done transition never fires. Close any stale
@@ -233,17 +240,6 @@ def _sync_moonraker_job(db, printer: Printer, job, current: dict, now: datetime)
         if entry is not None:
             from app.services.print_costing import finalize_print
             finalize_print(db, entry, printer, result, now=now)
-        if result == "failed":
-            send_print_event_notification(
-                db,
-                printer.organization_id,
-                event=result,
-                printer_name=printer.name,
-                printer_id=printer.id,
-                file_name=current.get("file"),
-                reason=current.get("error_msg"),
-                dedupe_key=f"{job.id}:{result}",
-            )
 
     transition_job(job, target or job.status, reason=reason, now=now, **updates)
 
@@ -311,7 +307,7 @@ def _close_stale(db, printer_id: int, now: datetime, result: str) -> None:
         db.commit()
 
 
-def _finalize_print(db, printer: Printer, now: datetime, result: str) -> None:
+def _finalize_print(db, printer: Printer, now: datetime, result: str, *, reason: str | None = None) -> None:
     """Close stale in-progress entry and run consumption accounting for any printer kind."""
     entry = (
         db.query(PrintHistory)
@@ -328,11 +324,20 @@ def _finalize_print(db, printer: Printer, now: datetime, result: str) -> None:
         return
 
     from app.services.print_costing import finalize_print
+    if reason:
+        entry.result_reason = reason[:255]
     finalize_print(db, entry, printer, result, now=now)
 
     # Auto-advance queue: mark today's PlanEntry as done on successful print
     if result == "completed":
         _advance_queue(db, printer, now)
+
+    event_type = workflow_events.PRINT_RESULT_EVENTS.get(result)
+    if event_type:
+        workflow_events.publish_event(
+            db, printer.organization_id, event_type,
+            workflow_events.print_event_payload(entry, printer.name),
+        )
 
     db.commit()
 

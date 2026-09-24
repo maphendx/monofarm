@@ -1,0 +1,19 @@
+.canvas {
+  --xy-background-color: var(--bg);
+  --xy-edge-stroke: var(--state-print);
+  --xy-edge-stroke-width: 1.5;
+  --xy-controls-button-background-color: var(--bg-elevated);
+  --xy-controls-button-background-color-hover: var(--surface-hi);
+  --xy-controls-button-color: var(--text-muted);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: var(--shadow-md);
+}
+.canvas :global(.react-flow__edge-path) { opacity: .55; }
+.canvas :global(.react-flow__edge.selected .react-flow__edge-path),
+.canvas :global(.react-flow__edge.animated .react-flow__edge-path) { opacity: 1; }
+.canvas :global(.react-flow__controls) { overflow: hidden; border-radius: var(--r-lg); border: 1px solid var(--border); }
+.canvas :global(.react-flow__edge-textbg) { fill: var(--bg-elevated); }
+.canvas :global(.react-flow__edge-text) { fill: var(--text-muted); font-size: 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .canvas :global(.react-flow__edge.animated path) { animation: none; }
+}

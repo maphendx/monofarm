@@ -15,6 +15,11 @@ log = logging.getLogger(__name__)
 _scheduler: AsyncIOScheduler | None = None
 
 
+def get_scheduler() -> AsyncIOScheduler | None:
+    """The process-local scheduler, or None in API-only processes."""
+    return _scheduler
+
+
 def start() -> None:
     global _scheduler
     if _scheduler is not None:
@@ -76,6 +81,37 @@ def start() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # Ready-made Telegram delivery is independent of workflow execution.
+    from app.services.telegram_notify import process_pending_notifications
+    _scheduler.add_job(
+        process_pending_notifications, IntervalTrigger(seconds=5),
+        id="telegram_notifications", replace_existing=True, max_instances=1, coalesce=True,
+    )
+
+    # Workflow engine — execute queued runs, resume waits, sync cron triggers
+    from app.workers.workflow_runs import process_pending_workflow_runs, resume_waiting_workflow_runs
+    from app.services import workflow_scheduler as wf_sched
+    _scheduler.add_job(
+        process_pending_workflow_runs,
+        IntervalTrigger(seconds=5),
+        id="workflow_runs",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        resume_waiting_workflow_runs,
+        IntervalTrigger(seconds=15),
+        id="workflow_waiting",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    try:
+        wf_sched.sync_all_jobs()
+    except Exception:
+        log.exception("workflow cron trigger sync failed")
 
     _scheduler.start()
     log.info("Scheduler started (timezone=%s)", settings.TIMEZONE)

@@ -62,7 +62,7 @@ function buildGroups(printers: Printer[]): FlowGroup[] {
 
 function printerColor(name: string): string {
   // deterministic color from printer name
-  const colors = ["#f9a8d4", "#fbbf24", "#34d399", "#a78bfa", "#fb923c", "#22d3ee", "#f87171", "#e5e7eb"];
+  const colors = ["#f9a8d4", "#fbbf24", "#34d399", "#a78bfa", "#fb923c", "#38bdf8", "#f87171", "#e5e7eb"];
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
   return colors[h % colors.length];
@@ -360,8 +360,8 @@ export function FlowView({ printers }: Props) {
       svg.innerHTML = "";
       const defs: [string, string, string][] = [];
       for (let i = 0; i < groups.length; i++) defs.push([`g${i}`, "qc", "#38bdf8"]);
-      defs.push(["qc", "wh",   "#22d3ee"]);
-      defs.push(["qc", "ship", "#22d3ee"]);
+      defs.push(["qc", "wh",   "#38bdf8"]);
+      defs.push(["qc", "ship", "#38bdf8"]);
 
       for (const [s, t, col] of defs) {
         const a = anchor(s, "r");
@@ -480,7 +480,7 @@ export function FlowView({ printers }: Props) {
     ro.observe(wrap);
     requestAnimationFrame(() => {
       buildEdges();
-      setTimeout(() => spawnOne({ name: "Завантаження…", qty: 1, col: "#22d3ee", real: false }), 600);
+      setTimeout(() => spawnOne({ name: "Завантаження…", qty: 1, col: "#38bdf8", real: false }), 600);
     });
     raf = requestAnimationFrame(frame);
 
@@ -523,7 +523,7 @@ export function FlowView({ printers }: Props) {
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#38bdf8]" />друк → контроль
           </span>
           <span className="flex items-center gap-1.5 rounded-full border border-[var(--border)] px-2.5 py-1 text-[11px] text-[var(--text-muted)]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />контроль → склад
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#38bdf8]" />контроль → склад
           </span>
           <span className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[rgba(34,197,94,.06)] px-2.5 py-1 text-[11px] text-[var(--state-ok)]">
             <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--state-ok)]" />live

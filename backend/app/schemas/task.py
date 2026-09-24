@@ -66,6 +66,7 @@ class PrintTaskOut(BaseModel):
     pieces_ok: int | None = None
     pieces_defective: int | None = None
     defect_reason: str | None = None
+    output_accounted_from_runs: bool = False
     material_cost_uah: float | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None

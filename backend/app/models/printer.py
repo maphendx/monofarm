@@ -71,6 +71,9 @@ class Printer(Base):
     # display flag — never derived from or reset by live printer telemetry.
     # Cleared automatically once the printer starts a new print.
     bed_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Retained when bed_cleared_at resets on a new run; never report an old run twice.
+    last_cleared_history_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_clear_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     # Operator dismissed an error. Purely a display flag — shows "paused"
     # instead of the error, regardless of live telemetry, until a new print starts.
     error_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

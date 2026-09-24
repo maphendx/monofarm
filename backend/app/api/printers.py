@@ -37,6 +37,7 @@ from app.schemas.printer import (
     PrinterReorderItem,
     PrinterUpdate,
 )
+from app.schemas.print_output import ClearBedPayload, PrintOutputContext
 from app.services import bambu, moonraker, tunnel as _tunnel
 from app.services.bambu_job_state import ACTIVE_STATUSES
 from app.services.skip_objects import (
@@ -52,10 +53,6 @@ log = logging.getLogger(__name__)
 
 BAMBU_SKIP_RECONCILE_TIMEOUT_SECONDS = 3.0
 BAMBU_SKIP_RECONCILE_POLL_SECONDS = 0.25
-
-
-class ClearBedPayload(BaseModel):
-    success: bool = True
 
 
 class AutoPrintSettings(BaseModel):
@@ -1822,9 +1819,21 @@ async def print_cancel(
     )
 
 
+@router.get("/{printer_id}/print/output-context", response_model=PrintOutputContext)
+def print_output_context(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> PrintOutputContext:
+    from app.services.print_output import output_context
+    return output_context(db, _require_printer(printer_id, db, org.id))
+
+
 @router.post("/{printer_id}/print/clear-bed")
 async def print_clear_bed(
     printer_id: int,
+    payload: ClearBedPayload | None = None,
     db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
     _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
@@ -1836,24 +1845,69 @@ async def print_clear_bed(
     it stays in force until the printer's live state shows an actual new
     print in progress, at which point `_to_dto()` clears it automatically.
     """
-    row = _require_printer(printer_id, db, org.id)
+    row = db.query(Printer).filter_by(id=printer_id, organization_id=org.id).with_for_update().first()
+    if row is None:
+        raise HTTPException(404, "Printer not found")
+    if payload is not None:
+        from app.services.print_output import replayed_output
+        if replayed_output(db, row, payload):
+            return {"ok": True, "action": "clear_bed"}
+        if payload.output is None and payload.request_id and row.last_clear_request_id == str(payload.request_id):
+            return {"ok": True, "action": "clear_bed"}
+
+    live = {}
+    if row.kind == PrinterKind.bambu and row.bambu_dev_id:
+        live = bambu.get_cached_state(row.bambu_dev_id, org_id=org.id)
+    elif row.moonraker_url:
+        live = moonraker.get_cached_live_status(row.moonraker_url, org_id=org.id) or {}
+    else:
+        live = {"state": row.manual_status}
+    if payload is not None:
+        if live.get("state") in {"printing", "paused", "pausing", "resuming", "cancelling"}:
+            raise HTTPException(409, "Друк ще триває. Очищення столу недоступне")
+        if payload.output and payload.output.warehouse_id:
+            from app.api.deps import require_warehouse_full
+            require_warehouse_full(org)
+        from app.services.print_output import record_output
+        record_output(db, row, payload, _user.id)
+
+    was_cleared = row.bed_cleared_at is not None
     row.bed_cleared_at = datetime.now(timezone.utc)
+    if payload is None or payload.output is None:
+        from app.services.print_output import latest_history
+        history = latest_history(db, row)
+        if payload is not None and payload.request_id:
+            if (history.id if history else None) != payload.history_id:
+                raise HTTPException(409, "Друк змінився. Відкрийте форму знову")
+            if history is None and was_cleared:
+                raise HTTPException(409, "Стіл уже звільнено. Облік доступний в історії друку")
+            if history is None:
+                from app.models.print_history import PrintHistory
+                history = PrintHistory(
+                    organization_id=org.id, printer_id=row.id, printer_name=row.name,
+                    printer_kind=row.kind.value, file_name=payload.file_name,
+                    started_at=row.bed_cleared_at, finished_at=row.bed_cleared_at,
+                    result="completed", source="manual", created_by_user_id=_user.id,
+                )
+                db.add(history)
+                db.flush()
+        if history:
+            row.last_cleared_history_id = history.id
+    if payload and payload.request_id:
+        row.last_clear_request_id = str(payload.request_id)
+
+    if row.kind != PrinterKind.bambu and not row.moonraker_url:
+        row.manual_status = "idle"
+        row.manual_job = None
+    db.commit()
 
     if row.kind == PrinterKind.bambu and row.bambu_dev_id:
-        from app.services import bambu
-        live = bambu.get_cached_state(row.bambu_dev_id, org_id=row.organization_id)
         bambu.mark_bed_cleared(row.bambu_dev_id, live.get("filename"), org_id=row.organization_id)
 
     elif row.moonraker_url:
-        live = moonraker.get_cached_live_status(row.moonraker_url, org_id=row.organization_id) or {}
         moonraker.mark_bed_cleared(row.moonraker_url, live.get("filename"), org_id=row.organization_id)
         moonraker.invalidate_status(row.moonraker_url, org_id=row.organization_id)
 
-    else:
-        row.manual_status = "idle"
-        row.manual_job = None
-
-    db.commit()
     return {"ok": True, "action": "clear_bed"}
 
 

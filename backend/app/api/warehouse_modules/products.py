@@ -14,12 +14,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_org, require_roles, require_warehouse_full
 from app.core.db import get_db
+from app.models.gcode_file_output import GcodeFileOutput
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.warehouse import (
     CellStock, OrderItem, ProductCategory, ProductImage, ProductionBatch, WarehouseMovement,
     Product,
 )
+from app.schemas.filament import FilamentOut
 from app.schemas.warehouse import (
     ProductCreate, ProductImageOut, ProductOptionOut, ProductOut, ProductUpdate,
     StockThresholdsUpdate,
@@ -716,6 +718,8 @@ def delete_product(
         blockers.append("замовлення")
     if db.query(func.count(ProductionBatch.id)).filter_by(product_id=product_id).scalar():
         blockers.append("виробничі партії")
+    if db.query(func.count(GcodeFileOutput.id)).filter_by(product_id=product_id).scalar():
+        blockers.append("виробничі прив'язки файлів")
     if db.query(CellStock).filter(CellStock.product_id == product_id, CellStock.quantity > 0).first():
         blockers.append("залишки в комірках")
     if blockers:
@@ -751,3 +755,17 @@ def update_thresholds(
     db.commit()
     db.refresh(p)
     return ProductOut.model_validate(p)
+
+
+@public_router.get("/products/{product_id}/spools", response_model=list[FilamentOut])
+def product_spools(
+    product_id: int, skip: PageOffset = 0, limit: PageLimit = DEFAULT_PAGE_SIZE,
+    db: Session = Depends(get_db), org: Organization = Depends(get_current_org),
+):
+    from app.models.filament import Filament
+    from app.api.filaments import _to_out
+    _get_product(product_id, org, db)
+    rows = db.query(Filament).filter_by(organization_id=org.id, warehouse_product_id=product_id).order_by(
+        Filament.status, Filament.id,
+    ).offset(skip).limit(limit).all()
+    return [_to_out(f, db) for f in rows]

@@ -14,7 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -30,8 +30,10 @@ from app.models.printer import Printer, PrinterKind
 from app.models.printer_group import PrinterGroup
 from app.models.user import User, UserRole
 from app.schemas.bambu_jobs import BambuQueuedResult
+from app.schemas.file_output import FileOutputOut, FileOutputSet
 from app.schemas.tag import TagOut
 from app.services import bambu, bambu_dispatch, bambu_lan_dispatch
+from app.services import file_outputs
 from app.services import moonraker as mr
 from app.services import moonraker_dispatch
 from app.services import storage as storage_svc
@@ -81,6 +83,8 @@ class GcodeFileOut(BaseModel):
     assigned_group_id: int | None
     assigned_group_name: str | None
     tags: list[TagOut] = []
+    output_warehouse_id: int | None = None
+    outputs: list[FileOutputOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -132,6 +136,8 @@ class SendPayload(BaseModel):
     use_ams: bool | None = None
     # Optional link to a PrintTask — used for schedule eligibility guard.
     task_id: int | None = None
+    # Exactly one physical slicer plate; None uses the first available plate.
+    plate: int | None = Field(default=None, ge=1, le=1000)
 
 
 class SendResult(BaseModel):
@@ -172,6 +178,16 @@ def _to_out(f: GcodeFile, db: Session, group_names: dict[int, str] | None = None
         assigned_group_id=f.assigned_group_id,
         assigned_group_name=group_name,
         tags=[TagOut(id=t.id, kind=t.kind, label=t.label, color=t.color, meta=t.meta, display=t.display) for t in (f.tags or [])],
+        output_warehouse_id=f.output_warehouse_id,
+        outputs=[
+            FileOutputOut(
+                product_id=o.product_id,
+                product_name=f"{o.product.sku} · {o.product.name}" if o.product else None,
+                qty_per_run=o.qty_per_run,
+                plate=o.plate,
+            )
+            for o in (f.outputs or [])
+        ],
     )
 
 
@@ -417,6 +433,31 @@ def get_file(
     return _to_out(row, db)
 
 
+@router.put("/{file_id}/outputs", response_model=GcodeFileOut)
+def set_file_outputs(
+    file_id: int,
+    payload: FileOutputSet,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+    _user: User = Depends(require_roles(UserRole.admin, UserRole.operator)),
+) -> GcodeFileOut:
+    """Configure what one run of this file produces and where it is received."""
+    from app.api.deps import require_warehouse_full
+
+    require_warehouse_full(org)
+    row = (
+        db.query(GcodeFile)
+        .filter(GcodeFile.id == file_id, GcodeFile.organization_id == org.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Файл не знайдено")
+    file_outputs.set_file_outputs(db, org, row, payload)
+    db.commit()
+    db.refresh(row)
+    return _to_out(row, db)
+
+
 @router.patch("/{file_id}/move", response_model=GcodeFileOut)
 def move_file(
     file_id: int,
@@ -566,6 +607,66 @@ def get_thumbnail(
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
+@router.get("/{file_id}/plates/{plate}")
+def get_plate_metadata(file_id: int, plate: int, db: Session = Depends(get_db), org: Organization = Depends(get_current_org)):
+    from app.services.print_plates import plate_metadata
+    file = db.query(GcodeFile).filter_by(id=file_id, organization_id=org.id).first()
+    if not file:
+        raise HTTPException(404, "Файл не знайдено")
+    return plate_metadata(file, org.id, plate)
+
+
+@router.get("/{file_id}/plates", response_model=list[int])
+def list_file_plates(file_id: int, db: Session = Depends(get_db), org: Organization = Depends(get_current_org)):
+    from app.services.print_plates import file_plates
+    file = db.query(GcodeFile).filter_by(id=file_id, organization_id=org.id).first()
+    if not file:
+        raise HTTPException(404, "Файл не знайдено")
+    return file_plates(file, org.id)
+
+
+@router.get("/{file_id}/preflight")
+def preflight_file(
+    file_id: int,
+    printer_id: int,
+    plate: int | None = None,
+    slot_map: str | None = None,
+    use_ams: bool | None = None,
+    db: Session = Depends(get_db),
+    org: Organization = Depends(get_current_org),
+):
+    """Per-slot material availability for the send form (backend-authoritative)."""
+    from app.services import filament_inventory
+
+    file = db.query(GcodeFile).filter_by(id=file_id, organization_id=org.id).first()
+    if not file:
+        raise HTTPException(404, "Файл не знайдено")
+    printer = db.query(Printer).filter_by(id=printer_id, organization_id=org.id).first()
+    if not printer:
+        raise HTTPException(404, "Принтер не знайдено")
+    import json
+    try:
+        mapping = {int(k): int(v) for k, v in json.loads(slot_map or "{}").items()}
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(422, "Некоректна карта слотів")
+    demand = filament_inventory.mapped_demand(db, org.id, file, printer, {"plate": plate, "slot_map": mapping, "use_ams": use_ams})
+    rows = filament_inventory.preflight_for_print(db, org, printer, demand)
+    return [
+        {
+            "slot_index": r.slot_index, "material": r.material,
+            "spool_label": r.spool_label, "planned_g": r.planned_g,
+            "required_g": round(r.required_g, 1), "remaining_g": r.remaining_g,
+            "reserved_g": r.reserved_g, "available_g": r.available_g,
+            "status": r.status, "reason": r.reason,
+            "suggestions": [
+                {"filament_id": c.filament_id, "label": c.label,
+                 "grams_available": c.grams_available}
+                for c in r.suggestions
+            ],
+        } for r in rows
+    ]
+
+
 @router.post("/{file_id}/send/{printer_id}", response_model=SendResult | BambuQueuedResult)
 async def send_to_printer(
     request: Request,
@@ -589,6 +690,50 @@ async def send_to_printer(
 
     if not storage_svc.exists(row.stored_name, org.id):
         raise HTTPException(status_code=404, detail="Файл відсутній")
+
+    if payload.plate is not None or row.outputs:
+        from app.services.print_plates import file_plates
+        plates = file_plates(row, org.id)
+        if payload.plate is None:
+            payload.plate = plates[0]
+        if payload.plate not in plates:
+            raise HTTPException(400, "Обрана пластина відсутня у файлі")
+
+    # Pre-flight material check: backend-authoritative. Blocks dispatch only
+    # when the org explicitly enabled enforcement (Налаштування → Загальне).
+    preflight_report: list[dict] = []
+    from app.services import filament_inventory
+    try:
+        demand = filament_inventory.mapped_demand(db, org.id, row, printer, payload.model_dump())
+        if demand:
+            preflight_rows = filament_inventory.preflight_for_print(db, org, printer, demand)
+            preflight_report = [
+                {
+                    "slot_index": r.slot_index, "material": r.material,
+                    "spool_label": r.spool_label, "planned_g": r.planned_g,
+                    "required_g": round(r.required_g, 1), "remaining_g": r.remaining_g,
+                    "reserved_g": r.reserved_g, "available_g": r.available_g,
+                    "status": r.status, "reason": r.reason,
+                    "suggestions": [
+                        {"filament_id": c.filament_id, "label": c.label,
+                         "grams_available": c.grams_available}
+                        for c in r.suggestions
+                    ],
+                } for r in preflight_rows
+            ]
+            blocked = [r for r in preflight_report if r["status"] == "blocked"]
+            if blocked and org.preflight_block_dispatch:
+                detail = "; ".join(
+                    f"Слот {r['slot_index'] + 1}: {r['reason']}" for r in blocked
+                )
+                raise HTTPException(409, f"Недостатньо матеріалу для запуску. {detail}")
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001 — validation must never block dispatch on its own errors
+        preflight_report = []
+    output_plan = file_outputs.build_output_plan(db, org.id, row.id, task_id=payload.task_id, plate=payload.plate)
+    if printer.kind != PrinterKind.bambu and row.original_name.lower().endswith(".3mf"):
+        raise HTTPException(400, "Для Moonraker експортуйте вибрану пластину як G-code")
 
     if printer.kind == PrinterKind.snapmaker_u1:
         try:
@@ -647,8 +792,12 @@ async def send_to_printer(
         if not is_3mf:
             raise HTTPException(status_code=400, detail="Bambu Lab приймає лише .3mf файли")
 
+        selected_meta = row.filament_meta
+        if payload.plate is not None:
+            from app.services.print_plates import plate_metadata
+            selected_meta = plate_metadata(row, org.id, payload.plate)
         ams_mapping, detected_use_ams, mapping_details = build_ams_mapping(
-            row.filament_meta, printer, payload.slot_map
+            selected_meta, printer, payload.slot_map
         )
         configured_use_ams = printer.bambu_has_ams
         use_ams = (
@@ -689,8 +838,10 @@ async def send_to_printer(
                 file_name=row.original_name,
                 created_by_user_id=user.id,
                 dispatch_mode="lan",
+                output_plan=output_plan,
                 request_payload={
                     "source": "files.send_to_printer",
+                    "plate": payload.plate,
                     "start_via": start_via,
                     "ams_mapping": ams_mapping if use_ams else None,
                     "use_ams": use_ams,
@@ -732,10 +883,12 @@ async def send_to_printer(
             printer_bambu_dev_id=printer.bambu_dev_id,
             gcode_file_id=row.id,
             file_name=row.original_name,
-            region=org.bambu_region or None,
-            created_by_user_id=user.id,
+                region=org.bambu_region or None,
+                created_by_user_id=user.id,
+                output_plan=output_plan,
             request_payload={
                 "source": "files.send_to_printer",
+                "plate": payload.plate,
                 "ams_mapping": ams_mapping if use_ams else None,
                 "use_ams": use_ams,
                 "slot_map": {str(k): v for k, v in payload.slot_map.items()},
@@ -770,7 +923,7 @@ async def send_to_printer(
             detail=f"Принтер '{printer.name}' не має Moonraker URL",
         )
 
-    if settings.MOONRAKER_QUEUE_ENABLED:
+    if settings.MOONRAKER_QUEUE_ENABLED or output_plan is not None:
         _check_bambu_send_rate_limit(request, org.id)
         job = bambu_dispatch.create_cloud_job(
             db,
@@ -781,6 +934,7 @@ async def send_to_printer(
             file_name=row.original_name,
             created_by_user_id=user.id,
             dispatch_mode="moonraker",
+            output_plan=output_plan,
             request_payload={
                 "source": "files.send_to_printer",
                 "slot_map": {str(k): v for k, v in payload.slot_map.items()},

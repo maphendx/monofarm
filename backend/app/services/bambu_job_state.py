@@ -151,6 +151,19 @@ def transition_job(
     for key, value in field_updates.items():
         setattr(job, key, value)
 
+    if to_status in TERMINAL_STATUSES:
+        # Free the promised grams; when accounting already consumed them the
+        # rows are no longer active and this is a no-op.
+        from sqlalchemy.orm import object_session
+
+        from app.services import filament_reservations
+        session = object_session(job)
+        if session is not None:
+            try:
+                filament_reservations.release_for_job(session, job.id)
+            except Exception:  # noqa: BLE001
+                log.warning("filament reservation release failed for job=%s", job.id)
+
     ts_field = _STATUS_TIMESTAMP_FIELD.get(to_status)
     if ts_field is not None and getattr(job, ts_field) is None:
         setattr(job, ts_field, now)

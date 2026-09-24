@@ -169,7 +169,7 @@ def close_batch(
     org:  Organization = Depends(get_current_org),
     user: User         = Depends(require_roles(UserRole.admin, UserRole.operator)),
 ) -> BatchOut:
-    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).first()
+    b = db.query(ProductionBatch).filter_by(id=batch_id, organization_id=org.id).with_for_update().first()
     if not b:
         raise HTTPException(status_code=404, detail="Batch not found")
     if b.status == BatchStatus.done:

@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { CreateTagModal } from "@/components/ui/CreateTagModal";
@@ -9,7 +10,7 @@ import { PrintersManager } from "@/components/printers/PrintersManager";
 import { UsersSection } from "@/components/users/UsersSection";
 import { ApiError, api, clearToken, getToken } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { usePageTitle } from "@/lib/usePageTitle";
 import type { BambuHealthOut } from "@/lib/types";
@@ -27,6 +28,14 @@ interface OrgSettings {
   bambu_configured: boolean;
   tg_configured: boolean;
   tg_bot_username: string | null;
+  notify_print_failed: boolean;
+  notify_filament_low: boolean;
+  workflows_enabled: boolean;
+  filament_safety_margin_pct: number;
+  preflight_block_dispatch: boolean;
+  has_workflows: boolean;
+  notification_workflows: Record<string, string[]>;
+  telegram_linked_users: number;
 }
 
 interface BillingStatus {
@@ -145,7 +154,7 @@ const inputCls = "input";
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-10 shadow-sm">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:p-10 shadow-sm">
       {children}
     </div>
   );
@@ -153,6 +162,112 @@ function SectionCard({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-6 text-xl font-semibold">{children}</h2>;
+}
+
+/** Ready-made notification rules — work without the workflow engine. */
+function RuleToggleRow({ title, hint, enabled, busy, onToggle }: {
+  title: string; hint: string; enabled: boolean; busy: boolean; onToggle: (v: boolean) => void;
+}) {
+  return (
+    <button type="button" role="switch" aria-checked={enabled} disabled={busy}
+      aria-label={title} onClick={() => onToggle(!enabled)}
+      className="flex min-h-11 w-full items-start justify-between gap-4 rounded-xl px-2 py-3 text-left transition-colors hover:bg-[var(--surface-hi)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-default">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-[var(--text)]">{title}</span>
+        <span className="mt-0.5 block text-xs leading-snug text-[var(--text-muted)]">{hint}</span>
+      </span>
+      <span aria-hidden="true" className={`mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${busy ? "opacity-50" : ""}`}
+        style={{ background: enabled ? "var(--accent)" : "var(--border-strong)" }}>
+        <span className={`h-5 w-5 rounded-full bg-[var(--bg-elevated)] shadow-sm transition-transform motion-reduce:transition-none ${enabled ? "translate-x-5" : "translate-x-0"}`} />
+      </span>
+    </button>
+  );
+}
+
+function NotificationsSection({ settings, onUpdate }: { settings: OrgSettings; onUpdate: (s: OrgSettings) => void }) {
+  const t = useT();
+  const [printFailed, setPrintFailed] = useState(settings.notify_print_failed);
+  const [filamentLow, setFilamentLow] = useState(settings.notify_filament_low);
+  const [workflowsEnabled, setWorkflowsEnabled] = useState(settings.workflows_enabled);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const inFlight = useRef(false);
+
+  async function save(patch: { notify_print_failed?: boolean; notify_filament_low?: boolean; workflows_enabled?: boolean }, key: string) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusyKey(key);
+    try {
+      const updated = await api<OrgSettings>("/api/orgs/me/settings", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      onUpdate(updated);
+      setPrintFailed(updated.notify_print_failed);
+      setFilamentLow(updated.notify_filament_low);
+      setWorkflowsEnabled(updated.workflows_enabled);
+      toast.success(t("settingsNotifications.saved"));
+      if (patch.workflows_enabled !== undefined && patch.workflows_enabled !== settings.workflows_enabled) {
+        // The sidebar shows/hides the experimental section based on this flag.
+        window.location.reload();
+        return;
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("common.error"));
+      setPrintFailed(settings.notify_print_failed);
+      setFilamentLow(settings.notify_filament_low);
+      setWorkflowsEnabled(settings.workflows_enabled);
+    } finally {
+      inFlight.current = false;
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard>
+        <h2 className="mb-1 font-semibold">{t("settingsNotifications.title")}</h2>
+        <p className={`mb-5 text-sm ${settings.tg_configured ? "text-[var(--state-ok)]" : "text-[var(--state-warn)]"}`}>
+          {!settings.tg_configured ? t("settingsNotifications.telegramRequired") : !settings.telegram_linked_users ? t("settingsNotifications.noRecipients") : t("settingsNotifications.telegramReady")}
+        </p>
+        <div className="space-y-1">
+          <RuleToggleRow
+            title={t("settingsNotifications.printFailed")}
+            hint={settings.notification_workflows?.["print.failed"]?.length ? `${t("settingsNotifications.workflowOwns")}: ${settings.notification_workflows["print.failed"].join(", ")}` : t("settingsNotifications.printFailedHint")}
+            enabled={printFailed} busy={busyKey !== null || (!printFailed && !!settings.notification_workflows?.["print.failed"]?.length)}
+            onToggle={(v) => { void save({ notify_print_failed: v }, "print_failed"); }}
+          />
+          <RuleToggleRow
+            title={t("settingsNotifications.filamentLow")}
+            hint={settings.notification_workflows?.["filament.low"]?.length ? `${t("settingsNotifications.workflowOwns")}: ${settings.notification_workflows["filament.low"].join(", ")}` : t("settingsNotifications.filamentLowHint")}
+            enabled={filamentLow} busy={busyKey !== null || (!filamentLow && !!settings.notification_workflows?.["filament.low"]?.length)}
+            onToggle={(v) => { void save({ notify_filament_low: v }, "filament_low"); }}
+          />
+        </div>
+        {(settings.has_workflows || settings.workflows_enabled) && (
+          <p className="mt-4 rounded-xl border border-dashed border-[var(--border-strong)] px-3 py-2 text-xs leading-snug text-[var(--text-muted)]">
+            {t("settingsNotifications.duplicatesHint")} <Link className="underline" href="/workflows">{t("settingsNotifications.manageWorkflows")}</Link>
+          </p>
+        )}
+      </SectionCard>
+
+      <SectionCard>
+        <h2 className="font-semibold">{t("settingsNotifications.experimental")}</h2>
+        <div className="mt-3">
+          <RuleToggleRow
+            title={t("settingsNotifications.workflowsEditor")}
+            hint={t("settingsNotifications.workflowsEditorHint")}
+            enabled={workflowsEnabled} busy={busyKey !== null}
+            onToggle={(v) => { void save({ workflows_enabled: v }, "workflows"); }}
+          />
+        </div>
+        <p className="-mt-2 px-2 pb-2 text-xs text-[var(--text-muted)]">
+          <span className="mr-2 inline-block rounded-full border border-[var(--state-warn)] bg-[var(--bg-elevated)] px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-[var(--state-warn)]">
+            {t("common.experimental")}
+          </span>
+        </p>
+      </SectionCard>
+    </div>
+  );
 }
 
 function ComingSoon({ label }: { label: string }) {
@@ -2219,6 +2334,74 @@ function TagsSection() {
 
 // ── General section ────────────────────────────────────────────────────────
 
+function PreFlightSettingsCard() {
+  const t = useT();
+  const [settings, setSettings] = useState<OrgSettings | null>(null);
+  const [margin, setMargin] = useState<string>("5");
+  const [block, setBlock] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    api<OrgSettings>("/api/orgs/me").then(value => {
+      if (!active) return;
+      setSettings(value);
+      setMargin(String(value.filament_safety_margin_pct));
+      setBlock(value.preflight_block_dispatch);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  async function save(next: { filament_safety_margin_pct?: number; preflight_block_dispatch?: boolean }) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+    try {
+      const updated = await api<OrgSettings>("/api/orgs/me/settings", {
+        method: "PUT",
+        body: JSON.stringify(next),
+      });
+      setSettings(updated);
+      toast.success(t("preflight.saved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("common.error"));
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  }
+
+  if (!settings) return null;
+  return (
+    <SectionCard>
+      <h2 className="font-semibold">{t("preflight.settingsTitle")}</h2>
+      <p className="mt-1 text-xs leading-snug text-[var(--text-muted)]">{t("preflight.settingsHint")}</p>
+      <div className="mt-4 space-y-3">
+        <label className="flex items-center justify-between gap-4 text-sm">
+          <span>{t("preflight.margin")}</span>
+          <span className="flex items-center gap-2">
+            <input type="number" min="0" max="100" step="1" value={margin} disabled={saving}
+              onChange={e => setMargin(e.target.value)}
+              className="input w-20 tabular-nums" aria-label={t("preflight.margin")} />
+            <button type="button" className="btn btn-ghost btn-sm"
+              onClick={() => void save({ filament_safety_margin_pct: Math.max(0, Math.min(100, Number(margin) || 0)) })}>
+              {t("common.save")}
+            </button>
+          </span>
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-4 text-sm">
+          <span>{t("preflight.block")}</span>
+          <input type="checkbox" role="switch" checked={block} disabled={saving}
+            onChange={e => { setBlock(e.target.checked); void save({ preflight_block_dispatch: e.target.checked }); }}
+            className="h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full border border-[var(--border-strong)] bg-[var(--surface)] transition-colors checked:border-[var(--accent)] checked:bg-[var(--accent)] before:block before:h-4 before:w-4 before:translate-x-0 before:rounded-full before:bg-white before:shadow before:transition-transform checked:before:translate-x-4"
+            aria-label={t("preflight.block")} />
+        </label>
+      </div>
+    </SectionCard>
+  );
+}
+
 function GeneralSection() {
   const { locale, setLocale } = useLocale();
   const [currency, setCurrencyState] = useState<string>(() =>
@@ -2231,7 +2414,9 @@ function GeneralSection() {
   }
 
   return (
-    <SectionCard>
+    <div className="space-y-6">
+      <PreFlightSettingsCard />
+      <SectionCard>
       <SectionTitle>Загальні налаштування</SectionTitle>
       <div className="space-y-6">
         <div>
@@ -2275,6 +2460,7 @@ function GeneralSection() {
         </div>
       </div>
     </SectionCard>
+    </div>
   );
 }
 
@@ -2436,12 +2622,10 @@ function IntegrationsSection() {
   );
 }
 
-function defaultSection(): SectionId {
-  if (typeof window === "undefined") return "profile";
-  const params = new URLSearchParams(window.location.search);
+function defaultSection(params: { get: (key: string) => string | null }): SectionId {
   if (params.get("billing")) return "billing";
   const section = params.get("section") as SectionId | null;
-  if (section) return section;
+  if (section && NAV_ITEMS.some(item => item.id === section)) return section;
   return "profile";
 }
 
@@ -2450,7 +2634,9 @@ export default function SettingsPage() {
   const user = useUser();
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [active, setActive] = useState<SectionId>(defaultSection);
+  const params = useSearchParams();
+  const t = useT();
+  const [active, setActive] = useState<SectionId>(() => defaultSection(params));
   const isAdmin = user?.role === "admin";
 
   useEffect(() => {
@@ -2467,7 +2653,7 @@ export default function SettingsPage() {
 
       {/* ── Horizontal tab nav ── */}
       <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
-        <div className="flex justify-center overflow-x-auto px-4 scrollbar-none">
+        <div className="flex justify-start overflow-x-auto px-4 scrollbar-none xl:justify-center">
           {visibleItems.map((item) => (
             <button
               key={item.id}
@@ -2482,7 +2668,7 @@ export default function SettingsPage() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
                 {item.d.map((p, i) => <path key={i} d={p} />)}
               </svg>
-              {item.label}
+              {item.id === "notifications" ? t("settingsNotifications.title") : item.label}
             </button>
           ))}
         </div>
@@ -2502,7 +2688,11 @@ export default function SettingsPage() {
         {active === "users" && <UsersSection />}
         {active === "filament" && <ComingSoon label="Пластик" />}
         {active === "queue" && <ComingSoon label="Черга" />}
-        {active === "notifications" && <ComingSoon label="Сповіщення" />}
+        {active === "notifications" && (
+          loadError ? <p className="text-sm text-[var(--state-error)]">{loadError}</p>
+          : !settings ? <p className="text-sm text-[var(--text-muted)]">{t("common.loading")}</p>
+          : <NotificationsSection settings={settings} onUpdate={setSettings} />
+        )}
         {active === "maintenance" && <ComingSoon label="Обслуговування" />}
         {active === "integrations" && <IntegrationsSection />}
         {active === "billing" && <BillingSection />}

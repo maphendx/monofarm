@@ -185,6 +185,11 @@ def _sync_order(org: Organization, payload: dict, db: Session) -> Order:
             unmatched = f"[KeyCRM] {prod_name} ×{qty} @ {price} (SKU {sku!r} не знайдено)"
             order.notes = (order.notes or "") + f"\n{unmatched}"
 
+    from app.services import workflow_events
+    workflow_events.publish_event(
+        db, org.id, workflow_events.ORDER_CREATED,
+        workflow_events.order_event_payload(order, items_count=len(payload.get("products") or [])),
+    )
     return order
 
 

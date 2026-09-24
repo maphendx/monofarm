@@ -199,7 +199,7 @@ def update_task(
     org: Organization = Depends(get_current_org),
     user: User = Depends(require_roles(UserRole.admin, UserRole.operator, UserRole.manager)),
 ) -> PrintTaskOut:
-    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).first()
+    task = db.query(PrintTask).filter(PrintTask.id == task_id, PrintTask.organization_id == org.id).with_for_update().first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -217,52 +217,82 @@ def update_task(
     if "assigned_group_id" in payload.model_fields_set:
         task.assigned_group_id = payload.assigned_group_id
 
-    if payload.pieces_ok is not None:
+    if payload.pieces_ok is not None and not task.output_accounted_from_runs:
         task.pieces_ok = payload.pieces_ok
-    if payload.pieces_defective is not None:
+    if payload.pieces_defective is not None and not task.output_accounted_from_runs:
         task.pieces_defective = payload.pieces_defective
     if payload.defect_reason is not None:
         task.defect_reason = payload.defect_reason
 
-    # deduct filaments and calculate cost on first transition to done only
-    if payload.status == PrintTaskStatus.done and old_status != PrintTaskStatus.done and consumptions:
+    # Filament consumption on first transition to done. Tracked print runs own
+    # the accounting: per-run deductions (print_accounting) already moved the
+    # grams and written off warehouse material, so closing only aggregates them.
+    # Planned/manual consumptions are the idempotent fallback for legacy tasks
+    # with no tracked runs — never a second deduction of the same plastic.
+    if payload.status == PrintTaskStatus.done and old_status != PrintTaskStatus.done and not task.output_accounted_from_runs:
         from app.models.filament import Filament, FilamentLog
-        from app.api.filaments import _warehouse_movement
+        from app.services import print_accounting
+        from app.services.filament_accounting import write_off_warehouse_material
 
-        planned_qty = task.quantity or 1
-        actual_printed = (pieces_ok or 0) + pieces_defective
-        scale = actual_printed / planned_qty if actual_printed and planned_qty else 1.0
+        tracked = print_accounting.task_tracked_consumption(db, org.id, task)
+        if tracked:
+            task.filament_consumptions = [
+                {"filament_id": filament_id, "grams": grams, "source": "tracked_runs"}
+                for filament_id, grams in sorted(tracked.items())
+            ]
+        elif consumptions:
+            planned_qty = task.quantity or 1
+            actual_printed = (pieces_ok or 0) + pieces_defective
+            scale = actual_printed / planned_qty if actual_printed and planned_qty else 1.0
 
-        total_cost = 0.0
-        stored = []
-        for c in consumptions:
-            fil = db.query(Filament).filter(Filament.id == c.filament_id, Filament.organization_id == org.id).first()
-            if not fil:
-                continue
-            actual_grams = round(c.grams * scale)
-            fil.grams_remaining = max(0, fil.grams_remaining - actual_grams)
-            reason = f"Списання по задачі #{task_id}"
-            if pieces_defective:
-                reason += f" (з них брак: {pieces_defective} шт.)"
-            if payload.defect_reason:
-                reason += f" — {payload.defect_reason}"
-            db.add(FilamentLog(
-                organization_id=org.id,
-                filament_id=fil.id,
-                delta_grams=-actual_grams,
-                grams_after=fil.grams_remaining,
-                reason=reason,
-                task_id=task_id,
-                user_id=user.id,
-            ))
-            _warehouse_movement(fil, -actual_grams, reason, user.id, db)
-            if fil.cost_per_kg:
-                total_cost += actual_grams * fil.cost_per_kg / 1000.0
-            stored.append({"filament_id": fil.id, "grams": actual_grams})
+            total_cost = 0.0
+            stored = []
+            for c in consumptions:
+                fil = db.query(Filament).filter(Filament.id == c.filament_id, Filament.organization_id == org.id).with_for_update().first()
+                if not fil:
+                    continue
+                # One deduction per task × spool even across reopen/close cycles.
+                already = db.query(FilamentLog.id).filter(
+                    FilamentLog.task_id == task_id,
+                    FilamentLog.filament_id == fil.id,
+                    FilamentLog.delta_grams < 0,
+                ).first()
+                if already:
+                    continue
+                actual_grams = round(c.grams * scale)
+                prev_grams = fil.grams_remaining
+                fil.grams_remaining = max(0, fil.grams_remaining - actual_grams)
+                # Ready-made Telegram rule (no workflow engine involved): fires on
+                # the drop below the threshold, re-arms after a refill.
+                from app.services.telegram_notify import notify_filament_low_if_crossed
+                notify_filament_low_if_crossed(db, org.id, fil, prev_grams=prev_grams)
+                reason = f"Списання по задачі #{task_id}"
+                if pieces_defective:
+                    reason += f" (з них брак: {pieces_defective} шт.)"
+                if payload.defect_reason:
+                    reason += f" — {payload.defect_reason}"
+                db.add(FilamentLog(
+                    organization_id=org.id,
+                    filament_id=fil.id,
+                    delta_grams=-actual_grams,
+                    grams_after=fil.grams_remaining,
+                    reason=reason,
+                    task_id=task_id,
+                    user_id=user.id,
+                ))
+                # Deterministic ledger key keeps the warehouse write-off idempotent.
+                write_off_warehouse_material(
+                    db, org.id, fil, actual_grams,
+                    print_accounting.task_reason(task_id, fil.id),
+                    user_id=user.id,
+                )
+                if fil.cost_per_kg:
+                    total_cost += actual_grams * fil.cost_per_kg / 1000.0
+                stored.append({"filament_id": fil.id, "grams": actual_grams, "reason": reason})
 
-        task.filament_consumptions = stored
-        if total_cost > 0:
-            task.material_cost_uah = round(total_cost, 2)
+            task.filament_consumptions = stored
+            if total_cost > 0:
+                task.material_cost_uah = round(total_cost, 2)
 
     # set timestamps on status transitions
     if payload.status == PrintTaskStatus.in_progress and old_status == PrintTaskStatus.queued:
@@ -273,18 +303,24 @@ def update_task(
         from datetime import datetime, timezone as _tz
         task.completed_at = datetime.now(_tz.utc)
 
-    # warehouse sync when task → done
+    # warehouse sync when task → done. Skipped when the output was already
+    # accounted from print runs (batch counters or stock receipt — no double count).
     transitioning_to_done = (
         payload.status == PrintTaskStatus.done
         and old_status != PrintTaskStatus.done
     )
-    if transitioning_to_done and (pieces_ok or 0) > 0 and task.product_id:
+    if (
+        transitioning_to_done
+        and (pieces_ok or 0) > 0
+        and task.product_id
+        and not task.output_accounted_from_runs
+    ):
         from decimal import Decimal
         from app.models.warehouse import (
             BatchStatus as WBatchStatus, ProductionBatch,
             Warehouse, WarehouseMovement, WarehouseType, MovementType,
         )
-        from app.api.warehouse import _apply_movement, _update_avco
+        from app.api.warehouse import _apply_movement
 
         # if there is a live batch linked to this task, update its counters —
         # PRODUCTION_IN will fire when the batch is closed (prevents double-counting)
@@ -295,10 +331,12 @@ def update_task(
                 ProductionBatch.organization_id == org.id,
                 ProductionBatch.status.notin_([WBatchStatus.done, WBatchStatus.cancelled]),
             )
+            .with_for_update()
             .first()
         )
 
         if linked_batch:
+            task.output_accounting_mode = "task"
             linked_batch.printed_qty += (pieces_ok or 0) + pieces_defective
             linked_batch.good_qty    += pieces_ok or 0
             linked_batch.defect_qty  += pieces_defective
@@ -315,13 +353,12 @@ def update_task(
                 .first()
             )
             if finished_wh:
+                task.output_accounting_mode = "task"
                 qty = Decimal(pieces_ok)
                 unit_cost: Decimal | None = None
                 total_cost_uah = task.material_cost_uah
                 if total_cost_uah and pieces_ok:
                     unit_cost = Decimal(str(round(total_cost_uah / pieces_ok, 4)))
-                if unit_cost:
-                    _update_avco(task.product_id, qty, unit_cost, db)
                 m = WarehouseMovement(
                     organization_id=org.id,
                     type=MovementType.PRODUCTION_IN,

@@ -9,7 +9,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { API_URL, ApiError, api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
+import { useUser } from "@/lib/auth-context";
+import { FileOutputsModal } from "@/components/files/FileOutputsModal";
 import type { BambuQueuedResult, GcodeFile, GcodeFileMeta, GcodeFolder, Printer as PrinterType } from "@/lib/types";
+
+interface PreflightRow {
+  slot_index: number;
+  material: string | null;
+  spool_label: string | null;
+  planned_g: number;
+  required_g: number;
+  remaining_g: number | null;
+  reserved_g: number;
+  available_g: number | null;
+  status: "ok" | "warn" | "blocked" | "unmapped";
+  reason: string | null;
+  suggestions: { filament_id: number; label: string; grams_available: number }[];
+}
 import { bambuJobStatusLabel } from "@/components/printers/BambuJobStatusBadge";
 import { trackPrintTransfer, usePrintTransfers } from "@/lib/printTransferStore";
 import { normalizedPrinterSlots, printerSlotStateKey } from "@/lib/printerSlots";
@@ -569,6 +586,7 @@ export function SendModal({
   onClose,
   defaultPrinterId,
   lockedPrinterId,
+  taskId,
   askMode = false,
   deleteOnCancel = false,
 }: {
@@ -577,13 +595,45 @@ export function SendModal({
   onClose: () => void;
   defaultPrinterId?: number;
   lockedPrinterId?: number;
+  taskId?: number;
   askMode?: boolean;
   deleteOnCancel?: boolean;
 }) {
+  const t = useT();
+  const user = useUser();
+  const [editingOutputs, setEditingOutputs] = useState(false);
   // ── file state ──
   const [pickedFile, setPickedFile] = useState<GcodeFile | null>(fileProp ?? null);
-  const file = pickedFile;
+  const [plateMeta, setPlateMeta] = useState<{ fileId: number; plate: number; meta: GcodeFile["filament_meta"] } | null>(null);
+  const file = useMemo(() => pickedFile && plateMeta?.fileId === pickedFile.id ? { ...pickedFile, filament_meta: plateMeta.meta } : pickedFile, [pickedFile, plateMeta]);
   const showFilePicker = !pickedFile;
+  const [plateInfo, setPlateInfo] = useState<{ fileId: number; plates: number[]; error?: string } | null>(null);
+  const [selectedPlate, setSelectedPlate] = useState(1);
+  const [plateReload, setPlateReload] = useState(0);
+  const needsPlate = !!file?.original_name.toLowerCase().endsWith(".3mf");
+  const platesReady = !needsPlate || (plateInfo?.fileId === file?.id && !plateInfo?.error && plateMeta?.fileId === file?.id && plateMeta?.plate === selectedPlate);
+  useEffect(() => {
+    if (!file || !needsPlate) return;
+    let active = true;
+    api<number[]>(`/api/files/${file.id}/plates`).then(plates => {
+      if (!active) return;
+      setSelectedPlate(plates[0]);
+      setPlateInfo({ fileId: file.id, plates });
+    }).catch(err => {
+      if (active) setPlateInfo({ fileId: file.id, plates: [], error: err instanceof Error ? err.message : t("common.error") });
+    });
+    return () => { active = false; };
+  }, [file?.id, needsPlate, plateReload, t]);
+  useEffect(() => {
+    if (!file || !needsPlate || plateInfo?.fileId !== file.id || !plateInfo.plates.includes(selectedPlate)) return;
+    let active = true;
+    api<GcodeFile["filament_meta"]>(`/api/files/${file.id}/plates/${selectedPlate}`).then(meta => {
+      if (active) setPlateMeta({ fileId: file.id, plate: selectedPlate, meta });
+    }).catch(err => {
+      if (active) setPlateInfo(current => current ? { ...current, error: err instanceof Error ? err.message : t("common.error") } : null);
+    });
+    return () => { active = false; };
+  }, [file?.id, needsPlate, plateInfo?.fileId, selectedPlate, plateReload, t]);
 
   // file picker
   const [allFiles, setAllFiles] = useState<GcodeFile[]>([]);
@@ -636,7 +686,7 @@ export function SendModal({
       (p.moonraker_url || (p.kind === "bambu" && p.bambu_dev_id)) &&
       isFileCompatibleWithPrinter(file, p)
     ),
-    [printers, lockedPrinterId],
+    [printers, lockedPrinterId, file],
   );
   const fileHasDimensions = !!(file?.filament_meta?.print_size_x || file?.filament_meta?.print_size_y || file?.filament_meta?.print_size_z);
   const compatiblePrinters = useMemo(() => {
@@ -660,6 +710,22 @@ export function SendModal({
     () => selectedPrinters[0] ?? null,
     [selectedPrinters],
   );
+
+  // Pre-flight material check (backend-authoritative) for single-printer sends.
+  const [preflight, setPreflight] = useState<PreflightRow[] | null>(null);
+  useEffect(() => {
+    const pid = primaryPrinter?.id;
+    if (!file || !pid || !platesReady) { setPreflight(null); return; }
+    let active = true;
+    const params = new URLSearchParams({ printer_id: String(pid) });
+    if (needsPlate) params.set("plate", String(selectedPlate));
+    params.set("slot_map", JSON.stringify(slotMap));
+    if (primaryPrinter?.kind === "bambu") params.set("use_ams", String(Object.values(slotMap).some(slot => slot < 254) || Object.keys(slotMap).length === 0));
+    api<PreflightRow[]>(`/api/files/${file.id}/preflight?${params}`)
+      .then(rows => { if (active) setPreflight(rows.filter(r => r.planned_g > 0)); })
+      .catch(() => { if (active) setPreflight(null); });
+    return () => { active = false; };
+  }, [file?.id, primaryPrinter?.id, selectedPlate, platesReady, needsPlate, slotMap]);
   const primaryPrinterSlotState = primaryPrinter ? printerSlotStateKey(primaryPrinter) : "";
   const fileSlotState = JSON.stringify({
     colors: file?.filament_meta?.colors ?? [],
@@ -726,11 +792,11 @@ export function SendModal({
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") closeModalRef.current(resultOkRef.current);
+      if (e.key === "Escape" && !editingOutputs) closeModalRef.current(resultOkRef.current);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [editingOutputs]);
 
   useEffect(() => {
     keepFileRef.current = !deleteOnCancel;
@@ -783,7 +849,7 @@ export function SendModal({
   }
 
   async function send() {
-    if (!file || numSelected === 0 || busy) return;
+    if (!file || numSelected === 0 || busy || !platesReady) return;
     setBusy(true);
     setResult(null);
     setMultiSendResults(null);
@@ -801,7 +867,7 @@ export function SendModal({
           // second print could silently reuse stale touchscreen assignments.
           apiSlotMap[i] = slotMap[i] ?? i;
         }
-        const body: Record<string, unknown> = { slot_map: apiSlotMap };
+        const body: Record<string, unknown> = { slot_map: apiSlotMap, plate: needsPlate ? selectedPlate : 1, ...(taskId ? { task_id: taskId } : {}) };
         if (p.moonraker_url) {
           if (!autoBedLeveling) body.auto_bed_leveling = false;
           if (!timelapse)       body.timelapse = false;
@@ -844,7 +910,7 @@ export function SendModal({
           for (const i of usedSlotIndices(file.filament_meta)) {
             apiSlotMap[i] = sm[i] ?? i;
           }
-          const multiBody: Record<string, unknown> = { slot_map: apiSlotMap };
+          const multiBody: Record<string, unknown> = { slot_map: apiSlotMap, plate: needsPlate ? selectedPlate : 1, ...(taskId ? { task_id: taskId } : {}) };
           if (p.moonraker_url) {
             if (!autoBedLeveling) multiBody.auto_bed_leveling = false;
             if (!timelapse)       multiBody.timelapse = false;
@@ -923,7 +989,7 @@ export function SendModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
-      onClick={() => closeModal(Boolean(result?.ok))}
+      onClick={() => { if (!editingOutputs) closeModal(Boolean(result?.ok)); }}
     >
       <div
         className={`flex w-full flex-col rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl ${modalWidth}`}
@@ -1105,6 +1171,49 @@ export function SendModal({
                       </div>
                     )}
 
+                    {needsPlate && <div className="space-y-2 rounded-xl border border-[var(--border)] p-3">
+                      {!platesReady ? <p role="status" className="text-xs text-[var(--text-muted)]">{plateInfo?.fileId === file?.id && plateInfo?.error ? plateInfo.error : t("common.loading")}</p> :
+                        <label className="block text-xs text-[var(--text-muted)]">{t("printOutput.plate")}
+                          <select aria-label={t("printOutput.plate")} className="input mt-1 w-full" value={selectedPlate} onChange={e => setSelectedPlate(Number(e.target.value))}>
+                            {plateInfo?.plates.map(plate => <option key={plate} value={plate}>{t("printOutput.plate")} {plate}</option>)}
+                          </select>
+                        </label>}
+                      {plateInfo?.error && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPlateReload(n => n + 1)}>{t("printOutput.retry")}</button>}
+                      <p className="text-xs text-[var(--text-muted)]">{t("printOutput.plateHint")}</p>
+                    </div>}
+                    {file && ["starter", "pro", "farm"].includes(user.org_plan ?? "free") && <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setEditingOutputs(true)}>{t("fileOutputs.editAction")}</button>}
+                    {file && !file.outputs?.length && (
+                      <p className="rounded-xl border border-dashed border-[rgba(234,179,8,.4)] bg-[rgba(234,179,8,.06)] px-3 py-2 text-[11px] leading-snug text-[var(--text-muted)]">
+                        ⚠ {t("fileOutputs.sendHint")}
+                      </p>
+                    )}
+
+                    {numSelected === 1 && preflight && preflight.length > 0 && (
+                      <div className="space-y-1.5 rounded-xl border border-[var(--border)] p-3" aria-label={t("preflight.title")}>
+                        <p className="text-xs font-medium text-[var(--text-muted)]">{t("preflight.title")}</p>
+                        {preflight.map(row => {
+                          const tone = row.status === "ok" ? "text-[var(--state-ok)]"
+                            : row.status === "warn" ? "text-[#eab308]"
+                            : row.status === "blocked" ? "text-[var(--state-error)]"
+                            : "text-[var(--text-muted)]";
+                          return (
+                            <div key={row.slot_index} className="flex items-start justify-between gap-2 text-xs">
+                              <div className="min-w-0">
+                                <span className={`font-medium ${tone}`}>
+                                  {row.status === "ok" ? "✓" : row.status === "warn" ? "⚠" : row.status === "blocked" ? "✕" : "—"}
+                                  {" "}Слот {row.slot_index + 1}
+                                </span>
+                                {row.spool_label && <span className="text-[var(--text-muted)]"> · {row.spool_label}</span>}
+                                {row.reason && <p className="text-[11px] leading-snug text-[var(--text-muted)]">{row.reason}</p>}
+                              </div>
+                              <span className="shrink-0 tabular-nums text-[var(--text-muted)]">
+                                {Math.round(row.available_g ?? row.remaining_g ?? 0)}/{Math.round(row.required_g)} г
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {numSelected === 0 && (
                       <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-6 text-center">
                         <p className="text-xs text-[var(--text-faint)]">Вибери принтер →</p>
@@ -1293,7 +1402,7 @@ export function SendModal({
                   {/* Action buttons */}
                   <div className="shrink-0 space-y-2 border-t border-[var(--border)] px-4 py-3">
                     {!allDone && (
-                      <button onClick={send} disabled={!canSend}
+                      <button onClick={send} disabled={!canSend || !platesReady}
                         className="btn btn-primary w-full disabled:opacity-40">
                         {busy
                           ? "Надсилаю…"
@@ -1555,6 +1664,7 @@ export function SendModal({
           </>
         )}
       </div>
+      {editingOutputs && file && <FileOutputsModal file={file} onClose={() => setEditingOutputs(false)} onSaved={updated => { setPickedFile(updated); setEditingOutputs(false); }} />}
     </div>
   );
 }

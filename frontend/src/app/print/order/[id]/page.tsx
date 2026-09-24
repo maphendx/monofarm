@@ -280,7 +280,7 @@ function OrderPrintContent() {
       <section className="invoice-page mx-auto w-full max-w-[210mm] bg-white p-[12mm] shadow-xl print:shadow-none">
         <header className="grid grid-cols-[1fr_auto] gap-8 border-b-2 border-[#111827] pb-5">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#0e7490]">monofarm</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#0284c7]">monofarm</div>
             <h1 className="mt-2 text-3xl font-bold tracking-normal text-[#111827]">Накладна</h1>
             <p className="mt-1 text-sm text-[#4b5563]">
               Замовлення {order.order_number} від {documentDate}

@@ -274,6 +274,9 @@ class WarehouseMovement(Base):
     total_revenue:     Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     batch_id:          Mapped[int | None]     = mapped_column(Integer, ForeignKey("wh_batches.id", ondelete="SET NULL"), nullable=True)
     order_id:          Mapped[int | None]     = mapped_column(Integer, ForeignKey("wh_orders.id", ondelete="SET NULL"), nullable=True)
+    # Set for production receipts created from a specific print run; pairs with
+    # the partial unique index that guards against double accounting.
+    print_history_id:  Mapped[int | None]     = mapped_column(Integer, ForeignKey("print_history.id", ondelete="SET NULL"), nullable=True, index=True)
     reason:            Mapped[str | None]     = mapped_column(String(255), nullable=True)
     created_by_id:     Mapped[int | None]     = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at:        Mapped[datetime]       = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

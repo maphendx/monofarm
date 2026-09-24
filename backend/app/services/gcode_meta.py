@@ -31,6 +31,8 @@ PATTERNS = {
     "filament_colour": re.compile(r"^;\s*filament_colou?r\s*=\s*(.+)$", re.IGNORECASE),
     "filament_used_g": re.compile(r"^;\s*filament used\s*\[g\]\s*=\s*(.+)$", re.IGNORECASE),
     "filament_used_m": re.compile(r"^;\s*filament used\s*\[m\]\s*=\s*(.+)$", re.IGNORECASE),
+    "filament_diameter": re.compile(r"^;\s*filament_diameter\s*=\s*(.+)$", re.IGNORECASE),
+    "filament_density": re.compile(r"^;\s*filament_density\s*=\s*(.+)$", re.IGNORECASE),
     "estimated_time": re.compile(
         r"^;\s*estimated printing time(?:\s*\([^)]*\))?\s*=\s*(.+)$", re.IGNORECASE
     ),
@@ -80,7 +82,7 @@ def _read_chunks_from_bytes(data: bytes) -> str:
     return (head + b"\n" + tail).decode("utf-8", errors="ignore")
 
 
-def _extract_gcode_from_3mf(path: Path) -> str:
+def _extract_gcode_from_3mf(path: Path, plate: int | None = None) -> str:
     """Open a .3mf ZIP and return the text of the embedded gcode.
 
     OrcaSlicer stores gcode at Metadata/plate_N.gcode.
@@ -97,7 +99,7 @@ def _extract_gcode_from_3mf(path: Path) -> str:
             if not candidates:
                 log.debug("No gcode found inside 3MF: %s", path)
                 return ""
-            gcode_name = candidates[0]
+            gcode_name = f"Metadata/plate_{plate}.gcode" if plate is not None else candidates[0]
             log.debug("Extracting gcode from 3MF: %s → %s", path.name, gcode_name)
             raw = zf.read(gcode_name)
             return _read_chunks_from_bytes(raw)
@@ -150,6 +152,24 @@ def _parse_text(text: str) -> dict:
             out["used_g"] = [
                 round(float(x.strip()), 2)
                 for x in raw["filament_used_g"].replace(";", ",").split(",")
+                if x.strip()
+            ]
+        except ValueError:
+            pass
+    if "filament_diameter" in raw:
+        try:
+            out["filament_diameter"] = [
+                round(float(x.strip()), 3)
+                for x in raw["filament_diameter"].replace(";", ",").split(",")
+                if x.strip()
+            ]
+        except ValueError:
+            pass
+    if "filament_density" in raw:
+        try:
+            out["filament_density"] = [
+                round(float(x.strip()), 3)
+                for x in raw["filament_density"].replace(";", ",").split(",")
                 if x.strip()
             ]
         except ValueError:
@@ -311,3 +331,8 @@ def parse_gcode(path: Path) -> dict:
     if not text:
         return {}
     return _parse_text(text)
+
+
+def parse_3mf_plate(path: Path, plate: int) -> dict:
+    """Read filament/time metadata of exactly one sliced plate."""
+    return _parse_text(_extract_gcode_from_3mf(path, plate))

@@ -7,8 +7,10 @@ import { useSearchParams } from "next/navigation";
 import { TagBadge, type Tag as TagType } from "@/components/ui/TagBadge";
 import { ApiError, api, getToken } from "@/lib/api";
 import { SendModal, checkSlots, compatBadge, fitCheck, modelCheck, nozzleCheck } from "@/components/files/SendModal";
+import { FileOutputsModal } from "@/components/files/FileOutputsModal";
 import { CardsSkeleton } from "@/components/ui/ContentSkeleton";
 import { useUser } from "@/lib/auth-context";
+import { useT } from "@/lib/i18n";
 import { usePrinterStream } from "@/hooks/usePrinterStream";
 import { preferRealtimePrinters } from "@/lib/printerSlots";
 import type { GcodeFile, GcodeFileMeta, GcodeFolder, Printer, PrinterGroup } from "@/lib/types";
@@ -346,13 +348,14 @@ function FolderCard({ folder, isDragOver, canEdit, onClick, onRename, onDelete, 
 }
 
 // ── File card ─────────────────────────────────────────────────────────────────
-function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onRename, onAssignGroup, onDragStart, onDragEnd }: {
+function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, onSend, onSendTo, onDelete, onRename, onAssignGroup, onConfigureOutputs, onDragStart, onDragEnd }: {
   file: GcodeFile; printers: Printer[]; groups: PrinterGroup[]; canEdit: boolean; highlighted: boolean; isDragging: boolean;
   onSend: () => void; onSendTo: (p: Printer | null, groupId?: number) => void; onDelete: () => void;
-  onRename: () => void; onAssignGroup: (groupId: number | null) => void;
+  onRename: () => void; onAssignGroup: (groupId: number | null) => void; onConfigureOutputs: () => void;
   onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
 }) {
   "use memo";
+  const t = useT();
   const [confirmDel, setConfirmDel] = useState(false);
   const [dlBusy, setDlBusy] = useState(false);
   const ext = file.original_name.split(".").pop()?.toLowerCase() ?? "";
@@ -446,6 +449,34 @@ function FileCard({ file, printers, groups, canEdit, highlighted, isDragging, on
           <p className="truncate text-[10px] text-[var(--text-muted)]">🖨 {file.assigned_group_name}</p>
         )
       )}
+
+      {/* production output summary */}
+      <button
+        type="button"
+        onClick={onConfigureOutputs}
+        disabled={!canEdit}
+        title={file.outputs?.length ? t("fileOutputs.editAction") : t("fileOutputs.title")}
+        className={[
+          "flex items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-left text-[10px] transition",
+          file.outputs?.length
+            ? "bg-[rgba(34,197,94,.10)] text-[var(--state-ok)] hover:bg-[rgba(34,197,94,.18)]"
+            : "border border-dashed border-[var(--border-strong)] text-[var(--text-faint)] hover:text-[var(--text-muted)]",
+          canEdit ? "cursor-pointer" : "cursor-default",
+        ].join(" ")}
+      >
+        {file.outputs?.length ? (
+          <>
+            <span className="shrink-0">✓</span>
+            <span className="truncate">
+              {file.outputs.length === 1 && file.outputs[0].product_name
+                ? `${file.outputs[0].product_name} × ${file.outputs[0].qty_per_run}`
+                : `${t("fileOutputs.positions")}: ${file.outputs.length}`}
+            </span>
+          </>
+        ) : (
+          <span className="truncate">{t("fileOutputs.notConfigured")}</span>
+        )}
+      </button>
 
       {/* tags */}
       {file.tags?.length > 0 && (
@@ -547,6 +578,7 @@ export default function FilesPage() {
   const [uploadPhase, setUploadPhase] = useState<"uploading" | "parsing">("uploading");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [sendFile, setSendFile] = useState<GcodeFile | null>(null);
+  const [outputsFile, setOutputsFile] = useState<GcodeFile | null>(null);
   const [defaultPrinterOverride, setDefaultPrinterOverride] = useState<number | null>(null);
   // Slicer (Orca) auto-open shows a save / print / queue chooser first
   const [sendAskMode, setSendAskMode] = useState(false);
@@ -984,6 +1016,7 @@ export default function FilesPage() {
               onDelete={() => handleDelete(f)}
               onRename={() => setRenamingFile(f)}
               onAssignGroup={groupId => handleAssignGroup(f, groupId)}
+              onConfigureOutputs={() => setOutputsFile(f)}
               onDragStart={e => onFileDragStart(e, f)}
               onDragEnd={() => { setDraggedFile(null); setDragOverTarget(null); }}
             />
@@ -1022,6 +1055,15 @@ export default function FilesPage() {
           }}
           defaultPrinterId={defaultPrinterOverride ?? defaultPrinterId ?? undefined}
           askMode={sendAskMode}
+        />
+      )}
+
+      {/* production output configuration */}
+      {outputsFile && (
+        <FileOutputsModal
+          file={outputsFile}
+          onClose={() => setOutputsFile(null)}
+          onSaved={() => { setOutputsFile(null); load(); }}
         />
       )}
 

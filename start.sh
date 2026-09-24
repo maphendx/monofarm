@@ -16,8 +16,8 @@ cd "$ROOT/backend"
 
 # ── Kill old processes ───────────────────────────────────────────────────────
 echo "▶ Clearing ports 8000 and 3000..."
-lsof -ti :8000 | xargs kill -9 2>/dev/null || true
-lsof -ti :3000 | xargs kill -9 2>/dev/null || true
+lsof -ti :8000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
+lsof -ti :3000 -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
 sleep 1
 
 # ── Backend ──────────────────────────────────────────────────────────────────

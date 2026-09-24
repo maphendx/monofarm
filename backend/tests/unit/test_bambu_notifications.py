@@ -12,6 +12,9 @@ class _Query:
     def filter(self, *args, **kwargs):
         return self
 
+    def order_by(self, *args):
+        return self
+
     def first(self):
         return self._printer
 
@@ -27,10 +30,14 @@ class _FakeDb:
         return False
 
     def query(self, *args, **kwargs):
-        return _Query(self._printer)
+        from app.models.printer import Printer
+        return _Query(self._printer if args[0] is Printer else None)
+
+    def commit(self):
+        pass
 
 
-def test_bambu_pause_with_error_emits_failed_alert(monkeypatch):
+def test_bambu_pause_with_error_emits_nonterminal_warning(monkeypatch):
     printer = SimpleNamespace(id=77, name="A3", organization_id=5)
     db = _FakeDb(printer)
 
@@ -69,7 +76,7 @@ def test_bambu_pause_with_error_emits_failed_alert(monkeypatch):
 
     assert len(captured) == 1
     alert = captured[0]
-    assert alert["event"] == "failed"
+    assert alert["event"] == "paused"
     assert alert["printer_name"] == "A3"
     assert alert["printer_id"] == 77
     assert alert["file_name"] == "benchy.3mf"

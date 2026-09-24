@@ -1,3 +1,4 @@
+from app.models.telegram_notification import TelegramNotification
 from app.models.organization import Organization, BambuAuthType
 from app.models.user import User, UserRole, is_platform_admin, is_tenant_admin
 from app.models.printer_group import PrinterGroup
@@ -7,6 +8,8 @@ from app.models.plan import PlanEntry
 from app.models.filament import Filament
 from app.models.filament_color import FilamentColor
 from app.models.gcode_file import GcodeFile
+from app.models.gcode_file_output import GcodeFileOutput
+from app.models.filament_reservation import FilamentReservation
 from app.models.gcode_folder import GcodeFolder
 from app.models.print_history import PrintHistory
 from app.models.printer_slot import PrinterSlot, SlotEvent, SlotState, SlotEventType
@@ -20,6 +23,7 @@ from app.models.warehouse import (
     CellStock, CellMovement, CashTransaction, LabelTemplate,
 )
 from app.models.tag import Tag, TagKind, printer_tags_table, gcode_file_tags_table, print_task_tags_table
+from app.models.workflow import Workflow, WorkflowRun, WorkflowRunStatus
 
 
 __all__ = [
@@ -40,6 +44,8 @@ __all__ = [
     "Filament",
     "FilamentColor",
     "GcodeFile",
+    "GcodeFileOutput",
+    "FilamentReservation",
     "GcodeFolder",
     "PrintHistory",
     "ApiKey",
@@ -49,4 +55,8 @@ __all__ = [
     "SlotEvent",
     "SlotState",
     "SlotEventType",
+    "TelegramNotification",
+    "Workflow",
+    "WorkflowRun",
+    "WorkflowRunStatus",
 ]

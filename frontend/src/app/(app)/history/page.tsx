@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth-context";
@@ -8,6 +10,8 @@ import { usePageTitle } from "@/lib/usePageTitle";
 import { PageSkeleton } from "@/components/ui/ContentSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { BambuJobDetailModal } from "@/components/printers/BambuJobDetailModal";
+import { PrintOutputModal, type HistoryOutputTarget } from "@/components/printers/PrintOutputModal";
+import type { PrintOutputReport } from "@/components/printers/PrintOutputModal";
 
 interface HistoryEntry {
   id: number;
@@ -22,6 +26,7 @@ interface HistoryEntry {
   filament_g: number | null;
   source: string | null;
   bambu_cloud_job_id: number | null;
+  output_report: PrintOutputReport | null;
 }
 
 const RESULT_STYLE: Record<string, string> = {
@@ -54,31 +59,47 @@ function dur(min: number | null): string {
 
 export default function HistoryPage() {
   usePageTitle("nav.history");
+  const runId = useSearchParams().get("run_id");
   const t = useT();
   const user = useUser();
   const canSeeJobs = user.role === "admin" || user.role === "operator" || user.role === "manager";
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reload, setReload] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [filter, setFilter] = useState<string>("");
   const [openJobId, setOpenJobId] = useState<number | null>(null);
+  const [attachEntry, setAttachEntry] = useState<HistoryOutputTarget | null>(null);
 
   useEffect(() => {
-    const params = filter ? `?result=${filter}` : "";
-    api<HistoryEntry[]>(`/api/history${params}`)
-      .then(setEntries)
-      .finally(() => setLoading(false));
-  }, [filter]);
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+    const params = new URLSearchParams({ limit: "100", skip: String(page * 100) });
+    if (runId) params.set("run_id", runId);
+    if (filter === "unreported") params.set("unreported", "true");
+    else if (filter) params.set("result", filter);
+    api<HistoryEntry[]>(`/api/history?${params}`)
+      .then(data => { if (active) { setEntries(current => page ? [...current, ...data] : data); setHasMore(data.length === 100); } })
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [filter, page, reload, runId]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">{t("history.title")}</h1>
+        <h1 className="text-xl font-semibold">{t("history.title")}{runId ? ` #${runId}` : ""}</h1>
+        {runId && <Link className="btn btn-ghost" href="/history">{t("common.all")}</Link>}
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => { setFilter(e.target.value); setPage(0); }}
           className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-1.5 text-sm  "
         >
           <option value="">{t("common.all")}</option>
+          <option value="unreported">{t("printOutput.needsAccounting")}</option>
           <option value="completed">{t("tasks.done")}</option>
           <option value="failed">{t("common.error")}</option>
           <option value="cancelled">{t("tasks.cancelled")}</option>
@@ -86,7 +107,8 @@ export default function HistoryPage() {
         </select>
       </div>
 
-      {loading ? (
+      {loadError && <p role="alert" className="text-sm text-[var(--state-error)]">{t("common.error")} <button className="btn btn-ghost" onClick={() => setReload(n => n + 1)}>{t("printOutput.retry")}</button></p>}
+      {loading && page === 0 ? (
         <PageSkeleton cols={6} />
       ) : entries.length === 0 ? (
         <EmptyState
@@ -95,7 +117,7 @@ export default function HistoryPage() {
           description={t("history.noRecordsHint")}
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] ">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] ">
           <table className="w-full text-sm">
             <thead className="bg-[var(--bg)] text-xs text-[var(--text-muted)]  ">
               <tr>
@@ -141,6 +163,26 @@ export default function HistoryPage() {
                         {e.result_reason}
                       </p>
                     )}
+                    {e.result !== "in_progress" && (user.role === "admin" || user.role === "operator") && (!e.output_report || e.output_report.accounting_state === "pending") && (
+                      <button type="button"
+                        onClick={() => setAttachEntry({ id: e.id, file_name: e.file_name })}
+                        className="mt-1.5 block rounded bg-[rgba(234,179,8,.12)] px-2 py-1 text-xs font-medium text-[var(--state-warn,#eab308)] transition hover:bg-[rgba(234,179,8,.2)]">
+                        {t("printOutput.needsAccounting")} · {t("printOutput.attach")}
+                      </button>
+                    )}
+                    {e.output_report && <details className="mt-2 text-xs text-[var(--text-muted)]">
+                      <summary className="cursor-pointer">
+                        {t("printOutput.good")}: {e.output_report.items.reduce((sum, item) => sum + item.pieces_ok, 0)}
+                        {" · "}{t("printOutput.defective")}: {e.output_report.items.reduce((sum, item) => sum + item.pieces_defective, 0)}
+                      </summary>
+                      <div className="mt-2 space-y-1">
+                        {e.output_report.items.map((item, index) => <p key={index}>
+                          {item.product_name ?? `${t("printOutput.item")} ${index + 1}`}: {item.pieces_ok} / {item.pieces_defective}
+                        </p>)}
+                        {e.output_report.defect_reason && <p>{e.output_report.defect_reason}</p>}
+                        {(e.output_report.accounting_state === "stock" || (!e.output_report.accounting_state && e.output_report.warehouse_id)) && <p className="text-[var(--state-ok)]">{t("printOutput.received")}</p>}
+                      </div>
+                    </details>}
                   </td>
                   <td className="px-4 py-3 text-right text-[var(--text-muted)]">
                     {e.filament_g != null ? `${e.filament_g.toFixed(0)} г` : "—"}
@@ -152,8 +194,22 @@ export default function HistoryPage() {
         </div>
       )}
 
+      {hasMore && !loadError && <button type="button" className="btn btn-ghost" disabled={loading} onClick={() => setPage(n => n + 1)}>{t(loading ? "common.loading" : "printOutput.more")}</button>}
+
       {openJobId != null && (
         <BambuJobDetailModal jobId={openJobId} onClose={() => setOpenJobId(null)} />
+      )}
+
+      {attachEntry && (
+        <PrintOutputModal
+          historyEntry={attachEntry}
+          onClose={() => setAttachEntry(null)}
+          onSaved={() => {
+            setAttachEntry(null);
+            setPage(0);
+            setReload(n => n + 1);
+          }}
+        />
       )}
     </div>
   );

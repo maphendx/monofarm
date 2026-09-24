@@ -23,6 +23,7 @@ class PrinterSlotOut(BaseModel):
 
 
 class SlotAssign(BaseModel):
+    sync_printer: bool = True
     filament_id: int | None = None  # None = unload
 
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -22,7 +22,18 @@ class Filament(Base):
     warehouse_product_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("wh_products.id", ondelete="SET NULL"), nullable=True
     )
+    warehouse_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("wh_warehouses.id", ondelete="RESTRICT"), nullable=True
+    )
+    receipt_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("wh_movements.id", ondelete="RESTRICT"), nullable=True
+    )
     grams_remaining: Mapped[int] = mapped_column(Integer, default=0)
+    # Warehouse-side lifecycle: in_stock | empty | retired. "Loaded" is derived
+    # from PrinterSlot — the slot mapping stays the single location truth.
+    status: Mapped[str] = mapped_column(String(16), default="in_stock", server_default="in_stock", nullable=False)
+    low_alert_active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    low_alert_episode: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     min_grams: Mapped[int] = mapped_column(Integer, default=0)
     cost_per_kg: Mapped[int | None] = mapped_column(Integer, nullable=True)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)

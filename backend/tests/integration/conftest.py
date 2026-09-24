@@ -125,6 +125,9 @@ def mock_external_services(monkeypatch) -> dict[str, MagicMock]:
     mr_status = MagicMock(return_value={"state": "offline"})
     monkeypatch.setattr(moonraker, "get_live_status", mr_status)
 
+    mr_gcode = MagicMock(return_value={"result": "ok"})
+    monkeypatch.setattr(moonraker, "send_gcode", mr_gcode)
+
     mr_upload = MagicMock(return_value={"item": {"path": "test.gcode"}, "print_started": False})
     monkeypatch.setattr(moonraker, "upload_gcode", mr_upload)
 

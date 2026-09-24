@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ProductSpools } from "@/components/warehouse/ProductSpools";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, apiAll } from "@/lib/api";
@@ -344,14 +345,19 @@ export default function ProductDetailPage() {
   useEffect(() => { load(); }, [load, version]);
 
   // Lazy load stock only when tab is opened
-  const stockLoaded = useRef(false);
+  const [stockRevision, setStockRevision] = useState(0);
   useEffect(() => {
-    if (tab === "stock" && !stockLoaded.current) {
-      stockLoaded.current = true;
-      api<StockRow[]>(`/api/warehouse/stock?product_id=${id}`).then(setStock).catch(() => {});
+    if (tab !== "stock") return;
+    const timer = setInterval(() => { if (!document.hidden) setStockRevision(n => n + 1); }, 15000);
+    return () => clearInterval(timer);
+  }, [tab]);
+  const reloadStock = useCallback(() => { setStockRevision(n => n + 1); void load(); }, [load]);
+  useEffect(() => {
+    if (tab === "stock") {
+      apiAll<StockRow>(`/api/warehouse/stock?product_id=${id}`).then(setStock).catch(() => {});
       api<ProductLocations>(`/api/warehouse/products/${id}/locations`).then(setLocations).catch(() => {});
     }
-  }, [tab, id]);
+  }, [tab, id, version, stockRevision]);
 
   async function createSpec() {
     setCreating(true);
@@ -707,6 +713,9 @@ export default function ProductDetailPage() {
       )}
 
       {/* Stock / Залишки */}
+      {tab === "stock" && ["г", "g", "кг", "kg", "gram", "grams"].includes(product.unit.toLowerCase()) &&
+        <ProductSpools productId={Number(id)} version={version} onChanged={reloadStock} />}
+
       {tab === "stock" && (
         stock.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--border-strong)] px-4 py-12 text-center text-sm text-[var(--text-faint)]">

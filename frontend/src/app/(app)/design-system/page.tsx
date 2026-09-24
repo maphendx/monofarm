@@ -39,25 +39,25 @@ function Mascot({ scale = 3 }: { scale?: number }) {
       shapeRendering="crispEdges"
       style={{ imageRendering: "pixelated" }}
     >
-      <rect x="4" y="0"  width="2" height="1" fill="#22d3ee"/>
-      <rect x="4" y="1"  width="2" height="1" fill="#0891b2"/>
-      <rect x="2" y="2"  width="6" height="1" fill="#cffafe"/>
-      <rect x="1" y="3"  width="8" height="3" fill="#cffafe"/>
-      <rect x="2" y="6"  width="6" height="1" fill="#cffafe"/>
-      <rect x="2" y="4"  width="2" height="2" fill="#083344"/>
-      <rect x="6" y="4"  width="2" height="2" fill="#083344"/>
+      <rect x="4" y="0"  width="2" height="1" fill="#38bdf8"/>
+      <rect x="4" y="1"  width="2" height="1" fill="#0ea5e9"/>
+      <rect x="2" y="2"  width="6" height="1" fill="#f0f9ff"/>
+      <rect x="1" y="3"  width="8" height="3" fill="#f0f9ff"/>
+      <rect x="2" y="6"  width="6" height="1" fill="#f0f9ff"/>
+      <rect x="2" y="4"  width="2" height="2" fill="#082f49"/>
+      <rect x="6" y="4"  width="2" height="2" fill="#082f49"/>
       <rect x="3" y="4"  width="1" height="1" fill="#fff" opacity="0.65"/>
       <rect x="7" y="4"  width="1" height="1" fill="#fff" opacity="0.65"/>
       <rect x="1" y="5"  width="1" height="1" fill="#f9a8d4" opacity="0.6"/>
       <rect x="8" y="5"  width="1" height="1" fill="#f9a8d4" opacity="0.6"/>
-      <rect x="3" y="7"  width="1" height="1" fill="#155e75" opacity="0.45"/>
-      <rect x="6" y="7"  width="1" height="1" fill="#155e75" opacity="0.45"/>
-      <rect x="2" y="7"  width="6" height="3" fill="#0891b2"/>
-      <rect x="3" y="8"  width="4" height="1" fill="#155e75" opacity="0.35"/>
-      <rect x="0" y="7"  width="2" height="2" fill="#0891b2"/>
-      <rect x="8" y="7"  width="2" height="2" fill="#0891b2"/>
-      <rect x="3" y="11" width="2" height="2" fill="#155e75"/>
-      <rect x="5" y="10" width="2" height="2" fill="#155e75"/>
+      <rect x="3" y="7"  width="1" height="1" fill="#0369a1" opacity="0.45"/>
+      <rect x="6" y="7"  width="1" height="1" fill="#0369a1" opacity="0.45"/>
+      <rect x="2" y="7"  width="6" height="3" fill="#0ea5e9"/>
+      <rect x="3" y="8"  width="4" height="1" fill="#0369a1" opacity="0.35"/>
+      <rect x="0" y="7"  width="2" height="2" fill="#0ea5e9"/>
+      <rect x="8" y="7"  width="2" height="2" fill="#0ea5e9"/>
+      <rect x="3" y="11" width="2" height="2" fill="#0369a1"/>
+      <rect x="5" y="10" width="2" height="2" fill="#0369a1"/>
     </svg>
   );
 }

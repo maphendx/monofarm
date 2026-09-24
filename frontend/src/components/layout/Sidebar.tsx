@@ -15,6 +15,7 @@ import {
   Search,
   Settings2,
   Warehouse as WarehouseIcon,
+  Workflow as WorkflowIcon,
 } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -81,6 +82,13 @@ const NAV_GROUPS: { label: string | null; items: { href: Route; Ic: NavIcon; tKe
       { href: "/analytics", Ic: LineChart,     tKey: "nav.analytics" },
     ],
   },
+  {
+    // Experimental — hidden until an admin enables workflows for the org.
+    label: "nav.groupExperimental",
+    items: [
+      { href: "/workflows", Ic: WorkflowIcon,  tKey: "nav.workflows" },
+    ],
+  },
 ];
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -129,6 +137,7 @@ export function Sidebar({
     "/files":      "files",
     "/printers":   "printers",
     "/tasks":      "tasks",
+    "/workflows":  "workflows",
     "/warehouse":  "warehouse",
     "/analytics":  "analytics",
   };
@@ -196,7 +205,10 @@ export function Sidebar({
 
       {/* Main nav */}
       <nav className="flex flex-1 flex-col px-2 py-3">
-        {NAV_GROUPS.map((group, gi) => (
+        {NAV_GROUPS.filter(group => group.items.some(item =>
+          (!("adminOnly" in item && item.adminOnly) || isAdmin) && canSee(item.href) &&
+          (item.href !== "/workflows" || user?.org_workflows_enabled || user?.org_has_workflows)
+        )).map((group, gi) => (
           <div key={gi} className={gi > 0 ? "mt-1" : ""}>
             {group.label && (
               <p className={`mt-2 mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest select-none whitespace-nowrap text-[var(--text-faint)] ${lbl}`}>
@@ -207,6 +219,7 @@ export function Sidebar({
               {group.items
                 .filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin)
                 .filter((item) => canSee(item.href))
+                .filter((item) => item.href !== "/workflows" || user?.org_workflows_enabled || user?.org_has_workflows)
                 .map((item) => (
                   <div key={item.href}>
                     {navItem(item.href, <item.Ic {...ICON_PROPS} />, t(item.tKey as Parameters<typeof t>[0]))}

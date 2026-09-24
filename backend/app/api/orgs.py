@@ -29,8 +29,16 @@ class BambuVerifyCodeRequest(BaseModel):
 router = APIRouter(prefix="/orgs", tags=["orgs"])
 
 
-def _org_settings_out(org: Organization) -> OrgSettingsOut:
+def _org_settings_out(org: Organization, db: Session) -> OrgSettingsOut:
     from decimal import Decimal
+    from app.models.workflow import Workflow
+    from app.services.workflow_nodes import telegram_rule_events
+    workflows = db.query(Workflow).filter(Workflow.organization_id == org.id).all()
+    conflicts = {"print.failed": [], "filament.low": []}
+    for workflow in workflows:
+        if workflow.enabled:
+            for event in telegram_rule_events(workflow.graph):
+                conflicts[event].append(workflow.name)
     return OrgSettingsOut(
         id=org.id,
         name=org.name,
@@ -42,6 +50,17 @@ def _org_settings_out(org: Organization) -> OrgSettingsOut:
         tg_bot_username=org.tg_bot_username or None,
         electricity_rate=org.electricity_rate or Decimal("4.5"),
         labor_rate=org.labor_rate or Decimal("150"),
+        notify_print_failed=org.notify_print_failed,
+        notify_filament_low=org.notify_filament_low,
+        workflows_enabled=org.workflows_enabled,
+        filament_safety_margin_pct=org.filament_safety_margin_pct,
+        preflight_block_dispatch=org.preflight_block_dispatch,
+        has_workflows=bool(workflows),
+        notification_workflows=conflicts,
+        telegram_linked_users=db.query(User).filter(
+            User.organization_id == org.id, User.is_active.is_(True),
+            User.telegram_chat_id.isnot(None),
+        ).count(),
     )
 
 
@@ -92,9 +111,10 @@ def register(request: Request, payload: OrgRegisterRequest, db: Session = Depend
 
 @router.get("/me", response_model=OrgSettingsOut)
 def get_org(
+    db: Session = Depends(get_db),
     org: Organization = Depends(get_current_org),
 ) -> OrgSettingsOut:
-    return _org_settings_out(org)
+    return _org_settings_out(org, db)
 
 
 @router.put("/me/settings", response_model=OrgSettingsOut)
@@ -106,6 +126,13 @@ async def update_org_settings(
 ) -> OrgSettingsOut:
     if user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+
+    # Serialize rule ownership changes with workflow enable/edit requests.
+    org = db.query(Organization).filter(Organization.id == org.id).with_for_update().populate_existing().one()
+    current = _org_settings_out(org, db)
+    for event, requested in (("print.failed", payload.notify_print_failed), ("filament.low", payload.notify_filament_low)):
+        if requested and current.notification_workflows.get(event):
+            raise HTTPException(409, detail="Спочатку вимкніть Telegram-повідомлення про цю подію в активних автоматизаціях / Disable the overlapping Telegram workflows first")
 
     if payload.name is not None:
         org.name = payload.name
@@ -124,6 +151,17 @@ async def update_org_settings(
         org.electricity_rate = payload.electricity_rate
     if payload.labor_rate is not None:
         org.labor_rate = payload.labor_rate
+
+    if payload.notify_print_failed is not None:
+        org.notify_print_failed = payload.notify_print_failed
+    if payload.notify_filament_low is not None:
+        org.notify_filament_low = payload.notify_filament_low
+    if payload.workflows_enabled is not None:
+        org.workflows_enabled = payload.workflows_enabled
+    if payload.filament_safety_margin_pct is not None:
+        org.filament_safety_margin_pct = payload.filament_safety_margin_pct
+    if payload.preflight_block_dispatch is not None:
+        org.preflight_block_dispatch = payload.preflight_block_dispatch
 
     tg_token_changed = payload.tg_bot_token is not None
     if tg_token_changed:
@@ -153,7 +191,7 @@ async def update_org_settings(
                 pass
         await tunnel.send_tg_config(org.id, new_token)
 
-    return _org_settings_out(org)
+    return _org_settings_out(org, db)
 
 
 @router.get("/me/keycrm-settings")
@@ -270,7 +308,7 @@ async def bambu_verify_code(
     await bambu.shutdown(org.id)
     await bambu.init(org)
 
-    return _org_settings_out(org)
+    return _org_settings_out(org, db)
 
 
 class ExtraSlotsPayload(BaseModel):

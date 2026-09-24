@@ -37,7 +37,7 @@ Movement types and when to use them:
 
 ## AVCO cost tracking
 
-`_update_avco(product_id, incoming_qty, incoming_cost, db)` must be called **before** `_apply_movement` when receiving stock (PURCHASE_IN, PRODUCTION_IN). It recalculates `Product.cost_price` as weighted average. Wrong call order corrupts cost history.
+`_apply_movement(movement, db)` owns AVCO updates for incoming PURCHASE_IN / PRODUCTION_IN movements: it invokes `_update_avco` before changing stock. Supply the movement’s `unit_cost`; do not call `_update_avco` again in the caller, because that would apply the weighted average twice.
 
 ## Auto-replenish
 

@@ -2,15 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CorrectSpoolModal } from "@/components/filament/CorrectSpoolModal";
 import { LabelGeneratorModal } from "@/components/labels/LabelGeneratorModal";
 import { Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/hooks/useConfirm";
+import { toast } from "sonner";
+
 import { ApiError, api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { useUser } from "@/lib/auth-context";
 import type { Filament, FilamentColor } from "@/lib/types";
 import { usePageTitle } from "@/lib/usePageTitle";
 import { CardsSkeleton, PageSkeleton, StatsSkeleton } from "@/components/ui/ContentSkeleton";
+import { SpoolUsageSheet } from "@/components/filament/SpoolUsageSheet";
+import { ReceiveSpoolsModal } from "@/components/filament/ReceiveSpoolsModal";
+
+interface ReconciliationRow {
+  product_id: number;
+  product_name: string;
+  ledger_g: number;
+  spools_g: number;
+  loaded_g: number;
+  reserved_g: number;
+  difference_g: number;
+  empty_spools: number;
+  total_spools: number;
+}
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -48,12 +65,13 @@ function SpoolSVG({ hexColor }: { hexColor: string | null }) {
 
 function FilamentCard({
   f, canEdit, isAdmin, selected, onSelect,
-  onAdjust, onEdit, onDelete, onLabel,
+  onAdjust, onEdit, onDelete, onLabel, onUsage,
 }: {
   f: Filament; canEdit: boolean; isAdmin: boolean; selected: boolean;
   onSelect: () => void; onAdjust: () => void; onEdit: () => void;
-  onDelete: () => void; onLabel: () => void;
+  onDelete: () => void; onLabel: () => void; onUsage: () => void;
 }) {
+  const t = useT();
   const pct = Math.min(100, Math.round((f.grams_remaining / FULL_SPOOL_G) * 100));
   const isLow = f.is_low;
   const barColor = isLow ? "var(--state-warn)" : pct < 20 ? "var(--state-error)" : "var(--accent)";
@@ -103,8 +121,10 @@ function FilamentCard({
           </button>
         )}
 
-        {/* low badge */}
-        {isLow && (
+        {/* low / empty badges */}
+        {f.status === "empty" ? (
+          <span className="absolute bottom-2 left-2 rounded bg-[var(--surface-hi)]/90 px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">порожня</span>
+        ) : isLow && (
           <span className="badge badge-warn absolute bottom-2 left-2 text-[10px]">мало</span>
         )}
       </div>
@@ -144,7 +164,19 @@ function FilamentCard({
             <span className="font-medium">{pct}% left</span>
             <span className="tabular-nums">{f.grams_remaining} / {FULL_SPOOL_G}g</span>
           </div>
+          {(f.reserved_g ?? 0) > 0 && (
+            <p className="mt-0.5 text-[11px] tabular-nums text-[#eab308]">
+              зарезервовано {f.reserved_g} г · вільно {f.available_g} г
+            </p>
+          )}
         </div>
+
+        {/* location (derived from printer slots) */}
+        {f.location && (
+          <p className="truncate text-[11px] text-[var(--text-faint)]">
+            📍 {f.location.printer_name} · слот {f.location.slot_index + 1}
+          </p>
+        )}
 
         {/* cost / note */}
         {(f.cost_per_kg != null || f.note) && (
@@ -163,9 +195,18 @@ function FilamentCard({
               onClick={e => { e.stopPropagation(); onAdjust(); }}
               className="flex-1 rounded-md border border-[var(--border)] py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-hi)]   "
             >
-              ± Грами
+              {t("materialStock.correct")}
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onUsage(); }}
+            className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hi)]  "
+            title="Витрати котушки"
+          >
+            📊
+          </button>
           <button
             type="button"
             onClick={e => { e.stopPropagation(); onLabel(); }}
@@ -189,7 +230,7 @@ function FilamentCard({
               type="button"
               onClick={e => { e.stopPropagation(); onDelete(); }}
               className="rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--text-faint)] hover:bg-[var(--surface-hi)] hover:text-[var(--state-error)]  "
-              title="Видалити"
+              title={t("materialStock.retire")}
             >
               ✕
             </button>
@@ -463,100 +504,10 @@ function FilamentFormModal({
 
 // ── AdjustModal ───────────────────────────────────────────────────────────────
 
-function AdjustModal({
-  filament, onClose, onSaved,
-}: {
+function AdjustModal({ filament, onClose, onSaved }: {
   filament: Filament | null; onClose: () => void; onSaved: (f: Filament) => void;
 }) {
-  const [delta, setDelta] = useState("");
-  const [direction, setDirection] = useState<"add" | "consume">("consume");
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (filament) { setDelta(""); setDirection("consume"); setReason(""); setError(null); }
-  }, [filament]);
-
-  if (!filament) return null;
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    try {
-      const grams = parseInt(delta);
-      if (!grams || grams <= 0) throw new ApiError(400, "Введи позитивне число");
-      const signed = direction === "add" ? grams : -grams;
-      const saved = await api<Filament>(`/api/materials/${filament!.id}/adjust`, {
-        method: "POST",
-        body: JSON.stringify({ delta_grams: signed, reason: reason.trim() || null }),
-      });
-      onSaved(saved); onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Помилка");
-    } finally { setBusy(false); }
-  }
-
-  const previewGrams = filament.grams_remaining + (direction === "add" ? 1 : -1) * (parseInt(delta) || 0);
-  const previewPct = Math.min(100, Math.round((Math.max(0, previewGrams) / FULL_SPOOL_G) * 100));
-  const inputCls = "input";
-
-  return (
-    <Modal open={!!filament} onClose={() => { if (!busy) onClose(); }}
-      title={`${filament.material} · ${filament.color}`}
-      footer={<>
-        <button type="button" onClick={onClose} disabled={busy}
-          className="btn btn-ghost disabled:opacity-50">
-          Скасувати
-        </button>
-        <button type="submit" form="adjust-form" disabled={busy || !delta}
-          className="btn btn-primary disabled:opacity-50">
-          {busy ? "Зберігаю…" : "Застосувати"}
-        </button>
-      </>}>
-      <form id="adjust-form" onSubmit={submit} className="space-y-3 text-sm">
-        <div className="flex items-center gap-4 rounded-lg bg-[var(--bg)] px-4 py-3 ">
-          <div className="h-12 w-12 shrink-0">
-            <SpoolSVG hexColor={filament.hex_color ?? null} />
-          </div>
-          <div>
-            <div className="text-xs text-[var(--text-muted)]">{delta ? "Стане" : "Зараз на котушці"}</div>
-            <div className="mt-0.5 text-xl font-semibold tabular-nums">
-              {delta ? Math.max(0, previewGrams) : filament.grams_remaining} г
-              {delta && previewGrams < 0 && (
-                <span className="ml-2 text-sm font-normal text-[var(--state-error)]">не вистачає!</span>
-              )}
-            </div>
-            {filament.sku && <div className="mt-0.5 font-mono text-[10px] text-[var(--text-faint)]">{filament.sku}</div>}
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {(["consume", "add"] as const).map(d => (
-            <button key={d} type="button" onClick={() => setDirection(d)}
-              className={["rounded-lg border py-2.5 text-sm font-medium transition", direction === d
-                ? d === "consume"
-                  ? "border-[var(--state-error)] bg-[rgba(239,68,68,.10)] text-[var(--state-error)]"
-                  : "border-[var(--state-ok)] bg-[rgba(34,197,94,.10)] text-[var(--state-ok)]"
-                : "border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-hi)]   ",
-              ].join(" ")}>
-              {d === "consume" ? "− Списати" : "+ Надійшло"}
-            </button>
-          ))}
-        </div>
-        <label className="block">
-          <span className="mb-1 block text-xs text-[var(--text-muted)]">Грами</span>
-          <input type="number" required min={1} autoFocus value={delta} onChange={e => setDelta(e.target.value)}
-            placeholder="напр. 250" className={inputCls} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-[var(--text-muted)]">Причина (необов’язково)</span>
-          <input type="text" value={reason} onChange={e => setReason(e.target.value)}
-            placeholder="Нова котушка, витрата на замовлення #12…" className={inputCls} />
-        </label>
-        {error && <p className="text-xs text-[var(--state-error)]">{error}</p>}
-      </form>
-    </Modal>
-  );
+  return filament ? <CorrectSpoolModal key={filament.id} filament={filament} onClose={onClose} onSaved={onSaved} /> : null;
 }
 
 // ── FilamentColorsSection ─────────────────────────────────────────────────────
@@ -576,7 +527,11 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
     try { setColors(await api<FilamentColor[]>("/api/filament-colors")); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => { if (!document.hidden) void load(); }, 15000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   function openAdd() { setName(""); setHex("#3b82f6"); setEditColor(null); setError(null); setAddOpen(true); }
   function openEdit(c: FilamentColor) { setName(c.name); setHex(c.hex_color); setEditColor(c); setError(null); setAddOpen(true); }
@@ -671,17 +626,21 @@ function FilamentColorsSection({ canEdit }: { canEdit: boolean }) {
 
 export default function FilamentPage() {
   usePageTitle("nav.filament");
-  const { confirm: confirmPage, dialog: dialogPage } = useConfirm();
+
   const t = useT();
   const me = useUser();
   const isAdmin = me.role === "admin";
   const canEdit = isAdmin || me.role === "operator";
+  const hasWarehouse = ["starter", "pro", "farm"].includes(me.org_plan ?? "free");
 
   const [filaments, setFilaments] = useState<Filament[]>([]);
   const [loading, setLoading] = useState(true);
   const [editFilament, setEditFilament] = useState<Filament | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [adjustFilament, setAdjustFilament] = useState<Filament | null>(null);
+  const [usageFilament, setUsageFilament] = useState<Filament | null>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationRow[] | null>(null);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [labelFilaments, setLabelFilaments] = useState<Filament[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
@@ -690,7 +649,11 @@ export default function FilamentPage() {
     try { setFilaments(await api<Filament[]>("/api/materials")); }
     finally { setLoading(false); }
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => { if (!document.hidden) void load(); }, 15000);
+    return () => clearInterval(timer);
+  }, [load]);
 
   function upsert(f: Filament) {
     setFilaments(prev => {
@@ -701,10 +664,11 @@ export default function FilamentPage() {
   }
 
   async function remove(f: Filament) {
-    if (!await confirmPage({ message: `Видалити ${f.material} · ${f.color}?`, variant: "danger" })) return;
-    await api(`/api/materials/${f.id}`, { method: "DELETE" });
-    setFilaments(prev => prev.filter(x => x.id !== f.id));
-    setSelected(prev => { const s = new Set(prev); s.delete(f.id); return s; });
+    try {
+      await api(`/api/materials/${f.id}/status`, { method: "POST", body: JSON.stringify({ status: "retired" }) });
+      setFilaments(prev => prev.filter(x => x.id !== f.id));
+      setSelected(prev => { const s = new Set(prev); s.delete(f.id); return s; });
+    } catch (err) { toast.error(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   function toggleSelect(id: number) {
@@ -723,8 +687,8 @@ export default function FilamentPage() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return filaments;
-    return filaments.filter(f =>
+    if (!q) return filaments.filter(f => f.status !== "retired");
+    return filaments.filter(f => f.status !== "retired").filter(f =>
       f.material.toLowerCase().includes(q) ||
       f.color.toLowerCase().includes(q) ||
       (f.hex_color ?? "").toLowerCase().includes(q) ||
@@ -748,6 +712,13 @@ export default function FilamentPage() {
     () => filaments.filter(f => selected.has(f.id)),
     [filaments, selected],
   );
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api<ReconciliationRow[]>("/api/materials/reconciliation")
+      .then(setReconciliation)
+      .catch(() => setReconciliation(null));
+  }, [isAdmin, filaments]);
 
   if (loading) {
     return (
@@ -774,10 +745,13 @@ export default function FilamentPage() {
           )}
         </div>
         {canEdit && (
-          <button onClick={() => { setEditFilament(null); setEditOpen(true); }}
-            className="btn btn-primary">
-            + Котушка
-          </button>
+          <div className="flex gap-2">
+          {hasWarehouse ? <button onClick={() => setReceiveOpen(true)} className="btn btn-primary">
+            + {t("materialStock.receive")}
+          </button> : <button onClick={() => { setEditFilament(null); setEditOpen(true); }} className="btn btn-primary">
+            + {t("spoolReceive.spool")}
+          </button>}
+          </div>
         )}
       </div>
 
@@ -829,6 +803,7 @@ export default function FilamentPage() {
                         onEdit={() => { setEditFilament(f); setEditOpen(true); }}
                         onDelete={() => remove(f)}
                         onLabel={() => setLabelFilaments([f])}
+                        onUsage={() => setUsageFilament(f)}
                       />
                     ))}
                   </div>
@@ -841,6 +816,46 @@ export default function FilamentPage() {
 
       <FilamentFormModal open={editOpen} initial={editFilament}
         onClose={() => setEditOpen(false)} onSaved={upsert} />
+      {isAdmin && reconciliation && reconciliation.length > 0 && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5">
+          <h2 className="mb-3 text-sm font-semibold">Звірка матеріалів</h2>
+          <div className="space-y-2">
+            {reconciliation.map(row => (
+              <div key={row.product_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{row.product_name}</p>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    Котушок: {row.total_spools} · на принтерах: {Math.round(row.loaded_g)} г · зарезервовано: {row.reserved_g} г
+                  </p>
+                </div>
+                <div className="text-right text-xs tabular-nums">
+                  <p>склад: {Math.round(row.ledger_g)} г · спули: {row.spools_g} г</p>
+                  {Math.abs(row.difference_g) >= 1 && (
+                    <p className={row.difference_g < 0 ? "text-[var(--state-warn,#eab308)]" : "text-[var(--state-ok)]"}>
+                      різниця: {row.difference_g > 0 ? "+" : ""}{Math.round(row.difference_g)} г
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-[var(--text-faint)]">
+            Різниця між складським обліком і фізичними котушками — лише діагностика; система не змінює залишки сама.
+          </p>
+        </div>
+      )}
+      {usageFilament && (
+        <SpoolUsageSheet
+          filament={usageFilament}
+          onClose={() => setUsageFilament(null)}
+        />
+      )}
+      {receiveOpen && (
+        <ReceiveSpoolsModal
+          onClose={() => setReceiveOpen(false)}
+          onSaved={() => { setReceiveOpen(false); window.location.reload(); }}
+        />
+      )}
       <AdjustModal filament={adjustFilament}
         onClose={() => setAdjustFilament(null)} onSaved={upsert} />
       {labelFilaments && (
@@ -877,7 +892,6 @@ export default function FilamentPage() {
           </div>
         </div>
       )}
-      {dialogPage}
     </div>
   );
 }

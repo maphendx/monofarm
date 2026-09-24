@@ -14,6 +14,8 @@ export interface User {
   role: UserRole;
   organization_id: number | null;
   org_plan: OrgPlan | null;
+  org_has_workflows?: boolean;
+  org_workflows_enabled?: boolean;
   is_platform_admin: boolean;
   created_at: string;
   email_verified_at: string | null;
@@ -196,6 +198,7 @@ export interface PrintTask {
   pieces_ok: number | null;
   pieces_defective: number | null;
   defect_reason: string | null;
+  output_accounted_from_runs?: boolean;
   material_cost_uah: number | null;
   // Queue page fields
   gcode_file_id: number | null;
@@ -211,6 +214,8 @@ export interface PrintTask {
 }
 
 export interface Filament {
+  warehouse_id?: number | null;
+  warehouse_name?: string | null;
   id: number;
   sku: string | null;
   label_id: string | null;
@@ -225,6 +230,10 @@ export interface Filament {
   updated_at: string;
   is_low: boolean;
   warehouse_product_id: number | null;
+  status?: string;
+  location?: { printer_id: number; printer_name: string; slot_index: number } | null;
+  reserved_g?: number;
+  available_g?: number;
 }
 
 export interface FarmTask {
@@ -251,6 +260,13 @@ export interface GcodeFileMeta {
   printer_model?: string;
 }
 
+export interface GcodeFileOutput {
+  product_id: number;
+  product_name: string | null;
+  qty_per_run: number;
+  plate: number | null;
+}
+
 export interface GcodeFile {
   id: number;
   original_name: string;
@@ -265,6 +281,8 @@ export interface GcodeFile {
   assigned_group_id: number | null;
   assigned_group_name: string | null;
   tags: { id: number; kind: string; label?: string | null; color?: string | null; meta?: Record<string, unknown> | null; display: string }[];
+  output_warehouse_id: number | null;
+  outputs: GcodeFileOutput[];
 }
 
 export interface GcodeFolder {

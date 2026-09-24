@@ -115,6 +115,12 @@ def create_order(
             total_price=it.unit_price * it.quantity,
         ))
 
+    from app.services import workflow_events
+    workflow_events.publish_event(
+        db, org.id, workflow_events.ORDER_CREATED,
+        workflow_events.order_event_payload(o, items_count=len(payload.items) if payload.items else 0),
+    )
+
     db.commit()
     db.refresh(o)
     bg.add_task(broadcast_warehouse, org.id, "orders")
@@ -332,6 +338,13 @@ def ship_order(
                 cp.balance += outstanding
 
     o.status = OrderStatus.shipped
+
+    from app.services import workflow_events
+    workflow_events.publish_event(
+        db, org.id, workflow_events.ORDER_SHIPPED,
+        workflow_events.order_event_payload(o),
+    )
+
     db.commit()
     db.refresh(o)
     bg.add_task(broadcast_warehouse, org.id, "orders")

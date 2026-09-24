@@ -105,9 +105,21 @@ def assign_slot(
             if payload.filament_id is not None:
                 filament = db.query(Filament).filter_by(
                     id=payload.filament_id, organization_id=org.id
-                ).first()
+                ).with_for_update().first()
                 if not filament:
                     raise HTTPException(404, detail="Філамент не знайдено")
+
+                if filament.status in ("empty", "retired") or filament.grams_remaining <= 0:
+                    raise HTTPException(409, "Ця котушка порожня або архівована")
+                other_slot = db.query(PrinterSlot).join(Printer).filter(
+                    Printer.organization_id == org.id,
+                    PrinterSlot.filament_id == filament.id,
+                    PrinterSlot.id != slot.id,
+                ).first()
+                if other_slot:
+                    raise HTTPException(409, "Котушка вже встановлена в іншому слоті. Спочатку зніміть її")
+                if slot.filament_id == filament.id:
+                    return slot
 
                 slot.filament_id = filament.id
                 _snapshot_from_filament(slot, filament)
@@ -140,7 +152,16 @@ def assign_slot(
                     user_id=user.id,
                 ))
 
-            if printer.kind == PrinterKind.bambu and printer.bambu_dev_id:
+            if printer.kind == PrinterKind.bambu and printer.bambu_dev_id and not payload.sync_printer and slot.filament_id:
+                # Bind inventory to the reported material without changing the printer.
+                live = next((row for row in bambu.get_ams_filaments(printer.bambu_dev_id, org_id=org.id)
+                             if row.get("slot") == slot_index), None)
+                if live and not live.get("empty"):
+                    slot.material = live.get("type") or slot.material
+                    live_color = live.get("hex_color") or live.get("color")
+                    if live_color and str(live_color).startswith("#"):
+                        slot.hex_color = str(live_color)[:7]
+            if printer.kind == PrinterKind.bambu and printer.bambu_dev_id and payload.sync_printer:
                 bambu.sync_filament_slot(
                     printer.bambu_dev_id,
                     {

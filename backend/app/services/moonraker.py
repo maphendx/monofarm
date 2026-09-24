@@ -335,6 +335,14 @@ def _parse_moonraker_status(status: dict) -> dict:
     )
     progress_pct = round(progress * 100) if isinstance(progress, (int, float)) else None
 
+    filament_used_mm: float | None = None
+    try:
+        raw_used = print_stats.get("filament_used")
+        if raw_used:
+            filament_used_mm = float(raw_used)
+    except (TypeError, ValueError):
+        filament_used_mm = None
+
     print_duration = print_stats.get("print_duration") or 0
     eta_minutes: int | None = None
     if state == "printing" and progress and progress > 0.01 and print_duration > 0:
@@ -351,6 +359,7 @@ def _parse_moonraker_status(status: dict) -> dict:
         "state": state,
         "raw_state": raw_state,
         "filename": print_stats.get("filename") or None,
+        "filament_used_mm": filament_used_mm,
         "progress_pct": progress_pct,
         "eta_minutes": eta_minutes,
         "print_duration_s": int(print_duration) if print_duration else None,

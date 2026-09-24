@@ -434,7 +434,7 @@ async def orca_upload(
                     if is_3mf:
                         try:
                             from app.models.organization import Organization
-                            from app.services import bambu_dispatch
+                            from app.services import bambu_dispatch, file_outputs
                             from app.workers.bambu_jobs import run_bambu_cloud_job
                             org = db.get(Organization, user.organization_id)
                             job = bambu_dispatch.create_cloud_job(
@@ -446,6 +446,9 @@ async def orca_upload(
                                 file_name=row.original_name,
                                 region=org.bambu_region if org else None,
                                 created_by_user_id=user.id,
+                                output_plan=file_outputs.build_output_plan(
+                                    db, user.organization_id, row.id,
+                                ),
                                 request_payload={"source": "orca.auto_print"},
                             )
                             background_tasks.add_task(run_bambu_cloud_job, job.id)

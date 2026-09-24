@@ -56,7 +56,7 @@ def test_send_org_notification_targets_only_linked_active_users(monkeypatch):
     ]
 
 
-def test_send_print_event_notification_dedupes_and_formats_message(monkeypatch):
+def test_print_delivery_formats_message(monkeypatch):
     org = Organization(id=1, name="Org", slug="org", tg_bot_token="encrypted")
     db = _FakeDb(org, [111])
 
@@ -68,34 +68,17 @@ def test_send_print_event_notification_dedupes_and_formats_message(monkeypatch):
         return 1
 
     monkeypatch.setattr(telegram_notify, "send_org_notification", _send_org_notification)
-    import app.services.cache as cache_mod
-    seen: dict[str, object] = {}
-    monkeypatch.setattr(cache_mod, "cache_get", lambda key: seen.get(key))
-    monkeypatch.setattr(cache_mod, "cache_set", lambda key, value, ttl: seen.__setitem__(key, value))
-
-    sent1 = telegram_notify.send_print_event_notification(
+    sent1 = telegram_notify._deliver_print_event_notification(
         db,
         org.id,
         event="failed",
         printer_name="A3",
         file_name="benchy.3mf",
         reason="SD card error",
-        dedupe_key="job-1:failed",
     )
-    sent2 = telegram_notify.send_print_event_notification(
-        db,
-        org.id,
-        event="failed",
-        printer_name="A3",
-        file_name="benchy.3mf",
-        reason="SD card error",
-        dedupe_key="job-1:failed",
-    )
-
     assert sent1 == 1
-    assert sent2 == 0
-    assert len(seen) == 1
     assert len(captured) == 1
+    assert "SD card error" in captured[0][0][2]
 
 
 def test_send_print_event_notification_uses_photo_for_failed_print(monkeypatch):
@@ -119,7 +102,7 @@ def test_send_print_event_notification_uses_photo_for_failed_print(monkeypatch):
     monkeypatch.setattr(cache_mod, "cache_get", lambda key: seen.get(key))
     monkeypatch.setattr(cache_mod, "cache_set", lambda key, value, ttl: seen.__setitem__(key, value))
 
-    sent = telegram_notify.send_print_event_notification(
+    sent = telegram_notify._deliver_print_event_notification(
         db,
         org.id,
         event="failed",
@@ -127,7 +110,6 @@ def test_send_print_event_notification_uses_photo_for_failed_print(monkeypatch):
         printer_id=7,
         file_name="benchy.3mf",
         reason="SD card error",
-        dedupe_key="job-2:failed",
     )
 
     assert sent == 1

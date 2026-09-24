@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 
 if TYPE_CHECKING:
+    from app.models.gcode_file_output import GcodeFileOutput
     from app.models.tag import Tag
 
 
@@ -34,6 +35,10 @@ class GcodeFile(Base):
     assigned_group_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("printer_groups.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Agreed destination warehouse (finished goods) for production receipts of this file.
+    output_warehouse_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("wh_warehouses.id", ondelete="SET NULL"), nullable=True
+    )
     uploaded_by_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -46,5 +51,12 @@ class GcodeFile(Base):
         "Tag",
         secondary="gcode_file_tags",
         back_populates="gcode_files",
+        lazy="selectin",
+    )
+
+    # Products this file produces, per run — see GcodeFileOutput.
+    outputs: Mapped[list["GcodeFileOutput"]] = relationship(
+        "GcodeFileOutput",
+        cascade="all, delete-orphan",
         lazy="selectin",
     )

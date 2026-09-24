@@ -36,8 +36,8 @@ def _linked_chat_ids(db: Session, org_id: int) -> list[int]:
     return [int(row[0]) for row in rows if row and row[0] is not None]
 
 
-def send_org_notification(db: Session, org_id: int, text: str) -> int:
-    """Send a plain-text Telegram message to every linked active user in org."""
+def send_org_notification(db: Session, org_id: int, text: str, chat_ids: list[int] | None = None) -> int:
+    """Send a plain-text Telegram message to linked active users (or explicit chats)."""
     org = db.get(Organization, org_id)
     if not org or not org.tg_bot_token:
         return 0
@@ -48,7 +48,7 @@ def send_org_notification(db: Session, org_id: int, text: str) -> int:
         log.warning("Telegram alert skipped for org %s: token decrypt failed: %s", org_id, exc)
         return 0
 
-    chat_ids = _linked_chat_ids(db, org_id)
+    chat_ids = chat_ids or _linked_chat_ids(db, org_id)
     if not chat_ids:
         log.info("Telegram alert skipped for org %s: no linked users", org_id)
         return 0
@@ -296,7 +296,7 @@ def _printer_snapshot(db: Session, org_id: int, printer_id: int) -> bytes | None
     return None
 
 
-def send_print_event_notification(
+def _deliver_print_event_notification(
     db: Session,
     org_id: int,
     *,
@@ -305,16 +305,9 @@ def send_print_event_notification(
     printer_id: int | None = None,
     file_name: str | None = None,
     reason: str | None = None,
-    dedupe_key: str | None = None,
 ) -> int:
-    """Send a printer lifecycle notification, suppressing duplicate deliveries."""
-    from app.services.cache import cache_get, cache_set
-    from datetime import datetime, timezone
+    """Delivery only; durable claims are owned by process_pending_notifications."""
     from app.core.config import settings
-
-    key = f"tg:print-event:{org_id}:{dedupe_key or event}:{printer_name}:{file_name or '-'}"
-    if cache_get(key):
-        return 0
 
     if event == "started":
         title = "▶ Print started"
@@ -361,6 +354,143 @@ def send_print_event_notification(
     else:
         sent = send_org_notification(db, org_id, text)
 
-    if sent:
-        cache_set(key, {"sent_at": datetime.now(timezone.utc).isoformat()}, 300)
     return sent
+
+
+PRINT_FAILED_RULE = "print.failed"
+FILAMENT_LOW_RULE = "filament.low"
+PENDING = "pending"
+ATTEMPTED = "attempted"
+DELIVERED = "delivered"
+FAILED = "failed"
+SKIPPED = "skipped"
+
+
+def _enqueue(db: Session, org_id: int, key: str, rule: str, payload: dict) -> int:
+    """Queue in the source transaction; duplicates and rollback never send."""
+    from hashlib import sha256
+    from sqlalchemy.dialects.postgresql import insert
+    from app.models.telegram_notification import TelegramNotification
+
+    try:
+        with db.begin_nested():
+            result = db.execute(insert(TelegramNotification).values(
+                organization_id=org_id, event_key=sha256(key.encode()).hexdigest(),
+                rule=rule, payload=payload,
+            ).on_conflict_do_nothing(constraint="uq_telegram_notification_event").returning(TelegramNotification.id))
+            return int(result.scalar_one_or_none() is not None)
+    except Exception:
+        log.exception("Telegram enqueue failed org=%s", org_id)
+        return 0
+
+
+def send_print_event_notification(
+    db: Session, org_id: int, *, event: str, printer_name: str,
+    printer_id: int | None = None, file_name: str | None = None,
+    reason: str | None = None, dedupe_key: str | None = None,
+) -> int:
+    """Queue a lifecycle alert. Caller commits; return value is rows queued."""
+    try:
+        org = db.get(Organization, org_id)
+        if org is None or (event == "failed" and org.notify_print_failed is False):
+            return 0
+        return _enqueue(db, org_id, dedupe_key or f"{event}:{printer_id}:{file_name}:{reason}",
+                        PRINT_FAILED_RULE if event == "failed" else "print.warning", {
+                            "event": event, "printer_name": printer_name, "printer_id": printer_id,
+                            "file_name": file_name, "reason": reason,
+                        })
+    except Exception:
+        log.exception("Print notification enqueue failed org=%s", org_id)
+        return 0
+
+
+def notify_failed_history(db: Session, history) -> int:
+    """One failure notification per persisted physical run across all drivers."""
+    if history.result != "failed" or history.id is None:
+        return 0
+    return send_print_event_notification(
+        db, history.organization_id, event="failed", printer_id=history.printer_id,
+        printer_name=history.printer_name, file_name=history.file_name,
+        reason=history.result_reason, dedupe_key=f"history:{history.id}:failed",
+    )
+
+
+def notify_filament_low_if_crossed(db: Session, org_id: int, filament, *, prev_grams: float) -> int:
+    """Persist crossing state with the stock update; no network in this transaction.
+
+    Callers lock the spool before changing its quantity. Recovery re-arms even
+    when the rule is disabled. No cache/worker lifetime is involved.
+    """
+    if filament.organization_id != org_id:
+        return 0
+    threshold = filament.min_grams or 0
+    if filament.grams_remaining > threshold:
+        filament.low_alert_active = False
+        return 0
+    if filament.low_alert_active or not prev_grams > threshold:
+        return 0
+    filament.low_alert_active = True
+    filament.low_alert_episode = (filament.low_alert_episode or 0) + 1
+    try:
+        org = db.get(Organization, org_id)
+        if org is None or org.notify_filament_low is False:
+            return 0
+        name = " ".join(p for p in (filament.brand, filament.material, filament.color) if p)
+        return _enqueue(db, org_id, f"filament:{filament.id}:{filament.low_alert_episode}", FILAMENT_LOW_RULE, {
+            "name": name, "grams_remaining": filament.grams_remaining, "min_grams": threshold,
+        })
+    except Exception:
+        log.exception("Filament notification enqueue failed org=%s", org_id)
+        return 0
+
+
+def _deliver_notification(db: Session, notification) -> int:
+    if notification.rule == FILAMENT_LOW_RULE:
+        from app.core.config import settings
+        payload = notification.payload
+        text = (f"⚠️ Low filament\nFilament: {payload['name']}\n"
+                f"Remaining: {round(payload['grams_remaining'])} g "
+                f"(threshold {round(payload['min_grams'])} g)")
+        if settings.FARM_PUBLIC_URL:
+            text += f"\n{settings.FARM_PUBLIC_URL}/filament"
+        return send_org_notification(db, notification.organization_id, text)
+    return _deliver_print_event_notification(db, notification.organization_id, **notification.payload)
+
+
+def process_pending_notifications(*, session_factory=None, limit: int = 50) -> int:
+    """Existing scheduler delivers committed alerts independently of workflows.
+
+    Commit the claim BEFORE network I/O. Telegram has no idempotency key:
+    ambiguous deliveries and interrupted claims are never automatically retried.
+    This favors no duplicates over guaranteed delivery and retains attempt audit.
+    """
+    from datetime import datetime, timezone
+    from app.core.db import SessionLocal
+    from app.models.telegram_notification import TelegramNotification
+
+    factory = session_factory or SessionLocal
+    processed = 0
+    for _ in range(limit):
+        with factory() as db:
+            notification = (db.query(TelegramNotification)
+                            .filter(TelegramNotification.status == PENDING)
+                            .order_by(TelegramNotification.id)
+                            .with_for_update(skip_locked=True).first())
+            if notification is None:
+                break
+            org = db.get(Organization, notification.organization_id)
+            enabled = org and (org.notify_print_failed if notification.rule == PRINT_FAILED_RULE else
+                               org.notify_filament_low if notification.rule == FILAMENT_LOW_RULE else True)
+            notification.status = ATTEMPTED if enabled else SKIPPED
+            notification.attempted_at = datetime.now(timezone.utc)
+            db.commit()
+            if enabled:
+                try:
+                    notification.sent_count = _deliver_notification(db, notification)
+                    notification.status = DELIVERED if notification.sent_count else FAILED
+                except Exception:
+                    notification.status = FAILED
+                    log.exception("Telegram delivery failed id=%s", notification.id)
+                db.commit()
+            processed += 1
+    return processed

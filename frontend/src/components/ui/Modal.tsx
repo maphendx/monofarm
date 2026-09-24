@@ -98,6 +98,9 @@ export function Modal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         onClick={(e) => e.stopPropagation()}
         className={`modal-panel p-0 w-full flex flex-col max-h-[90vh] ${SIZE_CLS[size] ?? "max-w-md"} ${closing ? "modal-out" : ""}`}
       >

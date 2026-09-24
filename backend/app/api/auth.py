@@ -1,3 +1,4 @@
+from app.models.workflow import Workflow
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
@@ -96,6 +97,8 @@ def me(
         "role":              user.role,
         "organization_id":    user.organization_id,
         "org_plan":          org.plan if org else None,
+        "org_has_workflows": db.query(Workflow.id).filter_by(organization_id=user.organization_id).first() is not None,
+        "org_workflows_enabled": bool(org.workflows_enabled) if org else False,
         "is_platform_admin": is_platform_admin(user),
         "created_at":        user.created_at,
         "email_verified_at": user.email_verified_at,

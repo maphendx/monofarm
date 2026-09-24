@@ -328,10 +328,11 @@ type DashView = "cards" | "compact" | "list" | "flow";
   const [view, setView] = useState<DashView>("cards");
   useEffect(() => {
     try {
+      if (searchParams.get("view") === "flow") { setView("flow"); return; }
       const saved = localStorage.getItem("monofarm_dashboard_view") as DashView | null;
       if (saved === "cards" || saved === "compact" || saved === "list" || saved === "flow") setView(saved);
     } catch {}
-  }, []);
+  }, [searchParams]);
   const [dragPrinterId, setDragPrinterId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [localOrder, setLocalOrder] = useState<number[] | null>(null);
@@ -489,9 +490,9 @@ type DashView = "cards" | "compact" | "list" | "flow";
   }, [printers]);
 
   function renderPrinterItem(p: Printer) {
-    if (view === "compact") return <CompactTile printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
-    if (view === "list") return <ListRow printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
-    return <PrinterCard printer={p} onClick={openPrinterPage} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />;
+    if (view === "compact") return <CompactTile key={p.id} printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
+    if (view === "list") return <ListRow key={p.id} printer={p} onOpen={openPrinterPage} onUpdated={upsertPrinter} />;
+    return <PrinterCard key={p.id} printer={p} onClick={openPrinterPage} onSettings={setSelected} onUpdated={upsertPrinter} onPrint={setPrintPrinter} onDeleted={() => reload()} />;
   }
 
   function itemsGridCls(): string {

@@ -27,6 +27,11 @@ class OrgSettingsUpdate(BaseModel):
     tg_bot_token: str | None = None
     electricity_rate: Decimal | None = None
     labor_rate: Decimal | None = None
+    notify_print_failed: bool | None = None
+    notify_filament_low: bool | None = None
+    workflows_enabled: bool | None = None
+    filament_safety_margin_pct: int | None = Field(default=None, ge=0, le=100)
+    preflight_block_dispatch: bool | None = None
 
 
 class OrgSettingsOut(BaseModel):
@@ -40,5 +45,13 @@ class OrgSettingsOut(BaseModel):
     tg_bot_username: str | None
     electricity_rate: Decimal
     labor_rate: Decimal
+    notify_print_failed: bool
+    notify_filament_low: bool
+    workflows_enabled: bool
+    filament_safety_margin_pct: int
+    preflight_block_dispatch: bool
+    has_workflows: bool = False
+    notification_workflows: dict[str, list[str]] = Field(default_factory=dict)
+    telegram_linked_users: int = 0
 
     model_config = ConfigDict(from_attributes=True)

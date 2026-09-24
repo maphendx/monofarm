@@ -41,26 +41,12 @@ def test_paused_with_error_finishes_as_failed(monkeypatch):
     monkeypatch.setattr(print_tracker, "_active_dispatch_job", lambda db, row: None)
 
     finalized: list[str] = []
-    notifications: list[dict] = []
 
-    monkeypatch.setattr(print_tracker, "_finalize_print", lambda db, row, now, result: finalized.append(result))
-    monkeypatch.setattr(
-        print_tracker,
-        "send_print_event_notification",
-        lambda *args, **kwargs: notifications.append(kwargs) or 1,
-    )
+    monkeypatch.setattr(print_tracker, "_finalize_print", lambda db, row, now, result, **kwargs: finalized.append(result))
 
     print_tracker._check_org(db, org)
 
     assert finalized == ["failed"]
-    assert len(notifications) == 1
-    notif = notifications[0]
-    assert notif["event"] == "failed"
-    assert notif["printer_name"] == "A1"
-    assert notif["printer_id"] == printer.id
-    assert notif["file_name"] == "benchy.3mf"
-    assert notif["reason"] == "SD card error"
-    assert notif["dedupe_key"].startswith("7:failed:benchy.3mf:")
 
 
 def test_paused_without_error_stays_open(monkeypatch):
@@ -75,17 +61,10 @@ def test_paused_without_error_stays_open(monkeypatch):
     monkeypatch.setattr(print_tracker, "_active_dispatch_job", lambda db, row: None)
 
     finalized: list[str] = []
-    notifications: list[dict] = []
 
-    monkeypatch.setattr(print_tracker, "_finalize_print", lambda db, row, now, result: finalized.append(result))
-    monkeypatch.setattr(
-        print_tracker,
-        "send_print_event_notification",
-        lambda *args, **kwargs: notifications.append(kwargs) or 1,
-    )
+    monkeypatch.setattr(print_tracker, "_finalize_print", lambda db, row, now, result, **kwargs: finalized.append(result))
 
     print_tracker._check_org(db, org)
 
     assert finalized == []
-    assert len(notifications) == 0
     assert print_tracker._prev[printer.id]["state"] == "paused"

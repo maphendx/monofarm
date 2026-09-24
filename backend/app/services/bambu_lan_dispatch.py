@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
+import zipfile
 import logging
 import threading
 from pathlib import Path
@@ -152,7 +154,7 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         # ── validating ───────────────────────────────────────────────────────
         file_bytes: bytes | None = None
         plate_gcode = cached_plate_gcode
-        if isinstance(platecycler, dict) or plate_gcode is None:
+        if isinstance(platecycler, dict) or plate_gcode is None or payload.get("plate") is not None:
             try:
                 file_bytes = await asyncio.to_thread(storage_svc.get_bytes, stored_name, org_id)
             except FileNotFoundError:
@@ -182,6 +184,17 @@ async def dispatch_lan_job(job_id: int) -> BambuCloudJob | None:
         # and a hardcoded plate_1 makes the printer "fail to parse the file".
         if file_bytes is not None:
             plate_gcode = bambu.plate_gcode_entry(file_bytes)
+            if payload.get("plate") is not None:
+                selected_entry = f"Metadata/plate_{int(payload['plate'])}.gcode"
+                try:
+                    with zipfile.ZipFile(io.BytesIO(file_bytes)) as archive:
+                        if selected_entry not in archive.namelist():
+                            raise ValueError("Обрана пластина відсутня у файлі")
+                    if isinstance(platecycler, dict) and selected_entry != plate_gcode:
+                        raise ValueError("Для автозаміни експортуйте обрану пластину окремим файлом")
+                    plate_gcode = selected_entry
+                except (zipfile.BadZipFile, ValueError) as exc:
+                    return fail_job(job_id, BambuErrorCode.INVALID_3MF, str(exc), retryable=False)
         if plate_gcode is None:
             return fail_job(
                 job_id, BambuErrorCode.INVALID_3MF,

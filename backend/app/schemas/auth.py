@@ -32,6 +32,8 @@ class UserOut(BaseModel):
     role: UserRole
     organization_id: int | None = None
     org_plan: OrgPlan | None = None
+    org_has_workflows: bool = False
+    org_workflows_enabled: bool = False
     is_platform_admin: bool = False
     created_at: datetime
     email_verified_at: datetime | None = None

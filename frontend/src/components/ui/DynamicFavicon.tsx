@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 
 type Printer = { state: string | null };
 
-const C_ACCENT = "#22d3ee";
+const C_ACCENT = "#38bdf8";
 const C_WARN   = "#f59e0b";
 const C_ERROR  = "#ef4444";
 const C_GREY   = "#71717a";

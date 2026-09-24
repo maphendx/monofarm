@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/lib/i18n";
+
 import { AuthImage } from "@/components/ui/AuthImage";
 
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
@@ -27,11 +29,11 @@ import { getMondayOfWeek, isoDateStr, getWeekDates } from "@/components/schedule
 // ── mascot ────────────────────────────────────────────────────────────────────
 
 function Mascot() {
-  const B = "#0891b2";
-  const S = "#0e7490";
-  const F = "#cffafe";
-  const E = "#083344";
-  const A = "#22d3ee";
+  const B = "#0ea5e9";
+  const S = "#0369a1";
+  const F = "#f0f9ff";
+  const E = "#082f49";
+  const A = "#38bdf8";
   return (
     <svg width={90} height={117} viewBox="0 0 10 13" shapeRendering="crispEdges"
       style={{ imageRendering: "pixelated" }} aria-hidden>
@@ -85,6 +87,8 @@ function taskToGcodeFile(task: PrintTask): GcodeFile {
     assigned_group_id: null,
     assigned_group_name: null,
     tags: [],
+    output_warehouse_id: null,
+    outputs: [],
   };
 }
 
@@ -236,6 +240,7 @@ const DEFECT_PRESETS = ["Варпінг", "Відшарування шарів",
 function CompleteModal({ task, onClose, onDone }: {
   task: PrintTask | null; onClose: () => void; onDone: (updated: PrintTask) => void;
 }) {
+  const t = useT();
   const [filaments, setFilaments] = useState<Filament[]>([]);
   const [piecesOk, setPiecesOk] = useState(1);
   const [piecesDefective, setPiecesDefective] = useState(0);
@@ -247,8 +252,8 @@ function CompleteModal({ task, onClose, onDone }: {
 
   useEffect(() => {
     if (!task) return;
-    setPiecesOk(task.quantity);
-    setPiecesDefective(0);
+    setPiecesOk(task.output_accounted_from_runs ? task.pieces_ok ?? 0 : task.quantity);
+    setPiecesDefective(task.output_accounted_from_runs ? task.pieces_defective ?? 0 : 0);
     setDefectPreset("");
     setDefectOther("");
     setSlotFilament({});
@@ -282,10 +287,10 @@ function CompleteModal({ task, onClose, onDone }: {
     if (!task) return;
     setBusy(true); setError(null);
     try {
-      const body: Record<string, unknown> = { status: "done", pieces_ok: piecesOk, pieces_defective: piecesDefective };
+      const body: Record<string, unknown> = task.output_accounted_from_runs ? { status: "done" } : { status: "done", pieces_ok: piecesOk, pieces_defective: piecesDefective };
       if (defectReason) body.defect_reason = defectReason;
       const valid = consumptions.filter(c => c.filament_id != null && c.grams > 0);
-      if (valid.length > 0) body.filament_consumptions = valid.map(c => ({ filament_id: c.filament_id!, grams: c.grams }));
+      if (valid.length > 0 && !task.output_accounted_from_runs) body.filament_consumptions = valid.map(c => ({ filament_id: c.filament_id!, grams: c.grams }));
       const updated = await api<PrintTask>(`/api/queue/${task.id}`, { method: "PATCH", body: JSON.stringify(body) });
       onDone(updated);
     } catch (e) { setError(e instanceof ApiError ? e.message : "Помилка"); }
@@ -299,16 +304,17 @@ function CompleteModal({ task, onClose, onDone }: {
         <button onClick={submit} disabled={busy || piecesOk < 0} className="btn btn-primary disabled:opacity-50">{busy ? "Зберігаю…" : "Виконано ✓"}</button>
       </>}>
       <div className="space-y-4 text-sm">
+        {task.output_accounted_from_runs && <p className="rounded-lg bg-[var(--surface)] p-3 text-[var(--text-muted)]">{t("printOutput.taskActualsHint")}</p>}
         <div>
           <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Результат (планувалось {plannedQty} шт.)</p>
           <div className="grid grid-cols-2 gap-3">
             <label className="block"><span className="mb-1 block text-xs text-[var(--text-muted)]">Добрих ✓</span>
-              <input type="number" min={0} value={piecesOk} onChange={e => setPiecesOk(Math.max(0, Number(e.target.value)))} className="input" /></label>
+              <input type="number" min={0} disabled={task.output_accounted_from_runs} value={piecesOk} onChange={e => setPiecesOk(Math.max(0, Number(e.target.value)))} className="input" /></label>
             <label className="block"><span className="mb-1 block text-xs text-[var(--text-muted)]">Брак ✕</span>
-              <input type="number" min={0} value={piecesDefective} onChange={e => setPiecesDefective(Math.max(0, Number(e.target.value)))} className="input" /></label>
+              <input type="number" min={0} disabled={task.output_accounted_from_runs} value={piecesDefective} onChange={e => setPiecesDefective(Math.max(0, Number(e.target.value)))} className="input" /></label>
           </div>
         </div>
-        {piecesDefective > 0 && (
+        {piecesDefective > 0 && !task.output_accounted_from_runs && (
           <div>
             <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Причина браку</p>
             <div className="flex flex-wrap gap-1.5">
@@ -328,7 +334,7 @@ function CompleteModal({ task, onClose, onDone }: {
             )}
           </div>
         )}
-        {usedG.length > 0 && (
+        {usedG.length > 0 && !task.output_accounted_from_runs && (
           <div>
             <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">
               Котушки (~{actualPrinted} шт. × {Math.round(usedG.reduce((s, g) => s + g, 0) / plannedQty)}г)
@@ -1013,6 +1019,7 @@ function QueuePageInner() {
       {sendRequest && sendRequest.task.gcode_file_id && (
         <SendModal
           file={taskToGcodeFile(sendRequest.task)}
+          taskId={sendRequest.task.id}
           printers={printers}
           defaultPrinterId={sendRequest.lockedPrinterId ?? sendRequest.task.assigned_printer_id ?? undefined}
           lockedPrinterId={sendRequest.lockedPrinterId}
